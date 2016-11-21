@@ -1,1 +1,74 @@
 # bpp
+
+## Introduction
+
+The aim of this project is to implement a versatile high-performance version
+of the BPP software. It should have the following properties:
+
+* open-source code with an appropriate open-source license.
+* 64-bit multi-threaded design that handles very large datasets.
+* easy to use and well-documented.
+* SIMD implementations of time-consuming parts.
+* Linux, Mac and Microsoft Windows compatibility.
+
+## Compilation instructions
+
+Currently, BPP requires that [GNU Bison](http://www.gnu.org/software/bison/)
+and [Flex](http://flex.sourceforge.net/) are installed on the target system.
+On a Debian-based Linux system, the two packages can be installed using the
+command
+
+```bash
+apt-get install flex bison
+```
+
+BPP can then be compiled using the provided `Makefile`
+
+```bash
+make
+```
+
+## License and third party licenses
+
+The code is currently licensed under the [GNU Affero General Public License version 3](http://www.gnu.org/licenses/agpl-3.0.en.html).
+
+## Code
+
+    File             | Description
+---------------------|----------------
+**alignment.c**      | Code for processing alignments
+**arch.c**           | Architecture specific code (Mac/Linux).
+**bpp.c**            | Main file handling command-line parameters and executing selected methods.
+**lex_phylip.l**     | Lexical analyzer for parsing phylip files.
+**lex_rtree.l**      | Lexical analyzer parsing newick rooted trees.
+**likelihood_avx.c** | AVX likelihood functions.
+**likelihood_sse.c** | SSE likelihood functions.
+**likelihood.c**     | Likelihood rated functions.
+**Makefile**         | Makefile
+**maps.c**           | Character mapping arrays for converting sequences to the internal representation.
+**parse_phylip.y**   | Functions for parsing phylip files.
+**parse_rtree.y**    | Functions for parsing rooted trees in newick format.
+**rtree.c**          | Rooted tree manipulation functions.
+**util.c**           | Various common utility functions.
+
+# References
+
+* Flouri T., Carrasco FI, Darriba D., Aberer AJ, Nguyen LT, Minh BQ, Haeseler A., Stamatakis A. (2015)
+**The Phylogenetic Likelihood Library.**
+*Systematic Biology*, 64(2):356-362.
+doi:[10.1093/sysbio/syu084](10.1093/sysbio/syu084)
+
+* Yang Z., Rannala B. (2003)
+**Bayes Estimation of Species Divergence Times and Ancestral Population Sizes using DNA Sequences From Multiple Loci.**
+*Genetics*, 164:1645-1656.
+Available at: [http://www.genetics.org/content/164/4/1645.long](http://www.genetics.org/content/164/4/1645.long)
+
+* Yang Z., Rannala B. (2010)
+**Bayesian species delimitation using multilocus sequence data.**
+*Proceedings of the National Academy of Sciences*, 107(20):9264-9269.
+doi:[10.1073/pnas.0913022107](http://dx.doi.org/10.1073/pnas.0913022107)
+
+* Yang Z., Rannala B. (2014)
+**Unguided species delimitation using DNA sequence data from multiple loci.**
+*Molecular Biology and Evolution*, 31(12):3125-3135.
+doi:[10.1093/molbev/msu279](10.1093/molbev/msu279)
