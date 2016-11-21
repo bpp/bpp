@@ -43,7 +43,8 @@ The code is currently licensed under the [GNU Affero General Public License vers
 **lex_rtree.l**      | Lexical analyzer parsing newick rooted trees.
 **likelihood_avx.c** | AVX likelihood functions.
 **likelihood_sse.c** | SSE likelihood functions.
-**likelihood.c**     | Likelihood rated functions.
+**likelihood.c**     | Likelihood related functions.
+**locus.c**          | Locus specific functions.
 **Makefile**         | Makefile
 **maps.c**           | Character mapping arrays for converting sequences to the internal representation.
 **parse_phylip.y**   | Functions for parsing phylip files.

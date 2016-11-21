@@ -42,6 +42,11 @@ long opt_mcmc_burnin;
 long opt_seed;
 long opt_stree;
 long opt_delimit;
+long opt_cleandata;
+double opt_tau_alpha;
+double opt_tau_beta;
+double opt_theta_alpha;
+double opt_theta_beta;
 char * opt_streefile;
 char * opt_mapfile;
 char * opt_outfile;
@@ -62,8 +67,21 @@ static struct option long_options[] =
   {"mcmc_steps",  required_argument, 0, 0 },  /* 10 */
   {"stree",       no_argument,       0, 0 },  /* 11 */
   {"delimit",     no_argument,       0, 0 },  /* 12 */
+  {"tauprior",    required_argument, 0, 0 },  /* 13 */
+  {"thetaprior",  required_argument, 0, 0 },  /* 14 */
+  {"cleandata",   no_argument,       0, 0 },  /* 15 */
   { 0, 0, 0, 0 }
 };
+
+static int args_getgammaprior(char * arg, double * a, double * b)
+{
+  int len = 0;
+
+  int ret = sscanf(arg, "%lf,%lf%n", a, b, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
+    return 0;
+  return 1;
+}
 
 void args_init(int argc, char ** argv)
 {
@@ -88,6 +106,11 @@ void args_init(int argc, char ** argv)
   opt_seed = (long)time(NULL);
   opt_stree = 0;
   opt_delimit = 0;
+  opt_tau_alpha = 0;
+  opt_tau_beta = 0;
+  opt_theta_alpha = 0;
+  opt_theta_beta = 0;
+  opt_cleandata = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -143,6 +166,20 @@ void args_init(int argc, char ** argv)
 
       case 12:
         opt_delimit = 1;
+        break;
+
+      case 13:
+        if (!args_getgammaprior(optarg, &opt_tau_alpha, &opt_tau_beta))
+          fatal("Illegal format for --tauprior");
+        break;
+
+      case 14:
+        if (!args_getgammaprior(optarg, &opt_theta_alpha, &opt_theta_beta))
+          fatal("Illegal format for --thetaprior");
+        break;
+
+      case 15:
+        opt_cleandata = 1;
         break;
 
       default:
@@ -227,30 +264,14 @@ static rtree_t * load_tree(void)
   return rtree;
 }
 
-static void print_loci(locus_t ** loci, int loci_count)
-{
-  if (!loci) return;
-
-  locus_t * locus;
-  int i,j;
-
-  for (i = 0; i < loci_count; ++i)
-  {
-    locus = loci[i];
-    printf("Locus %d\n", i);
-    for (j = 0; j < locus->seq_count; ++j)
-      printf("%s %s\n", locus->label[j], locus->seq[j]);
-  }
-}
-
-
 void cmd_a00(void)
 {
-  locus_t ** loci;
-  int loci_count;
+  int i;
+  int alignment_count;
+  alignment_t ** alignment_list;
 
-  if (opt_mcmc_steps == 0)
-    fatal("The number of steps specified after --mcmc_steps must be a positive integer greater than zero");
+  if (opt_mcmc_steps <= 0)
+    fatal("--mcmc_steps must be a positive integer greater than zero");
 
   if (opt_mcmc_burnin < 1 || opt_mcmc_burnin > opt_mcmc_steps)
     fatal("--mcmc_burnin must be a positive integer smaller or equal to --mcmc_steps");
@@ -262,16 +283,25 @@ void cmd_a00(void)
   srand48(opt_seed);
 
   /* parse the phylip file */
-  loci = yy_parse_phylip(opt_msafile, &loci_count);
+  printf("Parsed tree\n");
+  alignment_list = yy_parse_phylip(opt_msafile, &alignment_count);
 
-  print_loci(loci, loci_count);
+  /* print the alignments */
+  for (i = 0; i < alignment_count; ++i)
+    alignment_print(alignment_list[i]);
 
   /* call MCMC */
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
 
+  /* deallocate tree */
   rtree_destroy(rtree);
+
+  /* deallocate alignments */
+  for (i = 0; i < alignment_count; ++i)
+    alignment_destroy(alignment_list[i]);
+  free(alignment_list);
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");

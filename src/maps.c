@@ -19,7 +19,7 @@
     Schloss-Wolfsbrunnenweg 35, D-69118 Heidelberg, Germany
 */
 
-#include "mptp.h"
+#include "bpp.h"
 
 /* maps for encoding sequences */
 

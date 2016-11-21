@@ -30,7 +30,7 @@ static int sc = 0;
 
 typedef struct list_s
 {
-  locus_t * locus;
+  alignment_t * alignment;
   struct list_s * next;
 } list_t;
 
@@ -59,43 +59,46 @@ void yy_dealloc_list(list_t * list)
 
   int i;
 
-  for (i = 0; i < list->locus->seq_count; ++i)
+  for (i = 0; i < list->alignment->seq_count; ++i)
   {
-    free(list->locus->seq[i]);
-    free(list->locus->label[i]);
+    free(list->alignment->seq[i]);
+    free(list->alignment->label[i]);
   }
-  free(list->locus->seq);
-  free(list->locus->label);
-  free(list->locus);
+  free(list->alignment->seq);
+  free(list->alignment->label);
+  free(list->alignment);
 
   if (list->next);
     yy_dealloc_list(list->next);
   free(list);
 }
 
-static locus_t ** linearize(list_t * list, int * loci_count)
+static alignment_t ** linearize(list_t * list, int * alignment_count)
 {
   int i;
   list_t * temp;
+  alignment_t ** alignment_array;
   
-  *loci_count = 0;
+  /* convert from linked list of alignments to a linear array of alignments */
+  *alignment_count = 0;
 
-  /* get number of loci */
+  /* get number of alignments */
   for (temp = list; temp; temp = temp->next)
-    (*loci_count)++;
+    (*alignment_count)++;
 
-  /* allocate array for loci */
-  locus_t ** loci = (locus_t **)xmalloc((*loci_count)*sizeof(locus_t *));
+  /* allocate array for alignments */
+  alignment_array = (alignment_t **)xmalloc((*alignment_count) *
+                                            sizeof(alignment_t *));
 
-  /* copy loci structures and deallocate list */
+  /* copy alignments and deallocate list */
   for (i = 0; list; i++)
   {
-    loci[i] = list->locus;
+    alignment_array[i] = list->alignment;
     temp = list;
     list = list->next;
     free(temp);
   }
-  return loci;
+  return alignment_array;
 }
 
 %}
@@ -105,13 +108,13 @@ static locus_t ** linearize(list_t * list, int * loci_count)
   char * s;
   char * d;
   struct list_s * list;
-  struct locus_s * locus;
+  struct alignment_s * alignment;
   struct sequence_s * sequence;
 }
 
 %error-verbose
 %parse-param {struct list_s ** list}
-%destructor { yy_dealloc_list($$); } loci_list
+%destructor { yy_dealloc_list($$); } alignment_list
 
 %token OPAR
 %token CPAR
@@ -120,33 +123,33 @@ static locus_t ** linearize(list_t * list, int * loci_count)
 %token<s> STRING
 %token<d> NUMBER
 %type<d> number 
-%type<list> loci_list
-%type<locus> locus
+%type<list> alignment_list
+%type<alignment> alignment
 %type<sequence> seq_list
 %start input
 %%
 
-input: loci_list 
+input: alignment_list 
 {
   *list = $1;
 }
 
-loci_list: locus loci_list
+alignment_list: alignment alignment_list
 {
   $$ = yy_create_list();
   
-  $$->locus = $1;
+  $$->alignment = $1;
   $$->next = $2;
 }
-        | locus
+        | alignment
 {
   $$ = yy_create_list();
 
-  $$->locus = $1;
+  $$->alignment = $1;
   $$->next = NULL;
 };
 
-locus: number number seq_list
+alignment: number number seq_list
 {
   int i;
 
@@ -167,7 +170,7 @@ locus: number number seq_list
     exit(1);
   }
 
-  $$ = (locus_t *)calloc(1,sizeof(locus_t));
+  $$ = (alignment_t *)calloc(1,sizeof(alignment_t));
 
   $$->seq_count = atoi($1);
   $$->seq_len = atoi($2);
@@ -216,29 +219,26 @@ number: NUMBER { $$=$1; };
 
 %%
 
-locus_t ** yy_parse_phylip(const char * filename, int * loci_count)
+alignment_t ** yy_parse_phylip(const char * filename, int * alignment_count)
 {
   struct list_s * list; 
-  locus_t ** loci;
+  alignment_t ** alignment_array;
 
-  *loci_count = 0;
+  *alignment_count = 0;
 
   phylip_lineno = 1;
   phylip_in = fopen(filename, "r");
   if (!phylip_in)
-  {
     fatal("Cannot open file %s", filename);
-  }
+
   else if (phylip_parse(&list))
-  {
-    fatal("Cannot parse tree file %s (maybe non-binary?)", filename);
-  }
+    fatal("Cannot parse PHYLIP file %s", filename);
   
   if (phylip_in) fclose(phylip_in);
 
   phylip_lex_destroy();
 
-  loci = linearize(list,loci_count);
+  alignment_array = linearize(list,alignment_count);
 
-  return loci;
+  return alignment_array;
 }

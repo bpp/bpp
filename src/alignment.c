@@ -81,17 +81,17 @@ static void ssort1(char ** x, int n, int depth)
   r = d - c; ssort1(x+n-r,r,depth);
 }
 
-void pllssort1main(char ** x, int n)
+static void pllssort1main(char ** x, int n)
 {
   ssort1(x, n, 0);
 }
 
 
-void compress(locus_t * locus)
+void compress(alignment_t * locus)
 {
   int i,j;
   char ** sites;
-  long * weight = locus->weight;
+  unsigned int * weight = locus->weight;
   int dups;
 
   /* allocate space for transposed alignment */
@@ -118,3 +118,31 @@ void compress(locus_t * locus)
   }
 }
 
+void alignment_print(alignment_t * alignment)
+{
+  if (!alignment) return;
+
+  int i;
+
+  printf("%d %d\n", alignment->seq_count, alignment->seq_len);
+  for (i = 0; i < alignment->seq_count; ++i)
+    printf("%s %s\n", alignment->label[i], alignment->seq[i]);
+}
+
+void alignment_destroy(alignment_t * alignment)
+{
+  int i;
+
+  for (i = 0; i < alignment->seq_count; ++i)
+  {
+    free(alignment->seq[i]);
+    free(alignment->label[i]);
+  }
+  free(alignment->seq);
+  free(alignment->label);
+
+  if (alignment->weight)
+    free(alignment->weight);
+
+  free(alignment);
+}

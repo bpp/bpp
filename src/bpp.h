@@ -56,6 +56,20 @@ typedef unsigned int UINT32;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 
+typedef struct species_s
+{
+  double theta;
+  double tau;
+  char * label;
+  int * perloci_seqcount;
+} species_t;
+
+typedef struct gtree_data_s
+{
+  species_t * species;
+  double time;
+} gtree_data_t;
+
 typedef struct rtree_s
 {
   char * label;
@@ -65,23 +79,36 @@ typedef struct rtree_s
   struct rtree_s * parent;
   int leaves;
 
-  int id;
+  species_t * species_data;
+  gtree_data_t * gtree_data;
+
+  int node_index;
 
 } rtree_t;
 
-typedef struct locus_s
+typedef struct alignment_s
 {
-  rtree_t * gtree;
-
   int seq_count;
   int seq_len;
 
   char ** seq;
   char ** label;
+  unsigned int * weight;
+
+} alignment_t;
+
+typedef struct locus_s
+{
+  unsigned int tips_count;
+  unsigned int clv_count;
+  unsigned int pmatrix_count;
+  unsigned int states;
+  unsigned int sites;
+
   double ** clv;
   double ** pmatrix;
-  long * weight;
-
+  unsigned int * pattern_weights;
+  unsigned char ** tipstates;
 } locus_t;
 
 typedef struct pll_fasta
@@ -112,6 +139,11 @@ extern long opt_mcmc_burnin;
 extern long opt_seed;
 extern long opt_stree;
 extern long opt_delimit;
+extern long opt_cleandata;
+extern double opt_tau_alpha;
+extern double opt_tau_beta;
+extern double opt_theta_alpha;
+extern double opt_theta_beta;
 extern char * opt_streefile;
 extern char * opt_mapfile;
 extern char * opt_outfile;
@@ -168,7 +200,7 @@ void rtree_destroy(rtree_t * root);
 
 /* functions in parse_phylip.y */
 
-locus_t ** yy_parse_phylip(const char * filename, int * loci_count);
+alignment_t ** yy_parse_phylip(const char * filename, int * loci_count);
 
 /* functions in rtree.c */
 
@@ -195,21 +227,8 @@ rtree_t ** rtree_tipstring_nodes(rtree_t * root,
 unsigned long arch_get_memused(void);
 unsigned long arch_get_memtotal(void);
 
-/* functions in fasta.c */
+/* functions in alignment.c */
 
-pll_fasta_t * pll_fasta_open(const char * filename,
-                                        const unsigned int * map);
+void alignment_print(alignment_t * alignment);
 
-int pll_fasta_getnext(pll_fasta_t * fd, char ** head,
-                                 long * head_len,  char ** seq,
-                                 long * seq_len, long * seqno);
-
-void pll_fasta_close(pll_fasta_t * fd);
-
-long pll_fasta_getfilesize(pll_fasta_t * fd);
-
-long pll_fasta_getfilepos(pll_fasta_t * fd);
-
-int pll_fasta_rewind(pll_fasta_t * fd);
-
-void pllssort1main(char ** x, int n);
+void alignment_destroy(alignment_t * alignment);
