@@ -123,6 +123,19 @@ typedef struct pll_fasta
   long stripped[256];
 } pll_fasta_t;
 
+typedef struct map_s
+{
+  char * individual;
+  char * species;
+  int lineno;
+} map_t;
+
+typedef struct list_s
+{
+  void * data;
+  struct list_s * next;
+} list_t;
+
 /* macros */
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -148,6 +161,7 @@ extern char * opt_streefile;
 extern char * opt_mapfile;
 extern char * opt_outfile;
 extern char * opt_msafile;
+extern char * opt_mapfile;
 extern char * cmdline;
 
 /* common data */
@@ -232,3 +246,12 @@ unsigned long arch_get_memtotal(void);
 void alignment_print(alignment_t * alignment);
 
 void alignment_destroy(alignment_t * alignment);
+
+/* functions in parse_map.y */
+
+list_t * yy_parse_map(const char * filename);
+
+/* functions in mapping.c */
+
+void maplist_print(list_t * map_list);
+void maplist_destroy(list_t * map_list);

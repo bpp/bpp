@@ -1,4 +1,4 @@
-# Copyright (C) 2015 Tomas Flouri
+# Copyright (C) 2016 Tomas Flouri and Ziheng Yang
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -26,7 +26,6 @@ WARN=-Wall -Wsign-compare
 
 ifndef CC
 CC = gcc
-CC=i686-w64-mingw32-gcc
 endif
 #CC=i686-w64-mingw32-gcc
 CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN)
@@ -41,7 +40,7 @@ PROG=bpp
 all: $(PROG)
 
 OBJS=bpp.o rtree.o util.o parse_rtree.o lex_rtree.o arch.o parse_phylip.o \
-     lex_phylip.o alignment.o maps.o locus.o
+     lex_phylip.o alignment.o maps.o locus.o parse_map.o lex_map.o mapping.o
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+
@@ -53,7 +52,7 @@ parse_%.c: parse_%.y
 	$(BISON) -p $*_ -d -o $@ $<
 
 lex_%.c: lex_%.l
-	$(FLEX) -o $@ $<
+	$(FLEX) -P $*_ -o $@ $<
 
 clean:
 	rm -f *~ $(OBJS) gmon.out $(PROG)

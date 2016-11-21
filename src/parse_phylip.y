@@ -28,12 +28,6 @@ extern int phylip_lineno;
 
 static int sc = 0;
 
-typedef struct list_s
-{
-  alignment_t * alignment;
-  struct list_s * next;
-} list_t;
-
 struct sequence_s
 {
   int len;
@@ -58,15 +52,16 @@ void yy_dealloc_list(list_t * list)
   if (!list) return;
 
   int i;
+  alignment_t * aln = (alignment_t *)(list->data);
 
-  for (i = 0; i < list->alignment->seq_count; ++i)
+  for (i = 0; i < aln->seq_count; ++i)
   {
-    free(list->alignment->seq[i]);
-    free(list->alignment->label[i]);
+    free(aln->seq[i]);
+    free(aln->label[i]);
   }
-  free(list->alignment->seq);
-  free(list->alignment->label);
-  free(list->alignment);
+  free(aln->seq);
+  free(aln->label);
+  free(aln);
 
   if (list->next);
     yy_dealloc_list(list->next);
@@ -93,7 +88,7 @@ static alignment_t ** linearize(list_t * list, int * alignment_count)
   /* copy alignments and deallocate list */
   for (i = 0; list; i++)
   {
-    alignment_array[i] = list->alignment;
+    alignment_array[i] = (alignment_t *)(list->data);
     temp = list;
     list = list->next;
     free(temp);
@@ -138,14 +133,14 @@ alignment_list: alignment alignment_list
 {
   $$ = yy_create_list();
   
-  $$->alignment = $1;
+  $$->data = (void *)$1;
   $$->next = $2;
 }
         | alignment
 {
   $$ = yy_create_list();
 
-  $$->alignment = $1;
+  $$->data = (void *)$1;
   $$->next = NULL;
 };
 

@@ -39,14 +39,17 @@ The code is currently licensed under the [GNU Affero General Public License vers
 **alignment.c**      | Code for processing alignments
 **arch.c**           | Architecture specific code (Mac/Linux).
 **bpp.c**            | Main file handling command-line parameters and executing selected methods.
+**lex_map.l**        | Lexical analyzer for parsing map files.
 **lex_phylip.l**     | Lexical analyzer for parsing phylip files.
-**lex_rtree.l**      | Lexical analyzer parsing newick rooted trees.
+**lex_rtree.l**      | Lexical analyzer for parsing newick rooted trees.
 **likelihood_avx.c** | AVX likelihood functions.
 **likelihood_sse.c** | SSE likelihood functions.
 **likelihood.c**     | Likelihood related functions.
 **locus.c**          | Locus specific functions.
 **Makefile**         | Makefile
+**mapping.c**        | Functions for handling map files.
 **maps.c**           | Character mapping arrays for converting sequences to the internal representation.
+**parse_map.y**      | Functions for parsing map files.
 **parse_phylip.y**   | Functions for parsing phylip files.
 **parse_rtree.y**    | Functions for parsing rooted trees in newick format.
 **rtree.c**          | Rooted tree manipulation functions.

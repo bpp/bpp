@@ -51,6 +51,7 @@ char * opt_streefile;
 char * opt_mapfile;
 char * opt_outfile;
 char * opt_msafile;
+char * opt_mapfile;
 
 static struct option long_options[] =
 {
@@ -70,6 +71,7 @@ static struct option long_options[] =
   {"tauprior",    required_argument, 0, 0 },  /* 13 */
   {"thetaprior",  required_argument, 0, 0 },  /* 14 */
   {"cleandata",   no_argument,       0, 0 },  /* 15 */
+  {"map_file",    required_argument, 0, 0 },  /* 16 */
   { 0, 0, 0, 0 }
 };
 
@@ -182,6 +184,9 @@ void args_init(int argc, char ** argv)
         opt_cleandata = 1;
         break;
 
+      case 16:
+        opt_mapfile = optarg;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -290,6 +295,12 @@ void cmd_a00(void)
   for (i = 0; i < alignment_count; ++i)
     alignment_print(alignment_list[i]);
 
+  /* parse map file */
+  printf("Parsing map file...\n");
+  list_t * map_list = yy_parse_map(opt_mapfile);
+  maplist_print(map_list);
+
+
   /* call MCMC */
 
   if (!opt_quiet)
@@ -302,6 +313,9 @@ void cmd_a00(void)
   for (i = 0; i < alignment_count; ++i)
     alignment_destroy(alignment_list[i]);
   free(alignment_list);
+
+  /* deallocate maplist */
+  maplist_destroy(map_list);
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
