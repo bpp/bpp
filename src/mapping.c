@@ -21,27 +21,28 @@
 
 #include "bpp.h"
 
-void maplist_print(list_t * map_list)
+void maplist_print(list_t * maplist)
 {
-  while (map_list)
+  if (!maplist) return;
+
+  list_item_t * li = maplist->head;
+  while (li)
   {
-    map_t * map = (map_t *)(map_list->data);
+    map_t * map = (map_t *)(li->data);
     printf("%s -> %s\n", map->individual, map->species);
-    map_list = map_list->next;
+    li = li->next;
   }
 }
 
-void maplist_destroy(list_t * map_list)
+/* callback function for list deallocator */
+void map_dealloc(void * data)
 {
-  while (map_list)
+  if (data)
   {
-    map_t * map = (map_t *)(map_list->data);
+    map_t * map = (map_t *)data;
+
     free(map->individual);
     free(map->species);
     free(map);
-
-    list_t * tmp = map_list;
-    map_list = map_list->next;
-    free(tmp);
   }
 }

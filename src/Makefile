@@ -24,10 +24,7 @@ PROFILING=-g
 # Compiler warnings
 WARN=-Wall -Wsign-compare
 
-ifndef CC
 CC = gcc
-endif
-#CC=i686-w64-mingw32-gcc
 CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN)
 LINKFLAGS=$(PROFILING)
 LIBS=-lm
@@ -40,7 +37,7 @@ PROG=bpp
 all: $(PROG)
 
 OBJS=bpp.o rtree.o util.o parse_rtree.o lex_rtree.o arch.o phylip.o msa.o \
-     maps.o locus.o parse_map.o lex_map.o mapping.o compress.o
+     maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+

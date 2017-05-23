@@ -177,11 +177,31 @@ typedef struct map_s
   int lineno;
 } map_t;
 
-typedef struct list_s
+typedef struct list_item_s
 {
   void * data;
-  struct list_s * next;
+  struct list_item_s * next;
+} list_item_t;
+
+typedef struct list_s
+{
+  list_item_t * head;
+  list_item_t * tail;
+  long count;
 } list_t;
+
+typedef struct ht_item_s
+{
+  unsigned long key;
+  void * value;
+} ht_item_t;
+
+typedef struct hashtable_s
+{
+  unsigned long table_size;
+  unsigned long entries_count;
+  list_t ** entries;
+} hashtable_t;
 
 /* macros */
 
@@ -250,15 +270,21 @@ FILE * xopen(const char * filename, const char * mode);
 /* functions in bpp.c */
 
 void args_init(int argc, char ** argv);
+
 void cmd_help(void);
+
 void getentirecommandline(int argc, char * argv[]);
+
 void fillheader(void);
+
 void show_header(void);
+
 void cmd_ml(void);
 
 /* functions in parse_rtree.y */
 
 rtree_t * rtree_parse_newick(const char * filename);
+
 void rtree_destroy(rtree_t * root);
 
 /* functions in phylip.c */
@@ -279,13 +305,16 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count);
 /* functions in rtree.c */
 
 void rtree_show_ascii(const rnode_t * root, int options);
+
 char * rtree_export_newick(const rnode_t * root,
                            char * (*cb_serialize)(const rnode_t *));
+
 int rtree_traverse(rnode_t * root,
                    int traversal,
                    int (*cbtrav)(rnode_t *),
                    rnode_t ** outbuffer,
                    unsigned int * trav_size);
+
 rtree_t ** rtree_tipstring_nodes(rtree_t * root,
                                  char * tipstring,
                                  unsigned int * tiplist_count);
@@ -293,6 +322,7 @@ rtree_t ** rtree_tipstring_nodes(rtree_t * root,
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
+
 unsigned long arch_get_memtotal(void);
 
 /* functions in msa.c */
@@ -308,4 +338,37 @@ list_t * yy_parse_map(const char * filename);
 /* functions in mapping.c */
 
 void maplist_print(list_t * map_list);
-void maplist_destroy(list_t * map_list);
+
+void map_dealloc(void * data);
+
+/* functions in list.c */
+
+void list_append(list_t * list, void * data);
+
+void list_prepend(list_t * list, void * data);
+
+void list_clear(list_t * list, void (*cb_dealloc)(void *));
+
+/* functions in hash.c */
+
+void * hashtable_find(hashtable_t * ht,
+                      void * x,
+                      unsigned long hash,
+                      int (*cb_cmp)(void *, void *));
+
+hashtable_t * hashtable_create(unsigned long items_count);
+
+int hashtable_strcmp(void * x, void * y);
+
+int hashtable_ptrcmp(void * x, void * y);
+
+unsigned long hash_djb2a(char * s);
+
+unsigned long hash_fnv(char * s);
+
+int hashtable_insert(hashtable_t * ht,
+                     void * x,
+                     unsigned long hash,
+                     int (*cb_cmp)(void *, void *));
+
+void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));

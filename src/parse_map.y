@@ -26,19 +26,12 @@ extern FILE * map_in;
 extern void map_lex_destroy();
 extern int map_lineno;
 
-void map_error(list_t ** list, const char * s) 
+void map_error(list_item_t ** list, const char * s) 
 {
   fprintf(stderr, "%s.\n", s);
 }
 
-static list_t * yy_create_list()
-{
-  list_t * list = xrealloc(0, sizeof(list_t));
-  memset(list,0,sizeof(list_t));
-  return list;
-}
-
-static void yy_dealloc_list(list_t * list)
+static void yy_dealloc_list(list_item_t * list)
 {
   if (!list) return;
 
@@ -57,12 +50,12 @@ static void yy_dealloc_list(list_t * list)
 {
   char * s;
   char * d;
-  struct list_s * list;
+  struct list_item_s * list;
   struct map_s * map;
 }
 
 %error-verbose
-%parse-param {struct list_s ** list}
+%parse-param {struct list_item_s ** list}
 %destructor { yy_dealloc_list($$); } map_list
 
 %token OPAR
@@ -85,14 +78,14 @@ input: map_list
 
 map_list: map map_list
 {
-  $$ = yy_create_list();
+  $$ = (list_item_t *)xcalloc(1, sizeof(list_item_t));
   
   $$->data = (void *)$1;
   $$->next = $2;
 }
         | map
 {
-  $$ = yy_create_list();
+  $$ = (list_item_t *)xcalloc(1, sizeof(list_item_t));
 
   $$->data = (void *)$1;
   $$->next = NULL;
@@ -100,7 +93,7 @@ map_list: map map_list
 
 map: individual species
 {
-  $$ = (map_t *)calloc(1,sizeof(map_t));
+  $$ = (map_t *)xcalloc(1,sizeof(map_t));
   $$->individual = $1;
   $$->species = $2;
   $$->lineno = map_lineno;
@@ -116,7 +109,8 @@ species: STRING { $$ = $1; }
 
 list_t * yy_parse_map(const char * filename)
 {
-  struct list_s * list; 
+  list_t * list;
+  list_item_t * li;
 
   map_lineno = 1;
   map_in = fopen(filename, "r");
@@ -124,7 +118,7 @@ list_t * yy_parse_map(const char * filename)
   {
     fatal("Cannot open file %s", filename);
   }
-  else if (map_parse(&list))
+  else if (map_parse(&li))
   {
     fatal("Error while parsing file %s", filename);
   }
@@ -132,6 +126,25 @@ list_t * yy_parse_map(const char * filename)
   if (map_in) fclose(map_in);
 
   map_lex_destroy();
+
+  list = (list_t *)xmalloc(sizeof(list_t));
+  list->head = li;
+  list->count = 0;
+  
+  if (li)
+  {
+    list->count = 1;
+    while (li->next)
+    {
+      list->count++;
+      li = li->next;
+    }
+    list->tail = li;
+  }
+  else
+  {
+    list->tail = NULL;
+  }
 
   return list;
 }

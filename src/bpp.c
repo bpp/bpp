@@ -323,7 +323,8 @@ void cmd_a00(void)
   free(msa_list);
 
   /* deallocate maplist */
-  maplist_destroy(map_list);
+  list_clear(map_list,map_dealloc);
+  free(map_list);
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
