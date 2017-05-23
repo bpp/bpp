@@ -71,11 +71,18 @@ void progress_done()
 
 void * xmalloc(size_t size)
 {
-  const size_t alignment = 16;
-  void * t = NULL;
-  if (posix_memalign(& t, alignment, size) == -1)
+  void * t;
+  t = malloc(size);
+  if (!t)
     fatal("Unable to allocate enough memory.");
 
+  return t;
+}
+
+void * xcalloc(size_t nmemb, size_t size)
+{
+  void * t;
+  t = calloc(nmemb,size);
   if (!t)
     fatal("Unable to allocate enough memory.");
 

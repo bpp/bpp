@@ -21,17 +21,17 @@
 
 #include "bpp.h"
 
-static int mark_ambiguous_sites(alignment_t * alignment,
+static int mark_ambiguous_sites(msa_t * msa,
                                 const unsigned int * map)
 {
   int i,j,k;
   unsigned int c;
   int clean_count = 0;
 
-  int len = alignment->seq_len;
-  int count = alignment->seq_count;
+  int len = msa->length;
+  int count = msa->count;
 
-  char ** seq = alignment->seq;
+  char ** seq = msa->sequence;
 
   /* iterate sites */
   for (i = 0; i < len; ++i)
@@ -48,7 +48,7 @@ static int mark_ambiguous_sites(alignment_t * alignment,
       /* if no bits are set then invalid state */
       if (!k)
         fatal("Illegal state code \%c\" in tip %s",
-              seq[j][i], alignment->label[j]);
+              seq[j][i], msa->label[j]);
 
       /* if ambiguity, set the whole site to an ambiguous state and increase
          the number of sites to be removed */
@@ -67,19 +67,19 @@ static int mark_ambiguous_sites(alignment_t * alignment,
 }
 
 static void set_tipstates(locus_t * locus,
-                          alignment_t * alignment,
+                          msa_t * msa,
                           const unsigned int * map)
 {
   int i,j,k;
   unsigned int c;
   int clean_count = 0;
   
-  int len = alignment->seq_len;
-  int count = alignment->seq_count;
+  int len = msa->length;
+  int count = msa->count;
 
   /* if --cleandata then get number of sites to be removed */
   if (opt_cleandata)
-    clean_count = mark_ambiguous_sites(alignment,map);
+    clean_count = mark_ambiguous_sites(msa,map);
 
   /* allocate necessary space for storing tip sequences */
   locus->tipstates = (unsigned char **)xmalloc(count*sizeof(unsigned char *));
@@ -90,7 +90,7 @@ static void set_tipstates(locus_t * locus,
   /* iterate sequences */
   for (i = 0; i < count; ++i)
   {
-    char * seq = alignment->seq[i];
+    char * seq = msa->sequence[i];
 
     /* go through the current sequence */
     for (j=0, k=0; j < len; ++j)
@@ -101,7 +101,7 @@ static void set_tipstates(locus_t * locus,
       /* seq[j] is an illegal character */
       if (!c)
         fatal("Illegal state code \%c\" in tip %s",
-              seq[j], alignment->label[i]);
+              seq[j], msa->label[i]);
 
       /* if cleandata enabled and ambiguous state then skip */
       if (opt_cleandata && __builtin_popcount(c) > 1)
@@ -113,13 +113,13 @@ static void set_tipstates(locus_t * locus,
   }
 }
 
-void init_locus(locus_t * locus, alignment_t * alignment)
+void init_locus(locus_t * locus, msa_t * msa)
 {
   /* convert alignments from ASCII character representation to state nucleotide
      state representation and store them in the locus structure. If cleandata
      is specified, remove all sites that contain an ambiguity at some sequence
   */
 
-  set_tipstates(locus, alignment, pll_map_nt);
+  set_tipstates(locus, msa, pll_map_nt);
 
 }

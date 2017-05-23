@@ -26,7 +26,8 @@ static char progheader[80];
 char * cmdline;
 
 /* global error message buffer */
-char errmsg[200] = {0};
+__thread int bpp_errno;
+__thread char bpp_errmsg[200] = {0};
 
 /* number of mandatory options for the user to input */
 static const char mandatory_options_count = 2;
@@ -272,8 +273,8 @@ static rtree_t * load_tree(void)
 void cmd_a00(void)
 {
   int i;
-  int alignment_count;
-  alignment_t ** alignment_list;
+  int msa_count;
+  msa_t ** msa_list;
 
   if (opt_mcmc_steps <= 0)
     fatal("--mcmc_steps must be a positive integer greater than zero");
@@ -289,11 +290,18 @@ void cmd_a00(void)
 
   /* parse the phylip file */
   printf("Parsed tree\n");
-  alignment_list = yy_parse_phylip(opt_msafile, &alignment_count);
+
+  phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
+  assert(fd);
+
+  msa_list = phylip_parse_multisequential(fd, &msa_count);
+  assert(msa_list);
+
+  phylip_close(fd);
 
   /* print the alignments */
-  for (i = 0; i < alignment_count; ++i)
-    alignment_print(alignment_list[i]);
+  for (i = 0; i < msa_count; ++i)
+    msa_print(msa_list[i]);
 
   /* parse map file */
   printf("Parsing map file...\n");
@@ -310,9 +318,9 @@ void cmd_a00(void)
   rtree_destroy(rtree);
 
   /* deallocate alignments */
-  for (i = 0; i < alignment_count; ++i)
-    alignment_destroy(alignment_list[i]);
-  free(alignment_list);
+  for (i = 0; i < msa_count; ++i)
+    msa_destroy(msa_list[i]);
+  free(msa_list);
 
   /* deallocate maplist */
   maplist_destroy(map_list);

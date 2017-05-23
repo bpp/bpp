@@ -21,162 +21,226 @@
 
 #include "bpp.h"
 
-static int indend_space = 4;
+static int indent_space = 4;
 
-static void print_node_info(rtree_t * tree)
+static void print_node_info(const rnode_t * root, int options)
 {
-  printf (" %s", tree->label);
-  printf (" %f", tree->length);
+  if (options & RTREE_SHOW_LABEL)
+    printf (" %s", root->label);
+  if (options & RTREE_SHOW_BRANCH_LENGTH)
+    printf (" %f", root->length);
   printf("\n");
 }
 
-static void print_tree_recurse(rtree_t * tree,
-                               int indend_level,
-                               int * active_node_order)
+static void print_tree_recurse(const rnode_t * root,
+                               int indent_level,
+                               int * active_node_order,
+                               int options)
 {
   int i,j;
 
-  if (!tree) return;
+  if (!root) return;
 
-  for (i = 0; i < indend_level; ++i)
+  for (i = 0; i < indent_level; ++i)
   {
     if (active_node_order[i])
       printf("|");
     else
       printf(" ");
 
-    for (j = 0; j < indend_space-1; ++j)
+    for (j = 0; j < indent_space-1; ++j)
       printf(" ");
   }
   printf("\n");
 
-  for (i = 0; i < indend_level-1; ++i)
+  for (i = 0; i < indent_level-1; ++i)
   {
     if (active_node_order[i])
       printf("|");
     else
       printf(" ");
 
-    for (j = 0; j < indend_space-1; ++j)
+    for (j = 0; j < indent_space-1; ++j)
       printf(" ");
   }
 
   printf("+");
-  for (j = 0; j < indend_space-1; ++j)
+  for (j = 0; j < indent_space-1; ++j)
     printf ("-");
-  if (tree->left || tree->right) printf("+");
+  if (root->left || root->right) printf("+");
 
-  print_node_info(tree);
+  print_node_info(root, options);
 
-  if (active_node_order[indend_level-1] == 2)
-    active_node_order[indend_level-1] = 0;
+  if (active_node_order[indent_level-1] == 2)
+    active_node_order[indent_level-1] = 0;
 
-  active_node_order[indend_level] = 1;
-  print_tree_recurse(tree->left,
-                     indend_level+1,
-                     active_node_order);
-  active_node_order[indend_level] = 2;
-  print_tree_recurse(tree->right,
-                     indend_level+1,
-                     active_node_order);
+  active_node_order[indent_level] = 1;
+  print_tree_recurse(root->left,
+                     indent_level+1,
+                     active_node_order,
+                     options);
+  active_node_order[indent_level] = 2;
+  print_tree_recurse(root->right,
+                     indent_level+1,
+                     active_node_order,
+                     options);
 
 }
 
-static int tree_indend_level(rtree_t * tree, int indend)
+static unsigned int tree_indent_level(const rnode_t * root, unsigned int indent)
 {
-  if (!tree) return indend;
+  if (!root) return indent;
 
-  int a = tree_indend_level(tree->left,  indend+1);
-  int b = tree_indend_level(tree->right, indend+1);
+  unsigned int a = tree_indent_level(root->left,  indent+1);
+  unsigned int b = tree_indent_level(root->right, indent+1);
 
   return (a > b ? a : b);
 }
 
-void rtree_show_ascii(rtree_t * tree)
+void rtree_show_ascii(const rnode_t * root, int options)
 {
 
-  int indend_max = tree_indend_level(tree,0);
+  unsigned int indent_max = tree_indent_level(root,0);
 
-  int * active_node_order = (int *)malloc((size_t)(indend_max+1) * sizeof(int));
+  int * active_node_order = (int *)xmalloc((indent_max+1) * sizeof(int));
   active_node_order[0] = 1;
   active_node_order[1] = 1;
 
-  print_node_info(tree);
-  print_tree_recurse(tree->left,  1, active_node_order);
-  active_node_order[0] = 2;
-  print_tree_recurse(tree->right, 1, active_node_order);
+  print_node_info(root, options);
+  print_tree_recurse(root->left,  1, active_node_order, options);
+  print_tree_recurse(root->right, 1, active_node_order, options);
   free(active_node_order);
 }
 
-static char * rtree_export_newick_recursive(rtree_t * root)
+static char * rtree_export_newick_recursive(const rnode_t * root,
+                                            char * (*cb_serialize)(const rnode_t *))
 {
   char * newick;
-
-  if (!root) return NULL;
+  int size_alloced;
+  assert(root != NULL);
 
   if (!(root->left) || !(root->right))
   {
-    if (asprintf(&newick, "%s:%f", root->label, root->length) == -1)
-      fatal("Unable to allocate enough memory.");
+    if (cb_serialize)
+    {
+      newick = cb_serialize(root);
+      size_alloced = strlen(newick);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+    }
   }
   else
   {
-    char * subtree1 = rtree_export_newick_recursive(root->left);
-    char * subtree2 = rtree_export_newick_recursive(root->right);
+    char * subtree1 = rtree_export_newick_recursive(root->left,cb_serialize);
+    if (subtree1 == NULL)
+    {
+      return NULL;
+    }
+    char * subtree2 = rtree_export_newick_recursive(root->right,cb_serialize);
+    if (subtree2 == NULL)
+    {
+      free(subtree1);
+      return NULL;
+    }
 
-    if (asprintf(&newick, "(%s,%s)%s:%f", subtree1,
-                                          subtree2,
-                                          root->label,
-                                          root->length) == -1)
-      fatal("Unable to allocate enough memory.");
-
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s",
+                              subtree1,
+                              subtree2,
+                              temp);
+      free(temp);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s:%f",
+                              subtree1,
+                              subtree2,
+                              root->label ? root->label : "",
+                              root->length);
+    }
     free(subtree1);
     free(subtree2);
+  }
+  if (size_alloced < 0)
+  {
+    fatal("Memory allocation during newick export failed");
   }
 
   return newick;
 }
 
-char * rtree_export_newick(rtree_t * root)
+char * rtree_export_newick(const rnode_t * root,
+                           char * (*cb_serialize)(const rnode_t *))
 {
   char * newick;
-
+  int size_alloced;
   if (!root) return NULL;
 
   if (!(root->left) || !(root->right))
   {
-    if (asprintf(&newick, "%s:%f", root->label, root->length) == -1)
-      fatal("Unable to allocate enough memory.");
+    if (cb_serialize)
+    {
+      newick = cb_serialize(root);
+      size_alloced = strlen(newick);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+    }
   }
   else
   {
-    char * subtree1 = rtree_export_newick_recursive(root->left);
-    char * subtree2 = rtree_export_newick_recursive(root->right);
-
-    if (asprintf(&newick, "(%s,%s)%s:%f;", subtree1,
-                                           subtree2,
-                                           root->label,
-                                           root->length) == -1)
+    char * subtree1 = rtree_export_newick_recursive(root->left,cb_serialize);
+    if (!subtree1)
       fatal("Unable to allocate enough memory.");
 
+    char * subtree2 = rtree_export_newick_recursive(root->right,cb_serialize);
+    if (!subtree2)
+      fatal("Unable to allocate enough memory.");
+
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s",
+                              subtree1,
+                              subtree2,
+                              temp);
+      free(temp);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s:%f;",
+                              subtree1,
+                              subtree2,
+                              root->label ? root->label : "",
+                              root->length);
+    }
     free(subtree1);
     free(subtree2);
   }
+  if (size_alloced < 0)
+    fatal("memory allocation during newick export failed");
 
   return newick;
 }
 
-static void rtree_traverse_recursive(rtree_t * node,
-                                     int (*cbtrav)(rtree_t *),
-                                     int * index,
-                                     struct drand48_data * rstate,
-                                     rtree_t ** outbuffer)
-{
-  double rand_double = 0;
 
+static void rtree_traverse_postorder(rnode_t * node,
+                                     int (*cbtrav)(rnode_t *),
+                                     unsigned int * index,
+                                     rnode_t ** outbuffer)
+{
   if (!node->left)
   {
-    if (!cbtrav(node))
+    if (cbtrav(node))
     {
       outbuffer[*index] = node;
       *index = *index + 1;
@@ -184,36 +248,50 @@ static void rtree_traverse_recursive(rtree_t * node,
     return;
   }
   if (!cbtrav(node))
+    return;
+
+  rtree_traverse_postorder(node->left, cbtrav, index, outbuffer);
+  rtree_traverse_postorder(node->right, cbtrav, index, outbuffer);
+
+  outbuffer[*index] = node;
+  *index = *index + 1;
+}
+
+static void rtree_traverse_preorder(rnode_t * node,
+                                    int (*cbtrav)(rnode_t *),
+                                    unsigned int * index,
+                                    rnode_t ** outbuffer)
+{
+  if (!node->left)
   {
-    outbuffer[*index] = node;
-    *index = *index + 1;
+    if (cbtrav(node))
+    {
+      outbuffer[*index] = node;
+      *index = *index + 1;
+    }
     return;
   }
+  if (!cbtrav(node))
+    return;
 
-  drand48_r(rstate, &rand_double);
-  if (rand_double >= 0.5)
-  {
-    rtree_traverse_recursive(node->left, cbtrav, index, rstate, outbuffer);
-    rtree_traverse_recursive(node->right, cbtrav, index, rstate, outbuffer);
-  }
-  else
-  {
-    rtree_traverse_recursive(node->right, cbtrav, index, rstate, outbuffer);
-    rtree_traverse_recursive(node->left, cbtrav, index, rstate, outbuffer);
-  }
+  outbuffer[*index] = node;
+  *index = *index + 1;
+
+  rtree_traverse_preorder(node->left, cbtrav, index, outbuffer);
+  rtree_traverse_preorder(node->right, cbtrav, index, outbuffer);
 
 }
 
-int rtree_traverse(rtree_t * root,
-                   int (*cbtrav)(rtree_t *),
-                   struct drand48_data * rstate,
-                   rtree_t ** outbuffer)
+int rtree_traverse(rnode_t * root,
+                   int traversal,
+                   int (*cbtrav)(rnode_t *),
+                   rnode_t ** outbuffer,
+                   unsigned int * trav_size)
 {
-  int index = 0;
+  *trav_size = 0;
+  if (!root->left) return BPP_FAILURE;
 
-  if (!root->left) return -1;
-
-  /* we will traverse an rooted tree in the following way
+  /* we will traverse an unrooted tree in the following way
 
            root
             /\
@@ -223,69 +301,20 @@ int rtree_traverse(rtree_t * root,
      at each node the callback function is called to decide whether we
      are going to traversing the subtree rooted at the specific node */
 
-  rtree_traverse_recursive(root, cbtrav, &index, rstate, outbuffer);
-  return index;
+  if (traversal == TREE_TRAVERSE_POSTORDER)
+    rtree_traverse_postorder(root, cbtrav, trav_size, outbuffer);
+  else if (traversal == TREE_TRAVERSE_PREORDER)
+    rtree_traverse_preorder(root, cbtrav, trav_size, outbuffer);
+  else
+    fatal("Invalid traversal value.");
+
+  return BPP_SUCCESS;
 }
 
-static void rtree_traverse_postorder_recursive(rtree_t * node,
-                                               int (*cbtrav)(rtree_t *),
-                                               int * index,
-                                               rtree_t ** outbuffer)
-{
-  if (!node) return;
-
-  rtree_traverse_postorder_recursive(node->left,  cbtrav, index, outbuffer);
-  rtree_traverse_postorder_recursive(node->right, cbtrav, index, outbuffer);
-
-  if (cbtrav(node))
-  {
-    outbuffer[*index] = node;
-    *index = *index + 1;
-  }
-}
-
-
-int rtree_traverse_postorder(rtree_t * root,
-                             int (*cbtrav)(rtree_t *),
-                             rtree_t ** outbuffer)
-{
-  int index = 0;
-
-  if (!root->left) return -1;
-
-  /* we will traverse an unrooted tree in the following way
-
-           root
-            /\
-           /  \
-        left   right
-
-     at each node the callback function is called to decide whether to
-     place the node in the list */
-
-  rtree_traverse_postorder_recursive(root, cbtrav, &index, outbuffer);
-  return index;
-}
-
-static int rtree_height_recursive(rtree_t * node)
-{
-  if (!node) return 1;
-
-  int a = rtree_height_recursive(node->left);
-  int b = rtree_height_recursive(node->right);
-
-  return MAX(a,b)+1;
-}
-
-
-int rtree_height(rtree_t * root)
-{
-  return rtree_height_recursive(root);
-}
-
-static void rtree_query_tipnodes_recursive(rtree_t * node,
-                                           rtree_t ** node_list,
-                                           int * index)
+#if 0
+static void rtree_query_tipnodes_recursive(pll_rtree_t * node,
+                                           pll_rtree_t ** node_list,
+                                           unsigned int * index)
 {
   if (!node) return;
 
@@ -300,10 +329,10 @@ static void rtree_query_tipnodes_recursive(rtree_t * node,
   rtree_query_tipnodes_recursive(node->right, node_list, index);
 }
 
-int rtree_query_tipnodes(rtree_t * root,
-                         rtree_t ** node_list)
+PLL_EXPORT unsigned int pll_rtree_query_tipnodes(pll_rtree_t * root,
+                                                 pll_rtree_t ** node_list)
 {
-  int index = 0;
+  unsigned int index = 0;
 
   if (!root) return 0;
   if (!root->left)
@@ -318,9 +347,9 @@ int rtree_query_tipnodes(rtree_t * root,
   return index;
 }
 
-static void rtree_query_innernodes_recursive(rtree_t * root,
-                                             rtree_t ** node_list,
-                                             int * index)
+static void rtree_query_innernodes_recursive(pll_rtree_t * root,
+                                             pll_rtree_t ** node_list,
+                                             unsigned int * index)
 {
   if (!root) return;
   if (!root->left) return;
@@ -335,10 +364,10 @@ static void rtree_query_innernodes_recursive(rtree_t * root,
   return;
 }
 
-int rtree_query_innernodes(rtree_t * root,
-                           rtree_t ** node_list)
+PLL_EXPORT unsigned int pll_rtree_query_innernodes(pll_rtree_t * root,
+                                        pll_rtree_t ** node_list)
 {
-  int index = 0;
+  unsigned int index = 0;
 
   if (!root) return 0;
   if (!root->left) return 0;
@@ -350,110 +379,6 @@ int rtree_query_innernodes(rtree_t * root,
 
   return index;
 }
-
-void rtree_print_tips(rtree_t * node, FILE * out)
-{
-  if (node->left)  rtree_print_tips(node->left,out);
-  if (node->right) rtree_print_tips(node->right,out);
-
-  if (!node->left && !node->right)
-    fprintf(out, "%s\n", node->label);
-}
+#endif
 
 
-rtree_t * rtree_clone(rtree_t * node, rtree_t * parent)
-{
-  if (!node) return NULL;
-
-  /* clone node */
-  rtree_t * clone = (rtree_t *)xmalloc(sizeof(rtree_t));
-  memcpy(clone,node,sizeof(rtree_t));
-  clone->parent = parent;
-
-  if (node->label)
-    clone->label = xstrdup(node->label);
-
-  /* clone the two subtrees */
-  clone->left  = rtree_clone(node->left, clone);
-  clone->right = rtree_clone(node->right, clone);
-
-  return clone;
-}
-
-rtree_t ** rtree_tipstring_nodes(rtree_t * root,
-                                 char * tipstring,
-                                 unsigned int * tiplist_count)
-{
-  size_t i;
-  unsigned int k;
-  unsigned int commas_count = 0;
-
-  char * taxon;
-  unsigned long taxon_len;
-
-  ENTRY * found = NULL;
-
-  for (i = 0; i < strlen(tipstring); ++i)
-    if (tipstring[i] == ',')
-      commas_count++;
-
-  rtree_t ** node_list = (rtree_t **)xmalloc((size_t)(root->leaves) *
-                                             sizeof(rtree_t *));
-  rtree_query_tipnodes(root, node_list);
-
-  rtree_t ** out_node_list = (rtree_t **)xmalloc((size_t)(commas_count+1) *
-                                                 sizeof(rtree_t *));
-
-  /* create a hashtable of tip labels */
-  hcreate(2 * (size_t)(root->leaves));
-
-  for (i = 0; i < (unsigned int)(root->leaves); ++i)
-  {
-    ENTRY entry;
-    entry.key  = node_list[i]->label;
-    entry.data = node_list[i];
-    hsearch(entry,ENTER);
-  }
-
-  char * s = tipstring;
-
-  k = 0;
-  while (*s)
-  {
-    /* get next tip */
-    taxon_len = strcspn(s, ",");
-    if (!taxon_len)
-      fatal("Erroneous prune list format (double comma)/taxon missing");
-
-    taxon = xstrndup(s, taxon_len);
-
-    /* search tip in hash table */
-    ENTRY query;
-    query.key = taxon;
-    found = NULL;
-    found = hsearch(query,FIND);
-
-    if (!found)
-      fatal("Taxon %s in does not appear in the tree", taxon);
-
-    /* store pointer in output list */
-    out_node_list[k++] = (rtree_t *)(found->data);
-
-    /* free tip label, and move to the beginning of next tip if available */
-    free(taxon);
-    s += taxon_len;
-    if (*s == ',')
-      s += 1;
-  }
-
-  /* kill the hash table */
-  hdestroy();
-
-  free(node_list);
-
-  /* return number of tips in the list */
-  *tiplist_count = commas_count + 1;
-
-  /* return tip node list */
-  return out_node_list;
-}

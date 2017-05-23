@@ -48,7 +48,25 @@
 #define PROG_ARCH "linux_x86_64"
 #endif
 
+#define BPP_FAILURE  0
+#define BPP_SUCCESS  1
+
 #define LINEALLOC 2048
+#define ASCII_SIZE 256
+
+#define RTREE_SHOW_LABEL                1
+#define RTREE_SHOW_BRANCH_LENGTH        2
+
+#define TREE_TRAVERSE_POSTORDER         1
+#define TREE_TRAVERSE_PREORDER          2
+
+/* error codes */
+
+#define ERROR_PHYLIP_SYNTAX            106
+#define ERROR_PHYLIP_LONGSEQ           107
+#define ERROR_PHYLIP_NONALIGNED        108
+#define ERROR_PHYLIP_ILLEGALCHAR       109
+#define ERROR_PHYLIP_UNPRINTABLECHAR   110
 
 /* structures and data types */
 
@@ -70,32 +88,41 @@ typedef struct gtree_data_s
   double time;
 } gtree_data_t;
 
-typedef struct rtree_s
+typedef struct rnode_s
 {
   char * label;
   double length;
-  struct rtree_s * left;
-  struct rtree_s * right;
-  struct rtree_s * parent;
-  int leaves;
+  struct rnode_s * left;
+  struct rnode_s * right;
+  struct rnode_s * parent;
+  unsigned int leaves;
 
   species_t * species_data;
   gtree_data_t * gtree_data;
 
-  int node_index;
+  unsigned int index;
+} rnode_t;
 
+typedef struct rtree_s
+{
+  unsigned int tip_count;
+  unsigned int inner_count;
+  unsigned int edge_count;
+
+  rnode_t ** nodes;
+
+  rnode_t * root;
 } rtree_t;
 
-typedef struct alignment_s
+typedef struct msa_s
 {
-  int seq_count;
-  int seq_len;
+  int count;
+  int length;
 
-  char ** seq;
+  char ** sequence;
   char ** label;
-  unsigned int * weight;
 
-} alignment_t;
+} msa_t;
 
 typedef struct locus_s
 {
@@ -111,7 +138,9 @@ typedef struct locus_s
   unsigned char ** tipstates;
 } locus_t;
 
-typedef struct pll_fasta
+/* Simple structure for handling PHYLIP parsing */
+
+typedef struct fasta
 {
   FILE * fp;
   char line[LINEALLOC];
@@ -121,7 +150,25 @@ typedef struct pll_fasta
   long lineno;
   long stripped_count;
   long stripped[256];
-} pll_fasta_t;
+} fasta_t;
+
+
+/* Simple structure for handling PHYLIP parsing */
+
+typedef struct phylip_s
+{
+  FILE * fp;
+  char * line;
+  size_t line_size;
+  size_t line_maxsize;
+  char buffer[LINEALLOC];
+  const unsigned int * chrstatus;
+  long no;
+  long filesize;
+  long lineno;
+  long stripped_count;
+  long stripped[256];
+} phylip_t;
 
 typedef struct map_s
 {
@@ -140,6 +187,7 @@ typedef struct list_s
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define SWAP(x,y) do { __typeof__ (x) _t = x; x = y; y = _t; } while(0)
 
 /* options */
 
@@ -166,9 +214,9 @@ extern char * cmdline;
 
 /* common data */
 
-extern char errmsg[200];
+extern __thread int bpp_errno;
+extern __thread char bpp_errmsg[200];
 
-extern int pll_errno;
 extern const unsigned int pll_map_nt[256];
 extern const unsigned int pll_map_fasta[256];
 
@@ -190,6 +238,7 @@ void progress_init(const char * prompt, unsigned long size);
 void progress_update(unsigned int progress);
 void progress_done(void);
 void * xmalloc(size_t size);
+void * xcalloc(size_t nmemb, size_t size);
 void * xrealloc(void *ptr, size_t size);
 char * xstrchrnul(char *s, int c);
 char * xstrdup(const char * s);
@@ -212,26 +261,31 @@ void cmd_ml(void);
 rtree_t * rtree_parse_newick(const char * filename);
 void rtree_destroy(rtree_t * root);
 
-/* functions in parse_phylip.y */
+/* functions in phylip.c */
 
-alignment_t ** yy_parse_phylip(const char * filename, int * loci_count);
+phylip_t * phylip_open(const char * filename,
+                       const unsigned int * map);
+
+int phylip_rewind(phylip_t * fd);
+
+void phylip_close(phylip_t * fd);
+
+msa_t * phylip_parse_interleaved(phylip_t * fd);
+
+msa_t * phylip_parse_sequential(phylip_t * fd);
+
+msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count);
 
 /* functions in rtree.c */
 
-void rtree_show_ascii(rtree_t * tree);
-char * rtree_export_newick(rtree_t * root);
-int rtree_query_tipnodes(rtree_t * root, rtree_t ** node_list);
-int rtree_query_innernodes(rtree_t * root, rtree_t ** node_list);
-void rtree_reset_info(rtree_t * root);
-void rtree_print_tips(rtree_t * node, FILE * out);
-int rtree_traverse(rtree_t * root,
-                   int (*cbtrav)(rtree_t *),
-                   struct drand48_data * rstate,
-                   rtree_t ** outbuffer);
-rtree_t * rtree_clone(rtree_t * node, rtree_t * parent);
-int rtree_traverse_postorder(rtree_t * root,
-                             int (*cbtrav)(rtree_t *),
-                             rtree_t ** outbuffer);
+void rtree_show_ascii(const rnode_t * root, int options);
+char * rtree_export_newick(const rnode_t * root,
+                           char * (*cb_serialize)(const rnode_t *));
+int rtree_traverse(rnode_t * root,
+                   int traversal,
+                   int (*cbtrav)(rnode_t *),
+                   rnode_t ** outbuffer,
+                   unsigned int * trav_size);
 rtree_t ** rtree_tipstring_nodes(rtree_t * root,
                                  char * tipstring,
                                  unsigned int * tiplist_count);
@@ -241,11 +295,11 @@ rtree_t ** rtree_tipstring_nodes(rtree_t * root,
 unsigned long arch_get_memused(void);
 unsigned long arch_get_memtotal(void);
 
-/* functions in alignment.c */
+/* functions in msa.c */
 
-void alignment_print(alignment_t * alignment);
+void msa_print(msa_t * msa);
 
-void alignment_destroy(alignment_t * alignment);
+void msa_destroy(msa_t * msa);
 
 /* functions in parse_map.y */
 
