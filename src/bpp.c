@@ -311,11 +311,15 @@ void cmd_a00(void)
 
   /* call MCMC */
 
+  /* debugging */
+  stree_init(rtree,msa_list,map_list,msa_count);
+
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
 
   /* deallocate tree */
-  rtree_destroy(rtree);
+  /* TODO: Deallocate with species tree deallocator */
+  rtree_destroy(rtree,cb_stree_dealloc);
 
   /* deallocate alignments */
   for (i = 0; i < msa_count; ++i)

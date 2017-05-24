@@ -37,7 +37,8 @@ PROG=bpp
 all: $(PROG)
 
 OBJS=bpp.o rtree.o util.o parse_rtree.o lex_rtree.o arch.o phylip.o msa.o \
-     maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o
+     maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
+     stree.o random.o
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+

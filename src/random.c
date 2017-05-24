@@ -21,28 +21,16 @@
 
 #include "bpp.h"
 
-void maplist_print(list_t * maplist)
+/* legacy random number generators */
+static unsigned int z_rndu = 666;
+
+double legacy_rndu (void)
 {
-  if (!maplist) return;
-
-  list_item_t * li = maplist->head;
-  while (li)
-  {
-    mapping_t * map = (mapping_t *)(li->data);
-    printf("%s -> %s\n", map->individual, map->species);
-    li = li->next;
-  }
-}
-
-/* callback function for list deallocator */
-void map_dealloc(void * data)
-{
-  if (data)
-  {
-    mapping_t * map = (mapping_t *)data;
-
-    free(map->individual);
-    free(map->species);
-    free(map);
-  }
+/* 32-bit integer assumed.
+   From Ripley (1987) p. 46 or table 2.4 line 2. 
+   This may return 0 or 1, which can be a problem.
+*/
+   z_rndu = z_rndu*69069 + 1;
+   if(z_rndu==0 || z_rndu==4294967295)  z_rndu = 13;
+   return z_rndu/4294967295.0;
 }

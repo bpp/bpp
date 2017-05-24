@@ -74,17 +74,17 @@ typedef unsigned int UINT32;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 
-typedef struct species_s
+typedef struct stree_data_s
 {
   double theta;
   double tau;
   char * label;
-  int * perloci_seqcount;
-} species_t;
+  int * seq_count;
+} stree_data_t;
 
 typedef struct gtree_data_s
 {
-  species_t * species;
+  stree_data_t * species;
   double time;
 } gtree_data_t;
 
@@ -97,8 +97,7 @@ typedef struct rnode_s
   struct rnode_s * parent;
   unsigned int leaves;
 
-  species_t * species_data;
-  gtree_data_t * gtree_data;
+  void * data;
 
   unsigned int index;
 } rnode_t;
@@ -170,12 +169,12 @@ typedef struct phylip_s
   long stripped[256];
 } phylip_t;
 
-typedef struct map_s
+typedef struct mapping_s
 {
   char * individual;
   char * species;
   int lineno;
-} map_t;
+} mapping_t;
 
 typedef struct list_item_s
 {
@@ -202,6 +201,12 @@ typedef struct hashtable_s
   unsigned long entries_count;
   list_t ** entries;
 } hashtable_t;
+
+typedef struct pair_s
+{
+  char * label;
+  void * data;
+} pair_t;
 
 /* macros */
 
@@ -285,7 +290,8 @@ void cmd_ml(void);
 
 rtree_t * rtree_parse_newick(const char * filename);
 
-void rtree_destroy(rtree_t * root);
+void rtree_destroy(rtree_t * tree,
+                   void (*cb_destroy)(void *));
 
 /* functions in phylip.c */
 
@@ -372,3 +378,15 @@ int hashtable_insert(hashtable_t * ht,
                      int (*cb_cmp)(void *, void *));
 
 void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
+
+/* functions in stree.c */
+
+void stree_init(rtree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
+
+void cb_stree_dealloc(void * data);
+
+hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
+
+/* functions in random.c */
+
+double legacy_rndu(void);

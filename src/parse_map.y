@@ -35,7 +35,7 @@ static void yy_dealloc_list(list_item_t * list)
 {
   if (!list) return;
 
-  map_t * map = (map_t *)(list->data);
+  mapping_t * map = (mapping_t *)(list->data);
 
   free(map->individual);
   free(map->species);
@@ -51,7 +51,7 @@ static void yy_dealloc_list(list_item_t * list)
   char * s;
   char * d;
   struct list_item_s * list;
-  struct map_s * map;
+  struct mapping_s * map;
 }
 
 %error-verbose
@@ -93,7 +93,7 @@ map_list: map map_list
 
 map: individual species
 {
-  $$ = (map_t *)xcalloc(1,sizeof(map_t));
+  $$ = (mapping_t *)xcalloc(1,sizeof(mapping_t));
   $$->individual = $1;
   $$->species = $2;
   $$->lineno = map_lineno;

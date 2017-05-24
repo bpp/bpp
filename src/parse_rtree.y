@@ -34,41 +34,32 @@ extern void rtree__delete_buffer(struct rtree_buffer_state * buffer);
 
 static unsigned int tip_cnt = 0;
 
-static void dealloc_species_data(species_t * data)
+static void dealloc_data(rnode_t * node,
+                         void (*cb_destroy)(void *))
 {
-  if (data)
+  if (node->data)
   {
-    if (data->label)
-      free(data->label);
-
-    if (data->perloci_seqcount)
-      free(data->perloci_seqcount);
-
-    free(data);
+    if (cb_destroy)
+      cb_destroy(node->data);
   }
 }
 
-static void dealloc_gtree_data(gtree_data_t * data)
-{
-  if (data)
-    free(data);
-}
-
-void rtree_graph_destroy(rnode_t * root)
+void rtree_graph_destroy(rnode_t * root,
+                         void (*cb_destroy)(void *))
 {
   if (!root) return;
 
-  rtree_graph_destroy(root->left);
-  rtree_graph_destroy(root->right);
+  rtree_graph_destroy(root->left, cb_destroy);
+  rtree_graph_destroy(root->right, cb_destroy);
 
-  dealloc_species_data(root->species_data);
-  dealloc_gtree_data(root->gtree_data);
+  dealloc_data(root, cb_destroy);
 
   free(root->label);
   free(root);
 }
 
-void rtree_destroy(rtree_t * tree)
+void rtree_destroy(rtree_t * tree,
+                   void (*cb_destroy)(void *))
 {
   unsigned int i;
   rnode_t * node;
@@ -77,6 +68,7 @@ void rtree_destroy(rtree_t * tree)
   for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
   {
     node = tree->nodes[i];
+    dealloc_data(node,cb_destroy);
 
     if (node->label)
       free(node->label);
@@ -105,7 +97,7 @@ static void rtree_error(rnode_t * node, const char * s)
 
 %error-verbose
 %parse-param {struct rnode_s * tree}
-%destructor { rtree_graph_destroy($$); } subtree
+%destructor { rtree_graph_destroy($$,NULL); } subtree
 %destructor { free($$); } STRING
 %destructor { free($$); } NUMBER
 %destructor { free($$); } label
@@ -129,6 +121,7 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tree->label  = $6;
   tree->length = $7 ? atof($7) : 0;
   tree->parent = NULL;
+  tree->leaves = $2->leaves + $4->leaves;
   free($7);
 
   tree->left->parent  = tree;
@@ -143,6 +136,7 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$->right  = $4;
   $$->label  = $6;
   $$->length = $7 ? atof($7) : 0;
+  $$->leaves = $2->leaves + $4->leaves;
   free($7);
 
   $$->left->parent  = $$;
@@ -154,6 +148,7 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$ = (rnode_t *)calloc(1, sizeof(rnode_t));
   $$->label  = $1;
   $$->length = $2 ? atof($2) : 0;
+  $$->leaves = 1;
   $$->left   = NULL;
   $$->right  = NULL;
   tip_cnt++;
@@ -261,7 +256,7 @@ rtree_t * rtree_parse_newick(const char * filename)
 
   if (rtree_parse(root))
   {
-    rtree_graph_destroy(root);
+    rtree_graph_destroy(root,NULL);
     root = NULL;
     fclose(rtree_in);
     rtree_lex_destroy();
