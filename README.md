@@ -1,5 +1,8 @@
 # bpp
 
+[![Build Status](https://travis-ci.org/xflouris/bpp.svg?branch=master)](https://travis-ci.org/xflouris/bpp)
+[![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
+
 ## Introduction
 
 The aim of this project is to implement a versatile high-performance version
@@ -34,26 +37,31 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 ## Code
 
-    File             | Description
----------------------|----------------
-**alignment.c**      | Code for processing alignments
-**arch.c**           | Architecture specific code (Mac/Linux).
-**bpp.c**            | Main file handling command-line parameters and executing selected methods.
-**lex_map.l**        | Lexical analyzer for parsing map files.
-**lex_phylip.l**     | Lexical analyzer for parsing phylip files.
-**lex_rtree.l**      | Lexical analyzer for parsing newick rooted trees.
-**likelihood_avx.c** | AVX likelihood functions.
-**likelihood_sse.c** | SSE likelihood functions.
-**likelihood.c**     | Likelihood related functions.
-**locus.c**          | Locus specific functions.
-**Makefile**         | Makefile
-**mapping.c**        | Functions for handling map files.
-**maps.c**           | Character mapping arrays for converting sequences to the internal representation.
-**parse_map.y**      | Functions for parsing map files.
-**parse_phylip.y**   | Functions for parsing phylip files.
-**parse_rtree.y**    | Functions for parsing rooted trees in newick format.
-**rtree.c**          | Rooted tree manipulation functions.
-**util.c**           | Various common utility functions.
+| File                  | Description                                                                       |
+| --------------------- | --------------------------------------------------------------------------------- |
+| **arch.c**            | Architecture specific code (Mac/Linux).                                           |
+| **bpp.c**             | Main file handling command-line parameters and executing selected methods.        |
+| **compress.c**        | Functions for compressing multiple sequence alignments into site patterns         |
+| **gtree.c**           | Functions for setting and processing gene trees                                   |
+| **hash.c**            | Hash table implementation and related functions                                   |
+| **lex_map.l**         | Lexical analyzer for parsing map files.                                           |
+| **lex_rtree.l**       | Lexical analyzer for parsing newick rooted trees.                                 |
+| **likelihood_avx.c**  | AVX likelihood functions.                                                         |
+| **likelihood_sse.c**  | SSE likelihood functions.                                                         |
+| **likelihood.c**      | Likelihood related functions.                                                     |
+| **list.c**            | Linked list implementation and related functions                                  |
+| **locus.c**           | Locus specific functions.                                                         |
+| **Makefile**          | Makefile                                                                          |
+| **mapping.c**         | Functions for handling map files.                                                 |
+| **maps.c**            | Character mapping arrays for converting sequences to the internal representation. |
+| **msa.c**             | Code for processing multiple sequence alignments                                  |
+| **parse_map.y**       | Functions for parsing map files.                                                  |
+| **parse_rtree.y**     | Functions for parsing rooted trees in newick format.                              |
+| **phylip.c**          | Functions for parsing phylip files.                                               |
+| **random.c**          | Pseudo-random number generator functions                                          |
+| **rtree.c**           | Rooted tree manipulation functions.                                               |
+| **stree.c**           | Functions for setting and processing the species tree                             |
+| **util.c**            | Various common utility functions.                                                 |
 
 # References
 

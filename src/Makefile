@@ -24,7 +24,9 @@ PROFILING=-g
 # Compiler warnings
 WARN=-Wall -Wsign-compare
 
+ifndef CC
 CC = gcc
+endif
 CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN)
 LINKFLAGS=$(PROFILING)
 LIBS=-lm
