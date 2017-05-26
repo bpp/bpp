@@ -37,15 +37,15 @@ static unsigned int tip_cnt = 0;
 static void dealloc_data(rnode_t * node,
                          void (*cb_destroy)(void *))
 {
-  if (node->data)
+  if (node->extra)
   {
     if (cb_destroy)
-      cb_destroy(node->data);
+      cb_destroy(node->extra);
   }
 }
 
-void rtree_graph_destroy(rnode_t * root,
-                         void (*cb_destroy)(void *))
+static void rtree_graph_destroy(rnode_t * root,
+                                void (*cb_destroy)(void *))
 {
   if (!root) return;
 
@@ -232,7 +232,7 @@ rtree_t * rtree_wraptree(rnode_t * root,
   tree->root = root;
 
   for (i = 0; i < 2*tip_count-1; ++i)
-    tree->nodes[i]->index = i;
+    tree->nodes[i]->node_index = i;
 
   return tree;
 }

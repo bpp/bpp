@@ -312,14 +312,28 @@ void cmd_a00(void)
   /* call MCMC */
 
   /* debugging */
-  stree_init(rtree,msa_list,map_list,msa_count);
+  pop_t ** poplist = stree_init(rtree,msa_list,map_list,msa_count);
+
+  printf("MSA COUNT: %d\n", msa_count);
+  for (i = 0; i < msa_count; ++i)
+  {
+    printf("Generating gene tree for locus %d\n", i);
+    gtree_simulate(rtree,poplist,msa_list,i);
+  }
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
 
   /* deallocate tree */
   /* TODO: Deallocate with species tree deallocator */
-  rtree_destroy(rtree,cb_stree_dealloc);
+  for (i = 0; i < rtree->tip_count + rtree->inner_count; ++i)
+  {
+    free(poplist[i]->seq_count);
+    free(poplist[i]->label);
+    free(poplist[i]);
+  }
+  free(poplist);
+  rtree_destroy(rtree,NULL);
 
   /* deallocate alignments */
   for (i = 0; i < msa_count; ++i)

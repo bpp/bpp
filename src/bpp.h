@@ -74,32 +74,38 @@ typedef unsigned int UINT32;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 
-typedef struct stree_data_s
+typedef struct pop_s 
 {
   double theta;
   double tau;
-  char * label;
+  unsigned int node_index;
   int * seq_count;
-} stree_data_t;
+  int ** seq_indices;
+  char * label;
+} pop_t;
 
+#if 0
 typedef struct gtree_data_s
 {
   stree_data_t * species;
   double time;
 } gtree_data_t;
+#endif
 
 typedef struct rnode_s
 {
   char * label;
   double length;
+  double time;   /* for gene trees only */
   struct rnode_s * left;
   struct rnode_s * right;
   struct rnode_s * parent;
   unsigned int leaves;
 
-  void * data;
+  void * extra;
 
-  unsigned int index;
+  unsigned int pop_index;
+  unsigned int node_index;
 } rnode_t;
 
 typedef struct rtree_s
@@ -213,6 +219,8 @@ typedef struct pair_s
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define SWAP(x,y) do { __typeof__ (x) _t = x; x = y; y = _t; } while(0)
+
+#define legacy_rndexp(mean) (-(mean)*log(legacy_rndu()))
 
 /* options */
 
@@ -381,7 +389,7 @@ void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
 
 /* functions in stree.c */
 
-void stree_init(rtree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
+pop_t ** stree_init(rtree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 
 void cb_stree_dealloc(void * data);
 
@@ -390,3 +398,7 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 /* functions in random.c */
 
 double legacy_rndu(void);
+
+/* functions in gtree.c */
+
+void gtree_simulate(rtree_t * stree, pop_t ** poplist, msa_t ** msa_list, int msa_id);
