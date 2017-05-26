@@ -21,36 +21,36 @@
 %{
 #include "bpp.h"
 
-extern int rtree_lex();
-extern FILE * rtree_in;
-extern void rtree_lex_destroy();
-extern int rtree_lineno;
-extern int rtree_colstart;
-extern int rtree_colend;
+extern int stree_lex();
+extern FILE * stree_in;
+extern void stree_lex_destroy();
+extern int stree_lineno;
+extern int stree_colstart;
+extern int stree_colend;
 
-extern int rtree_parse();
-extern struct rtree_buffer_state * rtree__scan_string(const char * str);
-extern void rtree__delete_buffer(struct rtree_buffer_state * buffer);
+extern int stree_parse();
+extern struct stree_buffer_state * stree__scan_string(const char * str);
+extern void stree__delete_buffer(struct stree_buffer_state * buffer);
 
 static unsigned int tip_cnt = 0;
 
-static void dealloc_data(rnode_t * node,
+static void dealloc_data(snode_t * node,
                          void (*cb_destroy)(void *))
 {
-  if (node->extra)
+  if (node->data)
   {
     if (cb_destroy)
-      cb_destroy(node->extra);
+      cb_destroy(node->data);
   }
 }
 
-static void rtree_graph_destroy(rnode_t * root,
+static void stree_graph_destroy(snode_t * root,
                                 void (*cb_destroy)(void *))
 {
   if (!root) return;
 
-  rtree_graph_destroy(root->left, cb_destroy);
-  rtree_graph_destroy(root->right, cb_destroy);
+  stree_graph_destroy(root->left, cb_destroy);
+  stree_graph_destroy(root->right, cb_destroy);
 
   dealloc_data(root, cb_destroy);
 
@@ -58,11 +58,11 @@ static void rtree_graph_destroy(rnode_t * root,
   free(root);
 }
 
-void rtree_destroy(rtree_t * tree,
+void stree_destroy(stree_t * tree,
                    void (*cb_destroy)(void *))
 {
   unsigned int i;
-  rnode_t * node;
+  snode_t * node;
 
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
@@ -81,9 +81,9 @@ void rtree_destroy(rtree_t * tree,
   free(tree);
 }
 
-static void rtree_error(rnode_t * node, const char * s)
+static void stree_error(snode_t * node, const char * s)
 {
-  fatal("%s. (line %d column %d)", s, rtree_lineno, rtree_colstart);
+  fatal("%s. (line %d column %d)", s, stree_lineno, stree_colstart);
 }
 
 %}
@@ -92,12 +92,12 @@ static void rtree_error(rnode_t * node, const char * s)
 {
   char * s;
   char * d;
-  struct rnode_s * tree;
+  struct snode_s * tree;
 }
 
 %error-verbose
-%parse-param {struct rnode_s * tree}
-%destructor { rtree_graph_destroy($$,NULL); } subtree
+%parse-param {struct snode_s * tree}
+%destructor { stree_graph_destroy($$,NULL); } subtree
 %destructor { free($$); } STRING
 %destructor { free($$); } NUMBER
 %destructor { free($$); } label
@@ -131,7 +131,7 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
 
 subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
 {
-  $$ = (rnode_t *)calloc(1, sizeof(rnode_t));
+  $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->left   = $2;
   $$->right  = $4;
   $$->label  = $6;
@@ -145,7 +145,7 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
 }
        | label optional_length
 {
-  $$ = (rnode_t *)calloc(1, sizeof(rnode_t));
+  $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->label  = $1;
   $$->length = $2 ? atof($2) : 0;
   $$->leaves = 1;
@@ -163,8 +163,8 @@ number: NUMBER   {$$=$1;};
 
 %%
 
-static void fill_nodes_recursive(rnode_t * node,
-                                 rnode_t ** array,
+static void fill_nodes_recursive(snode_t * node,
+                                 snode_t ** array,
                                  unsigned int * tip_index,
                                  unsigned int * inner_index)
 {
@@ -182,14 +182,14 @@ static void fill_nodes_recursive(rnode_t * node,
   *inner_index = *inner_index + 1;
 }
 
-static unsigned int rtree_count_tips(rnode_t * root)
+static unsigned int stree_count_tips(snode_t * root)
 {
   unsigned int count = 0;
 
   if (root->left)
-    count += rtree_count_tips(root->left);
+    count += stree_count_tips(root->left);
   if (root->right)
-    count += rtree_count_tips(root->right);
+    count += stree_count_tips(root->right);
 
   if (!root->left && !root->right)
     return 1;
@@ -197,12 +197,12 @@ static unsigned int rtree_count_tips(rnode_t * root)
   return count;
 }
 
-rtree_t * rtree_wraptree(rnode_t * root,
+stree_t * stree_wraptree(snode_t * root,
                          unsigned int tip_count)
 {
   unsigned int i;
 
-  rtree_t * tree = (rtree_t *)xmalloc(sizeof(rtree_t));
+  stree_t * tree = (stree_t *)xmalloc(sizeof(stree_t));
 
   if (tip_count < 2 && tip_count != 0)
     fatal("Invalid number of tips in input tree (%u).", tip_count);
@@ -210,14 +210,14 @@ rtree_t * rtree_wraptree(rnode_t * root,
   if (tip_count == 0)
   {
     /* if tip counts is set to 0 then recursively count the number of tips */
-    tip_count = rtree_count_tips(root);
+    tip_count = stree_count_tips(root);
     if (tip_count < 2)
     {
       fatal("Input tree contains no inner nodes.");
     }
   }
 
-  tree->nodes = (rnode_t **)xmalloc((2*tip_count-1)*sizeof(rnode_t *));
+  tree->nodes = (snode_t **)xmalloc((2*tip_count-1)*sizeof(snode_t *));
   
   unsigned int tip_index = 0;
   unsigned int inner_index = tip_count;
@@ -237,62 +237,62 @@ rtree_t * rtree_wraptree(rnode_t * root,
   return tree;
 }
 
-rtree_t * rtree_parse_newick(const char * filename)
+stree_t * stree_parse_newick(const char * filename)
 {
-  rtree_t * tree;
+  stree_t * tree;
 
-  struct rnode_s * root;
+  struct snode_s * root;
 
   /* reset tip count */
   tip_cnt = 0;
 
   /* open input file */
-  rtree_in = fopen(filename, "r");
-  if (!rtree_in)
+  stree_in = fopen(filename, "r");
+  if (!stree_in)
     fatal("Unable to open file (%s)", filename);
 
   /* create root node */
-  root = (rnode_t *)xcalloc(1, sizeof(rnode_t));
+  root = (snode_t *)xcalloc(1, sizeof(snode_t));
 
-  if (rtree_parse(root))
+  if (stree_parse(root))
   {
-    rtree_graph_destroy(root,NULL);
+    stree_graph_destroy(root,NULL);
     root = NULL;
-    fclose(rtree_in);
-    rtree_lex_destroy();
+    fclose(stree_in);
+    stree_lex_destroy();
     return NULL;
   }
 
-  if (rtree_in) fclose(rtree_in);
+  if (stree_in) fclose(stree_in);
 
-  rtree_lex_destroy();
+  stree_lex_destroy();
 
   /* wrap tree */
-  tree = rtree_wraptree(root,tip_cnt);
+  tree = stree_wraptree(root,tip_cnt);
 
   return tree;
 }
 
-rtree_t * rtree_parse_newick_string(const char * s)
+stree_t * stree_parse_newick_string(const char * s)
 {
   int rc;
-  struct rnode_s * root;
-  rtree_t * tree = NULL;
+  struct snode_s * root;
+  stree_t * tree = NULL;
 
   /* reset tip count */
   tip_cnt = 0;
 
-  root = (rnode_t *)xcalloc(1, sizeof(rnode_t));
+  root = (snode_t *)xcalloc(1, sizeof(snode_t));
 
-  struct rtree_buffer_state * buffer = rtree__scan_string(s);
-  rc = rtree_parse(root);
-  rtree__delete_buffer(buffer);
+  struct stree_buffer_state * buffer = stree__scan_string(s);
+  rc = stree_parse(root);
+  stree__delete_buffer(buffer);
 
-  rtree_lex_destroy();
+  stree_lex_destroy();
 
   if (!rc)
   {
-    tree = rtree_wraptree(root,tip_cnt);
+    tree = stree_wraptree(root,tip_cnt);
   }
   else
     free(root);

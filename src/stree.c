@@ -25,7 +25,7 @@
 
 static int cb_cmp_nodelabel(void * a, void * b)
 {
-  rnode_t * node = (rnode_t *)a;
+  snode_t * node = (snode_t *)a;
   char * label = (char * )b;
 
   return (!strcmp(node->label,label));
@@ -66,7 +66,7 @@ void cb_stree_dealloc(void * data)
 #endif
 
 /* hashtable for indexing species tree labels */
-static hashtable_t * species_hash(rtree_t * tree)
+static hashtable_t * species_hash(stree_t * tree)
 {
   long i;
 
@@ -105,7 +105,7 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht)
   {
     mapping_t * mapping = (mapping_t *)(li->data);
 
-    rnode_t * node = hashtable_find(sht,
+    snode_t * node = hashtable_find(sht,
                                     (void *)(mapping->species),
                                     hash_fnv(mapping->species),
                                     cb_cmp_nodelabel);
@@ -133,16 +133,11 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht)
   return ht;
 }
 
-static pop_t ** populations_create(rtree_t * stree, int msa_count)
+void populations_create(stree_t * stree, int msa_count)
 {
   unsigned int i;
 
-  rnode_t ** nodes = stree->nodes;
-
-  pop_t ** poplist = (pop_t **)xmalloc((stree->tip_count + stree->inner_count) *
-                                       sizeof(pop_t *));
-
-
+  #if 0
   /* create one species structure for every node */
   for (i = 0; i < stree->inner_count + stree->tip_count; ++i)
   {
@@ -150,42 +145,47 @@ static pop_t ** populations_create(rtree_t * stree, int msa_count)
     stree->nodes[i]->pop_index = i;
     poplist[i]->node_index = i;
   }
+  #endif
 
+  #if 0
   /* populations get the same labels as species tree tip nodes */
   for (i = 0; i < stree->tip_count; ++i)
   {
     poplist[i]->label = xstrdup(nodes[i]->label);
     printf("tip node species label: %s\n", poplist[i]->label);
   }
+  #endif
 
   /* labels at inner nodes are concatenated labels of their children */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
     /* get the species structures of the two children */
-    pop_t * lpop = poplist[nodes[i]->left->pop_index];
-    pop_t * rpop = poplist[nodes[i]->right->pop_index];
+
+    snode_t * node = stree->nodes[i];
+    snode_t * lnode = stree->nodes[i]->left;
+    snode_t * rnode = stree->nodes[i]->right;
 
     /* allocate necessary memory for label */
-    poplist[i]->label = (char *)xmalloc(strlen(lpop->label)+
-                                        strlen(rpop->label)+1);
+    if (node->label)
+      free(node->label);
+    node->label = (char *)xmalloc(strlen(lnode->label)+
+                                  strlen(rnode->label)+1);
 
     /* concatenate */
-    poplist[i]->label[0] = 0;
-    strcat(poplist[i]->label,lpop->label);
-    strcat(poplist[i]->label,rpop->label);
+    node->label[0] = 0;
+    strcat(node->label,lnode->label);
+    strcat(node->label,rnode->label);
 
-    printf("inner node species label: %s\n", poplist[i]->label);
+    printf("inner node species label: %s\n", node->label);
   }
 
   /* create perloci sequence counters for tip and inner nodes */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
-    poplist[i]->seq_count = (int *)xcalloc(msa_count,sizeof(int));
-    poplist[i]->seq_indices = (int **)xcalloc(msa_count,sizeof(int *));
+    
+    stree->nodes[i]->seq_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->seq_indices = (int **)xcalloc(msa_count,sizeof(int *));
   }
-
-
-  return poplist;
 }
 
 static void cb_dealloc_pairlabel(void * data)
@@ -196,14 +196,13 @@ static void cb_dealloc_pairlabel(void * data)
   free(pair);
 }
 
-static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * maplist, int count)
+static void stree_populate(stree_t * stree, msa_t ** msalist, list_t * maplist, int count)
 {
-  int i,j,k;
-  rnode_t * node;
-  pop_t ** poplist;
+  int i,j;
+  snode_t * node;
 
   /* create a list of populations and associate them with species tree nodes */
-  poplist = populations_create(stree, count);
+  populations_create(stree, count);
 
   /* create one hash table of species and one for sequence->species mappings */
   hashtable_t * sht = species_hash(stree);
@@ -242,20 +241,20 @@ static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * mapli
       if (!pair)
         fatal("Cannot find");
 
-      node = (rnode_t *)(pair->data);
+      node = (snode_t *)(pair->data);
 
-#ifdef DEBUG
+#if 1 
       printf("Matched %s -> %s\n", label, node->label);
 #endif
 
       /* increment sequence count for loci i in corresponding population */
-      pop_t * pop = poplist[node->pop_index];
-      pop->seq_count[i]++;
+      node->seq_count[i]++;
     }
     for (j = 0; j < stree->tip_count; ++j)
     {
-      pop_t * pop = poplist[j];
-      pop->seq_indices[i] = (int *)xcalloc(pop->seq_count[i],sizeof(int));
+      snode_t * node = stree->nodes[j];
+
+      node->seq_indices[i] = (int *)xcalloc(node->seq_count[i],sizeof(int));
     }
   }
 
@@ -265,8 +264,7 @@ static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * mapli
   {
     msa_t * msa = msalist[i];
     
-    k = 0;
-    int * counter = (int *)calloc(stree->tip_count, sizeof(int));
+    int * counter = (int *)xcalloc(stree->tip_count, sizeof(int));
     for (j = 0; j < msa->count; ++j)
     {
       /* first get the species tag */
@@ -290,15 +288,12 @@ static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * mapli
       if (!pair)
         fatal("Cannot find");
 
-      node = (rnode_t *)(pair->data);
-
-#ifdef DEBUG
-      printf("Matched %s -> %s\n", label, node->label);
-#endif
+      node = (snode_t *)(pair->data);
 
       /* increment sequence count for loci i in corresponding population */
-      pop_t * pop = poplist[node->pop_index];
-      pop->seq_indices[i][counter[node->pop_index]++] = j;
+      int * k = &(counter[node->node_index]);
+      node->seq_indices[i][*k] = j;
+      (*k)++;
     }
     free(counter);
   }
@@ -307,10 +302,12 @@ static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * mapli
   printf("Population per-loci sequence count\n");
   for (i = 0; i < stree->tip_count; ++i)
   {
-    printf("%s\n", poplist[i]->label);
+    node = stree->nodes[i];
+
+    printf("%s\n", node->label);
     for (j = 0; j < count; ++j)
     {
-      printf("  %d -> %d\n", j, poplist[i]->seq_count[j]);
+      printf("  %d -> %d\n", j, node->seq_count[j]);
     }
   }
 #endif
@@ -318,47 +315,40 @@ static pop_t ** stree_populate(rtree_t * stree, msa_t ** msalist, list_t * mapli
 
   hashtable_destroy(sht,NULL);
   hashtable_destroy(mht,cb_dealloc_pairlabel);
-
-  return poplist;
 }
 
-static void stree_init_tau_recursive(rnode_t * node,
-                                     pop_t ** poplist,
+static void stree_init_tau_recursive(snode_t * node,
                                      double prop)
 {
   /* end recursion if node is a tip */
   if (!node->left) return;
 
   /* get species record associate with species tree node */
-  pop_t * pop = poplist[node->pop_index];
-  double tau_parent = poplist[node->parent->pop_index]->tau;
+  double tau_parent = node->parent->tau;
 
-  pop->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-  printf("tau: %f\n", pop->tau);
+  node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+  printf("tau: %f\n", node->tau);
 
-  stree_init_tau_recursive(node->left,poplist,prop);
-  stree_init_tau_recursive(node->right,poplist,prop);
+  stree_init_tau_recursive(node->left,prop);
+  stree_init_tau_recursive(node->right,prop);
 }
 
-static void stree_init_tau(rtree_t * stree, pop_t ** poplist)
+static void stree_init_tau(stree_t * stree)
 {
   /* Initialize speciation times for each extinct species */ 
 
   double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
 
-  /* get species record associate with species tree root*/
-  pop_t * pop = poplist[stree->root->pop_index];
-
   /* set the speciation time for root */
-  pop->tau = opt_tau_beta / (opt_tau_alpha - 1) * (0.9 + 0.2*legacy_rndu());
-  printf("tau root: %f\n", pop->tau);
+  stree->root->tau = opt_tau_beta/(opt_tau_alpha-1) * (0.9 + 0.2*legacy_rndu());
+  printf("tau root: %f\n", stree->root->tau);
 
   /* recursively set the speciation time for the remaining inner nodes */
-  stree_init_tau_recursive(stree->root->left,poplist,prop);
-  stree_init_tau_recursive(stree->root->right,poplist,prop);
+  stree_init_tau_recursive(stree->root->left,prop);
+  stree_init_tau_recursive(stree->root->right,prop);
 }
 
-static void stree_init_theta(rtree_t * stree, pop_t ** poplist, int msa_count)
+static void stree_init_theta(stree_t * stree, int msa_count)
 {
   /* initialize population sizes for extinct populations and populations
      with more than one lineage at some locus */
@@ -370,8 +360,10 @@ static void stree_init_theta(rtree_t * stree, pop_t ** poplist, int msa_count)
      two sequences in some loci */
   for (i = 0; i < stree->tip_count; ++i)
   {
+    snode_t * node = stree->nodes[i];
+
     for (j = 0; j < msa_count; ++j)
-      if (poplist[i]->seq_count[j] >= 2)
+      if (node->seq_count[j] >= 2)
         break;
 
     /* if no loci exists with two or more sequences of such species then move
@@ -379,44 +371,43 @@ static void stree_init_theta(rtree_t * stree, pop_t ** poplist, int msa_count)
     if (j == msa_count) continue;
 
     /* otherwise set theta around the mean of the inverse gamma prior */
-    poplist[i]->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+    node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                         (0.9 + 0.2 * legacy_rndu());
     ++k;
-    printf("theta tip: %f\n", poplist[i]->theta);
+    printf("theta tip: %f\n", node->theta);
   }
 
   /* go through inner nodes and setup thetas */
   /* TODO: Note, that we compute the theta for the root first to be in line
      with the original bpp code */
-  pop_t * pop = poplist[stree->root->pop_index];
-  pop->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-               (0.9 + 0.2 * legacy_rndu());
+  stree->root->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                       (0.9 + 0.2 * legacy_rndu());
   ++k;
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count-1; ++i)
   {
-    poplist[i]->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                        (0.9 + 0.2 * legacy_rndu());
+    snode_t * node = stree->nodes[i];
+
+    node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                  (0.9 + 0.2 * legacy_rndu());
     ++k;
-    printf("theta: %f\n", poplist[i]->theta);
+    printf("theta: %f\n", node->theta);
   }
 
   printf("Updated theta: %d\n", k);
 }
 
-pop_t ** stree_init(rtree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
+void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 {
   /* create populations on each node of the species tree, and compute and store
      the per-locus number of sequences for each species */
-  pop_t ** poplist = stree_populate(stree, msa, maplist, msa_count);
+  stree_populate(stree, msa, maplist, msa_count);
 
   /* Initialize tip count proportion variable */
 
   /* Initialize population sizes */
-  stree_init_theta(stree, poplist, msa_count);
+  stree_init_theta(stree, msa_count);
 
   /* Initialize speciation times and create extinct species groups */
-  stree_init_tau(stree,poplist);
-
-  return poplist;
+  stree_init_tau(stree);
 }
 

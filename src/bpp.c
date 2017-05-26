@@ -257,17 +257,17 @@ void cmd_help()
          );
 }
 
-static rtree_t * load_tree(void)
+static stree_t * load_tree(void)
 {
   /* parse tree */
   if (!opt_quiet)
     fprintf(stdout, "Parsing tree file...\n");
 
-  rtree_t * rtree = rtree_parse_newick(opt_streefile);
-  if (!rtree)
+  stree_t * stree = stree_parse_newick(opt_streefile);
+  if (!stree)
     fatal("Error while reading tree file %s\n.", opt_streefile);
 
-  return rtree;
+  return stree;
 }
 
 void cmd_a00(void)
@@ -283,7 +283,7 @@ void cmd_a00(void)
     fatal("--mcmc_burnin must be a positive integer smaller or equal to --mcmc_steps");
 
   /* load species tree */
-  rtree_t * rtree = load_tree();
+  stree_t * stree = load_tree();
 
   /* init random number generator */
   srand48(opt_seed);
@@ -312,28 +312,20 @@ void cmd_a00(void)
   /* call MCMC */
 
   /* debugging */
-  pop_t ** poplist = stree_init(rtree,msa_list,map_list,msa_count);
+  stree_init(stree,msa_list,map_list,msa_count);
 
   printf("MSA COUNT: %d\n", msa_count);
   for (i = 0; i < msa_count; ++i)
   {
     printf("Generating gene tree for locus %d\n", i);
-    gtree_simulate(rtree,poplist,msa_list,i);
+    gtree_simulate(stree,msa_list,i);
   }
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");
 
   /* deallocate tree */
-  /* TODO: Deallocate with species tree deallocator */
-  for (i = 0; i < rtree->tip_count + rtree->inner_count; ++i)
-  {
-    free(poplist[i]->seq_count);
-    free(poplist[i]->label);
-    free(poplist[i]);
-  }
-  free(poplist);
-  rtree_destroy(rtree,NULL);
+  stree_destroy(stree,NULL);
 
   /* deallocate alignments */
   for (i = 0; i < msa_count; ++i)

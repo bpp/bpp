@@ -74,50 +74,63 @@ typedef unsigned int UINT32;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 
-typedef struct pop_s 
-{
-  double theta;
-  double tau;
-  unsigned int node_index;
-  int * seq_count;
-  int ** seq_indices;
-  char * label;
-} pop_t;
-
-#if 0
-typedef struct gtree_data_s
-{
-  stree_data_t * species;
-  double time;
-} gtree_data_t;
-#endif
-
-typedef struct rnode_s
+typedef struct snode_s
 {
   char * label;
   double length;
-  double time;   /* for gene trees only */
-  struct rnode_s * left;
-  struct rnode_s * right;
-  struct rnode_s * parent;
+  double theta;
+  double tau;
+  struct snode_s * left;
+  struct snode_s * right;
+  struct snode_s * parent;
   unsigned int leaves;
 
-  void * extra;
+  void * data;
+  int * seq_count;
+  int ** seq_indices;
 
-  unsigned int pop_index;
   unsigned int node_index;
-} rnode_t;
+} snode_t;
 
-typedef struct rtree_s
+typedef struct stree_s
 {
   unsigned int tip_count;
   unsigned int inner_count;
   unsigned int edge_count;
 
-  rnode_t ** nodes;
+  snode_t ** nodes;
 
-  rnode_t * root;
-} rtree_t;
+  snode_t * root;
+} stree_t;
+
+typedef struct gnode_s
+{
+  char * label;
+  double length;
+  double time;
+  struct gnode_s * left;
+  struct gnode_s * right;
+  struct gnode_s * parent;
+  unsigned int leaves;
+
+  void * data;
+
+  unsigned int node_index;
+
+  unsigned int clv_index;
+  unsigned int scaler_index;
+  unsigned int pmatrix_index;
+} gnode_t;
+
+typedef struct gtree_s
+{
+  unsigned int tip_count;
+  unsigned int inner_count;
+  unsigned int edge_count;
+
+  gnode_t ** nodes;
+  gnode_t * root;
+} gtree_t;
 
 typedef struct msa_s
 {
@@ -294,11 +307,11 @@ void show_header(void);
 
 void cmd_ml(void);
 
-/* functions in parse_rtree.y */
+/* functions in parse_stree.y */
 
-rtree_t * rtree_parse_newick(const char * filename);
+stree_t * stree_parse_newick(const char * filename);
 
-void rtree_destroy(rtree_t * tree,
+void stree_destroy(stree_t * tree,
                    void (*cb_destroy)(void *));
 
 /* functions in phylip.c */
@@ -316,20 +329,20 @@ msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count);
 
-/* functions in rtree.c */
+/* functions in stree.c */
 
-void rtree_show_ascii(const rnode_t * root, int options);
+void stree_show_ascii(const snode_t * root, int options);
 
-char * rtree_export_newick(const rnode_t * root,
-                           char * (*cb_serialize)(const rnode_t *));
+char * stree_export_newick(const snode_t * root,
+                           char * (*cb_serialize)(const snode_t *));
 
-int rtree_traverse(rnode_t * root,
+int stree_traverse(snode_t * root,
                    int traversal,
-                   int (*cbtrav)(rnode_t *),
-                   rnode_t ** outbuffer,
+                   int (*cbtrav)(snode_t *),
+                   snode_t ** outbuffer,
                    unsigned int * trav_size);
 
-rtree_t ** rtree_tipstring_nodes(rtree_t * root,
+stree_t ** stree_tipstring_nodes(stree_t * root,
                                  char * tipstring,
                                  unsigned int * tiplist_count);
 
@@ -389,7 +402,7 @@ void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
 
 /* functions in stree.c */
 
-pop_t ** stree_init(rtree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
+void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 
 void cb_stree_dealloc(void * data);
 
@@ -401,4 +414,4 @@ double legacy_rndu(void);
 
 /* functions in gtree.c */
 
-void gtree_simulate(rtree_t * stree, pop_t ** poplist, msa_t ** msa_list, int msa_id);
+void gtree_simulate(stree_t * stree,msa_t ** msa_list, int msa_id);

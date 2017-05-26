@@ -23,7 +23,7 @@
 
 static int indent_space = 4;
 
-static void print_node_info(const rnode_t * root, int options)
+static void print_node_info(const snode_t * root, int options)
 {
   if (options & RTREE_SHOW_LABEL)
     printf (" %s", root->label);
@@ -32,7 +32,7 @@ static void print_node_info(const rnode_t * root, int options)
   printf("\n");
 }
 
-static void print_tree_recurse(const rnode_t * root,
+static void print_tree_recurse(const snode_t * root,
                                int indent_level,
                                int * active_node_order,
                                int options)
@@ -87,7 +87,7 @@ static void print_tree_recurse(const rnode_t * root,
 
 }
 
-static unsigned int tree_indent_level(const rnode_t * root, unsigned int indent)
+static unsigned int tree_indent_level(const snode_t * root, unsigned int indent)
 {
   if (!root) return indent;
 
@@ -97,7 +97,7 @@ static unsigned int tree_indent_level(const rnode_t * root, unsigned int indent)
   return (a > b ? a : b);
 }
 
-void rtree_show_ascii(const rnode_t * root, int options)
+void stree_show_ascii(const snode_t * root, int options)
 {
 
   unsigned int indent_max = tree_indent_level(root,0);
@@ -112,8 +112,8 @@ void rtree_show_ascii(const rnode_t * root, int options)
   free(active_node_order);
 }
 
-static char * rtree_export_newick_recursive(const rnode_t * root,
-                                            char * (*cb_serialize)(const rnode_t *))
+static char * stree_export_newick_recursive(const snode_t * root,
+                                            char * (*cb_serialize)(const snode_t *))
 {
   char * newick;
   int size_alloced;
@@ -133,12 +133,12 @@ static char * rtree_export_newick_recursive(const rnode_t * root,
   }
   else
   {
-    char * subtree1 = rtree_export_newick_recursive(root->left,cb_serialize);
+    char * subtree1 = stree_export_newick_recursive(root->left,cb_serialize);
     if (subtree1 == NULL)
     {
       return NULL;
     }
-    char * subtree2 = rtree_export_newick_recursive(root->right,cb_serialize);
+    char * subtree2 = stree_export_newick_recursive(root->right,cb_serialize);
     if (subtree2 == NULL)
     {
       free(subtree1);
@@ -175,8 +175,8 @@ static char * rtree_export_newick_recursive(const rnode_t * root,
   return newick;
 }
 
-char * rtree_export_newick(const rnode_t * root,
-                           char * (*cb_serialize)(const rnode_t *))
+char * stree_export_newick(const snode_t * root,
+                           char * (*cb_serialize)(const snode_t *))
 {
   char * newick;
   int size_alloced;
@@ -196,11 +196,11 @@ char * rtree_export_newick(const rnode_t * root,
   }
   else
   {
-    char * subtree1 = rtree_export_newick_recursive(root->left,cb_serialize);
+    char * subtree1 = stree_export_newick_recursive(root->left,cb_serialize);
     if (!subtree1)
       fatal("Unable to allocate enough memory.");
 
-    char * subtree2 = rtree_export_newick_recursive(root->right,cb_serialize);
+    char * subtree2 = stree_export_newick_recursive(root->right,cb_serialize);
     if (!subtree2)
       fatal("Unable to allocate enough memory.");
 
@@ -233,10 +233,10 @@ char * rtree_export_newick(const rnode_t * root,
 }
 
 
-static void rtree_traverse_postorder(rnode_t * node,
-                                     int (*cbtrav)(rnode_t *),
+static void stree_traverse_postorder(snode_t * node,
+                                     int (*cbtrav)(snode_t *),
                                      unsigned int * index,
-                                     rnode_t ** outbuffer)
+                                     snode_t ** outbuffer)
 {
   if (!node->left)
   {
@@ -250,17 +250,17 @@ static void rtree_traverse_postorder(rnode_t * node,
   if (!cbtrav(node))
     return;
 
-  rtree_traverse_postorder(node->left, cbtrav, index, outbuffer);
-  rtree_traverse_postorder(node->right, cbtrav, index, outbuffer);
+  stree_traverse_postorder(node->left, cbtrav, index, outbuffer);
+  stree_traverse_postorder(node->right, cbtrav, index, outbuffer);
 
   outbuffer[*index] = node;
   *index = *index + 1;
 }
 
-static void rtree_traverse_preorder(rnode_t * node,
-                                    int (*cbtrav)(rnode_t *),
+static void stree_traverse_preorder(snode_t * node,
+                                    int (*cbtrav)(snode_t *),
                                     unsigned int * index,
-                                    rnode_t ** outbuffer)
+                                    snode_t ** outbuffer)
 {
   if (!node->left)
   {
@@ -277,15 +277,15 @@ static void rtree_traverse_preorder(rnode_t * node,
   outbuffer[*index] = node;
   *index = *index + 1;
 
-  rtree_traverse_preorder(node->left, cbtrav, index, outbuffer);
-  rtree_traverse_preorder(node->right, cbtrav, index, outbuffer);
+  stree_traverse_preorder(node->left, cbtrav, index, outbuffer);
+  stree_traverse_preorder(node->right, cbtrav, index, outbuffer);
 
 }
 
-int rtree_traverse(rnode_t * root,
+int stree_traverse(snode_t * root,
                    int traversal,
-                   int (*cbtrav)(rnode_t *),
-                   rnode_t ** outbuffer,
+                   int (*cbtrav)(snode_t *),
+                   snode_t ** outbuffer,
                    unsigned int * trav_size)
 {
   *trav_size = 0;
@@ -302,9 +302,9 @@ int rtree_traverse(rnode_t * root,
      are going to traversing the subtree rooted at the specific node */
 
   if (traversal == TREE_TRAVERSE_POSTORDER)
-    rtree_traverse_postorder(root, cbtrav, trav_size, outbuffer);
+    stree_traverse_postorder(root, cbtrav, trav_size, outbuffer);
   else if (traversal == TREE_TRAVERSE_PREORDER)
-    rtree_traverse_preorder(root, cbtrav, trav_size, outbuffer);
+    stree_traverse_preorder(root, cbtrav, trav_size, outbuffer);
   else
     fatal("Invalid traversal value.");
 
@@ -312,8 +312,8 @@ int rtree_traverse(rnode_t * root,
 }
 
 #if 0
-static void rtree_query_tipnodes_recursive(pll_rtree_t * node,
-                                           pll_rtree_t ** node_list,
+static void stree_query_tipnodes_recursive(pll_stree_t * node,
+                                           pll_stree_t ** node_list,
                                            unsigned int * index)
 {
   if (!node) return;
@@ -325,12 +325,12 @@ static void rtree_query_tipnodes_recursive(pll_rtree_t * node,
     return;
   }
 
-  rtree_query_tipnodes_recursive(node->left,  node_list, index);
-  rtree_query_tipnodes_recursive(node->right, node_list, index);
+  stree_query_tipnodes_recursive(node->left,  node_list, index);
+  stree_query_tipnodes_recursive(node->right, node_list, index);
 }
 
-PLL_EXPORT unsigned int pll_rtree_query_tipnodes(pll_rtree_t * root,
-                                                 pll_rtree_t ** node_list)
+PLL_EXPORT unsigned int pll_stree_query_tipnodes(pll_stree_t * root,
+                                                 pll_stree_t ** node_list)
 {
   unsigned int index = 0;
 
@@ -341,14 +341,14 @@ PLL_EXPORT unsigned int pll_rtree_query_tipnodes(pll_rtree_t * root,
     return index;
   }
 
-  rtree_query_tipnodes_recursive(root->left,  node_list, &index);
-  rtree_query_tipnodes_recursive(root->right, node_list, &index);
+  stree_query_tipnodes_recursive(root->left,  node_list, &index);
+  stree_query_tipnodes_recursive(root->right, node_list, &index);
 
   return index;
 }
 
-static void rtree_query_innernodes_recursive(pll_rtree_t * root,
-                                             pll_rtree_t ** node_list,
+static void stree_query_innernodes_recursive(pll_stree_t * root,
+                                             pll_stree_t ** node_list,
                                              unsigned int * index)
 {
   if (!root) return;
@@ -356,24 +356,24 @@ static void rtree_query_innernodes_recursive(pll_rtree_t * root,
 
   /* postorder traversal */
 
-  rtree_query_innernodes_recursive(root->left,  node_list, index);
-  rtree_query_innernodes_recursive(root->right, node_list, index);
+  stree_query_innernodes_recursive(root->left,  node_list, index);
+  stree_query_innernodes_recursive(root->right, node_list, index);
 
   node_list[*index] = root;
   *index = *index + 1;
   return;
 }
 
-PLL_EXPORT unsigned int pll_rtree_query_innernodes(pll_rtree_t * root,
-                                        pll_rtree_t ** node_list)
+PLL_EXPORT unsigned int pll_stree_query_innernodes(pll_stree_t * root,
+                                        pll_stree_t ** node_list)
 {
   unsigned int index = 0;
 
   if (!root) return 0;
   if (!root->left) return 0;
 
-  rtree_query_innernodes_recursive(root->left,  node_list, &index);
-  rtree_query_innernodes_recursive(root->right, node_list, &index);
+  stree_query_innernodes_recursive(root->left,  node_list, &index);
+  stree_query_innernodes_recursive(root->right, node_list, &index);
 
   node_list[index++] = root;
 

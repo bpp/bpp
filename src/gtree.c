@@ -21,7 +21,7 @@
 
 #include "bpp.h"
 
-static int replace_item(pop_t ** list, pop_t * from, pop_t * to, int count)
+static int replace_item(snode_t ** list, snode_t * from, snode_t * to, int count)
 {
   int i;
 
@@ -37,7 +37,7 @@ static int replace_item(pop_t ** list, pop_t * from, pop_t * to, int count)
   return i != count;
 }
 
-static int remove_item(pop_t ** list, pop_t * item, int count)
+static int remove_item(snode_t ** list, snode_t * item, int count)
 {
   int i;
 
@@ -56,8 +56,8 @@ static int remove_item(pop_t ** list, pop_t * item, int count)
 static int cb_cmp_spectime(const void * a, const void * b)
 {
   
-  pop_t * const * x = a;
-  pop_t * const * y = b;
+  snode_t * const * x = a;
+  snode_t * const * y = b;
 
   printf("sorting %f %f\n", (*x)->tau, (*y)->tau);
 
@@ -65,19 +65,18 @@ static int cb_cmp_spectime(const void * a, const void * b)
   return -1;
 }
 
-void gtree_simulate(rtree_t * stree,
-                    pop_t ** poplist,
+void gtree_simulate(stree_t * stree,
                     msa_t ** msalist,
                     int msa_id)
 {
-  unsigned int i,j,k;
+  unsigned int i,j,k,m=0;
   unsigned int population_count;
   unsigned int epoch_count;
   unsigned int lineage_count = 0;
   double t, tmax, sum;
   double * ci;
-  pop_t ** epoch;
-  pop_t ** population;
+  snode_t ** epoch;
+  snode_t ** population;
 
   int n = msalist[msa_id]->count;
 
@@ -86,17 +85,17 @@ void gtree_simulate(rtree_t * stree,
   #if 1
   printf("Getting %d epochs\n", stree->inner_count);
   #endif
-  epoch = (pop_t **)xmalloc(stree->inner_count*sizeof(pop_t *));
+  epoch = (snode_t  **)xmalloc(stree->inner_count*sizeof(snode_t *));
   memcpy(epoch,
-         poplist + stree->tip_count,
-         stree->inner_count * sizeof(pop_t *));
+         stree->nodes + stree->tip_count,
+         stree->inner_count * sizeof(snode_t *));
 
   #if 1
   for (i = 0; i < stree->inner_count; ++i)
     printf("printing %f\n", epoch[i]->tau);
   #endif
 
-  qsort(&(epoch[0]), stree->inner_count, sizeof(pop_t *), cb_cmp_spectime);
+  qsort(&(epoch[0]), stree->inner_count, sizeof(snode_t *), cb_cmp_spectime);
   epoch_count = stree->inner_count;
 
   #if 1
@@ -108,8 +107,8 @@ void gtree_simulate(rtree_t * stree,
   #endif
 
   /* current active populations are the extant species */
-  population = (pop_t **)xmalloc(stree->tip_count*sizeof(pop_t *));
-  memcpy(population, poplist, stree->tip_count*sizeof(pop_t *));
+  population = (snode_t **)xmalloc(stree->tip_count*sizeof(snode_t *));
+  memcpy(population, stree->nodes, stree->tip_count*sizeof(snode_t *));
   population_count = stree->tip_count;
 
   /* start at present time */
@@ -117,9 +116,7 @@ void gtree_simulate(rtree_t * stree,
 
   /* count total number of lineages for this locus */
   for (i = 0; i < stree->tip_count; ++i)
-  {
     lineage_count += population[i]->seq_count[msa_id];
-  }
 
   /* allocate space for storing coalescent rates for each population */
   ci = (double *)xmalloc(population_count * sizeof(double));
@@ -127,10 +124,20 @@ void gtree_simulate(rtree_t * stree,
   /* current epoch index */
   unsigned int e = 0;
 
-  rnode_t ** nodelist = (rnode_t **)xcalloc(msalist[msa_id]->count,
-                                            sizeof(rnode_t *));
+  /* create a list of tip nodes for the target gene tree */
+  gnode_t ** gtips = (gnode_t **)xcalloc(msalist[msa_id]->count,
+                                         sizeof(gnode_t *));
   for (i = 0; i < msalist[msa_id]->count; ++i)
-    nodelist[i] = (rnode_t *)xcalloc(1,sizeof(rnode_t));
+    gtips[i] = (gnode_t *)xcalloc(1,sizeof(gnode_t));
+
+  gnode_t ** ginners = (gnode_t **)xcalloc(msalist[msa_id]->count-1,
+                                           sizeof(gnode_t *));
+
+  /* construct a list to be used for constructing the gene tree */
+  gnode_t ** nodelist = (gnode_t **)xcalloc(msalist[msa_id]->count,
+                                            sizeof(gnode_t *));
+  memcpy(nodelist,gtips,msalist[msa_id]->count * sizeof(gnode_t *));
+
 
   for (; ; --population_count)
   {
@@ -176,24 +183,28 @@ void gtree_simulate(rtree_t * stree,
 
       assert(j < population_count);
 
-      /* now choose two lineages from population j */
-      k = population[j]->seq_count[msa_id] * (population[j]->seq_count[msa_id]-1) * legacy_rndu();
+      /* now choose two lineages from population j in exactly the same way as
+         the original BPP */
+      k = population[j]->seq_count[msa_id] *
+          (population[j]->seq_count[msa_id]-1) *
+          legacy_rndu();
 
-      int k1,k2;
+      int k1 = k / (population[j]->seq_count[msa_id]-1);
+      int k2 = k % (population[j]->seq_count[msa_id]-1);
 
-      k1 = k / (population[j]->seq_count[msa_id]-1);
-      k2 = k % (population[j]->seq_count[msa_id]-1);
       if (k2 >= k1)
         k2++;
       else
         SWAP(k1,k2);
 
+      #if 1
       printf("DEBUG: Merging %d and %d  (k=%d)\n", k1,k2,k);
+      #endif
 
       if (population[j]->node_index < stree->tip_count)
       {
         if (population[j]->seq_indices[msa_id][k1] != -1)
-          printf("\t\t %d = %s\n", k1,msalist[msa_id]->label[population[j]->seq_indices[msa_id][k1]]);
+          printf("\t\t %d = %s\n", k1, msalist[msa_id]->label[population[j]->seq_indices[msa_id][k1]]);
         if (population[j]->seq_indices[msa_id][k2] != -1)
           printf("\t\t %d = %s\n", k2, msalist[msa_id]->label[population[j]->seq_indices[msa_id][k2]]);
         population[j]->seq_indices[msa_id][k1] = -1;
@@ -210,6 +221,9 @@ void gtree_simulate(rtree_t * stree,
         do something
       */
 
+      /* construct gene tree */
+
+
 
       if (--n == 1) break;
     }
@@ -224,8 +238,12 @@ void gtree_simulate(rtree_t * stree,
 
     
     /* get left and right descendant populations of epoch[e] */
-    pop_t * lpop= poplist[stree->nodes[epoch[e]->node_index]->left->pop_index];
-    pop_t * rpop= poplist[stree->nodes[epoch[e]->node_index]->right->pop_index];
+    snode_t * lpop = epoch[e]->left;
+    snode_t * rpop = epoch[e]->right;
+    #if 0
+    snode_t * lpop= poplist[stree->nodes[epoch[e]->node_index]->left->pop_index];
+    snode_t * rpop= poplist[stree->nodes[epoch[e]->node_index]->right->pop_index];
+    #endif
 
     if (!replace_item(population,lpop,epoch[e],population_count))
       fatal("Internal error during gene tree construction");
@@ -242,5 +260,7 @@ void gtree_simulate(rtree_t * stree,
   free(population);
   free(ci);
   free(epoch);
+#if 0
   free(nodelist);
+#endif
 }

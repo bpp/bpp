@@ -19,38 +19,38 @@
     Schloss-Wolfsbrunnenweg 35, D-69118 Heidelberg, Germany
 */
 %{
-#include "parse_rtree.h"
+#include "parse_stree.h"
 #include "bpp.h"
 
 #define YY_USER_ACTION preaction();
 
 static size_t string_length = 0;
 
-int rtree_colstart = 0;
-int rtree_colend = 0;
+int stree_colstart = 0;
+int stree_colend = 0;
 
 static void preaction()
 {
-  rtree_colstart = rtree_colend;
-  rtree_colend = rtree_colend + rtree_leng - 1;
+  stree_colstart = stree_colend;
+  stree_colend = stree_colend + stree_leng - 1;
 }
 
 static char * append(size_t * dstlen, const char * src, size_t srclen)
 {
   char * mem = (char *)xmalloc((*dstlen + srclen + 1)*sizeof(char));
-  memcpy(mem,rtree_lval.s,*dstlen);
+  memcpy(mem,stree_lval.s,*dstlen);
   strncpy(mem+(*dstlen),src,srclen);
   mem[*dstlen+srclen] = 0;
   if (*dstlen)
-    free(rtree_lval.s);
-  rtree_lval.s =  mem;
+    free(stree_lval.s);
+  stree_lval.s =  mem;
   *dstlen += srclen;
-  return rtree_lval.s;
+  return stree_lval.s;
 }
 
 %}
 %option noyywrap
-%option prefix="rtree_"
+%option prefix="stree_"
 %option nounput
 %option noinput
 %option yylineno
@@ -75,7 +75,7 @@ static char * append(size_t * dstlen, const char * src, size_t srclen)
 \\t               { append(&string_length, "\\t", 2);                          }
 \\                { append(&string_length, "\\", 1);                           }
 \\\\              { append(&string_length, "\\\\", 2);                         }
-([^\"\'\\]|\n)+   { append(&string_length, rtree_text, rtree_leng);            }
+([^\"\'\\]|\n)+   { append(&string_length, stree_text, stree_leng);            }
 }
 
 \:                { return COLON;                                              }
@@ -85,15 +85,15 @@ static char * append(size_t * dstlen, const char * src, size_t srclen)
 \,                { return COMMA;                                              }
 \"                { string_length = 0; BEGIN(quot);                            }
 \'                { string_length = 0; BEGIN(apos);                            }
-\n                { rtree_colstart = rtree_colend = 0;                         }
-[-+]?[0-9]+       { rtree_lval.d = xstrndup(rtree_text,rtree_leng);
+\n                { stree_colstart = stree_colend = 0;                         }
+[-+]?[0-9]+       { stree_lval.d = xstrndup(stree_text,stree_leng);
                     return NUMBER;                                             }
 [+-]?(([0-9]+[\.]?[0-9]*)|([0-9]*[\.]?[0-9]+))([eE][+-]?[0-9]+)? {
-                    rtree_lval.d = xstrndup(rtree_text,rtree_leng); 
+                    stree_lval.d = xstrndup(stree_text,stree_leng); 
                     return NUMBER;                                             }
 [^ \'\",\(\):;\[\]\t\n\r][^ \t\n\r\)\(\[\]\,:;]* {
-                    rtree_lval.s = xstrndup(rtree_text,rtree_leng);
+                    stree_lval.s = xstrndup(stree_text,stree_leng);
                     return STRING;                                             }
 [ \t\r]           { ;                                                          }
-.                 { fatal("Syntax error (%c)", rtree_text[0]);                 }
+.                 { fatal("Syntax error (%c)", stree_text[0]);                 }
 %%
