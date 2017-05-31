@@ -21,6 +21,62 @@
 
 #include "bpp.h"
 
+static int cb_cmp_pairpair(void * a, void * b)
+{
+  pair_t * p1 = (pair_t *)a;
+  pair_t * p2 = (pair_t *)b;
+
+  return (!strcmp(p1->label,p2->label));
+}
+
+static int cb_cmp_nodelabel(void * a, void * b)
+{
+  snode_t * node = (snode_t *)a;
+  char * label = (char * )b;
+
+  return (!strcmp(node->label,label));
+}
+
+hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht)
+{
+  if (!maplist) return NULL;
+
+  list_item_t * li = maplist->head;
+
+  hashtable_t * ht = hashtable_create(maplist->count);
+
+  while (li)
+  {
+    mapping_t * mapping = (mapping_t *)(li->data);
+
+    snode_t * node = hashtable_find(sht,
+                                    (void *)(mapping->species),
+                                    hash_fnv(mapping->species),
+                                    cb_cmp_nodelabel);
+    if (!node)
+      fatal("Cannot find node with population label %s", mapping->species);
+
+    pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
+
+    pair->label = xstrdup(mapping->individual);
+    pair->data = (void *)node;
+
+    if (!hashtable_insert(ht,
+                          (void *)pair,
+                          hash_fnv(pair->label),
+                          cb_cmp_pairpair))
+      fatal("Duplicate mapping (%s -> %s) found in file %s",
+            mapping->individual,
+            mapping->species,
+            opt_mapfile);
+
+    printf("Mapped %s -> %s\n", pair->label, node->label);
+    li = li->next;
+  }
+  
+  return ht;
+}
+
 void maplist_print(list_t * maplist)
 {
   if (!maplist) return;

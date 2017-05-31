@@ -314,12 +314,7 @@ void cmd_a00(void)
   /* debugging */
   stree_init(stree,msa_list,map_list,msa_count);
 
-  printf("MSA COUNT: %d\n", msa_count);
-  for (i = 0; i < msa_count; ++i)
-  {
-    printf("Generating gene tree for locus %d\n", i);
-    gtree_simulate(stree,msa_list,i);
-  }
+  gtree_init(stree,msa_list,map_list,msa_count);
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");

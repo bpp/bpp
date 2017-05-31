@@ -21,36 +21,415 @@
 
 #include "bpp.h"
 
-static int replace_item(snode_t ** list, snode_t * from, snode_t * to, int count)
+/* association of gene nodes to species populations. offset[i] is the 'nodes'
+   index at which the gene tree nodes for lineages inside species i are
+   available. count dictates the number of available lineages */
+
+typedef struct pop_s
 {
-  int i;
+  snode_t * snode;
 
-  for (i = 0; i < count; ++i)
+  unsigned int seq_count;
+  int * seq_indices;
+  gnode_t ** nodes;
+
+} pop_t;
+
+static hashtable_t * sht;
+static hashtable_t * mht;
+
+static void dealloc_data(gnode_t * node,
+                         void (*cb_destroy)(void *))
+{
+  if (node->data)
   {
-    if (list[i] == from)
-    {
-      list[i] = to;
-      break;
-    }
+    if (cb_destroy)
+      cb_destroy(node->data);
   }
-
-  return i != count;
 }
 
-static int remove_item(snode_t ** list, snode_t * item, int count)
+void gtree_destroy(gtree_t * tree,
+                   void (*cb_destroy)(void *))
 {
-  int i;
+  unsigned int i;
+  gnode_t * node;
 
-  for (i = 0; i < count; ++i)
+  /* deallocate all nodes */
+  for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
   {
-    if (list[i] == item)
+    node = tree->nodes[i];
+    dealloc_data(node,cb_destroy);
+
+    if (node->label)
+      free(node->label);
+
+    free(node);
+  }
+
+  /* deallocate tree structure */
+  free(tree->nodes);
+  free(tree);
+}
+
+static char * export_newick_recursive(const gnode_t * root,
+                                      char * (*cb_serialize)(const gnode_t *))
+{
+  char * newick;
+  int size_alloced;
+  assert(root != NULL);
+
+  if (!(root->left) || !(root->right))
+  {
+    if (cb_serialize)
     {
-      if (i < count-1)
-        list[i] = list[count-1];
-      break;
+      newick = cb_serialize(root);
+      size_alloced = strlen(newick);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
     }
   }
-  return (i != count);
+  else
+  {
+    char * subtree1 = export_newick_recursive(root->left,cb_serialize);
+    if (subtree1 == NULL)
+    {
+      return NULL;
+    }
+    char * subtree2 = export_newick_recursive(root->right,cb_serialize);
+    if (subtree2 == NULL)
+    {
+      free(subtree1);
+      return NULL;
+    }
+
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s",
+                              subtree1,
+                              subtree2,
+                              temp);
+      free(temp);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s:%f",
+                              subtree1,
+                              subtree2,
+                              root->label ? root->label : "",
+                              root->length);
+    }
+    free(subtree1);
+    free(subtree2);
+  }
+  if (size_alloced < 0)
+    fatal("Memory allocation during newick export failed.");
+
+  return newick;
+}
+
+char * gtree_export_newick(const gnode_t * root,
+                           char * (*cb_serialize)(const gnode_t *))
+{
+  char * newick;
+  int size_alloced;
+  if (!root) return NULL;
+
+  if (!(root->left) || !(root->right))
+  {
+    if (cb_serialize)
+    {
+      newick = cb_serialize(root);
+      size_alloced = strlen(newick);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+    }
+  }
+  else
+  {
+    char * subtree1 = export_newick_recursive(root->left,cb_serialize);
+    if (subtree1 == NULL)
+      fatal("Unable to allocate enough memory.");
+
+    char * subtree2 = export_newick_recursive(root->right,cb_serialize);
+    if (subtree2 == NULL)
+      fatal("Unable to allocate enough memory.");
+
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s",
+                              subtree1,
+                              subtree2,
+                              temp);
+      free(temp);
+    }
+    else
+    {
+      size_alloced = asprintf(&newick,
+                              "(%s,%s)%s:%f;",
+                              subtree1,
+                              subtree2,
+                              root->label ? root->label : "",
+                              root->length);
+    }
+    free(subtree1);
+    free(subtree2);
+  }
+  if (size_alloced < 0)
+    fatal("Memory allocation during newick export failed");
+
+  return newick;
+}
+
+
+static void fill_nodes_recursive(gnode_t * node,
+                                 gnode_t ** array,
+                                 unsigned int * tip_index,
+                                 unsigned int * inner_index)
+{
+  if (!node->left)
+  {
+    array[*tip_index] = node;
+    *tip_index = *tip_index + 1;
+    return;
+  }
+
+  fill_nodes_recursive(node->left,  array, tip_index, inner_index);
+  fill_nodes_recursive(node->right, array, tip_index, inner_index);
+
+  array[*inner_index] = node;
+  *inner_index = *inner_index + 1;
+}
+
+static unsigned int gtree_count_tips(gnode_t * root)
+{
+  unsigned int count = 0;
+
+  if (root->left)
+    count += gtree_count_tips(root->left);
+  if (root->right)
+    count += gtree_count_tips(root->right);
+
+  if (!root->left && !root->right)
+    return 1;
+
+  return count;
+}
+
+static gtree_t * gtree_wraptree(gnode_t * root,
+                                unsigned int tip_count)
+{
+  unsigned int i;
+
+  gtree_t * tree = (gtree_t *)xmalloc(sizeof(gtree_t));
+
+  if (tip_count < 2 && tip_count != 0)
+    fatal("Invalid number of tips in input tree (%u).", tip_count);
+
+  if (tip_count == 0)
+  {
+    /* if tip counts is set to 0 then recursively count the number of tips */
+    tip_count = gtree_count_tips(root);
+    if (tip_count < 2)
+    {
+      fatal("Input tree contains no inner nodes.");
+    }
+  }
+
+  tree->nodes = (gnode_t **)xmalloc((2*tip_count-1)*sizeof(gnode_t *));
+  
+  unsigned int tip_index = 0;
+  unsigned int inner_index = tip_count;
+
+  fill_nodes_recursive(root->left, tree->nodes, &tip_index, &inner_index);
+  fill_nodes_recursive(root->right,tree->nodes, &tip_index, &inner_index);
+  tree->nodes[inner_index] = root;
+
+  tree->tip_count = tip_count;
+  tree->edge_count = 2*tip_count-2;
+  tree->inner_count = tip_count-1;
+  tree->root = root;
+
+  for (i = 0; i < 2*tip_count-1; ++i)
+    tree->nodes[i]->node_index = i;
+
+  return tree;
+}
+
+static void cb_dealloc_pairlabel(void * data)
+{
+  pair_t * pair = data;
+
+  free(pair->label);
+  free(pair);
+}
+
+static int cb_cmp_pairlabel(void * a, void * b)
+{
+  pair_t * pair = (pair_t *)a;
+  char * label = (char *)b;
+
+  return (!strcmp(pair->label,label));
+}
+
+static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
+{
+  unsigned int i,j;
+
+    /* go through the sequences of the current locus and match each sequence
+       with the corresponding population using its species tag */
+  for (j = 0; j < stree->tip_count; ++j)
+    pop[j].snode = stree->nodes[j];
+
+  for (j = 0; j < (unsigned int)(msa->count); ++j)
+  {
+    /* first get the species tag */
+    char * label = msa->label[j];
+    label = strchr(label, '^');
+    if (!label)
+      fatal("Cannot find species tag on sequence %s of locus %d",
+            msa->label[j], msa_id);
+
+    /* skip the '^' mark */
+    label++;
+    if (!(*label))
+      fatal("Sequence %s of locus %d contains no label",
+            msa->label[j], msa_id);
+
+    pair_t * pair;
+    pair = hashtable_find(mht,
+                          (void *)label,
+                          hash_fnv(label),
+                          cb_cmp_pairlabel);
+    if (!pair)
+      fatal("Cannot find species mapping for sequence %s of locus %d",
+            label, msa_id);
+
+    snode_t * node = (snode_t *)(pair->data);
+
+    i = node->node_index;
+    assert(node == pop[i].snode);
+
+    /* increment sequence count for current loci in population i */
+    pop[i].seq_count++;
+  }
+
+  /* now repeat that for obtaining the sequence indices */
+  int * counter = (int *)xcalloc(stree->tip_count, sizeof(int));
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    pop[i].seq_indices = (int *)xcalloc(pop[i].seq_count,sizeof(int));
+    pop[i].nodes = (gnode_t **)xcalloc(pop[i].seq_count,sizeof(gnode_t *));
+  }
+  
+  for (j = 0; j < (unsigned int)(msa->count); ++j)
+  {
+    /* first get the species tag */
+    char * label = msa->label[j];
+    label = strchr(label, '^');
+    if (!label)
+      fatal("Cannot find species tag on sequence %s of locus %d",
+            msa->label[j], msa_id);
+
+    /* skip the '^' mark */
+    label++;
+    if (!(*label))
+      fatal("Sequence %s of locus %d contains no label",
+            msa->label[j], msa_id);
+
+    pair_t * pair;
+    pair = hashtable_find(mht,
+                          (void *)label,
+                          hash_fnv(label),
+                          cb_cmp_pairlabel);
+    if (!pair)
+      fatal("Cannot find species mapping for sequence %s of locus %d",
+            label, msa_id);
+
+    snode_t * node = (snode_t *)(pair->data);
+    i = node->node_index;
+    assert(node == pop[i].snode);
+
+    /* increment sequence count for loci i in corresponding population */
+    int * k = counter+i;
+    pop[i].seq_indices[*k] = j;
+    (*k)++;
+  }
+
+  free(counter);
+}
+
+static void replace(pop_t * pop, int count, snode_t * epoch)
+{
+  int i,j;
+
+  /* delete the two children of epoch from the pop list, by replacing the child
+     with the smaller index with epoch, and deleting the second child. It also
+     merges the sequences (lineages) of the two children into the new population
+  */
+
+  /* replace left descendant of current epoch with epoch */
+  for (i = 0; i < count; ++i)
+  {
+    if (pop[i].snode == epoch->left)
+      break;
+  }
+  assert(i != count);
+
+  /* delete right descendant of epoch */
+  for (j = 0; j < count; ++j)
+  {
+    /* replace indices and nodes */
+    if (pop[j].snode == epoch->right)
+      break;
+  }
+  assert( j != count);
+
+  /* order them such that i is the smaller index */
+  if (j < i)
+    SWAP(i,j);
+
+  /* allocate indices and nodes arrays for the new population */
+  int * indices = (int *)xmalloc((pop[i].seq_count+pop[j].seq_count) *
+                                 sizeof(int));
+  gnode_t ** nodes = (gnode_t **)xmalloc((pop[i].seq_count+pop[j].seq_count) *
+                                         sizeof(gnode_t *));
+
+  /* fill indices and nodes by merging the information from its two children
+     populations */
+  memcpy(indices,pop[i].seq_indices,pop[i].seq_count*sizeof(int));
+  memcpy(indices+pop[i].seq_count,
+         pop[j].seq_indices,
+         pop[j].seq_count*sizeof(int));
+  memcpy(nodes,pop[i].nodes,pop[i].seq_count*sizeof(gnode_t *));
+  memcpy(nodes+pop[i].seq_count,
+         pop[j].nodes,
+         pop[j].seq_count*sizeof(gnode_t *));
+  pop[i].seq_count += pop[j].seq_count;
+
+  /* deallocate indices and nodes array of the two children populations */
+  free(pop[i].seq_indices);
+  free(pop[i].nodes);
+  free(pop[j].seq_indices);
+  free(pop[j].nodes);
+
+  /* replace population i with new population */
+  pop[i].snode = epoch;
+  pop[i].seq_indices = indices;
+  pop[i].nodes = nodes;
+
+  /* if population j was not the last one, replace the last population in the
+     list with j */
+  if (j < count-1)
+    memcpy(pop+j,pop+count-1,sizeof(pop_t));
 }
 
 static int cb_cmp_spectime(const void * a, const void * b)
@@ -59,208 +438,240 @@ static int cb_cmp_spectime(const void * a, const void * b)
   snode_t * const * x = a;
   snode_t * const * y = b;
 
-  printf("sorting %f %f\n", (*x)->tau, (*y)->tau);
-
   if ((*x)->tau - (*y)->tau > 0) return 1;
   return -1;
 }
 
-void gtree_simulate(stree_t * stree,
-                    msa_t ** msalist,
-                    int msa_id)
+static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_id)
 {
-  unsigned int i,j,k,m=0;
-  unsigned int population_count;
+  int lineage_count = 0;
+  unsigned int i,j,k;
   unsigned int epoch_count;
-  unsigned int lineage_count = 0;
   double t, tmax, sum;
   double * ci;
+  pop_t * pop;
   snode_t ** epoch;
-  snode_t ** population;
+  gnode_t * inner = NULL;
 
-  int n = msalist[msa_id]->count;
-
-  /* get a list of inner nodes (epochs) and sort them in ascending order of
-     speciation times */
-  #if 1
-  printf("Getting %d epochs\n", stree->inner_count);
-  #endif
+  /* get a list of inner nodes (epochs) */
   epoch = (snode_t  **)xmalloc(stree->inner_count*sizeof(snode_t *));
   memcpy(epoch,
          stree->nodes + stree->tip_count,
          stree->inner_count * sizeof(snode_t *));
 
-  #if 1
-  for (i = 0; i < stree->inner_count; ++i)
-    printf("printing %f\n", epoch[i]->tau);
-  #endif
-
+  /* sort epochs in ascending order of speciation times */
   qsort(&(epoch[0]), stree->inner_count, sizeof(snode_t *), cb_cmp_spectime);
   epoch_count = stree->inner_count;
 
-  #if 1
-  printf("Epochs:\n");
-  for (i = 0; i < epoch_count; ++i)
-  {
-    printf("\t%s: tau %f theta %f\n", epoch[i]->label, epoch[i]->tau, epoch[i]->theta);
-  }
-  #endif
-
-  /* current active populations are the extant species */
-  population = (snode_t **)xmalloc(stree->tip_count*sizeof(snode_t *));
-  memcpy(population, stree->nodes, stree->tip_count*sizeof(snode_t *));
-  population_count = stree->tip_count;
+  /* create one hash table of species and one for sequence->species mappings */
+  pop = (pop_t *)xcalloc(stree->tip_count, sizeof(pop_t));
+  fill_pop(pop,stree,msa,msa_id);
 
   /* start at present time */
   t = 0;
 
-  /* count total number of lineages for this locus */
-  for (i = 0; i < stree->tip_count; ++i)
-    lineage_count += population[i]->seq_count[msa_id];
+  lineage_count = msa->count;
 
   /* allocate space for storing coalescent rates for each population */
-  ci = (double *)xmalloc(population_count * sizeof(double));
+  ci = (double *)xmalloc(stree->tip_count * sizeof(double));
 
   /* current epoch index */
   unsigned int e = 0;
 
   /* create a list of tip nodes for the target gene tree */
-  gnode_t ** gtips = (gnode_t **)xcalloc(msalist[msa_id]->count,
+  gnode_t ** gtips = (gnode_t **)xcalloc(msa->count,
                                          sizeof(gnode_t *));
-  for (i = 0; i < msalist[msa_id]->count; ++i)
+  for (i = 0; i < (unsigned int)(msa->count); ++i)
     gtips[i] = (gnode_t *)xcalloc(1,sizeof(gnode_t));
 
-  gnode_t ** ginners = (gnode_t **)xcalloc(msalist[msa_id]->count-1,
-                                           sizeof(gnode_t *));
+  /* fill each population with one gene tip node for each lineage */
+  for (i = 0, j=0; i < stree->tip_count; ++i)
+  {
+    memcpy(pop[i].nodes,gtips+j,pop[i].seq_count*sizeof(gnode_t *));
+    j += pop[i].seq_count;
+  }
 
-  /* construct a list to be used for constructing the gene tree */
-  gnode_t ** nodelist = (gnode_t **)xcalloc(msalist[msa_id]->count,
-                                            sizeof(gnode_t *));
-  memcpy(nodelist,gtips,msalist[msa_id]->count * sizeof(gnode_t *));
+  /* set the clv index for each gene tip node. The index must be equal to the
+     number of the sequence it represents in the current msa, and will be used
+     later for setting up and computing the CLVs */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    for (j = 0; j < pop[i].seq_count; ++j)
+    {
+      int index = pop[i].seq_indices[j];
+      pop[i].nodes[j]->label = xstrdup(msa->label[index]);
+      pop[i].nodes[j]->clv_index = index;
+    }
+  }
+  
+  /* initialize counter for clv indices for inner nodes. They will have CLV
+     indices in the range  [tip_count,2*tip_count-1] */
+  unsigned int clv_index = msa->count;
 
+  /* initialize the number of currently available populations for choosing
+     to coalesce lineages in */
+  unsigned int pop_count = stree->tip_count;
 
-  for (; ; --population_count)
+  /* TODO: The below loop is written to match exactly the loop in the original
+     BPP. It is possible to implement a simpler, more understandable routine but
+     it might change the structure of the randomly generated gene trees */
+
+  /* loop until we are left with only 1 lineage in one ancestral population */
+  for (; ; --pop_count)
   {
       
     while (1)
     {
       /* calculate poisson rates: ci[j] is coalescent rate for population j */
-      for (j=0, sum=0; j < population_count; ++j)
+      for (j=0, sum=0; j < pop_count; ++j)
       {
-        k = population[j]->seq_count[msa_id];
+        k = pop[j].seq_count;
 
         if (k >= 2)
         {
-          ci[j] = k*(k-1)/population[j]->theta;
+          ci[j] = k*(k-1)/pop[j].snode->theta;
           sum += ci[j];
-          printf("ci[%d] = %f (k: %d theta: %f)\n", j, ci[j], k, population[j]->theta);
         }
       }
 
+      /* set max waiting time for this epoch */
       tmax = epoch[e]->tau;
-        
 
-      printf("sum: %f (e = %d)\n", sum, e);
+      /* generate random waiting time from exponential distribution */
       t += legacy_rndexp(1/sum);
-      printf("t: %f\n", t);
 
-      /* if the generated time is larger than the current epoch, and we have at
-         least two populations, then break and merge the lineages of the two
-         populations in the current epoch */
-      if (t > tmax && population_count != 1) break;
+      /* if the generated time is larger than the current epoch, and we are not
+         yet at the root of the species tree, then break and, subsequently, 
+         merge the lineages of the two populations into the current epoch */
+      if (t > tmax && pop_count != 1) break;
 
-      /* TODO: if (C+M < 1e-300) {} */
+#ifdef DEBUG_GTREE_SIMULATE
+      fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
+#endif
 
-      /* we will coalesce two lineages from a population chosen at random
-         with the rates as probabilities. First choose the population */
+      /* TODO: Implement migration routine */
+
+      /* select an available population at random using the poisson rates as
+         weights */
       double r = legacy_rndu()*sum;
       double tmp = 0;
-      for (j = 0; j < population_count; ++j)
+      for (j = 0; j < pop_count; ++j)
       {
         tmp += ci[j];
         if (r < tmp) break;
       }
 
-      assert(j < population_count);
+      assert(j < pop_count);
 
-      /* now choose two lineages from population j in exactly the same way as
-         the original BPP */
-      k = population[j]->seq_count[msa_id] *
-          (population[j]->seq_count[msa_id]-1) *
-          legacy_rndu();
+      /* now choose two lineages from selected population j in exactly the same
+         way as the original BPP */
+      k = pop[j].seq_count * (pop[j].seq_count-1) * legacy_rndu();
 
-      int k1 = k / (population[j]->seq_count[msa_id]-1);
-      int k2 = k % (population[j]->seq_count[msa_id]-1);
+      unsigned int k1 = k / (pop[j].seq_count-1);
+      unsigned int k2 = k % (pop[j].seq_count-1);
 
       if (k2 >= k1)
         k2++;
       else
         SWAP(k1,k2);
 
-      #if 1
-      printf("DEBUG: Merging %d and %d  (k=%d)\n", k1,k2,k);
-      #endif
+#ifdef DEBUG_GTREE_SIMULATE
+      fprintf(stdout, "[Debug]: Coalesce (%d,%d) into %d\n",
+              pop[j].nodes[k1]->clv_index,
+              pop[j].nodes[k2]->clv_index,
+              clv_index);
+#endif
 
-      if (population[j]->node_index < stree->tip_count)
+      pop[j].seq_count--;
+      
+      /* allocate and fill new inner node as the parent of the gene tree nodes
+         representing lineages k1 and k2 */
+      inner = (gnode_t *)xcalloc(1,sizeof(gnode_t));
+      inner->parent = NULL;
+      inner->left  = pop[j].nodes[k1];
+      inner->right = pop[j].nodes[k2];
+      inner->clv_index = clv_index++;
+      inner->left->parent = inner;
+      inner->right->parent = inner;
+
+      /* in pop j, replace k1 by the new node, and remove k2 (replace it with
+         last node in list) */
+      pop[j].seq_indices[k1] = -1;   /* TODO HERE clv vector */
+      pop[j].nodes[k1] = inner;
+
+      if (k2 != pop[j].seq_count)
       {
-        if (population[j]->seq_indices[msa_id][k1] != -1)
-          printf("\t\t %d = %s\n", k1, msalist[msa_id]->label[population[j]->seq_indices[msa_id][k1]]);
-        if (population[j]->seq_indices[msa_id][k2] != -1)
-          printf("\t\t %d = %s\n", k2, msalist[msa_id]->label[population[j]->seq_indices[msa_id][k2]]);
-        population[j]->seq_indices[msa_id][k1] = -1;
+        pop[j].seq_indices[k2] = pop[j].seq_indices[pop[j].seq_count];
+        pop[j].nodes[k2] = pop[j].nodes[pop[j].seq_count];
       }
-      /* In pop i, replace k1 by new node, remove k2 */
-      population[j]->seq_count[msa_id]--;
-      if (population[j]->node_index < stree->tip_count) 
-      {
-        if (k2 != population[j]->seq_count[msa_id])
-          population[j]->seq_indices[msa_id][k2] = population[j]->seq_indices[msa_id][population[j]->seq_count[msa_id]];
-        }
-      /*
-      if (k2 != population[j]->seq_count[msa_id])
-        do something
-      */
-
-      /* construct gene tree */
-
-
-
-      if (--n == 1) break;
+      
+      /* break if this was the last available lineage in the current locus */
+      if (--lineage_count == 1) break;
     }
 
     t = tmax;
 
-    if (population_count == 1 || n == 1) break;
+    if (pop_count == 1 || lineage_count == 1) break;
 
-    /* place current epoch in the list of populations and remove
-       its two children */
-    //if (!remove_item(population,epoch[i]->left,population_count))
-
+    /* place current epoch in the list of populations, remove its two children
+       and add up the lineages of the two descendants */
+    replace(pop,pop_count,epoch[e]);
     
-    /* get left and right descendant populations of epoch[e] */
-    snode_t * lpop = epoch[e]->left;
-    snode_t * rpop = epoch[e]->right;
-    #if 0
-    snode_t * lpop= poplist[stree->nodes[epoch[e]->node_index]->left->pop_index];
-    snode_t * rpop= poplist[stree->nodes[epoch[e]->node_index]->right->pop_index];
-    #endif
-
-    if (!replace_item(population,lpop,epoch[e],population_count))
-      fatal("Internal error during gene tree construction");
-    if (!remove_item(population,rpop,population_count))
-      fatal("Internal error during gene tree construction");
-
-    /* add up the lineages of the two descendant population into epoch[e] */
-    epoch[e]->seq_count[msa_id] = lpop->seq_count[msa_id]+rpop->seq_count[msa_id];
-
     if (e != epoch_count-1)
       ++e;
   }
 
-  free(population);
+  for(i = 0; i < pop_count; ++i)
+  {
+    free(pop[i].seq_indices);
+    free(pop[i].nodes);
+  }
+
+  /* wrap the generated tree structure (made up of linked nodes) into gtree_t */
+  gtree_t * gtree = gtree_wraptree(inner, (unsigned int)(msa->count));
+
+#ifdef DEBUG_GTREE_SIMULATE
+  /* create a newick string from constructed gene tree */
+  fprintf(stdout, "[Debug]: Printing newick string for current gene tree\n");
+  char * newick = gtree_export_newick(gtree->root,NULL);
+  fprintf(stdout,"%s\n", newick);
+  free(newick);
+#endif
+
+  /* cleanup */
+  free(gtips);
+  free(pop);
   free(ci);
   free(epoch);
-#if 0
-  free(nodelist);
-#endif
+
+  return gtree;
+}
+
+void gtree_init(stree_t * stree,
+                msa_t ** msalist,
+                list_t * maplist,
+                int msa_count)
+{
+  int i;
+  gtree_t ** gtree;
+
+  assert(msa_count > 0);
+
+  gtree = (gtree_t **)xmalloc(msa_count*sizeof(gtree_t *));
+
+  /* create mapping hash tables */
+  sht = species_hash(stree);
+  mht = maplist_hash(maplist,sht);
+
+  /* generate random starting gene trees for each alignment */
+  for (i = 0; i < msa_count; ++i)
+    gtree[i] = gtree_simulate(stree, msalist[i],i);
+
+  /* destroy the hash tables */
+  hashtable_destroy(sht,NULL);
+  hashtable_destroy(mht,cb_dealloc_pairlabel);
+
+  for (i = 0; i < msa_count; ++i)
+    gtree_destroy(gtree[i],NULL);
+  free(gtree);
 }

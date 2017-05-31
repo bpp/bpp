@@ -27,7 +27,7 @@ WARN=-Wall -Wsign-compare
 ifndef CC
 CC = gcc
 endif
-CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN)
+CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN) #-DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
 LIBS=-lm
 

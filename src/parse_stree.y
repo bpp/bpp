@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2015 Tomas Flouri
+    Copyright (C) 2016-2017 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as

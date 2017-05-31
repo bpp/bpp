@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016 Tomas Flouri and Ziheng Yang
+    Copyright (C) 2016-2017 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -86,8 +86,6 @@ typedef struct snode_s
   unsigned int leaves;
 
   void * data;
-  int * seq_count;
-  int ** seq_indices;
 
   unsigned int node_index;
 } snode_t;
@@ -346,6 +344,10 @@ stree_t ** stree_tipstring_nodes(stree_t * root,
                                  char * tipstring,
                                  unsigned int * tiplist_count);
 
+hashtable_t * species_hash(stree_t * tree);
+
+hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
+
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
@@ -367,6 +369,8 @@ list_t * yy_parse_map(const char * filename);
 void maplist_print(list_t * map_list);
 
 void map_dealloc(void * data);
+
+hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
 /* functions in list.c */
 
@@ -404,14 +408,18 @@ void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
 
 void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 
-void cb_stree_dealloc(void * data);
-
-hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
-
 /* functions in random.c */
 
 double legacy_rndu(void);
 
 /* functions in gtree.c */
 
-void gtree_simulate(stree_t * stree,msa_t ** msa_list, int msa_id);
+void gtree_init(stree_t * stree,
+                msa_t ** msalist,
+                list_t * maplist,
+                int msa_count);
+
+char * gtree_export_newick(const gnode_t * root,
+                           char * (*cb_serialize)(const gnode_t *));
+
+void gtree_destroy(gtree_t * tree, void (*cb_destroy)(void *));
