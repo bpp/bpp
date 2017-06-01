@@ -40,11 +40,11 @@ static void dealloc_locus_data(locus_t * locus)
 
   if (locus->tipchars)
     for (i = 0; i < locus->tips; ++i)
-      xaligned_free(locus->tipchars[i]);
+      pll_aligned_free(locus->tipchars[i]);
   free(locus->tipchars);
 
   if (locus->ttlookup)
-    xaligned_free(locus->ttlookup);
+    pll_aligned_free(locus->ttlookup);
 
   if (locus->charmap)
     free(locus->charmap);
@@ -57,40 +57,40 @@ static void dealloc_locus_data(locus_t * locus)
     int start = (locus->attributes & PLL_ATTRIB_PATTERN_TIP) ?
                     locus->tips : 0;
     for (i = start; i < locus->clv_buffers + locus->tips; ++i)
-      xaligned_free(locus->clv[i]);
+      pll_aligned_free(locus->clv[i]);
   }
   free(locus->clv);
 
   if (locus->pmatrix)
   {
     //for (i = 0; i < partition->prob_matrices; ++i)
-      xaligned_free(locus->pmatrix[0]);
+      pll_aligned_free(locus->pmatrix[0]);
   }
   free(locus->pmatrix);
 
   if (locus->subst_params)
     for (i = 0; i < locus->rate_matrices; ++i)
-      xaligned_free(locus->subst_params[i]);
+      pll_aligned_free(locus->subst_params[i]);
   free(locus->subst_params);
 
   if (locus->eigenvecs)
     for (i = 0; i < locus->rate_matrices; ++i)
-      xaligned_free(locus->eigenvecs[i]);
+      pll_aligned_free(locus->eigenvecs[i]);
   free(locus->eigenvecs);
 
   if (locus->inv_eigenvecs)
     for (i = 0; i < locus->rate_matrices; ++i)
-      xaligned_free(locus->inv_eigenvecs[i]);
+      pll_aligned_free(locus->inv_eigenvecs[i]);
   free(locus->inv_eigenvecs);
 
   if (locus->eigenvals)
     for (i = 0; i < locus->rate_matrices; ++i)
-      xaligned_free(locus->eigenvals[i]);
+      pll_aligned_free(locus->eigenvals[i]);
   free(locus->eigenvals);
 
   if (locus->frequencies)
     for (i = 0; i < locus->rate_matrices; ++i)
-      xaligned_free(locus->frequencies[i]);
+      pll_aligned_free(locus->frequencies[i]);
   free(locus->frequencies);
 
   if (locus->pattern_weights)
@@ -312,7 +312,7 @@ static int update_charmap(locus_t * locus, const unsigned int * map)
       return BPP_SUCCESS;
 
     free(locus->ttlookup);
-    locus->ttlookup = xaligned_alloc(alloc_size * sizeof(double),
+    locus->ttlookup = pll_aligned_alloc(alloc_size * sizeof(double),
                                         locus->alignment);
     if (!locus->ttlookup)
       fatal("Cannot allocate space for storing precomputed tip-tip CLVs.");
@@ -394,14 +394,14 @@ static int create_charmap(locus_t * locus, const unsigned int * usermap)
   if ((locus->states == 4) &&
       (locus->attributes & PLL_ATTRIB_ARCH_AVX))
   {
-    locus->ttlookup = xaligned_alloc(1024 * locus->rate_cats *
-                                     sizeof(double),
-                                     locus->alignment);
+    locus->ttlookup = pll_aligned_alloc(1024 * locus->rate_cats *
+                                        sizeof(double),
+                                        locus->alignment);
   }
   else
   {
-    locus->ttlookup = xaligned_alloc(alloc_size * sizeof(double),
-                                     locus->alignment);
+    locus->ttlookup = pll_aligned_alloc(alloc_size * sizeof(double),
+                                        locus->alignment);
   }
 
   /* allocate tip character arrays */
@@ -643,9 +643,9 @@ locus_t * locus_create(unsigned int tips,
 
   for (i = start; i < locus->tips + locus->clv_buffers; ++i)
   {
-    locus->clv[i] = xaligned_alloc(sites_alloc * states_padded * rate_cats *
-                                   sizeof(double),
-                                   locus->alignment);
+    locus->clv[i] = pll_aligned_alloc(sites_alloc * states_padded * rate_cats *
+                                      sizeof(double),
+                                      locus->alignment);
     /* zero-out CLV vectors to avoid valgrind warnings when using odd number of
        states with vectorized code */
     memset(locus->clv[i],
@@ -661,10 +661,10 @@ locus_t * locus_create(unsigned int tips,
      required for updating partials when the number of states is not a multiple
      of states_padded. */
   size_t displacement = (states_padded - states)*(states_padded)*sizeof(double);
-  locus->pmatrix[0] = xaligned_alloc(locus->prob_matrices * states *
-                                     states_padded * rate_cats *
-                                     sizeof(double) + displacement,
-                                     locus->alignment);
+  locus->pmatrix[0] = pll_aligned_alloc(locus->prob_matrices * states *
+                                        states_padded * rate_cats *
+                                        sizeof(double) + displacement,
+                                        locus->alignment);
 
   for (i = 1; i < locus->prob_matrices; ++i)
     locus->pmatrix[i] = locus->pmatrix[i-1] + states*states_padded*rate_cats;
@@ -680,8 +680,8 @@ locus_t * locus_create(unsigned int tips,
                                         sizeof(double *));
   for (i = 0; i < locus->rate_matrices; ++i)
   {
-    locus->eigenvecs[i] = xaligned_alloc(states*states_padded*sizeof(double),
-                                         locus->alignment);
+    locus->eigenvecs[i] = pll_aligned_alloc(states*states_padded*sizeof(double),
+                                            locus->alignment);
     memset(locus->eigenvecs[i], 0, states * states_padded * sizeof(double));
   }
 
@@ -690,9 +690,9 @@ locus_t * locus_create(unsigned int tips,
                                             sizeof(double *));
   for (i = 0; i < locus->rate_matrices; ++i)
   {
-    locus->inv_eigenvecs[i] = xaligned_alloc(states*states_padded*
-                                             sizeof(double),
-                                             locus->alignment);
+    locus->inv_eigenvecs[i] = pll_aligned_alloc(states*states_padded *
+                                                sizeof(double),
+                                                locus->alignment);
     memset(locus->inv_eigenvecs[i], 0, states*states_padded*sizeof(double));
   }
 
@@ -700,8 +700,8 @@ locus_t * locus_create(unsigned int tips,
   locus->eigenvals = (double **)xcalloc(locus->rate_matrices,sizeof(double *));
   for (i = 0; i < locus->rate_matrices; ++i)
   {
-    locus->eigenvals[i] = xaligned_alloc(states_padded*sizeof(double),
-                                         locus->alignment);
+    locus->eigenvals[i] = pll_aligned_alloc(states_padded*sizeof(double),
+                                            locus->alignment);
     memset(locus->eigenvals[i], 0, states_padded * sizeof(double));
   }
 
@@ -709,17 +709,17 @@ locus_t * locus_create(unsigned int tips,
   locus->subst_params = (double **)xcalloc(locus->rate_matrices,
                                            sizeof(double *));
   for (i = 0; i < locus->rate_matrices; ++i)
-    locus->subst_params[i] = xaligned_alloc(((states*states-states)/2) *
-                                             sizeof(double),
-                                             locus->alignment);
+    locus->subst_params[i] = pll_aligned_alloc(((states*states-states)/2) *
+                                               sizeof(double),
+                                               locus->alignment);
 
   /* frequencies */
   locus->frequencies = (double **)xcalloc(locus->rate_matrices,
                                           sizeof(double *));
   for (i = 0; i < locus->rate_matrices; ++i)
   {
-    locus->frequencies[i] = xaligned_alloc(states_padded*sizeof(double),
-                                           locus->alignment);
+    locus->frequencies[i] = pll_aligned_alloc(states_padded*sizeof(double),
+                                              locus->alignment);
     memset(locus->frequencies[i],0,states_padded*sizeof(double));
   }
 

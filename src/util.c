@@ -155,7 +155,7 @@ FILE * xopen(const char * filename, const char * mode)
   return out;
 }
 
-void * xaligned_alloc(size_t size, size_t alignment)
+void * pll_aligned_alloc(size_t size, size_t alignment)
 {
   void * mem;
 
@@ -169,7 +169,7 @@ void * xaligned_alloc(size_t size, size_t alignment)
   return mem;
 }
 
-void xaligned_free(void * ptr)
+void pll_aligned_free(void * ptr)
 {
 #if (defined(__WIN32__) || defined(__WIN64__))
   _aligned_free(ptr);

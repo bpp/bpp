@@ -756,3 +756,17 @@ gtree_t ** gtree_init(stree_t * stree,
 
   return gtree;
 }
+
+void gtree_update_branch_lengths(gtree_t ** gtree_list, int count)
+{
+  unsigned int i,j;
+
+  for (j = 0; j < (unsigned int)count; ++j)
+  {
+    gtree_t * gtree = gtree_list[j];
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+      if (gtree->nodes[i] != gtree->root)
+        gtree->nodes[i]->length = gtree->nodes[i]->parent->time -
+                                  gtree->nodes[i]->time;
+  }
+}

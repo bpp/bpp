@@ -90,6 +90,7 @@ void cmd_a00()
 
   locus_t ** locus = (locus_t **)xcalloc(msa_count, sizeof(locus_t *));
 
+  gtree_update_branch_lengths(gtree, msa_count);
   for (i = 0; i < msa_count; ++i)
   {
     msa_t * msa = msa_list[i];
@@ -104,7 +105,7 @@ void cmd_a00()
                             2,                          /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
-                            PLL_ATTRIB_ARCH_CPU);       /* attributes */
+                            PLL_ATTRIB_ARCH_AVX);       /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
@@ -145,7 +146,7 @@ void cmd_a00()
                                        matrix_indices,
                                        param_indices,
                                        2,
-                                       PLL_ATTRIB_ARCH_CPU);
+                                       PLL_ATTRIB_ARCH_AVX);
 
       /* optionally, show pmatrices 
 
@@ -166,16 +167,14 @@ void cmd_a00()
                                  locus[i]->pmatrix[1],
                                  NULL,
                                  NULL,
-                                 PLL_ATTRIB_ARCH_CPU);
+                                 PLL_ATTRIB_ARCH_AVX);
     
     }
-
     assert(gtree[i]->root == trav[gtree[i]->inner_count-1]);
-
 
     /* optionally, show root CLV 
 
-    pll_show_clv(locus[0], gtree[0]->root->clv_index, PLL_SCALE_BUFFER_NONE, 9);
+    pll_show_clv(locus[i], gtree[i]->root->clv_index, PLL_SCALE_BUFFER_NONE, 9);
 
     */
 
@@ -192,7 +191,7 @@ void cmd_a00()
                                 locus[i]->pattern_weights,
                                 param_indices,
                                 NULL,
-                                0);
+                                PLL_ATTRIB_ARCH_AVX);
 
     printf("logL gene tree %d : %f\n", i,logl);
     free(trav);

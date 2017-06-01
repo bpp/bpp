@@ -9,7 +9,7 @@ matrix:
           sources: ['ubuntu-toolchain-r-test']
           packages: ['gcc-4.6']
       env:
-        - COMPILER=gcc-4.6
+        - COMPILER=gcc-4.6 LEGACY=true
 
     - os: linux
       compiler: gcc
@@ -112,4 +112,4 @@ matrix:
       env:
         - COMPILER=clang-4.0
 
-script: cd src; CC=$COMPILER make
+script: cd src; CC=$COMPILER DISABLE_AVX2=$LEGACY make

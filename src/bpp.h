@@ -36,6 +36,7 @@
 #if (!defined(WINNT) && !defined(WIN32) && !defined(WIN64))
 #include <sys/resource.h>
 #endif
+#include <x86intrin.h>
 
 /* constants */
 
@@ -340,8 +341,8 @@ char * xstrndup(const char * s, size_t len);
 long getusec(void);
 void show_rusage(void);
 FILE * xopen(const char * filename, const char * mode);
-void * xaligned_alloc(size_t size, size_t alignment);
-void xaligned_free(void * ptr);
+void * pll_aligned_alloc(size_t size, size_t alignment);
+void pll_aligned_free(void * ptr);
 
 /* functions in bpp.c */
 
@@ -482,6 +483,8 @@ int gtree_traverse(gnode_t * root,
                    gnode_t ** outbuffer,
                    unsigned int * trav_size);
 
+void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
+
 /* functions in locus.c */
 
 locus_t * locus_create(unsigned int tips,
@@ -512,6 +515,52 @@ void pll_set_frequencies(locus_t * locus,
 
 /* functions in core_partials.c */
 
+void pll_core_update_partial_tt_4x4(unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const unsigned char * right_tipchars,
+                                    const double * lookup,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_tt(unsigned int states,
+                                unsigned int sites,
+                                unsigned int rate_cats,
+                                double * parent_clv,
+                                unsigned int * parent_scaler,
+                                const unsigned char * left_tipchars,
+                                const unsigned char * right_tipchars,
+                                const unsigned int * tipmap,
+                                unsigned int tipmap_size,
+                                const double * lookup,
+                                unsigned int attrib);
+
+void pll_core_update_partial_ti_4x4(unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const double * right_clv,
+                                    const double * left_matrix,
+                                    const double * right_matrix,
+                                    const unsigned int * right_scaler,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_ti(unsigned int states,
+                                unsigned int sites,
+                                unsigned int rate_cats,
+                                double * parent_clv,
+                                unsigned int * parent_scaler,
+                                const unsigned char * left_tipchars,
+                                const double * right_clv,
+                                const double * left_matrix,
+                                const double * right_matrix,
+                                const unsigned int * right_scaler,
+                                const unsigned int * tipmap,
+                                unsigned int tipmap_size,
+                                unsigned int attrib);
+
 void pll_core_update_partial_ii(unsigned int states,
                                 unsigned int sites,
                                 unsigned int rate_cats,
@@ -524,6 +573,20 @@ void pll_core_update_partial_ii(unsigned int states,
                                 const unsigned int * left_scaler,
                                 const unsigned int * right_scaler,
                                 unsigned int attrib);
+
+void pll_core_create_lookup_4x4(unsigned int rate_cats,
+                                double * lookup,
+                                const double * left_matrix,
+                                const double * right_matrix);
+
+void pll_core_create_lookup(unsigned int states,
+                            unsigned int rate_cats,
+                            double * lookup,
+                            const double * left_matrix,
+                            const double * right_matrix,
+                            const unsigned int * tipmap,
+                            unsigned int tipmap_size,
+                            unsigned int attrib);
 
 /* functions in core_pmatrix.c */
 
@@ -578,3 +641,243 @@ void pll_show_clv(const locus_t * locus,
 /* functions in method_00.c */
 
 void cmd_a00(void);
+
+/* functions in core_partials_sse.c */
+
+#ifdef HAVE_SSE3
+void pll_core_create_lookup_sse(unsigned int states,
+                                unsigned int rate_cats,
+                                double * ttlookup,
+                                const double * left_matrix,
+                                const double * right_matrix,
+                                const unsigned int * tipmap,
+                                unsigned int tipmap_size);
+
+void pll_core_create_lookup_4x4_sse(unsigned int rate_cats,
+                                    double * lookup,
+                                    const double * left_matrix,
+                                    const double * right_matrix);
+
+void pll_core_update_partial_tt_sse(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const unsigned char * right_tipchars,
+                                    const double * lookup,
+                                    unsigned int tipstates_count,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_tt_4x4_sse(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const unsigned char * left_tipchars,
+                                        const unsigned char * right_tipchars,
+                                        const double * lookup,
+                                        unsigned int attrib);
+
+void pll_core_update_partial_ti_sse(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const double * right_clv,
+                                    const double * left_matrix,
+                                    const double * right_matrix,
+                                    const unsigned int * right_scaler,
+                                    const unsigned int * tipmap,
+                                    unsigned int tipmap_size,
+                                    unsigned int attrib);
+
+
+void pll_core_update_partial_ti_4x4_sse(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const unsigned char * left_tipchar,
+                                        const double * right_clv,
+                                        const double * left_matrix,
+                                        const double * right_matrix,
+                                        const unsigned int * right_scaler,
+                                        unsigned int attrib);
+
+void pll_core_update_partial_ii_sse(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const double * left_clv,
+                                    const double * right_clv,
+                                    const double * left_matrix,
+                                    const double * right_matrix,
+                                    const unsigned int * left_scaler,
+                                    const unsigned int * right_scaler,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_ii_4x4_sse(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const double * left_clv,
+                                        const double * right_clv,
+                                        const double * left_matrix,
+                                        const double * right_matrix,
+                                        const unsigned int * left_scaler,
+                                        const unsigned int * right_scaler,
+                                        unsigned int attrib);
+#endif
+
+/* functions in core_partials_avx.c */
+
+#ifdef HAVE_AVX
+void pll_core_create_lookup_avx(unsigned int states,
+                                unsigned int rate_cats,
+                                double * lookup,
+                                const double * left_matrix,
+                                const double * right_matrix,
+                                const unsigned int * tipmap,
+                                unsigned int tipmap_size);
+
+void pll_core_create_lookup_4x4_avx(unsigned int rate_cats,
+                                    double * lookup,
+                                    const double * left_matrix,
+                                    const double * right_matrix);
+
+void pll_core_create_lookup_20x20_avx(unsigned int rate_cats,
+                                      double * ttlookup,
+                                      const double * left_matrix,
+                                      const double * right_matrix,
+                                      const unsigned int * tipmap,
+                                      unsigned int tipmap_size);
+
+void pll_core_update_partial_tt_avx(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const unsigned char * right_tipchars,
+                                    const double * lookup,
+                                    unsigned int tipstates_count,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_tt_4x4_avx(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const unsigned char * left_tipchars,
+                                        const unsigned char * right_tipchars,
+                                        const double * lookup,
+                                        unsigned int attrib);
+
+void pll_core_update_partial_ti_avx(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const unsigned char * left_tipchars,
+                                    const double * right_clv,
+                                    const double * left_matrix,
+                                    const double * right_matrix,
+                                    const unsigned int * right_scaler,
+                                    const unsigned int * tipmap,
+                                    unsigned int tipmap_size,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_ti_4x4_avx(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const unsigned char * left_tipchar,
+                                        const double * right_clv,
+                                        const double * left_matrix,
+                                        const double * right_matrix,
+                                        const unsigned int * right_scaler,
+                                        unsigned int attrib);
+
+void pll_core_update_partial_ti_20x20_avx(unsigned int sites,
+                                          unsigned int rate_cats,
+                                          double * parent_clv,
+                                          unsigned int * parent_scaler,
+                                          const unsigned char * left_tipchar,
+                                          const double * right_clv,
+                                          const double * left_matrix,
+                                          const double * right_matrix,
+                                          const unsigned int * right_scaler,
+                                          const unsigned int * tipmap,
+                                          unsigned int tipmap_size,
+                                          unsigned int attrib);
+
+void pll_core_update_partial_ii_avx(unsigned int states,
+                                    unsigned int sites,
+                                    unsigned int rate_cats,
+                                    double * parent_clv,
+                                    unsigned int * parent_scaler,
+                                    const double * left_clv,
+                                    const double * right_clv,
+                                    const double * left_matrix,
+                                    const double * right_matrix,
+                                    const unsigned int * left_scaler,
+                                    const unsigned int * right_scaler,
+                                    unsigned int attrib);
+
+void pll_core_update_partial_ii_4x4_avx(unsigned int sites,
+                                        unsigned int rate_cats,
+                                        double * parent_clv,
+                                        unsigned int * parent_scaler,
+                                        const double * left_clv,
+                                        const double * right_clv,
+                                        const double * left_matrix,
+                                        const double * right_matrix,
+                                        const unsigned int * left_scaler,
+                                        const unsigned int * right_scaler,
+                                        unsigned int attrib);
+#endif
+
+/* functions in core_partials_avx2.c */
+
+#ifdef HAVE_AVX2
+void pll_core_update_partial_ti_avx2(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     double * parent_clv,
+                                     unsigned int * parent_scaler,
+                                     const unsigned char * left_tipchars,
+                                     const double * right_clv,
+                                     const double * left_matrix,
+                                     const double * right_matrix,
+                                     const unsigned int * right_scaler,
+                                     const unsigned int * tipmap,
+                                     unsigned int tipmap_size,
+                                     unsigned int attrib);
+
+
+void pll_core_update_partial_ti_20x20_avx2(unsigned int sites,
+                                           unsigned int rate_cats,
+                                           double * parent_clv,
+                                           unsigned int * parent_scaler,
+                                           const unsigned char * left_tipchar,
+                                           const double * right_clv,
+                                           const double * left_matrix,
+                                           const double * right_matrix,
+                                           const unsigned int * right_scaler,
+                                           const unsigned int * tipmap,
+                                           unsigned int tipmap_size,
+                                           unsigned int attrib);
+
+void pll_core_update_partial_ii_avx2(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     double * parent_clv,
+                                     unsigned int * parent_scaler,
+                                     const double * left_clv,
+                                     const double * right_clv,
+                                     const double * left_matrix,
+                                     const double * right_matrix,
+                                     const unsigned int * left_scaler,
+                                     const unsigned int * right_scaler,
+                                     unsigned int attrib);
+#endif

@@ -24,10 +24,17 @@ PROFILING=-g
 # Compiler warnings
 WARN=-Wall -Wsign-compare
 
+AVX2DEF=-DHAVE_AVX2
+AVX2OBJ=core_partials_avx2.o
+ifdef DISABLE_AVX2
+  AVX2DEF=
+  AVX2OBJ=
+endif
+
 ifndef CC
 CC = gcc
 endif
-CFLAGS = -D_GNU_SOURCE -g -msse3 -O3 $(WARN) #-DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 -DHAVE_AVX $(AVX2DEF) -g -msse3 -O3 $(WARN) #-DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
 LIBS=-lm
 
@@ -41,13 +48,19 @@ all: $(PROG)
 OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
      stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
-     output.o method_00.o
+     output.o method_00.o core_partials_avx.o core_partials_sse.o $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+%_avx.o: %_avx.c
+	$(CC) $(CFLAGS) -c -mavx -o $@ $<
+
+%_avx2.o: %_avx2.c
+	$(CC) $(CFLAGS) -c -mavx2 -mfma -o $@ $<
 
 parse_%.c: parse_%.y
 	$(BISON) -p $*_ -d -o $@ $<
