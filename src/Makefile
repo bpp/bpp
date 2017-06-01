@@ -53,14 +53,14 @@ OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
 %_avx.o: %_avx.c
 	$(CC) $(CFLAGS) -c -mavx -o $@ $<
 
 %_avx2.o: %_avx2.c
 	$(CC) $(CFLAGS) -c -mavx2 -mfma -o $@ $<
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 parse_%.c: parse_%.y
 	$(BISON) -p $*_ -d -o $@ $<
