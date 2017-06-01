@@ -40,7 +40,8 @@ all: $(PROG)
 
 OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
-     stree.o random.o gtree.o
+     stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
+     output.o method_00.o
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)

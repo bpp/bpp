@@ -38,6 +38,83 @@ typedef struct pop_s
 static hashtable_t * sht;
 static hashtable_t * mht;
 
+static void gtree_traverse_postorder(gnode_t * node,
+                                     int (*cbtrav)(gnode_t *),
+                                     unsigned int * index,
+                                     gnode_t ** outbuffer)
+{
+  if (!node->left)
+  {
+    if (cbtrav(node))
+    {
+      outbuffer[*index] = node;
+      *index = *index + 1;
+    }
+    return;
+  }
+  if (!cbtrav(node))
+    return;
+
+  gtree_traverse_postorder(node->left, cbtrav, index, outbuffer);
+  gtree_traverse_postorder(node->right, cbtrav, index, outbuffer);
+
+  outbuffer[*index] = node;
+  *index = *index + 1;
+}
+
+static void gtree_traverse_preorder(gnode_t * node,
+                                    int (*cbtrav)(gnode_t *),
+                                    unsigned int * index,
+                                    gnode_t ** outbuffer)
+{
+  if (!node->left)
+  {
+    if (cbtrav(node))
+    {
+      outbuffer[*index] = node;
+      *index = *index + 1;
+    }
+    return;
+  }
+  if (!cbtrav(node))
+    return;
+
+  outbuffer[*index] = node;
+  *index = *index + 1;
+
+  gtree_traverse_preorder(node->left, cbtrav, index, outbuffer);
+  gtree_traverse_preorder(node->right, cbtrav, index, outbuffer);
+
+}
+
+int gtree_traverse(gnode_t * root,
+                   int traversal,
+                   int (*cbtrav)(gnode_t *),
+                   gnode_t ** outbuffer,
+                   unsigned int * trav_size)
+{
+  *trav_size = 0;
+  if (!root->left) return BPP_FAILURE;
+
+  /* we will traverse an unrooted tree in the following way
+
+           root
+            /\
+           /  \
+        left   right
+
+     at each node the callback function is called to decide whether we
+     are going to traversing the subtree rooted at the specific node */
+
+  if (traversal == TREE_TRAVERSE_POSTORDER)
+    gtree_traverse_postorder(root, cbtrav, trav_size, outbuffer);
+  else if (traversal == TREE_TRAVERSE_PREORDER)
+    gtree_traverse_preorder(root, cbtrav, trav_size, outbuffer);
+  else
+    fatal("Invalid traversal value.");
+
+  return BPP_SUCCESS;
+}
 static void dealloc_data(gnode_t * node,
                          void (*cb_destroy)(void *))
 {
@@ -593,6 +670,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_id)
       inner->clv_index = clv_index++;
       inner->left->parent = inner;
       inner->right->parent = inner;
+      inner->time = t;
 
       /* in pop j, replace k1 by the new node, and remove k2 (replace it with
          last node in list) */
@@ -632,6 +710,11 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_id)
 
 #ifdef DEBUG_GTREE_SIMULATE
   /* create a newick string from constructed gene tree */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    if (gtree->nodes[i] != gtree->root)
+      gtree->nodes[i]->length = gtree->nodes[i]->parent->time -
+                                gtree->nodes[i]->time;
+
   fprintf(stdout, "[Debug]: Printing newick string for current gene tree\n");
   char * newick = gtree_export_newick(gtree->root,NULL);
   fprintf(stdout,"%s\n", newick);
@@ -647,10 +730,10 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_id)
   return gtree;
 }
 
-void gtree_init(stree_t * stree,
-                msa_t ** msalist,
-                list_t * maplist,
-                int msa_count)
+gtree_t ** gtree_init(stree_t * stree,
+                      msa_t ** msalist,
+                      list_t * maplist,
+                      int msa_count)
 {
   int i;
   gtree_t ** gtree;
@@ -671,7 +754,5 @@ void gtree_init(stree_t * stree,
   hashtable_destroy(sht,NULL);
   hashtable_destroy(mht,cb_dealloc_pairlabel);
 
-  for (i = 0; i < msa_count; ++i)
-    gtree_destroy(gtree[i],NULL);
-  free(gtree);
+  return gtree;
 }

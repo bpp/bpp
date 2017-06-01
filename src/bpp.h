@@ -60,6 +60,32 @@
 #define TREE_TRAVERSE_POSTORDER         1
 #define TREE_TRAVERSE_PREORDER          2
 
+/* libpll related definitions */
+
+#define PLL_ALIGNMENT_CPU   8
+#define PLL_ALIGNMENT_SSE  16
+#define PLL_ALIGNMENT_AVX  32
+
+#define PLL_ATTRIB_ARCH_CPU            0
+#define PLL_ATTRIB_ARCH_SSE       (1 << 0)
+#define PLL_ATTRIB_PATTERN_TIP    (1 << 4)
+
+#define PLL_ATTRIB_ARCH_AVX       (1 << 1)
+#define PLL_ATTRIB_ARCH_AVX2      (1 << 2)
+#define PLL_ATTRIB_ARCH_AVX512    (1 << 3)
+#define PLL_ATTRIB_ARCH_MASK         0xF
+
+#define PLL_ATTRIB_PATTERN_TIP    (1 << 4)
+
+#define PLL_ATTRIB_RATE_SCALERS   (1 << 9)
+
+#define PLL_SCALE_FACTOR 115792089237316195423570985008687907853269984665640564039457584007913129639936.0  /*  2**256 (exactly)  */
+#define PLL_SCALE_THRESHOLD (1.0/PLL_SCALE_FACTOR)
+#define PLL_SCALE_FACTOR_SQRT 340282366920938463463374607431768211456.0 /* 2**128 */
+#define PLL_SCALE_THRESHOLD_SQRT (1.0/PLL_SCALE_FACTOR_SQRT)
+#define PLL_SCALE_BUFFER_NONE -1
+
+#define PLL_MISC_EPSILON 1e-8
 /* error codes */
 
 #define ERROR_PHYLIP_SYNTAX            106
@@ -142,16 +168,40 @@ typedef struct msa_s
 
 typedef struct locus_s
 {
-  unsigned int tips_count;
-  unsigned int clv_count;
-  unsigned int pmatrix_count;
+  unsigned int tips;
+  unsigned int clv_buffers;
   unsigned int states;
   unsigned int sites;
+  unsigned int rate_matrices;
+  unsigned int prob_matrices;
+  unsigned int rate_cats;
+  unsigned int scale_buffers;
+  unsigned int attributes;
+
+  /* vectorization parameters */
+  size_t alignment;
+  unsigned int states_padded;
 
   double ** clv;
   double ** pmatrix;
+  double * rates;
+  double * rate_weights;
+  double ** subst_params;
+  unsigned int ** scale_buffer;
+  double ** frequencies;
   unsigned int * pattern_weights;
-  unsigned char ** tipstates;
+
+  int * eigen_decomp_valid;
+  double ** eigenvecs;
+  double ** inv_eigenvecs;
+  double ** eigenvals;
+
+  /* tip-tip precomputation data */
+  unsigned int maxstates;
+  unsigned char ** tipchars;
+  unsigned char * charmap;
+  double * ttlookup;
+  unsigned int * tipmap;
 } locus_t;
 
 /* Simple structure for handling PHYLIP parsing */
@@ -290,6 +340,8 @@ char * xstrndup(const char * s, size_t len);
 long getusec(void);
 void show_rusage(void);
 FILE * xopen(const char * filename, const char * mode);
+void * xaligned_alloc(size_t size, size_t alignment);
+void xaligned_free(void * ptr);
 
 /* functions in bpp.c */
 
@@ -414,12 +466,115 @@ double legacy_rndu(void);
 
 /* functions in gtree.c */
 
-void gtree_init(stree_t * stree,
-                msa_t ** msalist,
-                list_t * maplist,
-                int msa_count);
+gtree_t ** gtree_init(stree_t * stree,
+                      msa_t ** msalist,
+                      list_t * maplist,
+                      int msa_count);
 
 char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *));
 
 void gtree_destroy(gtree_t * tree, void (*cb_destroy)(void *));
+
+int gtree_traverse(gnode_t * root,
+                   int traversal,
+                   int (*cbtrav)(gnode_t *),
+                   gnode_t ** outbuffer,
+                   unsigned int * trav_size);
+
+/* functions in locus.c */
+
+locus_t * locus_create(unsigned int tips,
+                       unsigned int clv_buffers,
+                       unsigned int states,
+                       unsigned int sites,
+                       unsigned int rate_matrices,
+                       unsigned int prob_matrices,
+                       unsigned int rate_cats,
+                       unsigned int scale_buffers,
+                       unsigned int attributes);
+
+void locus_destroy(locus_t * locus);
+
+int pll_set_tip_states(locus_t * locus,
+                       unsigned int tip_index,
+                       const unsigned int * map,
+                       const char * sequence);
+
+int pll_set_tip_clv(locus_t * locus,
+                    unsigned int tip_index,
+                    const double * clv,
+                    int padding);
+
+void pll_set_frequencies(locus_t * locus,
+                         unsigned int freqs_index,
+                         const double * frequencies);
+
+/* functions in core_partials.c */
+
+void pll_core_update_partial_ii(unsigned int states,
+                                unsigned int sites,
+                                unsigned int rate_cats,
+                                double * parent_clv,
+                                unsigned int * parent_scaler,
+                                const double * left_clv,
+                                const double * right_clv,
+                                const double * left_matrix,
+                                const double * right_matrix,
+                                const unsigned int * left_scaler,
+                                const unsigned int * right_scaler,
+                                unsigned int attrib);
+
+/* functions in core_pmatrix.c */
+
+int pll_core_update_pmatrix(double ** pmatrix,
+                            unsigned int states,
+                            unsigned int rate_cats,
+                            const double * rates,
+                            const double * branch_lengths,
+                            const unsigned int * matrix_indices,
+                            const unsigned int * params_indices,
+                            double * const * eigenvals,
+                            double * const * eigenvecs,
+                            double * const * inv_eigenvecs,
+                            unsigned int count,
+                            unsigned int attrib);
+
+int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
+                                     unsigned int states,
+                                     unsigned int rate_cats,
+                                     const double * rates,
+                                     const double * branch_lengths,
+                                     const unsigned int * matrix_indices,
+                                     const unsigned int * params_indices,
+                                     unsigned int count,
+                                     unsigned int attrib);
+
+/* functions in core_likelihood.c */
+
+double pll_core_root_loglikelihood(unsigned int states,
+                                   unsigned int sites,
+                                   unsigned int rate_cats,
+                                   const double * clv,
+                                   const unsigned int * scaler,
+                                   double * const * frequencies,
+                                   const double * rate_weights,
+                                   const unsigned int * pattern_weights,
+                                   const unsigned int * freqs_indices,
+                                   double * persite_lnl,
+                                   unsigned int attrib);
+
+/* functions in output.c */
+
+void pll_show_pmatrix(const locus_t * locus,
+                                 unsigned int index,
+                                 unsigned int float_precision);
+
+void pll_show_clv(const locus_t * locus,
+                             unsigned int clv_index,
+                             int scaler_index,
+                             unsigned int float_precision);
+
+/* functions in method_00.c */
+
+void cmd_a00(void);

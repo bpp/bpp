@@ -154,3 +154,26 @@ FILE * xopen(const char * filename, const char * mode)
 
   return out;
 }
+
+void * xaligned_alloc(size_t size, size_t alignment)
+{
+  void * mem;
+
+#if (defined(__WIN32__) || defined(__WIN64__))
+  mem = _aligned_malloc(size, alignment);
+#else
+  if (posix_memalign(&mem, alignment, size))
+    mem = NULL;
+#endif
+
+  return mem;
+}
+
+void xaligned_free(void * ptr)
+{
+#if (defined(__WIN32__) || defined(__WIN64__))
+  _aligned_free(ptr);
+#else
+  free(ptr);
+#endif
+}
