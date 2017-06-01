@@ -105,7 +105,7 @@ void cmd_a00()
                             2,                          /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
-                            PLL_ATTRIB_ARCH_AVX);       /* attributes */
+                            PLL_ATTRIB_ARCH_SSE);       /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
@@ -146,7 +146,7 @@ void cmd_a00()
                                        matrix_indices,
                                        param_indices,
                                        2,
-                                       PLL_ATTRIB_ARCH_AVX);
+                                       PLL_ATTRIB_ARCH_SSE);
 
       /* optionally, show pmatrices 
 
@@ -167,7 +167,7 @@ void cmd_a00()
                                  locus[i]->pmatrix[1],
                                  NULL,
                                  NULL,
-                                 PLL_ATTRIB_ARCH_AVX);
+                                 PLL_ATTRIB_ARCH_SSE);
     
     }
     assert(gtree[i]->root == trav[gtree[i]->inner_count-1]);
@@ -191,7 +191,7 @@ void cmd_a00()
                                 locus[i]->pattern_weights,
                                 param_indices,
                                 NULL,
-                                PLL_ATTRIB_ARCH_AVX);
+                                PLL_ATTRIB_ARCH_SSE);
 
     printf("logL gene tree %d : %f\n", i,logl);
     free(trav);

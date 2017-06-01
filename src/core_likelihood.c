@@ -42,6 +42,106 @@ double pll_core_root_loglikelihood(unsigned int states,
 
   unsigned int states_padded = states;
 
+  #ifdef HAVE_SSE3
+  if (attrib & PLL_ATTRIB_ARCH_SSE)
+  {
+    if (states == 4)
+    {
+      return pll_core_root_loglikelihood_4x4_sse(sites,
+                                                 rate_cats,
+                                                 clv,
+                                                 scaler,
+                                                 frequencies,
+                                                 rate_weights,
+                                                 pattern_weights,
+                                                 freqs_indices,
+                                                 persite_lnl);
+    }
+    else
+    {
+      return pll_core_root_loglikelihood_sse(states,
+                                             sites,
+                                             rate_cats,
+                                             clv,
+                                             scaler,
+                                             frequencies,
+                                             rate_weights,
+                                             pattern_weights,
+                                             freqs_indices,
+                                             persite_lnl);
+    }
+    /* this line is never called, but should we disable the else case above,
+       then states_padded must be set to this value */
+    states_padded = (states+1) & 0xFFFFFFFE;
+  }
+  #endif
+  #ifdef HAVE_AVX
+  if (attrib & PLL_ATTRIB_ARCH_AVX)
+  {
+    if (states == 4)
+    {
+      return pll_core_root_loglikelihood_4x4_avx(sites,
+                                                 rate_cats,
+                                                 clv,
+                                                 scaler,
+                                                 frequencies,
+                                                 rate_weights,
+                                                 pattern_weights,
+                                                 freqs_indices,
+                                                 persite_lnl);
+    }
+    else
+    {
+      return pll_core_root_loglikelihood_avx(states,
+                                             sites,
+                                             rate_cats,
+                                             clv,
+                                             scaler,
+                                             frequencies,
+                                             rate_weights,
+                                             pattern_weights,
+                                             freqs_indices,
+                                             persite_lnl);
+    }
+    /* this line is never called, but should we disable the else case above,
+       then states_padded must be set to this value */
+    states_padded = (states+3) & 0xFFFFFFFC;
+  }
+  #endif
+  #ifdef HAVE_AVX2
+  if (attrib & PLL_ATTRIB_ARCH_AVX2)
+  {
+    if (states == 4)
+    {
+      return pll_core_root_loglikelihood_4x4_avx(sites,
+                                                 rate_cats,
+                                                 clv,
+                                                 scaler,
+                                                 frequencies,
+                                                 rate_weights,
+                                                 pattern_weights,
+                                                 freqs_indices,
+                                                 persite_lnl);
+    }
+    else
+    {
+      return pll_core_root_loglikelihood_avx2(states,
+                                             sites,
+                                             rate_cats,
+                                             clv,
+                                             scaler,
+                                             frequencies,
+                                             rate_weights,
+                                             pattern_weights,
+                                             freqs_indices,
+                                             persite_lnl);
+    }
+    /* this line is never called, but should we disable the else case above,
+       then states_padded must be set to this value */
+    states_padded = (states+3) & 0xFFFFFFFC;
+  }
+  #endif
+
   /* iterate through sites */
   for (i = 0; i < sites; ++i)
   {

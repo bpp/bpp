@@ -728,6 +728,30 @@ void pll_core_update_partial_ii_4x4_sse(unsigned int sites,
                                         const unsigned int * left_scaler,
                                         const unsigned int * right_scaler,
                                         unsigned int attrib);
+
+/* functions in core_likelihood_sse.c */
+
+
+double pll_core_root_loglikelihood_sse(unsigned int states,
+                                       unsigned int sites,
+                                       unsigned int rate_cats,
+                                       const double * clv,
+                                       const unsigned int * scaler,
+                                       double * const * frequencies,
+                                       const double * rate_weights,
+                                       const unsigned int * pattern_weights,
+                                       const unsigned int * freqs_indices,
+                                       double * persite_lnl);
+
+double pll_core_root_loglikelihood_4x4_sse(unsigned int sites,
+                                           unsigned int rate_cats,
+                                           const double * clv,
+                                           const unsigned int * scaler,
+                                           double * const * frequencies,
+                                           const double * rate_weights,
+                                           const unsigned int * pattern_weights,
+                                           const unsigned int * freqs_indices,
+                                           double * persite_lnl);
 #endif
 
 /* functions in core_partials_avx.c */
@@ -835,11 +859,37 @@ void pll_core_update_partial_ii_4x4_avx(unsigned int sites,
                                         const unsigned int * left_scaler,
                                         const unsigned int * right_scaler,
                                         unsigned int attrib);
+
+/* functions in core_likelihood_avx.c */
+
+
+double pll_core_root_loglikelihood_avx(unsigned int states,
+                                       unsigned int sites,
+                                       unsigned int rate_cats,
+                                       const double * clv,
+                                       const unsigned int * scaler,
+                                       double * const * frequencies,
+                                       const double * rate_weights,
+                                       const unsigned int * pattern_weights,
+                                       const unsigned int * freqs_indices,
+                                       double * persite_lnl);
+
+double pll_core_root_loglikelihood_4x4_avx(unsigned int sites,
+                                           unsigned int rate_cats,
+                                           const double * clv,
+                                           const unsigned int * scaler,
+                                           double * const * frequencies,
+                                           const double * rate_weights,
+                                           const unsigned int * pattern_weights,
+                                           const unsigned int * freqs_indices,
+                                           double * persite_lnl);
 #endif
+
+
+#ifdef HAVE_AVX2
 
 /* functions in core_partials_avx2.c */
 
-#ifdef HAVE_AVX2
 void pll_core_update_partial_ti_avx2(unsigned int states,
                                      unsigned int sites,
                                      unsigned int rate_cats,
@@ -880,4 +930,18 @@ void pll_core_update_partial_ii_avx2(unsigned int states,
                                      const unsigned int * left_scaler,
                                      const unsigned int * right_scaler,
                                      unsigned int attrib);
+
+/* functions in core_likelihood_avx2.c */
+
+double pll_core_root_loglikelihood_avx2(unsigned int states,
+                                        unsigned int sites,
+                                        unsigned int rate_cats,
+                                        const double * clv,
+                                        const unsigned int * scaler,
+                                        double * const * frequencies,
+                                        const double * rate_weights,
+                                        const unsigned int * pattern_weights,
+                                        const unsigned int * freqs_indices,
+                                        double * persite_lnl);
+
 #endif
