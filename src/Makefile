@@ -34,7 +34,7 @@ endif
 ifndef CC
 CC = gcc
 endif
-CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 -DHAVE_AVX $(AVX2DEF) -g -msse3 -O3 $(WARN) #-DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 -DHAVE_AVX $(AVX2DEF) -g -msse3 -O3 $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
 LIBS=-lm
 
@@ -48,7 +48,7 @@ all: $(PROG)
 OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
      stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
-     output.o method_00.o core_partials_avx.o core_partials_sse.o \
+     output.o method_00.o core_partials_avx.o core_partials_sse.o dlist.o \
      core_likelihood_sse.o core_likelihood_avx.o $(AVX2OBJ)
 
 $(PROG): $(OBJS)

@@ -250,11 +250,28 @@ static void stree_init_theta(stree_t * stree,
 
 void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 {
+  unsigned int i,j;
+
   assert(msa_count > 0);
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
   stree_label(stree, msa_count);
+
+  /* allocate space for keeping track of coalescent events at each species tree
+     node for each locus */
+  stree->locus_count = (unsigned int)msa_count;
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count,sizeof(dlist_t *));
+    stree->nodes[i]->event_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
+    stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
+
+    for (j = 0; j < stree->locus_count; ++j)
+      stree->nodes[i]->event[j] = dlist_create();
+  }
 
   /* Initialize population sizes */
   stree_init_theta(stree, msa, maplist, msa_count);

@@ -34,6 +34,7 @@ static stree_t * load_tree(void)
   return stree;
 }
 
+#if 0
 static int cb_full_traversal(gnode_t * node)
 {
   if (!node->left)
@@ -41,11 +42,14 @@ static int cb_full_traversal(gnode_t * node)
 
   return 1;
 }
+#endif
 
 void cmd_a00()
 {
   int i,j;
   int msa_count;
+  double logl,logpr;
+  double logl_sum = 0;
   msa_t ** msa_list;
 
   if (opt_mcmc_steps <= 0)
@@ -83,7 +87,6 @@ void cmd_a00()
 
   /* call MCMC */
 
-  /* debugging */
   stree_init(stree,msa_list,map_list,msa_count);
 
   gtree_t ** gtree = gtree_init(stree,msa_list,map_list,msa_count);
@@ -98,11 +101,11 @@ void cmd_a00()
 
     /* create the locus structure */
     locus[i] = locus_create(gtree[i]->tip_count,        /* # tip sequence */
-                            gtree[i]->inner_count,      /* # CLV vectors */
+                            2*gtree[i]->inner_count,    /* # CLV vectors */
                             4,                          /* # states */
                             msa->length,                /* sequence length */
                             1,                          /* # subst matrices */
-                            2,                          /* # prob matrices */
+                            gtree[i]->edge_count,       /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
                             PLL_ATTRIB_ARCH_SSE);       /* attributes */
@@ -114,63 +117,11 @@ void cmd_a00()
     for (j = 0; j < (int)(gtree[i]->tip_count); ++j)
       pll_set_tip_states(locus[i], j, pll_map_nt, msa_list[i]->sequence[j]);
 
-    /* get a postorder traversal of inner nodes for gene tree i */
-    unsigned int trav_size;
-    gnode_t ** trav = (gnode_t **)xmalloc(gtree[i]->inner_count * sizeof(gnode_t *));
-    gtree_traverse(gtree[i]->root,
-                   TREE_TRAVERSE_POSTORDER,
-                   cb_full_traversal,
-                   trav,
-                   &trav_size);
-
-
     /* compute the conditional probabilities for each inner node */
-    for (j = 0; j < (int)trav_size; ++j)
-    {
-      double branch_length[2];
-      unsigned int matrix_indices[2] = {0,1};
-      unsigned int param_indices[1] = {0};
-      double rates[1] = {1};
-      
-      branch_length[0] = trav[j]->left->length;
-      branch_length[1] = trav[j]->right->length;
-
-      /* update two transition probability matrices with indices 0 and 1,
-         and use the substitution matrix and frequencies with index 0 
-         (param_indices) */
-      pll_core_update_pmatrix_4x4_jc69(locus[i]->pmatrix,
-                                       locus[i]->states,
-                                       locus[i]->rate_cats,
-                                       rates,
-                                       branch_length,
-                                       matrix_indices,
-                                       param_indices,
-                                       2,
-                                       PLL_ATTRIB_ARCH_SSE);
-
-      /* optionally, show pmatrices 
-
-      pll_show_pmatrix(locus[i], 0, 5);
-      pll_show_pmatrix(locus[i], 1, 5);
-
-      */
-
-      /* now compute the conditional probabilities for the current node */
-      pll_core_update_partial_ii(locus[i]->states,
-                                 locus[i]->sites,
-                                 locus[i]->rate_cats,
-                                 locus[i]->clv[trav[j]->clv_index],
-                                 NULL,
-                                 locus[i]->clv[trav[j]->left->clv_index],
-                                 locus[i]->clv[trav[j]->right->clv_index],
-                                 locus[i]->pmatrix[0],
-                                 locus[i]->pmatrix[1],
-                                 NULL,
-                                 NULL,
-                                 PLL_ATTRIB_ARCH_SSE);
-    
-    }
-    assert(gtree[i]->root == trav[gtree[i]->inner_count-1]);
+    locus_update_matrices_jc69(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
+    locus_update_partials(locus[i],
+                          gtree[i]->nodes+gtree[i]->tip_count,
+                          gtree[i]->inner_count);
 
     /* optionally, show root CLV 
 
@@ -181,34 +132,31 @@ void cmd_a00()
     /* now that we computed the CLVs, calculate the log-likelihood for the
        current gene tree */
     unsigned int param_indices[1] = {0};
-    double logl = pll_core_root_loglikelihood(locus[i]->states,
-                                locus[i]->sites,
-                                locus[i]->rate_cats,
-                                locus[i]->clv[gtree[i]->root->clv_index],
-                                NULL,
-                                locus[i]->frequencies,
-                                locus[i]->rate_weights,
-                                locus[i]->pattern_weights,
-                                param_indices,
-                                NULL,
-                                PLL_ATTRIB_ARCH_SSE);
+    logl = locus_root_loglikelihood(locus[i],
+                                           gtree[i]->root,
+                                           param_indices,
+                                           NULL);
+    logl_sum += logl;
 
-    printf("logL gene tree %d : %f\n", i,logl);
-    free(trav);
+    /* store current log-likelihood in each gene tree structure */
+    gtree[i]->logl = logl;
+    logpr = gtree_logprob(stree,i);
+    gtree[i]->logpr = logpr;
   }
+
+  for (i = 0; i < msa_count; ++i)
+    gtree_propose_ages(locus[i], gtree[i], stree, i);
 
 
   for (i = 0; i < msa_count; ++i)
     locus_destroy(locus[i]);
   free(locus);
 
-  if (!opt_quiet)
-    fprintf(stdout, "Done...\n");
-
   /* deallocate gene trees */
   for (i = 0; i < msa_count; ++i)
     gtree_destroy(gtree[i],NULL);
   free(gtree);
+  gtree_fini(msa_count);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

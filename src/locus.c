@@ -767,3 +767,142 @@ void pll_set_frequencies(locus_t * locus,
          locus->states*sizeof(double));
   locus->eigen_decomp_valid[freqs_index] = 0;
 }
+
+void locus_update_matrices_jc69(locus_t * locus,
+                                gnode_t ** traversal,
+                                unsigned int count)
+{
+  unsigned int i,n;
+  double t;
+  double * pmat;
+  gnode_t * node;
+
+  unsigned int states = locus->states;
+  unsigned int states_padded = locus->states_padded;
+
+  for (i = 0; i < count; ++i)
+  {
+    node = traversal[i];
+
+      /* TODO: multiply by rate if different than one */
+    t = node->length = node->parent->time- node->time;
+
+    for (n = 0; n < locus->rate_cats; ++n)
+    {
+      pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+
+      if (t < 1e-100)
+      {
+        pmat[0]  = 1;
+        pmat[1]  = 0;
+        pmat[2]  = 0;
+        pmat[3]  = 0;
+
+        pmat[4]  = 0;
+        pmat[5]  = 1;
+        pmat[6]  = 0;
+        pmat[7]  = 0;
+
+        pmat[8]  = 0;
+        pmat[9]  = 0;
+        pmat[10] = 1;
+        pmat[11] = 0;
+
+        pmat[12] = 0;
+        pmat[13] = 0;
+        pmat[14] = 0;
+        pmat[15] = 1;
+      }
+      else
+      {
+        double a =  (1 + 3*exp(-4*t/3) ) / 4;
+        double b = (1 - a) / 3;
+
+        pmat[0]  = a;
+        pmat[1]  = b;
+        pmat[2]  = b;
+        pmat[3]  = b;
+
+        pmat[4]  = b;
+        pmat[5]  = a;
+        pmat[6]  = b;
+        pmat[7]  = b;
+
+        pmat[8]  = b;
+        pmat[9]  = b;
+        pmat[10] = a;
+        pmat[11] = b;
+
+        pmat[12] = b;
+        pmat[13] = b;
+        pmat[14] = b;
+        pmat[15] = a;
+      }
+    }
+  }
+}
+
+void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count)
+{
+  int i;
+  unsigned int * scaler;
+  unsigned int * lscaler;
+  unsigned int * rscaler;
+  gnode_t * node;
+  gnode_t * lnode;
+  gnode_t * rnode;
+
+  for (i = 0; i < count; ++i)
+  {
+    node  = traversal[i];
+    lnode = traversal[i]->left;
+    rnode = traversal[i]->right;
+
+    /* check if we use scalers */
+    scaler = (node->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+               NULL : locus->scale_buffer[node->scaler_index];
+
+    lscaler = (lnode->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+                NULL : locus->scale_buffer[lnode->scaler_index];
+
+    rscaler = (rnode->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+                NULL : locus->scale_buffer[rnode->scaler_index];
+
+    pll_core_update_partial_ii(locus->states,
+                               locus->sites,
+                               locus->rate_cats,
+                               locus->clv[node->clv_index],
+                               scaler,
+                               locus->clv[lnode->clv_index],
+                               locus->clv[rnode->clv_index],
+                               locus->pmatrix[lnode->pmatrix_index],
+                               locus->pmatrix[rnode->pmatrix_index],
+                               lscaler,
+                               rscaler,
+                               locus->attributes);
+  }
+}
+
+double locus_root_loglikelihood(locus_t * locus,
+                                gnode_t * root,
+                                const unsigned int * freqs_indices,
+                                double * persite_lnl)
+{
+  unsigned int * scaler;
+
+  scaler = (root->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+             NULL : locus->scale_buffer[root->scaler_index];
+
+  assert(scaler == NULL);
+  return pll_core_root_loglikelihood(locus->states,
+                                     locus->sites,
+                                     locus->rate_cats,
+                                     locus->clv[root->clv_index],
+                                     scaler,
+                                     locus->frequencies,
+                                     locus->rate_weights,
+                                     locus->pattern_weights,
+                                     freqs_indices,
+                                     persite_lnl,
+                                     locus->attributes);
+}

@@ -61,7 +61,7 @@ static void stree_graph_destroy(snode_t * root,
 void stree_destroy(stree_t * tree,
                    void (*cb_destroy)(void *))
 {
-  unsigned int i;
+  unsigned int i,j;
   snode_t * node;
 
   /* deallocate all nodes */
@@ -72,6 +72,29 @@ void stree_destroy(stree_t * tree,
 
     if (node->label)
       free(node->label);
+
+    if (node->event)
+    {
+      for (j = 0; j < tree->locus_count; ++j)
+        if (tree->nodes[i]->event[j])
+        {
+          dlist_clear(tree->nodes[i]->event[j],NULL);
+          dlist_destroy(tree->nodes[i]->event[j]);
+        }
+      free(node->event);
+    }
+    
+    if (node->event_count)
+      free(node->event_count);
+
+    if (node->seqin_count)
+      free(node->seqin_count);
+
+    if (node->logpr_contrib)
+      free(node->logpr_contrib);
+
+    if (node->old_logpr_contrib)
+      free(node->old_logpr_contrib);
 
     free(node);
   }

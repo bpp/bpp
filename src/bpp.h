@@ -101,6 +101,19 @@ typedef unsigned int UINT32;
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
 
+typedef struct dlist_item_s
+{
+  void * data;
+  struct dlist_item_s * prev;
+  struct dlist_item_s * next;
+} dlist_item_t;
+
+typedef struct dlist_s
+{
+  dlist_item_t * head;
+  dlist_item_t * tail;
+} dlist_t;
+
 typedef struct snode_s
 {
   char * label;
@@ -114,6 +127,20 @@ typedef struct snode_s
 
   void * data;
 
+  /* list of per-locus coalescent events */
+  dlist_t ** event;
+
+  int * event_count;
+
+  /* number of lineages coming in the population */
+  int * seqin_count;
+  double * logpr_contrib;
+  double * old_logpr_contrib;
+  //unsigned int * seqin_count;
+  //unsigned int * seqout_count;
+
+  //unsigned int ** seqin_indices;
+
   unsigned int node_index;
 } snode_t;
 
@@ -122,6 +149,8 @@ typedef struct stree_s
   unsigned int tip_count;
   unsigned int inner_count;
   unsigned int edge_count;
+
+  unsigned int locus_count;
 
   snode_t ** nodes;
 
@@ -140,10 +169,16 @@ typedef struct gnode_s
 
   void * data;
 
+  snode_t * pop;
+
+  /* pointer to the dlist item this node is wrapped into */
+  dlist_item_t * event;
+
   unsigned int node_index;
+  unsigned int clv_valid;
 
   unsigned int clv_index;
-  unsigned int scaler_index;
+  int scaler_index;
   unsigned int pmatrix_index;
 } gnode_t;
 
@@ -155,6 +190,11 @@ typedef struct gtree_s
 
   gnode_t ** nodes;
   gnode_t * root;
+
+  /* auxiliary space for traversals */
+  double logl;
+  double logpr;
+
 } gtree_t;
 
 typedef struct msa_s
@@ -433,6 +473,16 @@ void list_prepend(list_t * list, void * data);
 
 void list_clear(list_t * list, void (*cb_dealloc)(void *));
 
+/* functions in dlist.c */
+
+dlist_item_t * dlist_append(dlist_t * dlist, void * data);
+void dlist_clear(dlist_t * dlist, void (*cb_dealloc)(void *));
+void dlist_item_remove(dlist_item_t * item);
+void dlist_item_append(dlist_t * dlist, dlist_item_t * item);
+void dlist_item_prepend(dlist_t * dlist, dlist_item_t * item);
+dlist_t * dlist_create();
+void dlist_destroy(dlist_t *);
+
 /* functions in hash.c */
 
 void * hashtable_find(hashtable_t * ht,
@@ -464,6 +514,7 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 /* functions in random.c */
 
 double legacy_rndu(void);
+double legacy_rnd_symmetrical(void);
 
 /* functions in gtree.c */
 
@@ -484,6 +535,12 @@ int gtree_traverse(gnode_t * root,
                    unsigned int * trav_size);
 
 void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
+
+void gtree_propose_ages(locus_t * locus, gtree_t * gtree,stree_t * stree, int msa_index);
+
+void gtree_fini(int msa_count);
+
+double gtree_logprob(stree_t * stree, int msa_index);
 
 /* functions in locus.c */
 
@@ -512,6 +569,17 @@ int pll_set_tip_clv(locus_t * locus,
 void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies);
+
+void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count);
+
+void locus_update_matrices_jc69(locus_t * locus,
+                                gnode_t ** traversal,
+                                unsigned int count);
+
+double locus_root_loglikelihood(locus_t * locus,
+                                gnode_t * root,
+                                const unsigned int * freqs_indices,
+                                double * persite_lnl);
 
 /* functions in core_partials.c */
 

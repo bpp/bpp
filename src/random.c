@@ -21,10 +21,13 @@
 
 #include "bpp.h"
 
+#define mBactrian  0.95
+#define sBactrian  sqrt(1-mBactrian*mBactrian)
+
 /* legacy random number generators */
 static unsigned int z_rndu = 666;
 
-double legacy_rndu (void)
+double legacy_rndu()
 {
 /* 32-bit integer assumed.
    From Ripley (1987) p. 46 or table 2.4 line 2. 
@@ -33,4 +36,32 @@ double legacy_rndu (void)
    z_rndu = z_rndu*69069 + 1;
    if(z_rndu==0 || z_rndu==4294967295)  z_rndu = 13;
    return z_rndu/4294967295.0;
+}
+
+static double rndTriangle()
+{
+	double u, z;
+/* Standard Triangle variate, generated using inverse CDF  */
+	u = legacy_rndu();
+	if(u > 0.5)
+		z =  sqrt(6.0) - 2.0*sqrt(3.0*(1.0 - u));
+   else
+		z = -sqrt(6.0) + 2.0*sqrt(3.0*u);
+	return z;
+}
+
+static double rndBactrianTriangle()
+{
+/* This returns a variate from the 1:1 mixture of two Triangle Tri(-m, 1-m^2) and Tri(m, 1-m^2),
+   which has mean 0 and variance 1. 
+*/
+   double z = mBactrian + rndTriangle()*sBactrian;
+   if (legacy_rndu() < 0.5) z = -z;
+   return (z);
+}
+
+
+double legacy_rnd_symmetrical()
+{
+  return rndBactrianTriangle();
 }
