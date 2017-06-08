@@ -108,7 +108,7 @@ void cmd_a00()
                             gtree[i]->edge_count,       /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
-                            PLL_ATTRIB_ARCH_SSE);       /* attributes */
+                            PLL_ATTRIB_ARCH_AVX);       /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
@@ -147,6 +147,7 @@ void cmd_a00()
   for (i = 0; i < msa_count; ++i)
     gtree_propose_ages(locus[i], gtree[i], stree, i);
 
+  stree_propose_theta(gtree,stree);
 
   for (i = 0; i < msa_count; ++i)
     locus_destroy(locus[i]);

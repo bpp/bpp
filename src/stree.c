@@ -219,7 +219,11 @@ static void stree_init_theta(stree_t * stree,
 
     /* if no loci exists with two or more sequences of such species then move
        to the next tip node */
-    if (j == (unsigned int)msa_count) continue;
+    if (j == (unsigned int)msa_count)
+    {
+      node->theta = -1;
+      continue;
+    }
 
     /* otherwise set theta around the mean of the inverse gamma prior */
     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
@@ -280,3 +284,95 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
   stree_init_tau(stree);
 }
 
+static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
+{
+  int i;
+  double thetaold;
+  double thetanew;
+  const double finetune = 0.001;
+  double acceptance;
+
+  thetaold = snode->theta;
+  
+  thetanew = thetaold + finetune * legacy_rnd_symmetrical();
+ 
+  if (thetanew < 0)
+    thetanew = -thetanew;
+
+  snode->theta = thetanew;
+
+  acceptance = (-opt_theta_alpha-1) * log(thetanew/thetaold) -
+               opt_theta_beta*(1/thetanew - 1/thetaold);
+
+  for (i = 0; i < locus_count; ++i)
+  {
+    /* save a copy of old logpr */
+    gtree[i]->old_logpr = gtree[i]->logpr;
+
+    gtree[i]->logpr -= snode->logpr_contrib[i];
+    gtree_update_logprob_contrib(snode,i);
+    gtree[i]->logpr += snode->logpr_contrib[i];
+    
+    acceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
+
+  }
+
+#ifdef DEBUG_PROPOSAL_THETA
+  printf("theta acceptance = %f\n", acceptance);
+#endif
+
+  if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+  {
+    return 1;
+  }
+
+  /* TODO: Since the rejections are higher than acceptances, it would
+     make sense not to update gtree[i]->logpr in the first place, but
+     only update it when proposal is accepted */
+
+  /* reject */
+  for (i = 0; i < locus_count; ++i)
+    gtree[i]->logpr = gtree[i]->old_logpr;
+
+  snode->theta = thetaold;
+  for (i = 0; i < locus_count; ++i)
+    snode->logpr_contrib[i] = snode->old_logpr_contrib[i];
+
+  return 0;
+}
+
+void stree_propose_theta(gtree_t ** gtree, stree_t * stree)
+{
+  unsigned int i;
+  int accepted = 0;
+  int theta_count = 0;
+  snode_t * snode;
+
+  /* TODO: this kind of loop is for backwards compatibility with the old bpp
+     since the root node is the first inner node and not the last one */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    snode = stree->nodes[i];
+    if (snode->theta)
+    {
+      accepted += propose_theta(gtree, stree->locus_count, stree->nodes[i]);
+      theta_count++;
+    }
+  }
+
+  if (stree->root->theta)
+  {
+    accepted += propose_theta(gtree, stree->locus_count, stree->root);
+    theta_count++;
+  }
+    
+  for (i = 0; i < stree->inner_count-1; ++i)
+  {
+    snode = stree->nodes[stree->tip_count+i];
+    if (snode->theta)
+    {
+      accepted += propose_theta(gtree, stree->locus_count, snode);
+      theta_count++;
+    }
+  }
+}

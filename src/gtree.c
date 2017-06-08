@@ -868,7 +868,7 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-static double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
+double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
 {
     unsigned int j,k,n;
     double logpr = 0;
