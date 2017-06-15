@@ -147,6 +147,9 @@ void cmd_a00()
   for (i = 0; i < msa_count; ++i)
     gtree_propose_ages(locus[i], gtree[i], stree, i);
 
+  for (i = 0; i < msa_count; ++i)
+    gtree_propose_spr(locus[i],gtree[i],stree,i);
+
   stree_propose_theta(gtree,stree);
 
   for (i = 0; i < msa_count; ++i)

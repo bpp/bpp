@@ -255,6 +255,8 @@ static void stree_init_theta(stree_t * stree,
 void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 {
   unsigned int i,j;
+  snode_t * curnode;
+  snode_t * ancnode;
 
   assert(msa_count > 0);
 
@@ -270,6 +272,7 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
     stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count,sizeof(dlist_t *));
     stree->nodes[i]->event_count = (int *)xcalloc(msa_count,sizeof(int));
     stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
     stree->nodes[i]->logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
     stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
 
@@ -282,6 +285,25 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 
   /* Initialize speciation times and create extinct species groups */
   stree_init_tau(stree);
+
+  /* initialize pptable, where pptable[i][j] indicates whether population j
+     (that is, node with index j) is ancestral to population i */
+  stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count),
+                                   sizeof(int *));
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count),
+                                       sizeof(int));
+
+  
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    //curnode = stree->nodes[i];
+    //ancnode = stree->nodes[i]->parent;
+
+    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
+      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
+        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
+  }
 }
 
 static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
@@ -317,8 +339,9 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
 
   }
 
-#ifdef DEBUG_PROPOSAL_THETA
-  printf("theta acceptance = %f\n", acceptance);
+//#ifdef DEBUG_PROPOSAL_THETA
+#if 1
+  printf("THETAlnacceptance = %f\n", acceptance);
 #endif
 
   if (acceptance >= 0 || legacy_rndu() < exp(acceptance))

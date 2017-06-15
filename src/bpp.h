@@ -124,6 +124,7 @@ typedef struct snode_s
   struct snode_s * right;
   struct snode_s * parent;
   unsigned int leaves;
+  unsigned int * gene_leaves;
 
   void * data;
 
@@ -154,6 +155,8 @@ typedef struct stree_s
 
   snode_t ** nodes;
 
+  int ** pptable;
+
   snode_t * root;
 } stree_t;
 
@@ -180,6 +183,9 @@ typedef struct gnode_s
   unsigned int clv_index;
   int scaler_index;
   unsigned int pmatrix_index;
+
+  int mark;
+
 } gnode_t;
 
 typedef struct gtree_s
@@ -545,6 +551,7 @@ void gtree_fini(int msa_count);
 
 double gtree_logprob(stree_t * stree, int msa_index);
 double gtree_update_logprob_contrib(snode_t * snode, int msa_index);
+void gtree_propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index);
 
 /* functions in locus.c */
 

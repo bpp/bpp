@@ -96,7 +96,18 @@ void stree_destroy(stree_t * tree,
     if (node->old_logpr_contrib)
       free(node->old_logpr_contrib);
 
+    if (node->gene_leaves)
+      free(node->gene_leaves);
+
     free(node);
+  }
+
+  if (tree->pptable)
+  {
+    for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
+      if (tree->pptable[i])
+        free(tree->pptable[i]);
+    free(tree->pptable);
   }
 
   /* deallocate tree structure */
