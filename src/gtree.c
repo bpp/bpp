@@ -21,6 +21,8 @@
 
 #include "bpp.h"
 
+#define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+
 /* association of gene nodes to species populations. offset[i] is the 'nodes'
    index at which the gene tree nodes for lineages inside species i are
    available. count dictates the number of available lineages */
@@ -42,7 +44,41 @@ static double * sortbuffer = NULL;
 
 static gnode_t *** travbuffer = NULL;
 
-#define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+static int return_partials_recursive(gnode_t * node,
+                                     unsigned int * trav_size,
+                                     gnode_t ** outbuffer)
+{
+  int mark = 0;
+
+  if (!node->left)
+    return node->mark;
+
+  mark |= return_partials_recursive(node->left,  trav_size, outbuffer);
+  mark |= return_partials_recursive(node->right, trav_size, outbuffer);
+
+  if (node->mark || mark)
+  {
+    outbuffer[*trav_size] = node;
+    *trav_size = *trav_size + 1;
+  }
+
+  return node->mark | mark;
+}
+
+gnode_t ** gtree_return_partials(gnode_t * root,
+                                 unsigned int msa_index,
+                                 unsigned int * trav_size)
+{
+  gnode_t ** trav = travbuffer[msa_index];
+
+  *trav_size = 0;
+  if (!root->left) return NULL;
+
+  return_partials_recursive(root, trav_size, trav);
+
+  return trav;
+}
+
 
 static void gtree_traverse_postorder(gnode_t * node,
                                      int (*cbtrav)(gnode_t *),
@@ -994,7 +1030,7 @@ double gtree_logprob(stree_t * stree, int msa_index)
 
 }
 
-static double reflect(double t, double minage, double maxage)
+double reflect(double t, double minage, double maxage)
 {
   int side;
   double n,excess = 0;
@@ -1306,7 +1342,6 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
 
   assert(father != target);
   assert(target != sibling);
-  printf("curnode : %d (%f) (%s) father: %d (%f) (%s) sibling: %d (%f) (%s)  root: %d (%f) (%s) target: %d (%f) (%s)\n", curnode->node_index, curnode->time, curnode->pop->label, father->node_index, father->time, father->pop->label, sibling->node_index, sibling->time, sibling->pop->label, gtree->root->node_index, gtree->root->time, gtree->root->pop->label, target->node_index, target->time, target->pop->label);
 
   /*             
 
@@ -1412,7 +1447,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
     //SWAP(gtree->root->mark, oldroot->mark);
 
     gtree->root = oldroot;
-    printf("New root age = %f\n", gtree->root->time);
+    //printf("New root age = %f\n", gtree->root->time);
 
     return 1;
 

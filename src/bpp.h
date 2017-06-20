@@ -201,6 +201,7 @@ typedef struct gtree_s
   double logl;
   double logpr;
   double old_logpr;
+  double old_logl;
 
 } gtree_t;
 
@@ -450,6 +451,10 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
 void stree_propose_theta(gtree_t ** gtree, stree_t * stree);
 
+void stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+
+void stree_fini(void);
+
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
@@ -545,13 +550,20 @@ int gtree_traverse(gnode_t * root,
 
 void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
 
-void gtree_propose_ages(locus_t * locus, gtree_t * gtree,stree_t * stree, int msa_index);
+void gtree_propose_ages(locus_t * locus,
+                        gtree_t * gtree,
+                        stree_t * stree,
+                        int msa_index);
 
 void gtree_fini(int msa_count);
 
 double gtree_logprob(stree_t * stree, int msa_index);
 double gtree_update_logprob_contrib(snode_t * snode, int msa_index);
 void gtree_propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index);
+double reflect(double t, double minage, double maxage);
+gnode_t ** gtree_return_partials(gnode_t * root,
+                                 unsigned int msa_index,
+                                 unsigned int * trav_size);
 
 /* functions in locus.c */
 

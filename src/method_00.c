@@ -152,6 +152,8 @@ void cmd_a00()
 
   stree_propose_theta(gtree,stree);
 
+  stree_propose_tau(gtree,stree,locus);
+
   for (i = 0; i < msa_count; ++i)
     locus_destroy(locus[i]);
   free(locus);
@@ -164,6 +166,7 @@ void cmd_a00()
 
   /* deallocate tree */
   stree_destroy(stree,NULL);
+  stree_fini();
 
   /* deallocate alignments */
   for (i = 0; i < msa_count; ++i)

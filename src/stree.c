@@ -23,6 +23,13 @@
 
 #define PROP_THRESHOLD 10
 
+#define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+
+static gnode_t ** __gt_nodes = NULL;
+static double * __aux = NULL;
+static int * __mark_count = NULL;
+static int * __extra_count = NULL;
+
 static int cb_cmp_pairlabel(void * a, void * b)
 {
   pair_t * pair = (pair_t *)a;
@@ -272,9 +279,11 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
     stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count,sizeof(dlist_t *));
     stree->nodes[i]->event_count = (int *)xcalloc(msa_count,sizeof(int));
     stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count,sizeof(int));
-    stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
+    stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,
+                                                           sizeof(unsigned int));
     stree->nodes[i]->logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
-    stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
+    stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,
+                                                           sizeof(double));
 
     for (j = 0; j < stree->locus_count; ++j)
       stree->nodes[i]->event[j] = dlist_create();
@@ -304,6 +313,33 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
       for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
         stree->pptable[curnode->node_index][ancnode->node_index] = 1;
   }
+  
+
+  /* allocate traversal buffer to be the size of all nodes for all loci */
+  unsigned int sum_count = 0;
+  for (i = 0; i < (unsigned int)msa_count; ++i)
+    sum_count += (unsigned int)(msa[i]->count);
+
+  sum_count = 2*sum_count - msa_count;
+  __gt_nodes = (gnode_t **)xmalloc(sum_count * sizeof(gnode_t *));
+  __aux = (double *)xmalloc((sum_count - msa_count)*sizeof(double *));
+
+  /* The following two arrays are used purely for the tau proposal.
+     Entry i of marked_count indicates how many nodes from locus i are marked.
+     Similarly, extra_count 
+     how many extra nodes where added in __gt_nodes whose branch lengths (and
+     therefore) p-matrices need updating because their parent node's age was
+     changed */
+  __mark_count  = (int *)xmalloc(msa_count*sizeof(int));
+  __extra_count = (int *)xmalloc(msa_count*sizeof(int));
+}
+
+void stree_fini()
+{
+  free(__gt_nodes);
+  free(__aux);
+  free(__mark_count);
+  free(__extra_count);
 }
 
 static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
@@ -397,5 +433,316 @@ void stree_propose_theta(gtree_t ** gtree, stree_t * stree)
       accepted += propose_theta(gtree, stree->locus_count, snode);
       theta_count++;
     }
+  }
+}
+
+static void propose_tau(locus_t ** loci,
+                        snode_t * snode,
+                        gtree_t ** gtree,
+                        stree_t * stree,
+                        unsigned int candidate_count)
+{
+  unsigned int i,j,k;
+  unsigned int offset = 0;
+  int changetheta = 1;
+  int theta_method = 2;
+  double oldage, newage;
+  double minage = 0, maxage = 999;
+  double acceptance = 0;
+  double minfactor,maxfactor,thetafactor;
+  double finetune = 0.001;
+  double oldtheta;
+  double logpr = 0;
+  double logpr_diff = 0;
+  double logl_diff = 0;
+
+  unsigned int count_above = 0;
+  unsigned int count_below = 0;
+  unsigned int locus_count_above;
+  unsigned int locus_count_below;
+
+  oldage = snode->tau;
+
+  /* compute minage and maxage bounds */
+  if (snode->left)
+    minage = MAX(snode->left->tau,snode->right->tau);
+
+  if (snode->parent)
+    maxage = snode->parent->tau;
+
+  /* propose new tau */
+  newage = oldage + finetune * legacy_rnd_symmetrical();
+  newage = reflect(newage,minage,maxage);
+  snode->tau = newage;
+
+  /* compute factors for multiplying associated gene tree nodes ages */
+  minfactor = (newage - minage) / (oldage - minage);
+  maxfactor = (newage - maxage) / (oldage - maxage);
+
+  /* if we are dealing with the root population, add the following factor to
+     the acceptance ratio */
+  if (snode == stree->root)
+    acceptance = (-opt_tau_alpha-1 - candidate_count+1)*log(newage/oldage) -
+                 opt_tau_beta*(1/newage - 1/oldage);
+
+  /* change theta as well */
+  if (changetheta)
+  {
+    oldtheta = snode->theta;
+    if (theta_method == 1)
+      thetafactor = newage / oldage;
+    else if (theta_method == 2)
+      thetafactor = (newage - minage) / (oldage - minage);
+    else
+      assert(0);
+
+    snode->theta = oldtheta / thetafactor;
+
+    acceptance += -log(thetafactor) + (-opt_theta_alpha-1) * 
+                  log(snode->theta/oldtheta) -
+                  opt_theta_beta*(1/snode->theta - 1/oldtheta);
+  }
+
+  snode_t * affected[3] = {snode, snode->left, snode->right};
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    k = 0;
+    locus_count_above = locus_count_below = 0;
+
+    logpr = gtree[i]->logpr;
+
+    gnode_t ** gt_nodesptr = __gt_nodes + offset;
+    double * oldbranches = __aux + offset;
+
+    /* traverse the gene tree nodes of the three populations, find the ones
+       whose ages fall within the new age interval, update their age and mark
+       them. Also, count how many of them are above the old species node age,
+       and how many are below. Finally, update the gene tree probabilities */
+    for (j = 0; j < 3; ++j)
+    {
+      /* process events for current population */
+      if (affected[j]->event_count)
+      {
+        dlist_item_t * event;
+        for (event = affected[j]->event[i]->head; event; event = event->next)
+        {
+          gnode_t * node = (gnode_t *)(event->data);
+          if (node->time < minage) continue;
+
+          gt_nodesptr[k] = node;
+          node->mark = 1;
+          oldbranches[k++] = node->time;
+
+          if (node->time >= oldage && snode != stree->root)
+          {
+            node->time = maxage + maxfactor*(node->time - maxage);
+            locus_count_above++;
+          }
+          else
+          {
+            node->time = minage + minfactor*(node->time - minage);
+            locus_count_below++;
+          }
+        }
+        logpr -= affected[j]->logpr_contrib[i];
+        logpr += gtree_update_logprob_contrib(affected[j],i);
+      }
+    }
+
+    /* entry i of __mark_count holds the number of marked nodes for locus i */
+    __mark_count[i] = k;
+    offset += k;
+
+    //printf("locus %d old logpr = %f\n", i, gtree[i]->logpr);
+    //printf("locus %d new logpr = %f\n", i, logpr);
+
+    logpr_diff += logpr - gtree[i]->logpr;
+
+    gtree[i]->old_logpr = gtree[i]->logpr;
+    gtree[i]->logpr = logpr;
+
+    count_above += locus_count_above;
+    count_below += locus_count_below;
+
+    /* TODO: Do the integrated-out theta option */
+
+    unsigned int branch_count = k;
+    gnode_t ** branchptr = gt_nodesptr;
+
+    /* go through the list of marked nodes, and append at the end of the list
+       their children (only if they are unmarked to avoid duplicates). The final
+       list represents the nodes for which branch lengths must be updated */
+    int extra = 0;
+    for (j = 0; j < k; ++j)
+    {
+      gnode_t * node = gt_nodesptr[j];
+
+      /* if root is one of the marked nodes, we must not update its branch
+         length as we will receive a segfaul. Therefore, move the root to the
+         beginning of the list, incremenent the pointer to the next element and
+         decrease branch count */
+      if (!node->parent && j > 0)
+      {
+        SWAP(gt_nodesptr[0],gt_nodesptr[j]);
+        SWAP(oldbranches[0],oldbranches[j]);
+        branchptr = &(gt_nodesptr[1]);
+        --branch_count;
+      }
+
+      assert(node->left);
+      assert(node->right);
+
+      if (!node->left->mark)
+      {
+        branchptr[branch_count++] = node->left;
+        extra++;
+      }
+      if (!node->right->mark)
+      {
+        branchptr[branch_count++] = node->right;
+        extra++;
+      }
+    }
+
+    __extra_count[i] = extra;
+    offset += extra;
+
+    /* if at least one gene tree node age was changed, we need to recompute the
+       log-likelihood */
+    gtree[i]->old_logl = gtree[i]->logl;
+    if (k)
+    {
+      /* update transition probability matrices */
+      locus_update_matrices_jc69(loci[i],branchptr,branch_count);
+
+      /* get list of nodes for which partials must be recomputed */
+      unsigned int partials_count;
+      gnode_t ** partials = gtree_return_partials(gtree[i]->root,
+                                                  i,
+                                                  &partials_count);
+
+      for (j = 0; j < partials_count; ++j)
+        partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                partials[j]->clv_index);
+
+      /* update partials */
+      locus_update_partials(loci[i],partials,partials_count);
+
+      /* evaluate log-likelihood */
+      unsigned int param_indices[1] = {0};
+      double logl = locus_root_loglikelihood(loci[i],
+                                             gtree[i]->root,
+                                             param_indices,
+                                             NULL);
+
+      //printf("locus %d old logl = %f\n", i,gtree[i]->logl);
+      //printf("locus %d new logl = %f\n", i,logl);
+
+      logl_diff += logl - gtree[i]->logl;
+      gtree[i]->logl = logl;
+    }
+  }
+
+  acceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
+                count_above*log(maxfactor);
+  printf("TAUlnacceptance = %f\n", acceptance);
+
+  if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+  {
+    /* accepted */
+
+    /* nothing to do here here */
+  }
+  else
+  {
+    /* rejected */
+    offset = 0;
+    snode->tau = oldage;
+    snode->theta = oldtheta;
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      k = __mark_count[i];
+      gnode_t ** gt_nodesptr = __gt_nodes + offset;
+      double * old_ageptr = __aux + offset;
+
+      /* restore gene tree node ages */
+      for (j = 0; j < k; ++j)
+        gt_nodesptr[j]->time = old_ageptr[j];
+
+      /* restore logpr contributions */
+      for (j = 0; j < 3; ++j)
+        gtree_update_logprob_contrib(affected[j],i);
+
+
+      /* get the list of nodes for which CLVs must be reverted, i.e. all marked
+         nodes and all nodes whose left or right subtree has at least one marked
+         node */
+      unsigned int partials_count;
+      gnode_t ** partials = gtree_return_partials(gtree[i]->root,
+                                                  i,
+                                                  &partials_count);
+
+      /* revert CLV indices */
+      for (j = 0; j < partials_count; ++j)
+        partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                partials[j]->clv_index);
+
+      /* un-mark nodes */
+      for (j = 0; j < k; ++j)
+        gt_nodesptr[j]->mark = 0;
+
+      /* restore branch lengths and pmatrices */
+      int matrix_updates = __mark_count[i]+__extra_count[i];
+      if (matrix_updates)
+      {
+        if (!gt_nodesptr[0]->parent)
+        {
+          --matrix_updates;
+          gt_nodesptr++;
+        }
+        if (matrix_updates)
+          locus_update_matrices_jc69(loci[i],gt_nodesptr,matrix_updates);
+
+      }
+
+      /* restore gene tree log-likelihood */
+      gtree[i]->logl = gtree[i]->old_logl;
+
+      /* restore gene tree log probability */
+      gtree[i]->logpr = gtree[i]->old_logpr;
+
+      /* move offset to the batch of nodes for the next locus */
+      offset += __mark_count[i] + __extra_count[i];
+    }
+  }
+}
+
+void stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
+{
+  unsigned int i;
+  unsigned int candidate_count = 0;
+
+  /* compute number of nodes with tau > 0 */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->tau > 0)
+      candidate_count++;
+
+
+  /* TODO: this separate loops doing the same thing are done this way for
+     traversing the species tree in the same way the old bpp does, since
+     the root is processed immediately after the tip nodes */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (stree->nodes[i]->tau > 0)
+      propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
+  }
+
+  if (stree->root->tau > 0)
+    propose_tau(loci,stree->root,gtree,stree,candidate_count);
+
+  for (i = stree->tip_count; i < stree->inner_count + stree->tip_count-1; ++i)
+  {
+    if (stree->nodes[i]->tau > 0)
+      propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
   }
 }
