@@ -44,6 +44,7 @@ long opt_seed;
 long opt_stree;
 long opt_delimit;
 long opt_cleandata;
+long opt_debug;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -73,6 +74,7 @@ static struct option long_options[] =
   {"thetaprior",  required_argument, 0, 0 },  /* 14 */
   {"cleandata",   no_argument,       0, 0 },  /* 15 */
   {"map_file",    required_argument, 0, 0 },  /* 16 */
+  {"debug",       no_argument,       0, 0 },  /* 17 */
   { 0, 0, 0, 0 }
 };
 
@@ -114,6 +116,7 @@ void args_init(int argc, char ** argv)
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
   opt_cleandata = 0;
+  opt_debug = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -187,6 +190,11 @@ void args_init(int argc, char ** argv)
 
       case 16:
         opt_mapfile = optarg;
+        break;
+
+      case 17:
+        opt_debug = 1;
+        break;
 
       default:
         fatal("Internal error in option parsing");

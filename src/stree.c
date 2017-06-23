@@ -375,10 +375,8 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
 
   }
 
-//#ifdef DEBUG_PROPOSAL_THETA
-#if 1
-  printf("THETAlnacceptance = %f\n", acceptance);
-#endif
+  if (opt_debug)
+    printf("[Debug] (theta) lnacceptance = %f\n", acceptance);
 
   if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
   {
@@ -400,11 +398,11 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
   return 0;
 }
 
-void stree_propose_theta(gtree_t ** gtree, stree_t * stree)
+double stree_propose_theta(gtree_t ** gtree, stree_t * stree)
 {
   unsigned int i;
-  int accepted = 0;
   int theta_count = 0;
+  long accepted = 0;
   snode_t * snode;
 
   /* TODO: this kind of loop is for backwards compatibility with the old bpp
@@ -434,9 +432,11 @@ void stree_propose_theta(gtree_t ** gtree, stree_t * stree)
       theta_count++;
     }
   }
+
+  return ((double)accepted/theta_count);
 }
 
-static void propose_tau(locus_t ** loci,
+static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
                         stree_t * stree,
@@ -446,6 +446,7 @@ static void propose_tau(locus_t ** loci,
   unsigned int offset = 0;
   int changetheta = 1;
   int theta_method = 2;
+  long accepted = 0;
   double oldage, newage;
   double minage = 0, maxage = 999;
   double acceptance = 0;
@@ -645,13 +646,15 @@ static void propose_tau(locus_t ** loci,
 
   acceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                 count_above*log(maxfactor);
-  printf("TAUlnacceptance = %f\n", acceptance);
+
+  if (opt_debug)
+    printf("[Debug] (tau) lnacceptance = %f\n", acceptance);
 
   if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
   {
     /* accepted */
+    accepted++;
 
-    /* nothing to do here here */
   }
   else
   {
@@ -715,12 +718,14 @@ static void propose_tau(locus_t ** loci,
       offset += __mark_count[i] + __extra_count[i];
     }
   }
+  return accepted;
 }
 
-void stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
+double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 {
   unsigned int i;
   unsigned int candidate_count = 0;
+  long accepted = 0;
 
   /* compute number of nodes with tau > 0 */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -734,15 +739,17 @@ void stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
   for (i = 0; i < stree->tip_count; ++i)
   {
     if (stree->nodes[i]->tau > 0)
-      propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
+      accepted += propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
   }
 
   if (stree->root->tau > 0)
-    propose_tau(loci,stree->root,gtree,stree,candidate_count);
+    accepted += propose_tau(loci,stree->root,gtree,stree,candidate_count);
 
   for (i = stree->tip_count; i < stree->inner_count + stree->tip_count-1; ++i)
   {
     if (stree->nodes[i]->tau > 0)
-      propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
+      accepted += propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
   }
+
+  return ((double)accepted/candidate_count);
 }

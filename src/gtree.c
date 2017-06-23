@@ -1018,16 +1018,10 @@ double gtree_logprob(stree_t * stree, int msa_index)
 
   double logpr = 0;
 
-  /* TODO: Make a function that computes the logpr contribution of a specific node
-           Also add this logpr contribution to the species tree nodes such that we can
-           update the logpr on the fly */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     logpr += gtree_update_logprob_contrib(stree->nodes[i],msa_index);
 
-  //printf("LogP = %f\n", logpr);
   return logpr;
-
-
 }
 
 double reflect(double t, double minage, double maxage)
@@ -1083,9 +1077,10 @@ static void unlink_event(gnode_t * node, int msa_index)
     node->pop->event[msa_index]->tail = node->event->prev;
 }
 
-void gtree_propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
+static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
 {
   unsigned int i,k,j;
+  long accepted = 0;
   double tnew,minage,maxage,oldage;
   double logpr;
   double logl;
@@ -1242,11 +1237,13 @@ void gtree_propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
     /* acceptance ratio */
     double acceptance = logpr - gtree->logpr + logl - gtree->logl;
 
-    printf("AGElnacceptance = %f\n", acceptance);
+    if (opt_debug)
+      printf("[Debug] (age) lnacceptance = %f\n", acceptance);
 
     if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
     {
       /* accepted */
+      accepted++;
 
       /* update new log-likelihood and gene tree log probability */
       gtree->logpr = logpr;
@@ -1327,7 +1324,29 @@ void gtree_propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
       }
     }
   }
+  return accepted;
 }
+
+double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
+{
+  unsigned int i;
+  long proposal_count = 0;
+  long accepted = 0;
+
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    /* TODO: Fix this to account mcmc.moveinnode in original bpp */
+    proposal_count += gtree[i]->inner_count;
+    accepted += propose_ages(locus[i],gtree[i],stree,i);
+  }
+
+  if (!accepted)
+    return 0;
+
+  return ((double)accepted/proposal_count);
+
+}
+
 
 static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
 {
@@ -1469,10 +1488,11 @@ void gtree_fini(int msa_count)
   free(travbuffer);
 }
 
-void gtree_propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
+static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
 {
   unsigned int i,j,k,m,n;
   unsigned int source_count, target_count;
+  long accepted = 0;
   gnode_t * curnode;
   gnode_t * sibling;
   gnode_t * father;
@@ -1720,14 +1740,15 @@ void gtree_propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int ms
     /* acceptance ratio */
     double acceptance = log((double)target_count / source_count) + logpr - gtree->logpr + logl - gtree->logl;
 
-#if 1
-    printf("SPRlnacceptance = %f\n", acceptance);
-#endif
+    if (opt_debug)
+      printf("[Debug] (spr) lnacceptance = %f\n", acceptance);
 
     if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
     {
       gtree->logpr = logpr;
       gtree->logl = logl;
+
+      accepted++;
     }
     else
     {
@@ -1824,4 +1845,25 @@ if (root_changed)
       }
     }
   }
+  return accepted;
+}
+
+double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
+{
+  unsigned int i;
+  long proposal_count = 0;
+  long accepted = 0;
+
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    /* TODO: Fix this to account mcmc.moveinnode in original bpp */
+    proposal_count += gtree[i]->edge_count;
+    accepted += propose_spr(locus[i],gtree[i],stree,i);
+  }
+
+  if (!accepted)
+    return 0;
+
+  return ((double)accepted/proposal_count);
+
 }

@@ -120,6 +120,8 @@ typedef struct snode_s
   double length;
   double theta;
   double tau;
+  double old_tau;
+  double old_theta;
   struct snode_s * left;
   struct snode_s * right;
   struct snode_s * parent;
@@ -165,6 +167,7 @@ typedef struct gnode_s
   char * label;
   double length;
   double time;
+  double old_time;
   struct gnode_s * left;
   struct gnode_s * right;
   struct gnode_s * parent;
@@ -344,6 +347,7 @@ extern long opt_seed;
 extern long opt_stree;
 extern long opt_delimit;
 extern long opt_cleandata;
+extern long opt_debug;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
 extern double opt_theta_alpha;
@@ -449,9 +453,9 @@ hashtable_t * species_hash(stree_t * tree);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
-void stree_propose_theta(gtree_t ** gtree, stree_t * stree);
+double stree_propose_theta(gtree_t ** gtree, stree_t * stree);
 
-void stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 
 void stree_fini(void);
 
@@ -550,20 +554,21 @@ int gtree_traverse(gnode_t * root,
 
 void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
 
-void gtree_propose_ages(locus_t * locus,
-                        gtree_t * gtree,
-                        stree_t * stree,
-                        int msa_index);
+double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 
 void gtree_fini(int msa_count);
 
 double gtree_logprob(stree_t * stree, int msa_index);
 double gtree_update_logprob_contrib(snode_t * snode, int msa_index);
-void gtree_propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index);
+double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 double reflect(double t, double minage, double maxage);
 gnode_t ** gtree_return_partials(gnode_t * root,
                                  unsigned int msa_index,
                                  unsigned int * trav_size);
+
+/* functions in prop_mixing.c */
+
+long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
 
 /* functions in locus.c */
 

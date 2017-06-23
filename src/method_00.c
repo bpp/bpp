@@ -144,15 +144,15 @@ void cmd_a00()
     gtree[i]->logpr = logpr;
   }
 
-  for (i = 0; i < msa_count; ++i)
-    gtree_propose_ages(locus[i], gtree[i], stree, i);
+  gtree_propose_ages(locus, gtree, stree);
 
-  for (i = 0; i < msa_count; ++i)
-    gtree_propose_spr(locus[i],gtree[i],stree,i);
+  gtree_propose_spr(locus,gtree,stree);
 
   stree_propose_theta(gtree,stree);
 
   stree_propose_tau(gtree,stree,locus);
+
+  proposal_mixing(gtree,stree,locus);
 
   for (i = 0; i < msa_count; ++i)
     locus_destroy(locus[i]);
