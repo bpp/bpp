@@ -45,36 +45,56 @@ long opt_stree;
 long opt_delimit;
 long opt_cleandata;
 long opt_debug;
+long opt_samples;
+long opt_samplefreq;
+long opt_burnin;
+long opt_finetune_reset;
+long opt_log_samples;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
 double opt_theta_beta;
+double opt_finetune_gtage;
+double opt_finetune_gtspr;
+double opt_finetune_theta;
+double opt_finetune_tau;
+double opt_finetune_mix;
 char * opt_streefile;
 char * opt_mapfile;
 char * opt_outfile;
 char * opt_msafile;
 char * opt_mapfile;
+char * opt_mcmcfile;
+
+long opt_debugflag = 0;
 
 static struct option long_options[] =
 {
-  {"help",        no_argument,       0, 0 },  /*  0 */
-  {"version",     no_argument,       0, 0 },  /*  1 */
-  {"quiet",       no_argument,       0, 0 },  /*  2 */
-  {"stree_file",  required_argument, 0, 0 },  /*  3 */
-  {"map_file",    required_argument, 0, 0 },  /*  4 */
-  {"output_file", required_argument, 0, 0 },  /*  5 */
-  {"msa_file",    required_argument, 0, 0 },  /*  6 */
-  {"seed",        required_argument, 0, 0 },  /*  7 */
-  {"mcmc_rate",   required_argument, 0, 0 },  /*  8 */
-  {"mcmc_burnin", required_argument, 0, 0 },  /*  9 */
-  {"mcmc_steps",  required_argument, 0, 0 },  /* 10 */
-  {"stree",       no_argument,       0, 0 },  /* 11 */
-  {"delimit",     no_argument,       0, 0 },  /* 12 */
-  {"tauprior",    required_argument, 0, 0 },  /* 13 */
-  {"thetaprior",  required_argument, 0, 0 },  /* 14 */
-  {"cleandata",   no_argument,       0, 0 },  /* 15 */
-  {"map_file",    required_argument, 0, 0 },  /* 16 */
-  {"debug",       no_argument,       0, 0 },  /* 17 */
+  {"help",            no_argument,       0, 0 },  /*  0 */
+  {"version",         no_argument,       0, 0 },  /*  1 */
+  {"quiet",           no_argument,       0, 0 },  /*  2 */
+  {"stree_file",      required_argument, 0, 0 },  /*  3 */
+  {"map_file",        required_argument, 0, 0 },  /*  4 */
+  {"output_file",     required_argument, 0, 0 },  /*  5 */
+  {"msa_file",        required_argument, 0, 0 },  /*  6 */
+  {"seed",            required_argument, 0, 0 },  /*  7 */
+  {"mcmc_rate",       required_argument, 0, 0 },  /*  8 */
+  {"mcmc_burnin",     required_argument, 0, 0 },  /*  9 */
+  {"mcmc_steps",      required_argument, 0, 0 },  /* 10 */
+  {"stree",           no_argument,       0, 0 },  /* 11 */
+  {"delimit",         no_argument,       0, 0 },  /* 12 */
+  {"tauprior",        required_argument, 0, 0 },  /* 13 */
+  {"thetaprior",      required_argument, 0, 0 },  /* 14 */
+  {"cleandata",       no_argument,       0, 0 },  /* 15 */
+  {"map_file",        required_argument, 0, 0 },  /* 16 */
+  {"debug",           no_argument,       0, 0 },  /* 17 */
+  {"samples",         required_argument, 0, 0 },  /* 18 */
+  {"samplefreq",      required_argument, 0, 0 },  /* 19 */
+  {"burnin",          required_argument, 0, 0 },  /* 20 */
+  {"finetune_reset",  no_argument,       0, 0 },  /* 21 */
+  {"finetune_params", no_argument,       0, 0 },  /* 22 */
+  {"mcmc_file",       required_argument, 0, 0 },  /* 23 */
+  {"log_samples",     no_argument,       0, 0 },  /* 24 */
   { 0, 0, 0, 0 }
 };
 
@@ -105,6 +125,7 @@ void args_init(int argc, char ** argv)
   opt_outfile = NULL;
   opt_msafile = NULL;
   opt_mapfile = NULL;
+  opt_mcmcfile = NULL;
   opt_mcmc_steps = 100000;
   opt_mcmc_rate = 10000;
   opt_mcmc_burnin = 10000;
@@ -117,6 +138,17 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_cleandata = 0;
   opt_debug = 0;
+  //opt_samples = 100000;
+  opt_samples = 30000;
+  opt_samplefreq = 2;
+  opt_burnin = 8000;
+  opt_finetune_reset = 0;
+  opt_finetune_gtage = 5;
+  opt_finetune_gtspr = 0.001;
+  opt_finetune_theta = 0.001;
+  opt_finetune_tau   = 0.001;
+  opt_finetune_mix   = 0.3;
+  opt_log_samples = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -196,6 +228,35 @@ void args_init(int argc, char ** argv)
         opt_debug = 1;
         break;
 
+      case 18:
+        opt_samples = atol(optarg);
+        break;
+
+      case 19:
+        opt_samplefreq = atol(optarg);
+        break;
+
+      case 20:
+        opt_burnin = atol(optarg);
+        break;
+
+      case 21:
+        opt_finetune_reset = 1;
+        break;
+
+      case 22:
+        fatal("Not implemented");
+        break;
+
+      case 23:
+        opt_mcmcfile = optarg;
+        break;
+
+      case 24:
+        opt_log_samples = 1;
+        break;
+        
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -238,10 +299,16 @@ void args_init(int argc, char ** argv)
     if (mand_options != mandatory_options_count)
       fatal("Mandatory options are:\n\n%s", mandatory_options_list);
 
+  if (opt_log_samples && !opt_mcmcfile)
+    fatal("You must provide an output mcmc file via --mcmc_file");
+
 }
 
 void cmd_help()
 {
+  /*         0         1         2         3         4         5         6         7          */
+  /*         01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
+
   fprintf(stderr,
           "Usage: %s [OPTIONS]\n", progname);
   fprintf(stderr,
@@ -263,6 +330,9 @@ void cmd_help()
           "  --map_file FILENAME     map file connecting  "
           "  --output_file FILENAME  output file name.\n"
          );
+
+  /*         0         1         2         3         4         5         6         7          */
+  /*         01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
 }
 
 void getentirecommandline(int argc, char * argv[])

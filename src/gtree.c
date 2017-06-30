@@ -23,6 +23,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 
+
 /* association of gene nodes to species populations. offset[i] is the 'nodes'
    index at which the gene tree nodes for lineages inside species i are
    available. count dictates the number of available lineages */
@@ -43,6 +44,58 @@ static hashtable_t * mht;
 static double * sortbuffer = NULL;
 
 static gnode_t *** travbuffer = NULL;
+
+#if 0
+
+/* 
+   This functions are purely for debugging. I use them to update all partials
+   (even if not necessary) and to reset the 'leaves' property of gene tree
+   nodes, in order to ensure that computations are correct
+*/
+
+static void all_partials_recursive(gnode_t * node,
+                                   unsigned int * trav_size,
+                                   gnode_t ** outbuffer)
+{
+  if (!node->left)
+    return;
+
+  all_partials_recursive(node->left,  trav_size, outbuffer);
+  all_partials_recursive(node->right, trav_size, outbuffer);
+
+  outbuffer[*trav_size] = node;
+  *trav_size = *trav_size + 1;
+}
+
+static void gtree_all_partials(gnode_t * root,
+                               gnode_t ** travbuffer,
+                               unsigned int * trav_size)
+{
+  *trav_size = 0;
+  if (!root->left) return;
+
+  all_partials_recursive(root, trav_size, travbuffer);
+}
+
+static void gtree_reset_leaves_recursive(gnode_t * node)
+{
+  if (!node->left) return;
+    node->leaves = 1;
+    
+
+  gtree_reset_leaves_recursive(node->left);
+  gtree_reset_leaves_recursive(node->right);
+  
+  node->leaves = node->left->leaves + node->right->leaves;
+}
+
+static void gtree_reset_leaves(gnode_t * root)
+{
+  if (!root->left) return;
+
+  gtree_reset_leaves_recursive(root);
+}
+#endif
 
 static int return_partials_recursive(gnode_t * node,
                                      unsigned int * trav_size,
@@ -308,27 +361,6 @@ char * gtree_export_newick(const gnode_t * root,
   return newick;
 }
 
-
-#if 0
-static void fill_nodes_recursive(gnode_t * node,
-                                 gnode_t ** array,
-                                 unsigned int * tip_index,
-                                 unsigned int * inner_index)
-{
-  if (!node->left)
-  {
-    array[*tip_index] = node;
-    *tip_index = *tip_index + 1;
-    return;
-  }
-
-  fill_nodes_recursive(node->left,  array, tip_index, inner_index);
-  fill_nodes_recursive(node->right, array, tip_index, inner_index);
-
-  array[*inner_index] = node;
-  *inner_index = *inner_index + 1;
-}
-#endif
 static void fill_nodes_recursive(gnode_t * node, gnode_t ** array)
 {
   array[node->clv_index] = node;
@@ -378,9 +410,6 @@ static gtree_t * gtree_wraptree(gnode_t * root,
   tree->nodes = (gnode_t **)xmalloc((2*tip_count-1)*sizeof(gnode_t *));
   
   fill_nodes_recursive(root, tree->nodes);
-  //fill_nodes_recursive(root->left, tree->nodes);
-  //fill_nodes_recursive(root->right,tree->nodes);
-  //tree->nodes[inner_index] = root;
 
   tree->tip_count = tip_count;
   tree->edge_count = 2*tip_count-2;
@@ -593,10 +622,12 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   qsort(&(epoch[0]), stree->inner_count, sizeof(snode_t *), cb_cmp_spectime);
   epoch_count = stree->inner_count;
 
-#ifdef DEBUG_GTREE_SIMULATE
-  for (i = 0; i < stree->inner_count; ++i)
-    printf("[Debug]: Epoch %d (%s) time - %f\n", i, epoch[i]->label, epoch[i]->tau);
-#endif
+  if (opt_debug)
+  {
+    for (i = 0; i < stree->inner_count; ++i)
+      printf("[Debug]: Epoch %d (%s) time - %f\n",
+             i, epoch[i]->label, epoch[i]->tau);
+  }
 
   /* create one hash table of species and one for sequence->species mappings */
   pop = (pop_t *)xcalloc(stree->tip_count, sizeof(pop_t));
@@ -690,9 +721,8 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
          merge the lineages of the two populations into the current epoch */
       if (t > tmax && pop_count != 1) break;
 
-#ifdef DEBUG_GTREE_SIMULATE
-      //fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
-#endif
+      if (opt_debug)
+        fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
 
       /* TODO: Implement migration routine */
 
@@ -720,13 +750,14 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       else
         SWAP(k1,k2);
 
-#ifdef DEBUG_GTREE_SIMULATE
-      fprintf(stdout, "[Debug]: Coalesce (%3d,%3d) into %3d (age: %f)\n",
-              pop[j].nodes[k1]->clv_index,
-              pop[j].nodes[k2]->clv_index,
-              clv_index,
-              t);
-#endif
+      if (opt_debug)
+      {
+        fprintf(stdout, "[Debug]: Coalesce (%3d,%3d) into %3d (age: %f)\n",
+                pop[j].nodes[k1]->clv_index,
+                pop[j].nodes[k2]->clv_index,
+                clv_index,
+                t);
+      }
 
       pop[j].seq_count--;
       
@@ -790,18 +821,19 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   /* wrap the generated tree structure (made up of linked nodes) into gtree_t */
   gtree_t * gtree = gtree_wraptree(inner, (unsigned int)(msa->count));
 
-#ifdef DEBUG_GTREE_SIMULATE
-  /* create a newick string from constructed gene tree */
-  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
-    if (gtree->nodes[i] != gtree->root)
-      gtree->nodes[i]->length = gtree->nodes[i]->parent->time -
-                                gtree->nodes[i]->time;
+  /* create a newick string from constructed gene tree and print it on screen */
+  if (opt_debug)
+  {
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+      if (gtree->nodes[i] != gtree->root)
+        gtree->nodes[i]->length = gtree->nodes[i]->parent->time -
+                                  gtree->nodes[i]->time;
 
-  fprintf(stdout, "[Debug]: Printing newick string for current gene tree\n");
-  char * newick = gtree_export_newick(gtree->root,NULL);
-  fprintf(stdout,"%s\n", newick);
-  free(newick);
-#endif
+    fprintf(stdout, "[Debug]: Printing newick string for current gene tree\n");
+    char * newick = gtree_export_newick(gtree->root,NULL);
+    fprintf(stdout,"%s\n", newick);
+    free(newick);
+  }
 
   /* cleanup */
   free(gtips);
@@ -826,15 +858,19 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
                                    rnode->event_count[msa_index];
   }
 
-#ifdef DEBUG_GTREE_SIMULATE
-  printf("[Debug] # coalescent events, lineages coming in locus %d:\n", msa_index);
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    printf("  %-*s : %-3d %-3d (age: %f)\n", (int)(strlen(stree->root->label)),
-                                       stree->nodes[i]->label,
-                                       stree->nodes[i]->event_count[msa_index],
-                                       stree->nodes[i]->seqin_count[msa_index],
-                                       stree->nodes[i]->tau);
-#endif
+  if (opt_debug)
+  {
+    fprintf(stdout,
+            "[Debug] # coalescent events, lineages coming in locus %d:\n", 
+            msa_index);
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      fprintf(stdout, "  %-*s : %-3d %-3d (age: %f)\n", 
+              (int)(strlen(stree->root->label)),
+              stree->nodes[i]->label,
+              stree->nodes[i]->event_count[msa_index],
+              stree->nodes[i]->seqin_count[msa_index],
+              stree->nodes[i]->tau);
+  }
 
   return gtree;
 }
@@ -853,7 +889,6 @@ static void reset_gene_leaves_count(stree_t * stree)
     for (j = 0; j < stree->locus_count; ++j)
       stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->left->gene_leaves[j] +
                                         stree->nodes[i]->right->gene_leaves[j];
-
 }
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
@@ -925,41 +960,6 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-#if 0
-static void stree_print_events(stree_t * stree, int msa_index)
-{
-  unsigned int i,j,k,m;
-  dlist_item_t * event;
-
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-  {
-    snode_t * snode = stree->nodes[i];
-    j = 0;
-    for (event = snode->event[msa_index]->head; event; event = event->next)
-    {
-      gnode_t * gnode = (gnode_t *)(event->data);
-      sortbuffer[j++] = gnode->time;
-    }
-
-    /* if there was at least one coalescent event, sort */
-    if (j > 1)
-      qsort(sortbuffer,j,sizeof(double),cb_cmp_double_asc);
-
-    printf("Population: %s\n", snode->label);
-    for (k = 0; k < j; ++k)
-    {
-      for (event = snode->event[msa_index]->head; event; event = event->next)
-      {
-        gnode_t * gnode = (gnode_t *)(event->data);
-        if (gnode->time == sortbuffer[k]) {m = gnode->node_index; break;}
-      }
-      printf("\t t = %f   (%d)\n", sortbuffer[k],m);
-    }
-    printf("\n");
-  }
-}
-#endif
-
 double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
 {
     unsigned int j,k,n;
@@ -975,7 +975,6 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
       gnode_t * gnode = (gnode_t *)(event->data);
       sortbuffer[j++] = gnode->time;
     }
-    //printf("total items: %d\n", j-1);
     if (snode->parent)
       sortbuffer[j++] = snode->parent->tau;
 
@@ -985,7 +984,13 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
 
     #if 0
     printf("Population: %s\n", snode->label);
-    for (k = 1; k < j-1; ++k)
+
+    if (snode->parent)
+      n = j-1;
+    else
+      n = j;
+
+    for (k = 1; k < n; ++k)
     {
       printf("\t t = %f\n", sortbuffer[k]);
     }
@@ -1026,7 +1031,7 @@ double gtree_logprob(stree_t * stree, int msa_index)
 
 double reflect(double t, double minage, double maxage)
 {
-  int side;
+  int side = 0;
   double n,excess = 0;
   const double EPSILON = 1e-100;
 
@@ -1053,7 +1058,7 @@ double reflect(double t, double minage, double maxage)
 
     if (fmod(n,2.0) > 0.1)
       side = !side;
-    
+
     excess -= n*diff;
 
     t = side ? maxage-excess : minage+excess;
@@ -1084,11 +1089,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   double tnew,minage,maxage,oldage;
   double logpr;
   double logl;
-  const double finetune = 5;
   snode_t * pop;
   snode_t * oldpop;
-
-  /* TODO: Change finetune to be given by the user */
 
   /* TODO: Instead of traversing the gene tree nodes this way, traverse the
      coalescent events for each population in the species tree instead. This
@@ -1126,7 +1128,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
     assert(maxage > minage);
 
-    tnew = node->time + finetune * legacy_rnd_symmetrical();
+    tnew = node->time + opt_finetune_gtage * legacy_rnd_symmetrical();
     tnew = reflect(tnew, minage, maxage);
 
     /* find the first ancestral pop with age higher than the proposed tnew */
@@ -1137,7 +1139,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     /* save old age and old ancestral population */
     oldage = node->time;
     oldpop = node->pop;
-    
+
     node->time = tnew;
 
     /* If we need to change the population of node, we have to also update the
@@ -1179,6 +1181,14 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     }
 
     /* quick recomputation  of logpr */
+    /* IMPORTANT NOTE:
+       In the normal runs, DEBUG_LOGPROB is not defined, and *only* the gene
+       tree log probability is only updated by re-computing the contributions
+       for the coalescent events in the modified populations (partial 
+       computation). If DEBUG_LOGPROB is defined, then the whole gene tree
+       probability is recomputed. This is useful for debugging and checking that
+       the partial computation is functioning properly */
+    #ifndef DEBUG_LOGPROB
     logpr = gtree->logpr;
     if (oldpop == node->pop)
     {
@@ -1206,6 +1216,12 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         logpr += gtree_update_logprob_contrib(pop,msa_index);
       }
     }
+    #else
+      logpr = gtree_logprob(stree,msa_index);
+      /* assertion just to remind us that this is not what we should put in
+         the official version */
+      assert(0);
+    #endif
 
     /* now update branch lengths and prob matrices */
     gnode_t * temp;
@@ -1238,7 +1254,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     double acceptance = logpr - gtree->logpr + logl - gtree->logl;
 
     if (opt_debug)
-      printf("[Debug] (age) lnacceptance = %f\n", acceptance);
+      fprintf(stdout, "[Debug] (age) lnacceptance = %f\n", acceptance);
 
     if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
     {
@@ -1293,13 +1309,11 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
         node->pop->event_count[msa_index]++;
 
-        /* increase or decrease the number of incoming lineages to all populations in the path
-        from old population to the new population, depending on the case  */
+        /* increase or decrease the number of incoming lineages to all
+           populations in the path from old population to the new population,
+           depending on the case  */
         if (oldage >= tnew)
         {
-          /* TODO this case was never covered!!!! */
-
-          assert(0);
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
           for (pop=oldpop; pop != node->pop; pop = pop->parent)
@@ -1353,6 +1367,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   gnode_t * sibling;
   gnode_t * father;
   gnode_t * oldroot = gtree->root;
+  int ret = 0;
 
   sibling = (curnode->parent->left == curnode) ? 
                 curnode->parent->right : curnode->parent->left;
@@ -1387,6 +1402,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
     sibling->leaves = gtree->root->leaves;   /* NEW */
     gtree->root = sibling;
     sibling->parent = NULL;
+    ret = 2;
   }
   else
   {
@@ -1397,8 +1413,11 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
       father->parent->right = sibling;
     sibling->parent = father->parent;
 
-    father->parent->leaves = father->parent->left->leaves +
-                             father->parent->right->leaves;
+    /* update number of leaves all nodes from father's parent and up */
+    gnode_t * temp;
+    for (temp = father->parent; temp; temp = temp->parent)
+      temp->leaves = temp->left->leaves +
+                     temp->right->leaves;
   }
 
   /* regraft */
@@ -1411,6 +1430,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   {
     father->leaves = gtree->root->leaves;
     gtree->root = father;
+    ret = 1;
   }
   else
   {
@@ -1419,8 +1439,11 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
     else
       father->parent->right = father;
 
-    father->parent->leaves = father->parent->left->leaves +
-                             father->parent->right->leaves;
+    /* update number of leaves all nodes from father's parent and up */
+    gnode_t * temp;
+    for (temp = father->parent; temp; temp = temp->parent)
+      temp->leaves = temp->left->leaves +
+                     temp->right->leaves;
   }
 
 
@@ -1466,11 +1489,8 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
     //SWAP(gtree->root->mark, oldroot->mark);
 
     gtree->root = oldroot;
-    //printf("New root age = %f\n", gtree->root->time);
 
-    return 1;
-
-    //printf("gtree->root->parent : %p\n", gtree->root->parent);
+    return ret;
   }
 
   return 0;
@@ -1488,7 +1508,10 @@ void gtree_fini(int msa_count)
   free(travbuffer);
 }
 
-static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
+static long propose_spr(locus_t * locus,
+                        gtree_t * gtree,
+                        stree_t * stree,
+                        int msa_index)
 {
   unsigned int i,j,k,m,n;
   unsigned int source_count, target_count;
@@ -1498,7 +1521,6 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
   gnode_t * father;
   gnode_t * p;
   double minage,maxage,tnew;
-  const double finetune = 0.001;
   snode_t * pop;
 
 
@@ -1506,7 +1528,7 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
 
                                  *
                                 / \
-                       parent  *   \
+                       father  *   \
                               / \
                     curnode  /   \
                             *     *  sibling
@@ -1516,8 +1538,6 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
 
 
   */
-
-  /* TODO: We need a traversal here */ 
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
   {
     curnode = gtree->nodes[i];
@@ -1528,14 +1548,17 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
     father  = curnode->parent;
     
     assert(curnode->parent);
+
     /* find youngest population with subtree lineages more than current node subtree lineages */
-    for (pop = curnode->pop; pop->gene_leaves[msa_index] <= curnode->leaves; pop = pop->parent);
+    for (pop = curnode->pop; pop->gene_leaves[msa_index] <= curnode->leaves; pop = pop->parent)
+      if (!pop->parent)
+        break;
 
     /* TODO: Set age limits. 999 is set for backwards compatibility with bpp */
     minage = MAX(curnode->time, pop->tau);
     maxage = 999;
 
-    tnew = father->time + finetune * legacy_rnd_symmetrical();
+    tnew = father->time + opt_finetune_gtspr*legacy_rnd_symmetrical();
     tnew = reflect(tnew,minage,maxage);
 
     for (pop = curnode->pop; pop->parent; pop = pop->parent)
@@ -1612,8 +1635,9 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
 
       father->pop->event_count[msa_index]++;
 
-      /* increase or decrease the number of incoming lineages to all populations in the path
-      from old population to the new population, depending on the case  */
+      /* increase or decrease the number of incoming lineages to all populations
+         in the path from old population to the new population, depending on the
+         case  */
       if (tnew > oldage)
       {
         /* increase the number of incoming lineages to all populations in the
@@ -1630,12 +1654,15 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
       }
     }
     
-    int spr_required = target != sibling && target != father;
+    int spr_required = (target != sibling && target != father);
 
     /* if the following holds we need to change tree topology */
     int root_changed = 0;
     if (spr_required)
       root_changed = perform_spr(gtree,curnode,target);
+
+    if (root_changed)
+      father = curnode->parent;
 
     /* recompute logpr */
     double logpr = gtree->logpr;
@@ -1665,9 +1692,6 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
         logpr += gtree_update_logprob_contrib(pop,msa_index);
       }
     }
-
-    if (root_changed)
-      father = curnode->parent;
 
     k = 0;
     travbuffer[msa_index][k++] = father->left;
@@ -1763,9 +1787,10 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
       
       /* now reset branch lengths and pmatrices */
 
-      /* TODO: Now this is correct, but be very careful about the exact steps of placing nodes in the traversal buffer.
-         First place the fathers two children, then do the SPR to restore topology, then add father's parent and then
-         if an SPR was required, add the sibling */
+      /* TODO: Now this is correct, but be very careful about the exact steps of
+         placing nodes in the traversal buffer. First place the fathers two
+         children, then do the SPR to restore topology, then add father's parent
+         and then if an SPR was required, add the sibling */
 
       father->time = oldage;
       k = 0;
@@ -1774,24 +1799,33 @@ static long propose_spr(locus_t * locus, gtree_t * gtree, stree_t * stree, int m
       travbuffer[msa_index][k++] = father->right;  /* target or sibling */
 
       if (spr_required)
-        root_changed = perform_spr(gtree,curnode,sibling);
+      {
+        /* if root_changed == 2 it means that the old sibling is now the root,
+           and because of the old bpp compatibility code, the node the
+           represents the root is *not* the node that used to be the old
+           sibling. Therefore, we must pass the root as the target of the SPR
+           (and not the node pointing to the old sibling). In the other cases,
+           the target is just the old sibling */
+        if (root_changed == 2)
+          root_changed = perform_spr(gtree,curnode,gtree->root);
+        else
+          root_changed = perform_spr(gtree,curnode,sibling);
+      }
 
-#if 1
       if (root_changed)
         father = curnode->parent;
-#endif
+
       if (father->parent)
         travbuffer[msa_index][k++] = father;
 
       if (spr_required)
+      {
+        sibling = (curnode->parent->left == curnode) ? 
+                    curnode->parent->right : curnode->parent->left;
         travbuffer[msa_index][k++] = sibling;
+      }
 
       locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
-
-#if 0
-if (root_changed)
-  father = curnode->parent;
-#endif
 
       if (father->pop == oldpop)
       {
@@ -1865,5 +1899,4 @@ double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
     return 0;
 
   return ((double)accepted/proposal_count);
-
 }

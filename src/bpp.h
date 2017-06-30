@@ -348,15 +348,26 @@ extern long opt_stree;
 extern long opt_delimit;
 extern long opt_cleandata;
 extern long opt_debug;
+extern long opt_samples;
+extern long opt_samplefreq;
+extern long opt_burnin;
+extern long opt_finetune_reset;
+extern long opt_log_samples;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
 extern double opt_theta_alpha;
 extern double opt_theta_beta;
+extern double opt_finetune_gtage;
+extern double opt_finetune_gtspr;
+extern double opt_finetune_theta;
+extern double opt_finetune_tau;
+extern double opt_finetune_mix;
 extern char * opt_streefile;
 extern char * opt_mapfile;
 extern char * opt_outfile;
 extern char * opt_msafile;
 extern char * opt_mapfile;
+extern char * opt_mcmcfile;
 extern char * cmdline;
 
 /* common data */

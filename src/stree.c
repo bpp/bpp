@@ -155,9 +155,8 @@ static int ** populations_seqcount(stree_t * stree,
 
       node = (snode_t *)(pair->data);
 
-#ifdef DEBUG_STREE_INIT
-      printf("Matched %s -> %s\n", label, node->label);
-#endif
+      if (opt_debug)
+        printf("Matched %s -> %s\n", label, node->label);
 
       /* increment sequence count for loci i in corresponding population */
       k = node->node_index;
@@ -306,9 +305,6 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
   
   for (i = 0; i < stree->tip_count; ++i)
   {
-    //curnode = stree->nodes[i];
-    //ancnode = stree->nodes[i]->parent;
-
     for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
       for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
         stree->pptable[curnode->node_index][ancnode->node_index] = 1;
@@ -347,12 +343,11 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
   int i;
   double thetaold;
   double thetanew;
-  const double finetune = 0.001;
   double acceptance;
 
   thetaold = snode->theta;
   
-  thetanew = thetaold + finetune * legacy_rnd_symmetrical();
+  thetanew = thetaold + opt_finetune_theta * legacy_rnd_symmetrical();
  
   if (thetanew < 0)
     thetanew = -thetanew;
@@ -451,7 +446,6 @@ static long propose_tau(locus_t ** loci,
   double minage = 0, maxage = 999;
   double acceptance = 0;
   double minfactor,maxfactor,thetafactor;
-  double finetune = 0.001;
   double oldtheta;
   double logpr = 0;
   double logpr_diff = 0;
@@ -472,7 +466,7 @@ static long propose_tau(locus_t ** loci,
     maxage = snode->parent->tau;
 
   /* propose new tau */
-  newage = oldage + finetune * legacy_rnd_symmetrical();
+  newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical();
   newage = reflect(newage,minage,maxage);
   snode->tau = newage;
 
@@ -554,9 +548,6 @@ static long propose_tau(locus_t ** loci,
     __mark_count[i] = k;
     offset += k;
 
-    //printf("locus %d old logpr = %f\n", i, gtree[i]->logpr);
-    //printf("locus %d new logpr = %f\n", i, logpr);
-
     logpr_diff += logpr - gtree[i]->logpr;
 
     gtree[i]->old_logpr = gtree[i]->logpr;
@@ -582,10 +573,14 @@ static long propose_tau(locus_t ** loci,
          length as we will receive a segfaul. Therefore, move the root to the
          beginning of the list, incremenent the pointer to the next element and
          decrease branch count */
-      if (!node->parent && j > 0)
+      //if (!node->parent && j > 0)
+      if (!node->parent)
       {
-        SWAP(gt_nodesptr[0],gt_nodesptr[j]);
-        SWAP(oldbranches[0],oldbranches[j]);
+        if (j)
+        {
+          SWAP(gt_nodesptr[0],gt_nodesptr[j]);
+          SWAP(oldbranches[0],oldbranches[j]);
+        }
         branchptr = &(gt_nodesptr[1]);
         --branch_count;
       }
@@ -613,7 +608,6 @@ static long propose_tau(locus_t ** loci,
     gtree[i]->old_logl = gtree[i]->logl;
     if (k)
     {
-      /* update transition probability matrices */
       locus_update_matrices_jc69(loci[i],branchptr,branch_count);
 
       /* get list of nodes for which partials must be recomputed */
@@ -636,9 +630,6 @@ static long propose_tau(locus_t ** loci,
                                              param_indices,
                                              NULL);
 
-      //printf("locus %d old logl = %f\n", i,gtree[i]->logl);
-      //printf("locus %d new logl = %f\n", i,logl);
-
       logl_diff += logl - gtree[i]->logl;
       gtree[i]->logl = logl;
     }
@@ -654,6 +645,18 @@ static long propose_tau(locus_t ** loci,
   {
     /* accepted */
     accepted++;
+
+    offset = 0;
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      k = __mark_count[i];
+      gnode_t ** gt_nodesptr = __gt_nodes + offset;
+
+      for (j = 0; j < k; ++j)
+        gt_nodesptr[j]->mark = 0;
+
+      offset += __mark_count[i] + __extra_count[i];
+    }
 
   }
   else

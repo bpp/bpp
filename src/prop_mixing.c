@@ -52,7 +52,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   unsigned i,j,k;
   unsigned int theta_count, tau_count;
   double lnc,c;
-  double finetune = 0.3;
+//  double finetune = 0.3;
   double lnacceptance;
   long accepted = 0;
 
@@ -64,7 +64,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
    * nodes will have a tau=0 */
   tau_count   = stree->inner_count;
 
-  lnc = finetune * legacy_rnd_symmetrical();
+  lnc = opt_finetune_mix * legacy_rnd_symmetrical();
   c = exp(lnc);
 
   /* sum of inner nodes for all loci */
@@ -90,7 +90,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     snodes[i]->old_theta = snodes[i]->theta;
     snodes[i]->theta *= c;
     lnacceptance += (-opt_theta_alpha-1)*lnc -
-                    opt_theta_beta*(1/snodes[i]->theta - 1/snodes[i]->old_theta);
+                   opt_theta_beta*(1/snodes[i]->theta - 1/snodes[i]->old_theta);
   }
 
   /* change the taus */
@@ -108,55 +108,51 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   
   for (i = 0; i < stree->locus_count; ++i)
   {
+    gtree_t * gt = gtree[i];
+
     /* go through all gene nodes */
-    for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    for (j = gt->tip_count; j < gt->tip_count + gt->inner_count; ++j)
     {
-      gtree[i]->nodes[j]->old_time = gtree[i]->nodes[j]->time;
-      gtree[i]->nodes[j]->time *= c;
+      gt->nodes[j]->old_time = gt->nodes[j]->time;
+      gt->nodes[j]->time *= c;
     }
 
     /* update branch lengths */
-    for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    for (j = 0; j < gt->tip_count+gt->inner_count; ++j)
     {
-      if (gtree[i]->nodes[j]->parent)
-        gtree[i]->nodes[j]->length = gtree[i]->nodes[j]->parent->time - gtree[i]->nodes[j]->time;
+      if (gt->nodes[j]->parent)
+        gt->nodes[j]->length = gt->nodes[j]->parent->time - gt->nodes[j]->time;
     }
 
     /* update pmatrices */
     /* TODO: Remove this allocation */
-    gnode_t ** gt_nodes = (gnode_t **)xmalloc((gtree[i]->tip_count + gtree[i]->inner_count) * sizeof(gnode_t *));
+    gnode_t ** gt_nodes = (gnode_t **)xmalloc((gt->tip_count + gt->inner_count)*
+                                              sizeof(gnode_t *));
     k=0;
-    for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
-      if (gtree[i]->nodes[j]->parent)
-        gt_nodes[k++] = gtree[i]->nodes[j];
+    for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
+      if (gt->nodes[j]->parent)
+        gt_nodes[k++] = gt->nodes[j];
     locus_update_matrices_jc69(locus[i],gt_nodes,k);
 
-    gtree_all_partials(gtree[i]->root,gt_nodes,&k);
+    gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
-      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,gt_nodes[j]->clv_index);
+      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
 
     locus_update_partials(locus[i],gt_nodes,k);
 
     /* compute log-likelihood */
     unsigned int param_indices[1] = {0};
-    double logl = locus_root_loglikelihood(locus[i],gtree[i]->root,param_indices,NULL);
+    double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
 
 
     double logpr = gtree_logprob(stree,i);
-    if (opt_debug > 1)
-    {
-      printf("old logl: %f\n", gtree[i]->logl);
-      printf("new logl: %f\n", logl);
-      printf("old logpr: %f\n", gtree[i]->logpr);
-      printf("new logpr: %f\n", logpr);
-    }
 
-    lnacceptance += logl - gtree[i]->logl + logpr - gtree[i]->logpr;
+    lnacceptance += logl - gt->logl + logpr - gt->logpr;
 
-    gtree[i]->old_logpr = gtree[i]->logpr;
-    gtree[i]->old_logl = gtree[i]->logl;
-    gtree[i]->logpr = logpr;
-    gtree[i]->logl = logl;
+    gt->old_logpr = gt->logpr;
+    gt->old_logl = gt->logl;
+    gt->logpr = logpr;
+    gt->logl = logl;
 
     free(gt_nodes);
     
@@ -181,14 +177,28 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
 
       if (snodes[i]->theta <= 0) continue;
+
+      /* TODO: Note that, it is both faster and more precise to restore the old
+         value from memory, than re-computing it with a division. For now, we
+         use the division here to be compatible with the old bpp */
+#if 0
       snodes[i]->theta = snodes[i]->old_theta;
+#else
+      snodes[i]->theta /= c;
+#endif
     }
 
     /* revert taus */
     for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
       if (snodes[i]->tau == 0) continue;
+
+      /* TODO: Same here */
+#if 0
       snodes[i]->tau = snodes[i]->old_tau;
+#else
+      snodes[i]->tau /= c;
+#endif
     }
 
     /* go through all loci */
