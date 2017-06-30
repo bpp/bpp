@@ -92,7 +92,7 @@ static struct option long_options[] =
   {"samplefreq",      required_argument, 0, 0 },  /* 19 */
   {"burnin",          required_argument, 0, 0 },  /* 20 */
   {"finetune_reset",  no_argument,       0, 0 },  /* 21 */
-  {"finetune_params", no_argument,       0, 0 },  /* 22 */
+  {"finetune_params", required_argument, 0, 0 },  /* 22 */
   {"mcmc_file",       required_argument, 0, 0 },  /* 23 */
   {"log_samples",     no_argument,       0, 0 },  /* 24 */
   { 0, 0, 0, 0 }
@@ -103,6 +103,23 @@ static int args_getgammaprior(char * arg, double * a, double * b)
   int len = 0;
 
   int ret = sscanf(arg, "%lf,%lf%n", a, b, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
+    return 0;
+  return 1;
+}
+
+static int args_getftparams(char * arg)
+{
+  int len = 0;
+
+  int ret = sscanf(arg,
+                   "%lf,%lf,%lf,%lf,%lf%n", 
+                   &opt_finetune_gtage,
+                   &opt_finetune_gtspr,
+                   &opt_finetune_theta,
+                   &opt_finetune_tau,
+                   &opt_finetune_mix,
+                   &len);
   if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
     return 0;
   return 1;
@@ -245,7 +262,8 @@ void args_init(int argc, char ** argv)
         break;
 
       case 22:
-        fatal("Not implemented");
+        if (!args_getftparams(optarg))
+          fatal("Illegal format for --finetune_params");
         break;
 
       case 23:
