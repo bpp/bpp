@@ -80,3 +80,13 @@ const unsigned int pll_map_fasta[256] =
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
   };
 
+/* map for checking valid characters for JC69 compression */
+
+const unsigned int pll_map_validjc69[16] =
+ {
+   /* based on pll_map_nt. Only 1-out-of-N states, i.e. A,C,G,T,
+      and gap (N,?,-,X) states are considered
+   */
+
+   0,  1,  1,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  1
+ };

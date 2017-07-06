@@ -21,16 +21,18 @@
 
 #include "bpp.h"
 
-static void vecswap(int i, int j, int n, char ** x)
+static void vecswap(int i, int j, int n, char ** x, int * oi)
 {
   while (n--)
   {
     SWAP(x[i],x[j]);
+    if (oi)
+      SWAP(oi[i],oi[j]);
     ++i; ++j;
   }
 }
 
-static void ssort1(char ** x, int n, int depth)
+static void ssort1(char ** x, int n, int depth, int * oi)
 {
   int a,b,c,d,r,v;
 
@@ -39,6 +41,8 @@ static void ssort1(char ** x, int n, int depth)
   a = rand() % n;
 
   SWAP(x[0], x[a]);
+  if (oi)
+    SWAP(oi[0], oi[a]);
 
   v = x[0][depth];
 
@@ -52,6 +56,8 @@ static void ssort1(char ** x, int n, int depth)
       if (r == 0)
       {
         SWAP(x[a], x[b]);
+        if (oi)
+          SWAP(oi[a], oi[b]);
         ++a;
       }
       ++b;
@@ -61,23 +67,37 @@ static void ssort1(char ** x, int n, int depth)
       if (r == 0)
       {
         SWAP(x[c], x[d]);
+        if (oi)
+          SWAP(oi[c], oi[d]);
         --d;
       }
       --c;
     }
     if (b > c) break;
-    SWAP (x[b], x[c]);
+    SWAP(x[b], x[c]);
+    if (oi)
+      SWAP(oi[b], oi[c]);
     ++b; --c;
   }
 
-  r = MIN(a,b-a); vecswap(0,b-r,r,x);
-  r = MIN(d-c,n-d-1); vecswap(b,n-r,r,x);
-  r = b-a; ssort1(x,r,depth);
+  r = MIN(a,b-a); vecswap(0,b-r,r,x,oi);
+  r = MIN(d-c,n-d-1); vecswap(b,n-r,r,x,oi);
+  r = b-a; ssort1(x,r,depth,oi);
 
   if (x[r][depth] != 0)
-    ssort1 (x + r, a + n - d - 1, depth + 1);
+  {
+    if (oi)
+      ssort1 (x + r, a + n - d - 1, depth + 1, oi + r);
+    else
+      ssort1 (x + r, a + n - d - 1, depth + 1, NULL);
 
-  r = d - c; ssort1(x+n-r,r,depth);
+  }
+
+    r = d - c; 
+    if (oi)
+      ssort1(x+n-r,r,depth,oi+n-r);
+    else
+      ssort1(x+n-r,r,depth,NULL);
 }
 
 static void remap_range(const unsigned int * map,
@@ -118,7 +138,10 @@ static unsigned int findmax(const unsigned int * map)
   return max;
 }
 
-static void encode(char ** sequence, const unsigned char * map, int count, int len)
+static void encode(char ** sequence,
+                   const unsigned char * map,
+                   int count,
+                   int len)
 {
   int i,j;
   char * p;
@@ -135,15 +158,73 @@ static void encode(char ** sequence, const unsigned char * map, int count, int l
   }
 }
 
+static unsigned char ** encode_jc69(char ** sequence,
+                                    int count,
+                                    int len)
+{
+  int i,j;
+  char * p;
+  unsigned char ** jc69_invmaps;
+  unsigned char sitemap[16];
+  int valid;
+
+  /* allocate memory for inverse map in order to later decode sequence data */
+  jc69_invmaps = (unsigned char **)xcalloc(count,sizeof(unsigned char *)); 
+
+  /* go through the sites */
+  for (i = 0; i < count; ++i)
+  {
+    valid = 1;
+    p = sequence[i];
+    j = len;
+
+    /* we re-encode only sites that have no ambiguities with the exception of
+       gaps */
+    while (j--)
+    {
+      valid &= (*p > 15) ? 0 : pll_map_validjc69[(unsigned int)*p];
+      ++p;
+    }
+
+
+    /* if no ambiguities apart gaps were found, encode the sequence and create
+       an inverse map to decode back later */
+    if (valid)
+    {
+      p = sequence[i];
+      jc69_invmaps[i] = (unsigned char *)xcalloc(16,sizeof(unsigned char));
+      memset(sitemap,0,16*sizeof(unsigned char));
+      unsigned char code = 1;
+      for ( j = 0; j < len; ++j)
+      {
+        unsigned int c = (unsigned int)(p[j]);
+        if (!sitemap[c])
+        {
+          sitemap[c] = code;
+          jc69_invmaps[i][code] = p[j];
+          code++;
+        }
+
+        p[j] = sitemap[c];
+      }
+    }
+  }
+
+  /* return the inverse maps */
+  return jc69_invmaps;
+}
+
 unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
-                                      int * length)
+                                      int * length,
+                                      int attrib)
 {
   int i,j;
   char * memptr;
   char ** column;
   unsigned int * weight;
+  unsigned char ** jc69_invmaps = NULL;
 
   unsigned char charmap[ASCII_SIZE];
   unsigned char inv_charmap[ASCII_SIZE];
@@ -161,6 +242,9 @@ unsigned int * compress_site_patterns(char ** sequence,
   if (findmax(map) >= ASCII_SIZE)
   {
     remap_range(map,charmap);
+
+    /* for now only DNA with pll_map_nt */
+    assert(0);
   }
   else
   {
@@ -200,8 +284,17 @@ unsigned int * compress_site_patterns(char ** sequence,
     column[i][j] = 0;
   }
 
-  /* sort the columns */
-  ssort1(column, *length, 0);
+  /* allocate space for storing original indices (before sorting sites) */
+  int * oi = (int *)xmalloc(*length * sizeof(int));
+  for (i = 0; i < *length; ++i)
+    oi[i] = i;
+
+    /* do the jc68 now */
+  if (attrib == COMPRESS_JC69)
+    jc69_invmaps = encode_jc69(column,*length,count);
+
+  /* sort the columns and keep original indices */
+  ssort1(column, *length, 0, oi);
 
   /* we have at least one unique site with weight 1 (the first site) */
   int compressed_length = 1;
@@ -209,17 +302,37 @@ unsigned int * compress_site_patterns(char ** sequence,
   weight[ref] = 1;
 
   /* find all unique columns and set their weights */
+  int * compressed_oi = (int *)xmalloc(*length * sizeof(int));
+
+  compressed_oi[0] = oi[0];
   for (i = 1; i < *length; ++i)
   {
     if (strcmp(column[i],column[i-1]))
     {
       column[ref+1] = column[i];
+      compressed_oi[ref+1] = oi[i];
       ++ref;
       ++compressed_length;
       weight[ref] = 1;
     }
     else
       weight[ref]++;
+  }
+
+  /* decode the jc69 encoding */
+  if (attrib == COMPRESS_JC69)
+  {
+    for (i=0; i < compressed_length; ++i)
+    {
+      unsigned char * sitemap = jc69_invmaps[compressed_oi[i]];
+      if (sitemap)
+        for (j=0; j < count; ++j)
+          column[i][j] = sitemap[(unsigned int)column[i][j]];
+    }
+    for (i = 0; i < *length; ++i)
+      if (jc69_invmaps[i])
+        free(jc69_invmaps[i]);
+    free(jc69_invmaps);
   }
 
   /* copy the unique columns over the original sequences */
@@ -254,6 +367,9 @@ unsigned int * compress_site_patterns(char ** sequence,
 
   /* decode sequences using inv_charmap */
   encode(sequence,inv_charmap,count,compressed_length);
+
+  free(oi);
+  free(compressed_oi);
 
   return weight;
 }

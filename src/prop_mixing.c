@@ -233,6 +233,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       
     }
   }
+  free(snodes);
 
   return accepted;
 

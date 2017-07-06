@@ -61,6 +61,9 @@
 #define TREE_TRAVERSE_POSTORDER         1
 #define TREE_TRAVERSE_PREORDER          2
 
+#define COMPRESS_GENERAL                1
+#define COMPRESS_JC69                   2
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -377,6 +380,7 @@ extern __thread char bpp_errmsg[200];
 
 extern const unsigned int pll_map_nt[256];
 extern const unsigned int pll_map_fasta[256];
+extern const unsigned int pll_map_validjc69[16];
 
 extern long mmx_present;
 extern long sse_present;
@@ -611,6 +615,9 @@ void pll_set_frequencies(locus_t * locus,
 
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count);
 
+void pll_set_pattern_weights(locus_t * locus,
+                             const unsigned int * pattern_weights);
+
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,
                                 unsigned int count);
@@ -619,6 +626,15 @@ double locus_root_loglikelihood(locus_t * locus,
                                 gnode_t * root,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl);
+
+/* functions in compress.c */
+
+
+unsigned int * compress_site_patterns(char ** sequence,
+                                      const unsigned int * map,
+                                      int count,
+                                      int * length,
+                                      int attrib);
 
 /* functions in core_partials.c */
 

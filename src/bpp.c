@@ -155,7 +155,6 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_cleandata = 0;
   opt_debug = 0;
-  //opt_samples = 100000;
   opt_samples = 30000;
   opt_samplefreq = 2;
   opt_burnin = 8000;

@@ -250,6 +250,20 @@ void cmd_a00()
   for (i = 0; i < msa_count; ++i)
     msa_print(msa_list[i]);
 
+  /* compress it */
+  unsigned int ** weights = (unsigned int **)xmalloc(msa_count *
+                                                     sizeof(unsigned int *));
+  for (i = 0; i < msa_count; ++i)
+  {
+    int ol = msa_list[i]->length;
+    weights[i] = compress_site_patterns(msa_list[i]->sequence,
+                                        pll_map_nt,
+                                        msa_list[i]->count,
+                                        &(msa_list[i]->length),
+                                        COMPRESS_JC69);
+    printf("Locus %d: original length %d, after compression %d\n", i, ol, msa_list[i]->length);
+  }
+
   /* parse map file */
   printf("Parsing map file...\n");
   list_t * map_list = yy_parse_map(opt_mapfile);
@@ -281,10 +295,15 @@ void cmd_a00()
                             gtree[i]->edge_count,       /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
-                            PLL_ATTRIB_ARCH_CPU);       /* attributes */
+                            PLL_ATTRIB_ARCH_AVX);       /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
+
+    /* set pattern weights and free the weights array */
+    pll_set_pattern_weights(locus[i], weights[i]);
+    free(weights[i]);
+
 
     /* set tip sequences */
     for (j = 0; j < (int)(gtree[i]->tip_count); ++j)
@@ -316,6 +335,9 @@ void cmd_a00()
     logpr = gtree_logprob(stree,i);
     gtree[i]->logpr = logpr;
   }
+
+  /* free weights array */
+  free(weights);
 
   /* start of MCMC loop */
 

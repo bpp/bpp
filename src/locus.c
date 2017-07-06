@@ -203,6 +203,14 @@ void init_locus(locus_t * locus, msa_t * msa)
 }
 #endif
 
+void pll_set_pattern_weights(locus_t * locus,
+                             const unsigned int * pattern_weights)
+{
+  memcpy(locus->pattern_weights,
+         pattern_weights,
+         sizeof(unsigned int)*locus->sites);
+}
+
 static int update_charmap(locus_t * locus, const unsigned int * map)
 {
   unsigned int i,j,k = 0;
