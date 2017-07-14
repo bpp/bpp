@@ -600,6 +600,28 @@ static int cb_cmp_spectime(const void * a, const void * b)
   return -1;
 }
 
+static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
+{
+  if (!node->left)
+    return;
+
+  fill_seqin_counts_recursive(node->left,msa_index);
+  fill_seqin_counts_recursive(node->right,msa_index);
+
+  snode_t * lnode = node->left;
+  snode_t * rnode = node->right;
+
+  node->seqin_count[msa_index] = lnode->seqin_count[msa_index] +
+                                 rnode->seqin_count[msa_index] -
+                                 lnode->event_count[msa_index] -
+                                 rnode->event_count[msa_index];
+}
+
+static void fill_seqin_counts(stree_t * stree, int msa_index)
+{
+  fill_seqin_counts_recursive(stree->root,msa_index);
+}
+
 static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 {
   int lineage_count = 0;
@@ -842,21 +864,10 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   free(epoch);
 
 
-  /* we assume a post-order traversal of the inner node of the species tree,
-     and we update the number of lineages coming into each ancestral population
-     as the sum of lineages coming into its two children populations minus the
+  /* Update the number of lineages coming into each ancestral population as the
+     sum of lineages coming into its two children populations minus the
      coalescent events that have occured */
-  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
-  {
-    snode_t * node  = stree->nodes[i];
-    snode_t * lnode = stree->nodes[i]->left;
-    snode_t * rnode = stree->nodes[i]->right;
-
-    node->seqin_count[msa_index] = lnode->seqin_count[msa_index] +
-                                   rnode->seqin_count[msa_index] -
-                                   lnode->event_count[msa_index] -
-                                   rnode->event_count[msa_index];
-  }
+  fill_seqin_counts(stree,msa_index);
 
   if (opt_debug)
   {

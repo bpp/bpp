@@ -66,29 +66,30 @@ hashtable_t * species_hash(stree_t * tree)
   return ht;
 }
 
-static void stree_label(stree_t * stree, int msa_count)
+static void stree_label_recursive(snode_t * node)
 {
-  unsigned int i;
+  /* if node is a tip return */
+  if (!node->left)
+    return;
 
-  /* labels at inner nodes are concatenated labels of their children */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    /* get the species structures of the two children */
-    snode_t * node  = stree->nodes[i];
-    snode_t * lnode = stree->nodes[i]->left;
-    snode_t * rnode = stree->nodes[i]->right;
+  stree_label_recursive(node->left);
+  stree_label_recursive(node->right);
 
-    /* allocate necessary memory for label */
-    if (node->label)
-      free(node->label);
-    node->label = (char *)xmalloc(strlen(lnode->label)+
-                                  strlen(rnode->label)+1);
+  if (node->label) 
+    free(node->label);
 
-    /* concatenate species labels */
-    node->label[0] = 0;
-    strcat(node->label,lnode->label);
-    strcat(node->label,rnode->label);
-  }
+  node->label = (char *)xmalloc(strlen(node->left->label) +
+                                strlen(node->right->label) + 1);
+
+  /* concatenate species labels */
+  node->label[0] = 0;
+  strcat(node->label,node->left->label);
+  strcat(node->label,node->right->label);
+}
+
+static void stree_label(stree_t * stree)
+{
+  stree_label_recursive(stree->root);
 }
 
 static void cb_dealloc_pairlabel(void * data)
@@ -238,12 +239,7 @@ static void stree_init_theta(stree_t * stree,
   }
 
   /* go through inner nodes and setup thetas */
-  /* TODO: Note, that we compute the theta for the root first to be in line
-     with the original bpp code */
-  stree->root->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                       (0.9 + 0.2 * legacy_rndu());
-  ++k;
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count-1; ++i)
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode_t * node = stree->nodes[i];
 
@@ -268,7 +264,7 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
-  stree_label(stree, msa_count);
+  stree_label(stree);
 
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */
@@ -400,30 +396,12 @@ double stree_propose_theta(gtree_t ** gtree, stree_t * stree)
   long accepted = 0;
   snode_t * snode;
 
-  /* TODO: this kind of loop is for backwards compatibility with the old bpp
-     since the root node is the first inner node and not the last one */
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
     if (snode->theta)
     {
       accepted += propose_theta(gtree, stree->locus_count, stree->nodes[i]);
-      theta_count++;
-    }
-  }
-
-  if (stree->root->theta)
-  {
-    accepted += propose_theta(gtree, stree->locus_count, stree->root);
-    theta_count++;
-  }
-    
-  for (i = 0; i < stree->inner_count-1; ++i)
-  {
-    snode = stree->nodes[stree->tip_count+i];
-    if (snode->theta)
-    {
-      accepted += propose_theta(gtree, stree->locus_count, snode);
       theta_count++;
     }
   }
@@ -736,19 +714,7 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
       candidate_count++;
 
 
-  /* TODO: this separate loops doing the same thing are done this way for
-     traversing the species tree in the same way the old bpp does, since
-     the root is processed immediately after the tip nodes */
-  for (i = 0; i < stree->tip_count; ++i)
-  {
-    if (stree->nodes[i]->tau > 0)
-      accepted += propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);
-  }
-
-  if (stree->root->tau > 0)
-    accepted += propose_tau(loci,stree->root,gtree,stree,candidate_count);
-
-  for (i = stree->tip_count; i < stree->inner_count + stree->tip_count-1; ++i)
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau > 0)
       accepted += propose_tau(loci,stree->nodes[i],gtree,stree,candidate_count);

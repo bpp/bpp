@@ -77,10 +77,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   /* TODO: This loop separation is for having the same traversal as old bpp */
   snode_t ** snodes = (snode_t **)xmalloc((stree->tip_count+stree->inner_count)*
                                           sizeof(snode_t *));
-  for (i = 0; i < stree->tip_count; ++i) snodes[i] = stree->nodes[i];
-  snodes[i++] = stree->root;
-  for (j = stree->tip_count; j < stree->tip_count + stree->inner_count-1; ++j)
-    snodes[i++] = stree->nodes[j];
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    snodes[i] = stree->nodes[i];
 
   /* change the thetas */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)

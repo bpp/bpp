@@ -197,6 +197,7 @@ number: NUMBER   {$$=$1;};
 
 %%
 
+/* fill array in preorder */
 static void fill_nodes_recursive(snode_t * node,
                                  snode_t ** array,
                                  unsigned int * tip_index,
@@ -209,11 +210,12 @@ static void fill_nodes_recursive(snode_t * node,
     return;
   }
 
+  array[*inner_index] = node;
+  *inner_index = *inner_index + 1;
+
   fill_nodes_recursive(node->left,  array, tip_index, inner_index);
   fill_nodes_recursive(node->right, array, tip_index, inner_index);
 
-  array[*inner_index] = node;
-  *inner_index = *inner_index + 1;
 }
 
 static unsigned int stree_count_tips(snode_t * root)
@@ -256,9 +258,8 @@ stree_t * stree_wraptree(snode_t * root,
   unsigned int tip_index = 0;
   unsigned int inner_index = tip_count;
 
-  fill_nodes_recursive(root->left, tree->nodes, &tip_index, &inner_index);
-  fill_nodes_recursive(root->right,tree->nodes, &tip_index, &inner_index);
-  tree->nodes[inner_index] = root;
+  /* fill tree->nodes in pre-order */
+  fill_nodes_recursive(root, tree->nodes, &tip_index, &inner_index);
 
   tree->tip_count = tip_count;
   tree->edge_count = 2*tip_count-2;

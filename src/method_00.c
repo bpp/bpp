@@ -272,8 +272,7 @@ void cmd_a00()
   if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
     fatal("Cannot open file %s for writing...");
 
-  /* call MCMC */
-
+  /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count);
 
   gtree_t ** gtree = gtree_init(stree,msa_list,map_list,msa_count);
