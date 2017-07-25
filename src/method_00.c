@@ -109,20 +109,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
         fprintf(fp, "\ttheta_%d", ++j);
     }
 
-  /* then for root */
-  if (stree->root->theta >= 0)
-  {
-    if (print_labels)
-      fprintf(fp, "\ttheta_%d%s", ++j, stree->root->label);
-    else
-      fprintf(fp, "\ttheta_%d", ++j);
-  }
-
-  /* and finally for inner nodes */
+  /* then for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
-    if (stree->nodes[i] == stree->root) continue;
-
     if (stree->nodes[i]->theta >= 0)
     {
       if (print_labels)
@@ -132,23 +121,11 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     }
   }
 
-  /* 2. Print taus */
+  /* 2. Print taus for inner nodes */
   j = stree->tip_count;
 
-  /* first print tau for root */
-  if (stree->root->tau)
-  {
-    if (print_labels)
-      fprintf(fp, "\ttau_%d%s", ++j, stree->root->label);
-    else
-      fprintf(fp, "\ttau_%d", ++j);
-  }
-
-  /* and finally for the remaining inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
-    if (stree->nodes[i] == stree->root) continue;
-
     if (stree->nodes[i]->tau)
     {
       if (print_labels)
@@ -179,33 +156,15 @@ static void mcmc_logsample(FILE * fp,
     if (stree->nodes[i]->theta >= 0)
       fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
 
-  /* then for root */
-  if (stree->root->theta >= 0)
-      fprintf(fp, "\t%.5g", stree->root->theta);
-
-  /* and finally for inner nodes */
+  /* then for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    if (stree->nodes[i] == stree->root) continue;
-
     if (stree->nodes[i]->theta >= 0)
       fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
-  }
 
-  /* 2. Print taus */
-
-  /* first print tau for root */
-  if (stree->root->tau)
-    fprintf(fp, "\t%.5g", stree->root->tau);
-
-  /* and finally for the remaining inner nodes */
+  /* 2. Print taus for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    if (stree->nodes[i] == stree->root) continue;
-
     if (stree->nodes[i]->tau)
       fprintf(fp, "\t%.5g", stree->nodes[i]->tau);
-  }
 
   /* print log-likelihood */
   for (i = 0; i < stree->locus_count; ++i)
@@ -220,14 +179,15 @@ void cmd_a00()
   int msa_count;
   double logl,logpr;
   double logl_sum = 0;
+  double logpr_sum = 0;
   msa_t ** msa_list;
   FILE * fp_mcmc;
 
-  if (opt_mcmc_steps <= 0)
-    fatal("--mcmc_steps must be a positive integer greater than zero");
+  if (opt_samples < 1)
+    fatal("--samples must be a positive integer greater than zero");
 
-  if (opt_mcmc_burnin < 1 || opt_mcmc_burnin > opt_mcmc_steps)
-    fatal("--mcmc_burnin must be a positive integer smaller or equal to --mcmc_steps");
+  if (opt_burnin < 0)
+    fatal("--burnin must be a positive integer");
 
   /* load species tree */
   stree_t * stree = load_tree();
@@ -246,9 +206,13 @@ void cmd_a00()
 
   phylip_close(fd);
 
-  /* print the alignments */
-  for (i = 0; i < msa_count; ++i)
-    msa_print(msa_list[i]);
+  /* remove ambiguous sites */
+  if (opt_cleandata)
+  {
+    for (i = 0; i < msa_count; ++i)
+      if (!msa_remove_ambiguous(msa_list[i]))
+        fatal("All sites in locus %d contain ambiguous characters",i);
+  }
 
   /* compress it */
   unsigned int ** weights = (unsigned int **)xmalloc(msa_count *
@@ -263,6 +227,13 @@ void cmd_a00()
                                         COMPRESS_JC69);
     printf("Locus %d: original length %d, after compression %d\n", i, ol, msa_list[i]->length);
   }
+
+  #if 0
+  /* print the alignments */
+  for (i = 0; i < msa_count; ++i)
+    msa_print(msa_list[i]);
+  #endif
+
 
   /* parse map file */
   printf("Parsing map file...\n");
@@ -333,14 +304,15 @@ void cmd_a00()
     gtree[i]->logl = logl;
     logpr = gtree_logprob(stree,i);
     gtree[i]->logpr = logpr;
+    logpr_sum += logpr;
   }
+
+  printf("logL0 = %f   logP0 = %f\n", logl_sum, logpr_sum);
 
   /* free weights array */
   free(weights);
 
   /* start of MCMC loop */
-
-  long steps = opt_burnin + opt_samples*opt_samplefreq;
 
   double * pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
   long ft_round = 0;
@@ -349,16 +321,14 @@ void cmd_a00()
   mcmc_printheader(fp_mcmc,stree);
 
   /* start of MCMC loop */
-  for (i = 0; i < steps; ++i)
+  for (i = -opt_burnin; i < opt_samples*opt_samplefreq; ++i)
   {
-    /* TODO: STOPPING CRITERION FOR DEBUGGING */
-    //if (i == 10001) assert(0);
-
     /* reset finetune parameters */
-    if (i == opt_burnin || (opt_finetune_reset && opt_burnin >= 200 &&
-        i < opt_burnin && ft_round >= 100 && (i%(opt_burnin/4)==0)))
+    if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
+                   ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      reset_finetune(pjump);
+      if (opt_finetune_reset && opt_burnin >= 200)
+        reset_finetune(pjump);
       for (j = 0; j < PROP_COUNT; ++j)
         pjump[j] = 0;
 
@@ -389,11 +359,9 @@ void cmd_a00()
     pjump[4] = (pjump[4]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* log into file */
-    if (opt_log_samples && i >= opt_burnin && 
-        (i-opt_burnin+1) % opt_samplefreq == 0)
+    if (opt_log_samples && i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      /* TODO: print parameters in output mcmc file */
-      mcmc_logsample(fp_mcmc,i-opt_burnin+1,stree,gtree);
+      mcmc_logsample(fp_mcmc,i+1,stree,gtree);
     }
 
     /* TODO: print on screen */

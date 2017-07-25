@@ -37,9 +37,6 @@ static const char * mandatory_options_list = " --stree_file --output_file";
 long opt_help;
 long opt_version;
 long opt_quiet;
-long opt_mcmc_steps;
-long opt_mcmc_rate;
-long opt_mcmc_burnin;
 long opt_seed;
 long opt_stree;
 long opt_delimit;
@@ -78,23 +75,20 @@ static struct option long_options[] =
   {"output_file",     required_argument, 0, 0 },  /*  5 */
   {"msa_file",        required_argument, 0, 0 },  /*  6 */
   {"seed",            required_argument, 0, 0 },  /*  7 */
-  {"mcmc_rate",       required_argument, 0, 0 },  /*  8 */
-  {"mcmc_burnin",     required_argument, 0, 0 },  /*  9 */
-  {"mcmc_steps",      required_argument, 0, 0 },  /* 10 */
-  {"stree",           no_argument,       0, 0 },  /* 11 */
-  {"delimit",         no_argument,       0, 0 },  /* 12 */
-  {"tauprior",        required_argument, 0, 0 },  /* 13 */
-  {"thetaprior",      required_argument, 0, 0 },  /* 14 */
-  {"cleandata",       no_argument,       0, 0 },  /* 15 */
-  {"map_file",        required_argument, 0, 0 },  /* 16 */
-  {"debug",           no_argument,       0, 0 },  /* 17 */
-  {"samples",         required_argument, 0, 0 },  /* 18 */
-  {"samplefreq",      required_argument, 0, 0 },  /* 19 */
-  {"burnin",          required_argument, 0, 0 },  /* 20 */
-  {"finetune_reset",  no_argument,       0, 0 },  /* 21 */
-  {"finetune_params", required_argument, 0, 0 },  /* 22 */
-  {"mcmc_file",       required_argument, 0, 0 },  /* 23 */
-  {"log_samples",     no_argument,       0, 0 },  /* 24 */
+  {"stree",           no_argument,       0, 0 },  /*  8 */
+  {"delimit",         no_argument,       0, 0 },  /*  9 */
+  {"tauprior",        required_argument, 0, 0 },  /* 10 */
+  {"thetaprior",      required_argument, 0, 0 },  /* 11 */
+  {"cleandata",       no_argument,       0, 0 },  /* 12 */
+  {"map_file",        required_argument, 0, 0 },  /* 13 */
+  {"debug",           no_argument,       0, 0 },  /* 14 */
+  {"samples",         required_argument, 0, 0 },  /* 15 */
+  {"samplefreq",      required_argument, 0, 0 },  /* 16 */
+  {"burnin",          required_argument, 0, 0 },  /* 17 */
+  {"finetune_reset",  no_argument,       0, 0 },  /* 18 */
+  {"finetune_params", required_argument, 0, 0 },  /* 19 */
+  {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
+  {"log_samples",     no_argument,       0, 0 },  /* 21 */
   { 0, 0, 0, 0 }
 };
 
@@ -143,9 +137,6 @@ void args_init(int argc, char ** argv)
   opt_msafile = NULL;
   opt_mapfile = NULL;
   opt_mcmcfile = NULL;
-  opt_mcmc_steps = 100000;
-  opt_mcmc_rate = 10000;
-  opt_mcmc_burnin = 10000;
   opt_seed = (long)time(NULL);
   opt_stree = 0;
   opt_delimit = 0;
@@ -155,9 +146,9 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_cleandata = 0;
   opt_debug = 0;
-  opt_samples = 30000;
-  opt_samplefreq = 2;
-  opt_burnin = 8000;
+  opt_samples = 10;
+  opt_samplefreq = 1;
+  opt_burnin = 1;
   opt_finetune_reset = 0;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
@@ -203,77 +194,64 @@ void args_init(int argc, char ** argv)
         break;
 
       case 8:
-        opt_mcmc_rate = atol(optarg);
-        break;
-
-      case 9:
-        opt_mcmc_burnin = atol(optarg);
-        break;
-
-      case 10:
-        opt_mcmc_steps = atol(optarg);
-        break;
-
-      case 11:
         opt_stree = 1;
         break;
 
-      case 12:
+      case 9:
         opt_delimit = 1;
         break;
 
-      case 13:
+      case 10:
         if (!args_getgammaprior(optarg, &opt_tau_alpha, &opt_tau_beta))
           fatal("Illegal format for --tauprior");
         break;
 
-      case 14:
+      case 11:
         if (!args_getgammaprior(optarg, &opt_theta_alpha, &opt_theta_beta))
           fatal("Illegal format for --thetaprior");
         break;
 
-      case 15:
+      case 12:
         opt_cleandata = 1;
         break;
 
-      case 16:
+      case 13:
         opt_mapfile = optarg;
         break;
 
-      case 17:
+      case 14:
         opt_debug = 1;
         break;
 
-      case 18:
+      case 15:
         opt_samples = atol(optarg);
         break;
 
-      case 19:
+      case 16:
         opt_samplefreq = atol(optarg);
         break;
 
-      case 20:
+      case 17:
         opt_burnin = atol(optarg);
         break;
 
-      case 21:
+      case 18:
         opt_finetune_reset = 1;
         break;
 
-      case 22:
+      case 19:
         if (!args_getftparams(optarg))
           fatal("Illegal format for --finetune_params");
         break;
 
-      case 23:
+      case 20:
         opt_mcmcfile = optarg;
         break;
 
-      case 24:
+      case 21:
         opt_log_samples = 1;
         break;
         
-
       default:
         fatal("Internal error in option parsing");
     }
@@ -295,8 +273,8 @@ void args_init(int argc, char ** argv)
     commands++;
   if (opt_help)
     commands++;
-  if (opt_stree || opt_delimit)
-    commands++;
+//  if (opt_stree || opt_delimit)
+//    commands++;
   if (opt_streefile)
     commands++;
 
@@ -404,6 +382,10 @@ int main (int argc, char * argv[])
   else if (!opt_stree && !opt_delimit)
   {
     cmd_a00();
+  }
+  else if (!opt_stree)
+  {
+    cmd_a10();
   }
 
   free(cmdline);

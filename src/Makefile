@@ -49,7 +49,8 @@ OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
      stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
      output.o method_00.o core_partials_avx.o core_partials_sse.o dlist.o \
-     core_likelihood_sse.o core_likelihood_avx.o prop_mixing.o $(AVX2OBJ)
+     core_likelihood_sse.o core_likelihood_avx.o prop_mixing.o method_10.o \
+     delimit.o $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)

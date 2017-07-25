@@ -130,6 +130,7 @@ typedef struct snode_s
   struct snode_s * parent;
   unsigned int leaves;
   unsigned int * gene_leaves;
+  int mark;
 
   void * data;
 
@@ -343,9 +344,6 @@ typedef struct pair_s
 extern long opt_help;
 extern long opt_version;
 extern long opt_quiet;
-extern long opt_mcmc_steps;
-extern long opt_mcmc_rate;
-extern long opt_mcmc_burnin;
 extern long opt_seed;
 extern long opt_stree;
 extern long opt_delimit;
@@ -380,6 +378,7 @@ extern __thread char bpp_errmsg[200];
 
 extern const unsigned int pll_map_nt[256];
 extern const unsigned int pll_map_fasta[256];
+extern const unsigned int pll_map_amb[256];
 extern const unsigned int pll_map_validjc69[16];
 
 extern long mmx_present;
@@ -485,6 +484,8 @@ unsigned long arch_get_memtotal(void);
 void msa_print(msa_t * msa);
 
 void msa_destroy(msa_t * msa);
+
+int msa_remove_ambiguous(msa_t * msa);
 
 /* functions in parse_map.y */
 
@@ -764,6 +765,16 @@ void pll_show_clv(const locus_t * locus,
 /* functions in method_00.c */
 
 void cmd_a00(void);
+
+/* functions in method_10.c */
+
+void cmd_a10(void);
+
+/* functions in delimit.c */
+
+long delimitations_count(stree_t * stree);
+
+void delimitations_enumerate(stree_t * stree);
 
 /* functions in core_partials_sse.c */
 

@@ -730,10 +730,15 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
           ci[j] = k*(k-1)/pop[j].snode->theta;
           sum += ci[j];
         }
+        else
+          ci[j] = 0;
       }
 
       /* set max waiting time for this epoch */
       tmax = epoch[e]->tau;
+
+      if (sum < 1e-300)
+        break;
 
       /* generate random waiting time from exponential distribution */
       t += legacy_rndexp(1/sum);
@@ -830,8 +835,6 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     {
       ++e;
     }
-
-    printf("Changed epoch to %s\n", epoch[e]->label);
   }
 
   for(i = 0; i < pop_count; ++i)
@@ -886,6 +889,21 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   return gtree;
 }
 
+static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus_count)
+{
+  unsigned int j;
+
+  if (!node->left)
+    return;
+
+  reset_gene_leaves_count_recursive(node->left,locus_count);
+  reset_gene_leaves_count_recursive(node->right,locus_count);
+
+  for (j = 0; j < locus_count; ++j)
+    node->gene_leaves[j] = node->left->gene_leaves[j] +
+                           node->right->gene_leaves[j];
+
+}
 static void reset_gene_leaves_count(stree_t * stree)
 {
   unsigned int i,j;
@@ -895,12 +913,14 @@ static void reset_gene_leaves_count(stree_t * stree)
     for (j = 0; j < stree->locus_count; ++j)
       stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
 
-  /* for inner nodes it is the sum of gene leaves of the two children */
-  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
-    for (j = 0; j < stree->locus_count; ++j)
-      stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->left->gene_leaves[j] +
-                                        stree->nodes[i]->right->gene_leaves[j];
+  reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
+
+  for (j = 0; j < stree->locus_count; ++j)
+    stree->root->gene_leaves[j] = stree->root->left->gene_leaves[j] +
+                                  stree->root->right->gene_leaves[j];
+
 }
+
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,

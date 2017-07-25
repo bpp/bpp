@@ -266,6 +266,20 @@ stree_t * stree_wraptree(snode_t * root,
   tree->inner_count = tip_count-1;
   tree->root = root;
 
+  #if 0
+  /* TODO: Re-order the sequence of tips according to the control file */
+
+  /* The following is a fixed re-ordering for a particular dataset */
+  unsigned int j;
+  char * labels[6] = {"G","C","R","L","A","Q"};
+  for (i = 0; i < tip_count; ++i)
+  {
+    for (j = i+1; j < tip_count; ++j)
+      if (!strcmp(tree->nodes[j]->label,labels[i]))
+        SWAP(tree->nodes[j],tree->nodes[i]);
+  }
+  #endif
+
   for (i = 0; i < 2*tip_count-1; ++i)
     tree->nodes[i]->node_index = i;
 
