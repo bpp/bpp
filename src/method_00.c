@@ -309,6 +309,8 @@ void cmd_a00()
 
   printf("logL0 = %f   logP0 = %f\n", logl_sum, logpr_sum);
 
+  printf("Starting MCMC\n");
+
   /* free weights array */
   free(weights);
 
@@ -359,7 +361,7 @@ void cmd_a00()
     pjump[4] = (pjump[4]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* log into file */
-    if (opt_log_samples && i >= 0 && (i+1)%opt_samplefreq == 0)
+    if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
       mcmc_logsample(fp_mcmc,i+1,stree,gtree);
     }

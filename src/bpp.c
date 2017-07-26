@@ -30,8 +30,8 @@ __thread int bpp_errno;
 __thread char bpp_errmsg[200] = {0};
 
 /* number of mandatory options for the user to input */
-static const char mandatory_options_count = 2;
-static const char * mandatory_options_list = " --stree_file --output_file";
+static const char mandatory_options_count = 3;
+static const char * mandatory_options_list = " --stree_file --output_file --mcmc_file";
 
 /* options */
 long opt_help;
@@ -46,7 +46,6 @@ long opt_samples;
 long opt_samplefreq;
 long opt_burnin;
 long opt_finetune_reset;
-long opt_log_samples;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -89,8 +88,7 @@ static struct option long_options[] =
   {"finetune_reset",  no_argument,       0, 0 },  /* 18 */
   {"finetune_params", required_argument, 0, 0 },  /* 19 */
   {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
-  {"log_samples",     no_argument,       0, 0 },  /* 21 */
-  {"reorder",         required_argument, 0, 0 },  /* 22 */
+  {"reorder",         required_argument, 0, 0 },  /* 21 */
   { 0, 0, 0, 0 }
 };
 
@@ -148,16 +146,15 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_cleandata = 0;
   opt_debug = 0;
-  opt_samples = 10;
-  opt_samplefreq = 1;
-  opt_burnin = 1;
+  opt_samples = 10000;
+  opt_samplefreq = 10;
+  opt_burnin = 100;
   opt_finetune_reset = 0;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_theta = 0.001;
   opt_finetune_tau   = 0.001;
   opt_finetune_mix   = 0.3;
-  opt_log_samples = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -251,10 +248,6 @@ void args_init(int argc, char ** argv)
         break;
 
       case 21:
-        opt_log_samples = 1;
-        break;
-
-      case 22:
         opt_reorder = optarg;
         break;
         
@@ -272,6 +265,8 @@ void args_init(int argc, char ** argv)
   if (opt_streefile)
     mand_options++;
   if (opt_outfile)
+    mand_options++;
+  if (opt_mcmcfile)
     mand_options++;
 
   /* check for number of independent commands selected */
@@ -299,10 +294,6 @@ void args_init(int argc, char ** argv)
   if (!opt_version && !opt_help)
     if (mand_options != mandatory_options_count)
       fatal("Mandatory options are:\n\n%s", mandatory_options_list);
-
-  if (opt_log_samples && !opt_mcmcfile)
-    fatal("You must provide an output mcmc file via --mcmc_file");
-
 }
 
 void cmd_help()
@@ -315,21 +306,29 @@ void cmd_help()
   fprintf(stderr,
           "\n"
           "General options:\n"
-          "  --help                  display help information.\n"
-          "  --version               display version information.\n"
-          "  --quiet                 only output warnings and fatal errors to stderr.\n"
-          "  --mcmc_steps INT        Perform INT MCMC steps (default: 100000).\n"
-          "  --mcmc_rate INT         Sample every INT step (default: 1000).\n"
-          "  --mcmc_burnin INT       discard the first INT MCMC steps (default: 10000).\n"
-          "  --seed INT              Seed for pseudo-random number generator.\n"
-          "  --stree                 estimate species tree.\n"
-          "  --delimit               estimates species delimitation.\n"
+          "  --help                    display help information\n"
+          "  --version                 display version information\n"
+          "  --quiet                   only output warnings and fatal errors to stderr\n"
+          "  --samples INT             total number of MCMC samples to log (default: 10000)\n"
+          "  --samplefreq INT          log every INT sample (default: 10)\n"
+          "  --burnin INT              discard first INT MCMC samples (default: 100)\n"
+          "  --seed INT                seed for pseudo-random number generator\n"
+          "  --stree                   estimate species tree (not implemented)\n"
+          "  --delimit                 estimate species delimitation (not implemented)\n"
+          "  --cleandata               remove sites containing ambiguous characters\n"
+          "  --finetune_reset          reset finetune steps during MCMC\n"
+          "  --finetune_params STRING  specify fine-tuning parameters\n"
+          "  --tauprior REAL,REAL      specify prior for species tree ages\n"
+          "  --thetaprior REAL,REAL    specify prior for population size\n"
+          "  --reorder STRING          reorder sequence of species tips\n"
           "\n"
           "Input and output options:\n"
-          "  --stree_file FILENAME   species tree file in newick format.\n"
-          "  --msa_file FILENAMES    comma separated list of loci MSAs.\n"
-          "  --map_file FILENAME     map file connecting sequences to species\n"
-          "  --output_file FILENAME  output file name.\n"
+          "  --stree_file FILENAME     species tree file in newick format\n"
+          "  --msa_file FILENAME       PHYLIP file containing loci\n"
+          "  --map_file FILENAME       file containing mapping of sequences to species\n"
+          "  --output_file FILENAME    output file name\n"
+          "  --mcmc_file FILENAME      output file containing logged MCMC samples\n"
+          "\n"
          );
 
   /*         0         1         2         3         4         5         6         7          */
