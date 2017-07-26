@@ -233,6 +233,86 @@ static unsigned int stree_count_tips(snode_t * root)
   return count;
 }
 
+static void reorder(stree_t * stree)
+{
+  unsigned int i,j,k;
+  unsigned int commas_count = 0;
+  pair_t ** pairlist;
+
+  /* compute number of commas in list of tips */
+  for (i = 0; i < strlen(opt_reorder); ++i)
+    if (opt_reorder[i] == ',')
+      commas_count++;
+
+  if (!commas_count || commas_count+1 != stree->tip_count)
+    fatal("Labels (%d) specified in --reorder do not match species tree", commas_count);
+
+  hashtable_t * ht = hashtable_create(stree->tip_count);
+
+  pairlist = (pair_t **)xmalloc(stree->tip_count * sizeof(pair_t *));
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
+    pair->label = stree->nodes[i]->label;
+    pair->data = (void *)(uintptr_t)i;
+    pairlist[i] = pair;
+
+    if (!hashtable_insert(ht,
+                          (void *)pair,
+                          hash_fnv(stree->nodes[i]->label),
+                          cb_cmp_pairlabel))
+      fatal("Duplicate taxon (%s)", stree->nodes[i]->label);
+  }
+
+  char * s = opt_reorder;
+
+  k = 0;
+  while (*s)
+  {
+    /* get next tip */
+    size_t taxon_len = strcspn(s,",");
+    if (!taxon_len)
+      fatal("Erroneous format in --reorder (taxon missing)");
+
+    char * taxon = xstrndup(s, taxon_len);
+
+    /* search tip in hash table */
+    pair_t * query = hashtable_find(ht,
+                                    taxon,
+                                    hash_fnv(taxon),
+                                    cb_cmp_pairlabel);
+    if (!query)
+      fatal("Taxon %s does not appear in the tree", taxon);
+
+    j = (unsigned int)(uintptr_t)(query->data);
+    /* swap */
+    if (j != k)
+    {
+      i = k;
+
+      assert((unsigned int)(uintptr_t)(pairlist[i]->data) == i);
+      assert(pairlist[j] == query);
+
+      SWAP(stree->nodes[i],stree->nodes[j]);
+      SWAP(pairlist[i],pairlist[j]);
+      SWAP(pairlist[k]->data,pairlist[j]->data);
+    }
+
+    free(taxon);
+
+    s += taxon_len;
+    if (*s == ',')
+      s += 1;
+
+    ++k;
+  }
+  /* kill hashtable */
+  hashtable_destroy(ht,free);
+
+  free(pairlist);
+}
+
 stree_t * stree_wraptree(snode_t * root,
                          unsigned int tip_count)
 {
@@ -266,19 +346,9 @@ stree_t * stree_wraptree(snode_t * root,
   tree->inner_count = tip_count-1;
   tree->root = root;
 
-  #if 0
-  /* TODO: Re-order the sequence of tips according to the control file */
-
-  /* The following is a fixed re-ordering for a particular dataset */
-  unsigned int j;
-  char * labels[6] = {"G","C","R","L","A","Q"};
-  for (i = 0; i < tip_count; ++i)
-  {
-    for (j = i+1; j < tip_count; ++j)
-      if (!strcmp(tree->nodes[j]->label,labels[i]))
-        SWAP(tree->nodes[j],tree->nodes[i]);
-  }
-  #endif
+  /* reorder tip nodes if specified */
+  if (opt_reorder)
+    reorder(tree);
 
   for (i = 0; i < 2*tip_count-1; ++i)
     tree->nodes[i]->node_index = i;

@@ -32,6 +32,7 @@
 #include <locale.h>
 #include <math.h>
 #include <sys/time.h>
+#include <stdint.h>
 #include <unistd.h>
 #if (!defined(WINNT) && !defined(WIN32) && !defined(WIN64))
 #include <sys/resource.h>
@@ -363,12 +364,13 @@ extern double opt_finetune_gtspr;
 extern double opt_finetune_theta;
 extern double opt_finetune_tau;
 extern double opt_finetune_mix;
-extern char * opt_streefile;
 extern char * opt_mapfile;
-extern char * opt_outfile;
 extern char * opt_msafile;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
+extern char * opt_reorder;
+extern char * opt_outfile;
+extern char * opt_streefile;
 extern char * cmdline;
 
 /* common data */
@@ -540,6 +542,8 @@ int hashtable_insert(hashtable_t * ht,
                      int (*cb_cmp)(void *, void *));
 
 void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
+
+int cb_cmp_pairlabel(void * a, void * b);
 
 /* functions in stree.c */
 

@@ -170,3 +170,12 @@ void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *))
   free(ht->entries);
   free(ht); 
 }
+
+int cb_cmp_pairlabel(void * a, void * b)
+{
+  pair_t * pair = (pair_t *)a;
+  char * label = (char *)b;
+
+  return (!strcmp(pair->label,label));
+}
+

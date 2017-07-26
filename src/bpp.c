@@ -56,12 +56,13 @@ double opt_finetune_gtspr;
 double opt_finetune_theta;
 double opt_finetune_tau;
 double opt_finetune_mix;
-char * opt_streefile;
 char * opt_mapfile;
-char * opt_outfile;
 char * opt_msafile;
 char * opt_mapfile;
 char * opt_mcmcfile;
+char * opt_outfile;
+char * opt_reorder;
+char * opt_streefile;
 
 long opt_debugflag = 0;
 
@@ -89,6 +90,7 @@ static struct option long_options[] =
   {"finetune_params", required_argument, 0, 0 },  /* 19 */
   {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
   {"log_samples",     no_argument,       0, 0 },  /* 21 */
+  {"reorder",         required_argument, 0, 0 },  /* 22 */
   { 0, 0, 0, 0 }
 };
 
@@ -251,6 +253,10 @@ void args_init(int argc, char ** argv)
       case 21:
         opt_log_samples = 1;
         break;
+
+      case 22:
+        opt_reorder = optarg;
+        break;
         
       default:
         fatal("Internal error in option parsing");
@@ -322,7 +328,7 @@ void cmd_help()
           "Input and output options:\n"
           "  --stree_file FILENAME   species tree file in newick format.\n"
           "  --msa_file FILENAMES    comma separated list of loci MSAs.\n"
-          "  --map_file FILENAME     map file connecting  "
+          "  --map_file FILENAME     map file connecting sequences to species\n"
           "  --output_file FILENAME  output file name.\n"
          );
 

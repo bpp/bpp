@@ -30,14 +30,6 @@ static double * __aux = NULL;
 static int * __mark_count = NULL;
 static int * __extra_count = NULL;
 
-static int cb_cmp_pairlabel(void * a, void * b)
-{
-  pair_t * pair = (pair_t *)a;
-  char * label  = (char *)b;
-
-  return (!strcmp(pair->label,label));
-}
-
 /* hashtable for indexing species tree labels */
 hashtable_t * species_hash(stree_t * tree)
 {

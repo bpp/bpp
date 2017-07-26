@@ -430,14 +430,6 @@ static void cb_dealloc_pairlabel(void * data)
   free(pair);
 }
 
-static int cb_cmp_pairlabel(void * a, void * b)
-{
-  pair_t * pair = (pair_t *)a;
-  char * label = (char *)b;
-
-  return (!strcmp(pair->label,label));
-}
-
 static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
 {
   unsigned int i,j;
