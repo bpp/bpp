@@ -378,7 +378,9 @@ int main (int argc, char * argv[])
 
   show_header();
 
+  /* intiialize random number generators */
   srand48(opt_seed);
+  legacy_init();
 
   if (opt_help)
   {

@@ -552,6 +552,7 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 
 double legacy_rndu(void);
 double legacy_rnd_symmetrical(void);
+void legacy_init(void);
 
 /* functions in gtree.c */
 

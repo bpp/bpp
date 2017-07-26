@@ -27,6 +27,11 @@
 /* legacy random number generators */
 static unsigned int z_rndu = 666;
 
+void legacy_init()
+{
+  z_rndu = (unsigned int)opt_seed;
+}
+
 double legacy_rndu()
 {
 /* 32-bit integer assumed.

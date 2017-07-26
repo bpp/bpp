@@ -309,8 +309,6 @@ void cmd_a00()
 
   printf("logL0 = %f   logP0 = %f\n", logl_sum, logpr_sum);
 
-  printf("Starting MCMC\n");
-
   /* free weights array */
   free(weights);
 
@@ -322,9 +320,18 @@ void cmd_a00()
   /* print header in mcmc file */
   mcmc_printheader(fp_mcmc,stree);
 
+  unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
+  progress_init("Running MCMC...", total_steps);
+  unsigned long curstep = 0;
+
   /* start of MCMC loop */
   for (i = -opt_burnin; i < opt_samples*opt_samplefreq; ++i)
   {
+    
+    /* update progress bar */
+    if (!opt_quiet)
+      progress_update(curstep);
+
     /* reset finetune parameters */
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
@@ -367,7 +374,11 @@ void cmd_a00()
     }
 
     /* TODO: print on screen */
+    
+    curstep++;
   }
+
+  progress_done();
 
   free(pjump);
 
