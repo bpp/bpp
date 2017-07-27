@@ -129,23 +129,6 @@ long getusec(void)
   return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
-void show_rusage()
-{
-  struct rusage r_usage;
-  getrusage(RUSAGE_SELF, & r_usage);
-
-  fprintf(stderr, "Time: %.3fs (user)", r_usage.ru_utime.tv_sec * 1.0 + (double) r_usage.ru_utime.tv_usec * 1.0e-6);
-  fprintf(stderr, " %.3fs (sys)", r_usage.ru_stime.tv_sec * 1.0 + r_usage.ru_stime.tv_usec * 1.0e-6);
-
-#if defined __APPLE__
-  /* Mac: ru_maxrss gives the size in bytes */
-  fprintf(stderr, " Memory: %.0fMB\n", r_usage.ru_maxrss * 1.0e-6);
-#else
-  /* Linux: ru_maxrss gives the size in kilobytes  */
-  fprintf(stderr, " Memory: %.0fMB\n", r_usage.ru_maxrss * 1.0e-3);
-#endif
-}
-
 FILE * xopen(const char * filename, const char * mode)
 {
   FILE * out = fopen(filename, mode);

@@ -26,7 +26,6 @@ static size_t string_length = 0;
 
 static char * append(size_t * current_len, const char * s2, size_t append_len)
 {
-  printf("%ld %s %ld\n", *current_len, s2, append_len);
   map_lval.s = (char *)xrealloc(map_lval.s, sizeof(char) * (*current_len+append_len+1));
   strncpy(&map_lval.s[*current_len], s2, append_len);
   map_lval.s[*current_len + append_len]=0;

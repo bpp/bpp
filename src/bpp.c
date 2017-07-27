@@ -359,7 +359,7 @@ void fillheader()
            "%s %s_%s, %1.fGB RAM, %ld cores",
            PROG_NAME, PROG_VERSION, PROG_ARCH,
            arch_get_memtotal() / 1024.0 / 1024.0 / 1024.0,
-           sysconf(_SC_NPROCESSORS_ONLN));
+           arch_get_cores());
 }
 
 void show_header()
@@ -379,7 +379,7 @@ int main (int argc, char * argv[])
   show_header();
 
   /* intiialize random number generators */
-  srand48(opt_seed);
+  //srand48(opt_seed);
   legacy_init();
 
   if (opt_help)

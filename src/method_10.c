@@ -52,9 +52,6 @@ void cmd_a10()
   /* load species tree */
   stree_t * stree = load_tree();
 
-  /* init random number generator */
-  srand48(opt_seed);
-
   /* parse the phylip file */
   printf("Parsed tree\n");
 

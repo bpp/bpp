@@ -53,7 +53,7 @@ OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      delimit.o $(AVX2OBJ)
 
 $(PROG): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)
 
 %_avx.o: %_avx.c
 	$(CC) $(CFLAGS) -c -mavx -o $@ $<

@@ -20,6 +20,7 @@
 */
 
 #include <assert.h>
+#include <fcntl.h>
 #include <search.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -31,12 +32,10 @@
 #include <limits.h>
 #include <locale.h>
 #include <math.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <stdint.h>
 #include <unistd.h>
-#if (!defined(WINNT) && !defined(WIN32) && !defined(WIN64))
-#include <sys/resource.h>
-#endif
 #include <x86intrin.h>
 
 /* constants */
@@ -44,11 +43,39 @@
 #define PROG_NAME "bpp"
 #define PROG_VERSION "v0.0.0"
 
-#ifdef __APPLE__
-#define PROG_ARCH "macosx_x86_64"
+#ifdef __PPC__
+
+#ifdef __LITTLE_ENDIAN__
+#define PROG_CPU "ppc64le"
 #else
-#define PROG_ARCH "linux_x86_64"
+#error "Big endian ppc64 CPUs not supported"
 #endif
+
+#else
+
+#define PROG_CPU "x86_64"
+
+#endif
+
+#ifdef __APPLE__
+#define PROG_OS "osx"
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#endif
+
+#ifdef __linux__
+#define PROG_OS "linux"
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+#endif
+
+#ifdef _WIN32
+#define PROG_OS "win"
+#include <windows.h>
+#include <psapi.h>
+#endif
+
+#define PROG_ARCH PROG_OS "_" PROG_CPU
 
 #define BPP_FAILURE  0
 #define BPP_SUCCESS  1
@@ -406,7 +433,6 @@ char * xstrchrnul(char *s, int c);
 char * xstrdup(const char * s);
 char * xstrndup(const char * s, size_t len);
 long getusec(void);
-void show_rusage(void);
 FILE * xopen(const char * filename, const char * mode);
 void * pll_aligned_alloc(size_t size, size_t alignment);
 void pll_aligned_free(void * ptr);
@@ -479,6 +505,8 @@ void stree_fini(void);
 unsigned long arch_get_memused(void);
 
 unsigned long arch_get_memtotal(void);
+
+long arch_get_cores(void);
 
 /* functions in msa.c */
 
