@@ -1026,7 +1026,7 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
       T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
     }
 
-    if (snode->event_count)
+    if (snode->event_count[msa_index])
       logpr += snode->event_count[msa_index] * log(2.0/snode->theta);
 
     if (T2h)
