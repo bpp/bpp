@@ -63,6 +63,10 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **stree.c**           | Functions for setting and processing the species tree                             |
 | **util.c**            | Various common utility functions.                                                 |
 
+# Acknowledgements
+
+Special thanks to Yuttapong Thawornwattana for testing and bug reports.
+
 # References
 
 * Flouri T., Carrasco FI, Darriba D., Aberer AJ, Nguyen LT, Minh BQ, Haeseler A., Stamatakis A. (2015)
