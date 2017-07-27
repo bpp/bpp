@@ -391,7 +391,7 @@ double stree_propose_theta(gtree_t ** gtree, stree_t * stree)
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    if (snode->theta)
+    if (snode->theta >= 0)
     {
       accepted += propose_theta(gtree, stree->locus_count, stree->nodes[i]);
       theta_count++;

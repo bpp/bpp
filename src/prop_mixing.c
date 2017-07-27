@@ -50,7 +50,8 @@ static void gtree_all_partials(gnode_t * root,
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
   unsigned i,j,k;
-  unsigned int theta_count, tau_count;
+  unsigned int theta_count=0;
+  unsigned int tau_count=0;
   double lnc,c;
 //  double finetune = 0.3;
   double lnacceptance;
@@ -58,11 +59,13 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
 
   /* TODO: Account for integrated out theta, and also for rj-MCMC */
-  theta_count = stree->tip_count + stree->inner_count;
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->theta > 0)
+      theta_count++;
 
-  /* TODO: This will not be the same for rj-MCMC where collapsed species tree
-   * nodes will have a tau=0 */
-  tau_count   = stree->inner_count;
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->tau > 0)
+      tau_count++;
 
   lnc = opt_finetune_mix * legacy_rnd_symmetrical();
   c = exp(lnc);

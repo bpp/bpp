@@ -88,7 +88,7 @@ static void reset_finetune(double * pjump)
 static void mcmc_printheader(FILE * fp, stree_t * stree)
 {
   int print_labels = 1;
-  unsigned int i,j=0;
+  unsigned int i;
   fprintf(fp, "Gen");
 
   /* TODO: Account for integrated out theta */
@@ -98,40 +98,24 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     print_labels = 0;
 
   /* 1. Print thetas */
-
-  /* first print thetas for tips */
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->theta >= 0)
     {
       if (print_labels)
-        fprintf(fp, "\ttheta_%d%s", ++j, stree->nodes[i]->label);
+        fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
       else
-        fprintf(fp, "\ttheta_%d", ++j);
+        fprintf(fp, "\ttheta_%d", i+1);
     }
-
-  /* then for inner nodes */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    if (stree->nodes[i]->theta >= 0)
-    {
-      if (print_labels)
-        fprintf(fp, "\ttheta_%d%s", ++j, stree->nodes[i]->label);
-      else
-        fprintf(fp, "\ttheta_%d", ++j);
-    }
-  }
 
   /* 2. Print taus for inner nodes */
-  j = stree->tip_count;
-
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau)
     {
       if (print_labels)
-        fprintf(fp, "\ttau_%d%s", ++j, stree->nodes[i]->label);
+        fprintf(fp, "\ttau_%d%s", i+1, stree->nodes[i]->label);
       else
-        fprintf(fp, "\ttau_%d", ++j);
+        fprintf(fp, "\ttau_%d", i+1);
     }
   }
 
