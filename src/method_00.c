@@ -276,9 +276,9 @@ void cmd_a00()
        current gene tree */
     unsigned int param_indices[1] = {0};
     logl = locus_root_loglikelihood(locus[i],
-                                           gtree[i]->root,
-                                           param_indices,
-                                           NULL);
+                                    gtree[i]->root,
+                                    param_indices,
+                                    NULL);
     logl_sum += logl;
 
     /* store current log-likelihood in each gene tree structure */

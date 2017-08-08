@@ -614,6 +614,14 @@ static void fill_seqin_counts(stree_t * stree, int msa_index)
   fill_seqin_counts_recursive(stree->root,msa_index);
 }
 
+static int cb_trav_full(snode_t * x)
+{
+  if (!x->left)
+    return 0;
+
+  return 1;
+}
+
 static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 {
   int lineage_count = 0;
@@ -633,7 +641,29 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
          stree->inner_count * sizeof(snode_t *));
 
   /* sort epochs in ascending order of speciation times */
-  qsort(&(epoch[0]), stree->inner_count, sizeof(snode_t *), cb_cmp_spectime);
+  stree_traverse(stree->root,
+                 TREE_TRAVERSE_POSTORDER,
+                 cb_trav_full,
+                 epoch,
+                 &epoch_count);
+
+  assert(epoch_count == stree->inner_count);
+
+  snode_t ** sortptr = epoch;
+
+  for (j = 0, i = 0; i < stree->inner_count; ++i)
+  {
+    if (epoch[i]->tau == 0)
+    {
+      if (i != j)
+        SWAP(epoch[i], epoch[j]);
+      
+      ++j;
+    }
+  }
+  sortptr += j;
+  qsort(&(sortptr[0]), stree->inner_count-j, sizeof(snode_t *), cb_cmp_spectime);
+
   epoch_count = stree->inner_count;
 
   if (opt_debug)
@@ -709,9 +739,16 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   /* loop until we are left with only 1 lineage in one ancestral population */
   for (; ; --pop_count)
   {
+    /* set max waiting time for this epoch */
+    if (pop_count == 1)
+      tmax = -1;
+    else
+      tmax = epoch[e]->tau;
       
     while (1)
     {
+      if (!tmax) break;
+
       /* calculate poisson rates: ci[j] is coalescent rate for population j */
       for (j=0, sum=0; j < pop_count; ++j)
       {
@@ -725,9 +762,6 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         else
           ci[j] = 0;
       }
-
-      /* set max waiting time for this epoch */
-      tmax = epoch[e]->tau;
 
       if (sum < 1e-300)
         break;
@@ -1006,7 +1040,7 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
       qsort(sortbuffer+1,j-1,sizeof(double),cb_cmp_double_asc);
 
     #if 0
-    printf("Population: %s\n", snode->label);
+    printf("Population: %s    tau: %f   theta: %f\n", snode->label, snode->tau, snode->theta);
 
     if (snode->parent)
       n = j-1;
@@ -1020,8 +1054,9 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
     printf("\n");
     #endif
 
-
-    for (k=1, n=snode->seqin_count[msa_index]; k < j; ++k, --n)
+    /* skip the last step in case the last value of n was supposed to be 1 */
+    if ((unsigned int)(snode->seqin_count[msa_index]) == j-1) --j;
+    for (k=1,n=snode->seqin_count[msa_index]; k < j; ++k, --n)
     {
       T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
     }

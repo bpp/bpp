@@ -206,9 +206,16 @@ void init_locus(locus_t * locus, msa_t * msa)
 void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights)
 {
+  unsigned int i;
+
   memcpy(locus->pattern_weights,
          pattern_weights,
          sizeof(unsigned int)*locus->sites);
+
+  locus->pattern_weights_sum = 0;
+  for (i = 0; i < locus->sites; ++i)
+    locus->pattern_weights_sum += pattern_weights[i];
+
 }
 
 static int update_charmap(locus_t * locus, const unsigned int * map)
@@ -746,6 +753,7 @@ locus_t * locus_create(unsigned int tips,
   /* implicitely set all weights to 1 */
   for (i = 0; i < locus->sites; ++i)
     locus->pattern_weights[i] = 1;
+  locus->pattern_weights_sum = sites;
 
   /* scale_buffer */
   locus->scale_buffer = (unsigned int **)xcalloc(locus->scale_buffers,

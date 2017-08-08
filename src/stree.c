@@ -172,7 +172,10 @@ static void stree_init_tau_recursive(snode_t * node,
   /* get species record associate with species tree node */
   double tau_parent = node->parent->tau;
 
-  node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+  if (node->tau)
+    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+  else
+    node->left->theta = node->right->theta = -1;
 
   stree_init_tau_recursive(node->left,prop);
   stree_init_tau_recursive(node->right,prop);
@@ -180,12 +183,27 @@ static void stree_init_tau_recursive(snode_t * node,
 
 static void stree_init_tau(stree_t * stree)
 {
+  unsigned int i;
+
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    stree->nodes[i]->tau = 1;
+  
+  if (opt_delimit && !opt_stree)    /* method A10 */
+  {
+    double r = legacy_rndu();
+    int index = (int)(r * delimitation_getparam_count());
+    delimitation_set(stree,index);
+
+    char * s = delimitation_getparam_string();
+    printf("Starting delimitation: %s\n", s);
+  }
   /* Initialize speciation times for each extinct species */ 
 
   double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
 
   /* set the speciation time for root */
-  stree->root->tau = opt_tau_beta/(opt_tau_alpha-1) * (0.9 + 0.2*legacy_rndu());
+  if (stree->root->tau)
+    stree->root->tau = opt_tau_beta/(opt_tau_alpha-1) * (0.9 + 0.2*legacy_rndu());
 
   /* recursively set the speciation time for the remaining inner nodes */
   stree_init_tau_recursive(stree->root->left,prop);
@@ -713,4 +731,129 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
   }
 
   return ((double)accepted/candidate_count);
+}
+
+void stree_rootdist(stree_t * stree,
+                    list_t * maplist,
+                    msa_t ** msalist,
+                    unsigned int ** weights,
+                    int * ol)
+{
+  unsigned int i,j,k,n;
+  unsigned int msa_count = stree->locus_count;
+  unsigned int lroot_index = stree->root->left->node_index;
+  unsigned int jpop_index, kpop_index;
+  unsigned int diff_count;
+  unsigned int locus_used = 0;
+  double diff_locus;
+  double diff_pair;
+  double md, vd;
+  char * jseq;
+  char * kseq;
+
+  hashtable_t * sht = species_hash(stree);
+  hashtable_t * mht = maplist_hash(maplist,sht);
+
+  assert(msa_count);
+
+  stree->root_age = opt_tau_beta / (opt_tau_alpha-1)*4;
+  printf("Root age beginning = %f\n", stree->root_age);
+  /* find max alignment length */
+  size_t maxalloc = 0;
+  for (i = 0; i < msa_count; ++i)
+    if ((size_t)(msalist[i]->count) > maxalloc)
+      maxalloc = msalist[i]->count;
+
+  snode_t ** pop = (snode_t **)xmalloc(maxalloc*sizeof(snode_t *));
+
+  md = vd = 0;
+
+  for (i = 0; i < msa_count; ++i)
+  {
+    diff_count = 0;
+    diff_locus = 0;
+
+    /* find the population for each sequence */
+    for (j = 0; j < (unsigned int)(msalist[i]->count); ++j)
+    {
+      char * label = msalist[i]->label[j];
+      label = strchr(label, '^');
+      if (!label)
+        fatal("Cannot find species tag on sequence %s of locus %d",
+              msalist[i]->label[j], i);
+      
+      /* skip the '^' mark */
+      label++;
+      if (!(*label))
+        fatal("Sequence %s of locus %d contains no label",
+              msalist[i]->label[j], i);
+
+      pair_t * pair = hashtable_find(mht,
+                                     (void *)label,
+                                     hash_fnv(label),
+                                     cb_cmp_pairlabel);
+
+      if (!pair)
+        fatal("!! Cannot find species mapping for sequence %s of locus %d",
+              label, i);
+
+      pop[j] = (snode_t *)(pair->data);
+    }
+
+
+    for (j = 0; j < (unsigned int)(msalist[i]->count); ++j)
+    {
+      for (k = j+1; k < (unsigned int)(msalist[i]->count); ++k)
+      {
+        /* get population index for node j and k */
+        jpop_index = pop[j]->node_index;
+        kpop_index = pop[k]->node_index;
+
+        /* check that the mRCA of the two nodes is the species tree root */
+        if (stree->pptable[jpop_index][lroot_index] !=
+            stree->pptable[kpop_index][lroot_index])
+        {
+          /* obtain the two sequences */
+          jseq = msalist[i]->sequence[j];
+          kseq = msalist[i]->sequence[k];
+          diff_pair = 0;
+
+          for (n = 0; n < (unsigned int)(msalist[i]->length); ++n)
+          {
+            if (jseq[n] != kseq[n])
+              diff_pair += weights[i][n];
+          }
+          diff_pair  /= ol[i];
+          diff_locus += diff_pair;
+          ++diff_count;
+        }
+      }
+    }
+    if (!diff_count) continue;
+
+    locus_used++;
+
+    diff_locus /= (2*diff_count);
+    vd += (diff_locus-md)*(diff_locus-md) * (locus_used-1)/locus_used;
+    md = (md * (locus_used-1) + diff_locus)/locus_used;
+  }
+  
+  vd /= msa_count;
+  if (locus_used >= 2)
+  {
+    double theta = 2*sqrt(vd);
+    theta = sqrt(vd*4+1) - 1;
+    theta = (2*sqrt(vd) + sqrt(vd*4+1) - 1)/2;
+    if (md - theta/2 > 0)
+      stree->root_age = md-theta/2;
+    else
+      stree->root_age = md;
+  }
+  else
+    stree->root_age = md;
+
+  printf("root dist = %7.5f\n", stree->root_age);
+  hashtable_destroy(sht,NULL);
+  hashtable_destroy(mht,cb_dealloc_pairlabel);
+  free(pop);
 }

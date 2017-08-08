@@ -92,6 +92,9 @@
 #define COMPRESS_GENERAL                1
 #define COMPRESS_JC69                   2
 
+#define BPP_DELIMIT_PRIOR_DIRICHLET     0
+#define BPP_DELIMIT_PRIOR_UNIFORM       1
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -192,6 +195,10 @@ typedef struct stree_s
   int ** pptable;
 
   snode_t * root;
+
+  double root_age;
+
+  int mark;
 } stree_t;
 
 typedef struct gnode_s
@@ -208,6 +215,7 @@ typedef struct gnode_s
   void * data;
 
   snode_t * pop;
+  snode_t * old_pop;
 
   /* pointer to the dlist item this node is wrapped into */
   dlist_item_t * event;
@@ -274,6 +282,7 @@ typedef struct locus_s
   unsigned int ** scale_buffer;
   double ** frequencies;
   unsigned int * pattern_weights;
+  unsigned int pattern_weights_sum;
 
   int * eigen_decomp_valid;
   double ** eigenvecs;
@@ -375,6 +384,7 @@ extern long opt_quiet;
 extern long opt_seed;
 extern long opt_stree;
 extern long opt_delimit;
+extern long opt_delimit_prior;
 extern long opt_cleandata;
 extern long opt_debug;
 extern long opt_samples;
@@ -500,6 +510,8 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 
 void stree_fini(void);
 
+void stree_rootdist(stree_t * stree, list_t * maplist, msa_t ** msalist, unsigned int ** weights, int * ol);
+
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
@@ -581,6 +593,8 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
 double legacy_rndu(void);
 double legacy_rnd_symmetrical(void);
 void legacy_init(void);
+double legacy_rndbeta (double p, double q);
+double legacy_rndgamma (double a);
 
 /* functions in gtree.c */
 
@@ -617,6 +631,24 @@ gnode_t ** gtree_return_partials(gnode_t * root,
 /* functions in prop_mixing.c */
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+
+/* functions in prop_rj.c */
+
+long prop_split(gtree_t ** gtree,
+                stree_t * stree,
+                locus_t ** locus,
+                double pr_split,
+                long * param_count);
+
+long prop_join(gtree_t ** gtree,
+               stree_t * stree,
+               locus_t ** locus,
+               double pr_split,
+               long * param_count);
+
+void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count);
+
+void rj_fini();
 
 /* functions in locus.c */
 
@@ -806,7 +838,23 @@ void cmd_a10(void);
 
 long delimitations_count(stree_t * stree);
 
-void delimitations_enumerate(stree_t * stree);
+long delimitations_init(stree_t * stree);
+
+long histories(stree_t * stree);
+
+void delimitations_fini(void);
+
+void delimitation_set(stree_t * stree, long index);
+
+long delimitation_getparam_count(void);
+
+char * delimitation_getparam_string();
+
+long delimit_getindex(stree_t * stree);
+
+void delimit_setindex(long index);
+
+void delimit_resetpriors(void);
 
 /* functions in core_partials_sse.c */
 

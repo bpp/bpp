@@ -40,6 +40,7 @@ long opt_quiet;
 long opt_seed;
 long opt_stree;
 long opt_delimit;
+long opt_delimit_prior;
 long opt_cleandata;
 long opt_debug;
 long opt_samples;
@@ -89,6 +90,7 @@ static struct option long_options[] =
   {"finetune_params", required_argument, 0, 0 },  /* 19 */
   {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
   {"reorder",         required_argument, 0, 0 },  /* 21 */
+  {"delimit_prior",   required_argument, 0, 0 },  /* 22 */
   { 0, 0, 0, 0 }
 };
 
@@ -129,32 +131,33 @@ void args_init(int argc, char ** argv)
 
   progname = argv[0];
 
-  opt_help = 0;
-  opt_version = 0;
-  opt_quiet = 0;
-  opt_streefile = NULL;
-  opt_outfile = NULL;
-  opt_msafile = NULL;
-  opt_mapfile = NULL;
-  opt_mcmcfile = NULL;
-  opt_seed = (long)time(NULL);
-  opt_stree = 0;
+  opt_burnin = 100;
+  opt_cleandata = 0;
+  opt_debug = 0;
   opt_delimit = 0;
+  opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
+  opt_finetune_gtage = 5;
+  opt_finetune_gtspr = 0.001;
+  opt_finetune_mix   = 0.3;
+  opt_finetune_reset = 0;
+  opt_finetune_tau   = 0.001;
+  opt_finetune_theta = 0.001;
+  opt_help = 0;
+  opt_quiet = 0;
+  opt_samplefreq = 10;
+  opt_samples = 10000;
+  opt_stree = 0;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
-  opt_cleandata = 0;
-  opt_debug = 0;
-  opt_samples = 10000;
-  opt_samplefreq = 10;
-  opt_burnin = 100;
-  opt_finetune_reset = 0;
-  opt_finetune_gtage = 5;
-  opt_finetune_gtspr = 0.001;
-  opt_finetune_theta = 0.001;
-  opt_finetune_tau   = 0.001;
-  opt_finetune_mix   = 0.3;
+  opt_version = 0;
+  opt_msafile = NULL;
+  opt_mapfile = NULL;
+  opt_mcmcfile = NULL;
+  opt_outfile = NULL;
+  opt_seed = (long)time(NULL);
+  opt_streefile = NULL;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -249,6 +252,15 @@ void args_init(int argc, char ** argv)
 
       case 21:
         opt_reorder = optarg;
+        break;
+
+      case 22:
+        if (!strcmp(optarg,"dirichlet"))
+          opt_delimit_prior = BPP_DELIMIT_PRIOR_DIRICHLET;
+        else if (!strcmp(optarg,"uniform"))
+          opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
+        else
+          fatal("Unknown species delimitation prior: %s", optarg);
         break;
         
       default:
