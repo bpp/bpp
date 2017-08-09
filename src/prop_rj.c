@@ -632,9 +632,6 @@ long prop_split(gtree_t ** gtree,
 
     for (i = 0; i < stree->locus_count; ++i)
     {
-      gtree[i]->logl  = gtree[i]->old_logl;
-      gtree[i]->logpr = gtree[i]->old_logpr;
-
       /* TODO: Perhaps only nodevec needs to be traversed and not all nodes */
       for (k = 0; k < gtree[i]->tip_count + gtree[i]->inner_count; ++k)
       {
@@ -660,13 +657,19 @@ long prop_split(gtree_t ** gtree,
         tmp->mark = 0;
       }
           
-      locus_update_matrices_jc69(locus[i],
-                                 nodevec+nodevec_offset[i],
-                                 nodevec_count[i]);
+      if (gtree[i]->logl != gtree[i]->old_logl)
+      {
+        locus_update_matrices_jc69(locus[i],
+                                   nodevec+nodevec_offset[i],
+                                   nodevec_count[i]);
 
-      for (k = 0; k < partials_count[i]; ++k)
-        partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                   partials[i][k]->clv_index);
+        for (k = 0; k < partials_count[i]; ++k)
+          partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                     partials[i][k]->clv_index);
+        gtree[i]->logl  = gtree[i]->old_logl;
+      }
+      gtree[i]->logpr = gtree[i]->old_logpr;
+
 
       node->logpr_contrib[i] = node->old_logpr_contrib[i];
       node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
