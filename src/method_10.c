@@ -179,6 +179,22 @@ void cmd_a10()
   if (opt_burnin < 0)
     fatal("--burnin must be a positive integer");
 
+  if (opt_rjmcmc_method == 0)
+  {
+    if (opt_rjmcmc_epsilon <= 0)
+      fatal("--rjmcmc_epsilon must be a positive real greater than zero");
+  }
+  else if (opt_rjmcmc_method == 1)
+  {
+    if (opt_rjmcmc_alpha <= 0)
+      fatal("--rjmcmc_alpha must be a positive real greater than zero");
+
+    if (opt_rjmcmc_mean <= 0)
+      fatal("--rjmcmc_mean must be a positive real greater than zero");
+  }
+  else
+    fatal("Internal error in deciding rjMCMC algorithm");
+
   /* load species tree */
   stree_t * stree = load_tree();
 

@@ -47,6 +47,7 @@ long opt_samples;
 long opt_samplefreq;
 long opt_burnin;
 long opt_finetune_reset;
+long opt_rjmcmc_method;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -56,6 +57,9 @@ double opt_finetune_gtspr;
 double opt_finetune_theta;
 double opt_finetune_tau;
 double opt_finetune_mix;
+double opt_rjmcmc_alpha;
+double opt_rjmcmc_mean;
+double opt_rjmcmc_epsilon;
 char * opt_mapfile;
 char * opt_msafile;
 char * opt_mapfile;
@@ -91,6 +95,9 @@ static struct option long_options[] =
   {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
   {"reorder",         required_argument, 0, 0 },  /* 21 */
   {"delimit_prior",   required_argument, 0, 0 },  /* 22 */
+  {"rjmcmc_alpha",    required_argument, 0, 0 },  /* 23 */
+  {"rjmcmc_mean",     required_argument, 0, 0 },  /* 24 */
+  {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 25 */
   { 0, 0, 0, 0 }
 };
 
@@ -119,6 +126,27 @@ static int args_getftparams(char * arg)
   if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
     return 0;
   return 1;
+}
+
+static long args_getlong(char * arg)
+{
+  int len = 0;
+  long temp;
+
+  int ret = sscanf(arg, "%ld%n", &temp, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
+    fatal("Illegal option argument");
+  return temp;
+}
+
+static double args_getdouble(char * arg)
+{
+  int len = 0;
+  double temp = 0;
+  int ret = sscanf(arg, "%lf%n", &temp, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
+    fatal("Illegal option argument");
+  return temp;
 }
 
 void args_init(int argc, char ** argv)
@@ -158,6 +186,10 @@ void args_init(int argc, char ** argv)
   opt_outfile = NULL;
   opt_seed = (long)time(NULL);
   opt_streefile = NULL;
+  opt_rjmcmc_alpha = -1;
+  opt_rjmcmc_mean = -1;
+  opt_rjmcmc_epsilon = -1;
+  opt_rjmcmc_method = -1;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -192,7 +224,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 7:
-        opt_seed = atol(optarg);
+        opt_seed = args_getlong(optarg);
         break;
 
       case 8:
@@ -226,15 +258,15 @@ void args_init(int argc, char ** argv)
         break;
 
       case 15:
-        opt_samples = atol(optarg);
+        opt_samples = args_getlong(optarg);
         break;
 
       case 16:
-        opt_samplefreq = atol(optarg);
+        opt_samplefreq = args_getlong(optarg);
         break;
 
       case 17:
-        opt_burnin = atol(optarg);
+        opt_burnin = args_getlong(optarg);
         break;
 
       case 18:
@@ -261,6 +293,27 @@ void args_init(int argc, char ** argv)
           opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
         else
           fatal("Unknown species delimitation prior: %s", optarg);
+        break;
+
+      case 23:
+        if (opt_rjmcmc_method == 0)
+          fatal("Cannot use --rjmcmc_alpha with --rjmcmc_epsilon");
+        opt_rjmcmc_alpha = args_getdouble(optarg);
+        opt_rjmcmc_method = 1;
+        break;
+
+      case 24:
+        if (opt_rjmcmc_method == 0)
+          fatal("Cannot use --rjmcmc_mean with --rjmcmc_epsilon");
+        opt_rjmcmc_mean = args_getdouble(optarg);
+        opt_rjmcmc_method = 1;
+        break;
+
+      case 25:
+        if (opt_rjmcmc_method == 1)
+          fatal("Cannot use --rjmcmc_epsilon with --rjmcmc_alpha/--rjmcmc_mean");
+        opt_rjmcmc_epsilon = args_getdouble(optarg);
+        opt_rjmcmc_method = 0;
         break;
         
       default:

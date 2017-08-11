@@ -34,9 +34,9 @@
         log(b))
 #define log_pdfinvgamma(x, a, b)  ( (a)*log(b) - lgamma(a) - (a+1)*log(x) - (b)/(x) )
 
-static int opt_rjalgorithm = 1;
-static double opt_finetune_rja = 2;
-static double opt_finetune_rjm = 1;
+//static int opt_rjalgorithm = 1;
+//static double opt_finetune_rja = 2;
+//static double opt_finetune_rjm = 1;
 
 static gnode_t ** nodevec;
 static unsigned int * nodevec_offset;
@@ -472,18 +472,18 @@ long prop_split(gtree_t ** gtree,
   /* Store the left child theta, and update it according to RJ algorithm */
   node->left->old_theta = node->left->theta;
 
-  if (!opt_rjalgorithm)
+  if (!opt_rjmcmc_method)
   {
-    node->left->theta = node->theta*exp(opt_finetune_rja*(legacy_rndu() - 0.5));
-    thetafactor *= opt_finetune_rja * node->left->theta;
+    node->left->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+    thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
   }
   else
   {
-    node->left->theta = legacy_rndgamma(opt_finetune_rja) /
-                        (opt_finetune_rja/(opt_finetune_rjm*node->theta));
+    node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                        (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
     thetafactor /= pdf_gamma(node->left->theta,
-                             opt_finetune_rja,
-                             opt_finetune_rja/(opt_finetune_rjm*node->theta));
+                             opt_rjmcmc_alpha,
+                             opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
   }
 
   lnacceptance += log_pdfinvgamma(node->left->theta,
@@ -493,18 +493,18 @@ long prop_split(gtree_t ** gtree,
   /* Store the right child theta, and update it according to RJ algorithm */
   node->right->old_theta = node->right->theta;
 
-  if (!opt_rjalgorithm)
+  if (!opt_rjmcmc_method)
   {
-    node->right->theta = node->theta*exp(opt_finetune_rja*(legacy_rndu() - 0.5));
-    thetafactor *= opt_finetune_rja * node->right->theta;
+    node->right->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+    thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
   }
   else
   {
-    node->right->theta = legacy_rndgamma(opt_finetune_rja) /
-                         (opt_finetune_rja/(opt_finetune_rjm*node->theta));
+    node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                         (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
     thetafactor /= pdf_gamma(node->right->theta,
-                             opt_finetune_rja,
-                             opt_finetune_rja/(opt_finetune_rjm*node->theta));
+                             opt_rjmcmc_alpha,
+                             opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
   }
 
   lnacceptance += log_pdfinvgamma(node->right->theta,
@@ -777,19 +777,19 @@ long prop_join(gtree_t ** gtree,
 
   if (node->left->theta > 0)
   {
-    if (!opt_rjalgorithm)
+    if (!opt_rjmcmc_method)
     {
-      double y = exp(opt_finetune_rja*0.5);
+      double y = exp(opt_rjmcmc_epsilon*0.5);
       if (node->left->theta < node->theta/y ||
           node->left->theta > node->theta*y)
         return 2;  /* move disallowed */
-      thetafactor /= opt_finetune_rja * node->left->theta;
+      thetafactor /= opt_rjmcmc_epsilon * node->left->theta;
     }
     else
     {
       thetafactor *= pdf_gamma(node->left->theta,
-                               opt_finetune_rja,
-                               opt_finetune_rja/(opt_finetune_rjm*node->theta));
+                               opt_rjmcmc_alpha,
+                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
     }
     lnacceptance -= log_pdfinvgamma(node->left->theta,
                                     opt_theta_alpha,
@@ -801,19 +801,19 @@ long prop_join(gtree_t ** gtree,
 
   if (node->right->theta > 0)
   {
-    if (!opt_rjalgorithm)
+    if (!opt_rjmcmc_method)
     {
-      double y = exp(opt_finetune_rja*0.5);
+      double y = exp(opt_rjmcmc_epsilon*0.5);
       if (node->right->theta < node->theta/y ||
           node->right->theta > node->theta*y)
         return 2;  /* move disallowed */
-      thetafactor /= opt_finetune_rja * node->right->theta;
+      thetafactor /= opt_rjmcmc_epsilon * node->right->theta;
     }
     else
     {
       thetafactor *= pdf_gamma(node->right->theta,
-                               opt_finetune_rja,
-                               opt_finetune_rja/(opt_finetune_rjm*node->theta));
+                               opt_rjmcmc_alpha,
+                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
     }
     lnacceptance -= log_pdfinvgamma(node->right->theta,
                                     opt_theta_alpha,
