@@ -165,6 +165,8 @@ typedef struct snode_s
 
   void * data;
 
+  double support;
+
   /* list of per-locus coalescent events */
   dlist_t ** event;
 
@@ -855,10 +857,13 @@ long delimitation_getparam_count(void);
 char * delimitation_getparam_string();
 
 long delimit_getindex(stree_t * stree);
+long delimit_getindexfromstring(char * model);
 
 void delimit_setindex(long index);
 
 void delimit_resetpriors(void);
+
+void delimit_summary(stree_t * stree);
 
 /* functions in core_partials_sse.c */
 

@@ -32,6 +32,138 @@ static int trav_size = 0;
 
 const char * const * bs_last_addr = NULL;
 
+char buffer[LINEALLOC];
+char * line = NULL;
+size_t line_size = 0;
+size_t line_maxsize = 0;
+
+static void reallocline(size_t newmaxsize)
+{
+  char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
+
+  memcpy(temp,line,line_size*sizeof(char));
+  free(line);
+  line = temp;
+  line_maxsize = newmaxsize;
+}
+
+static char * getnextline(FILE * fp)
+{
+  size_t len = 0;
+
+  line_size = 0;
+
+  /* read from file until newline or eof */
+  while (fgets(buffer, LINEALLOC, fp))
+  {
+    len = strlen(buffer);
+
+    if (line_size + len > line_maxsize)
+      reallocline(line_maxsize + LINEALLOC);
+
+    memcpy(line+line_size,buffer,len*sizeof(char));
+    line_size += len;
+
+    if (buffer[len-1] == '\n')
+    {
+      #if 0
+      if (line_size+1 > line_maxsize)
+        reallocline(line_maxsize+1);
+
+      line[line_size] = 0;
+      #else
+        line[line_size-1] = 0;
+      #endif
+
+      return line;
+    }
+  }
+
+  if (!line_size)
+  {
+    free(line);
+    line_maxsize = 0;
+    line = NULL;
+    return NULL;
+  }
+
+  if (line_size == line_maxsize)
+    reallocline(line_maxsize+1);
+
+  line[line_size] = 0;
+  return line;
+}
+
+static char * cb_serialize_support(const snode_t * node)
+{
+  char * s = NULL;
+
+  /* inner node */
+  if (node->left)
+    asprintf(&s, "#%f", node->support);
+  else
+    asprintf(&s, "%s", node->label);
+
+  return s;
+}
+
+void delimit_summary(stree_t * stree)
+{
+  long i,j,np;
+  long line_count = 0;
+  char model[2048];
+  FILE * fp;
+
+  /* open MCMC file for reading */
+  fp = xopen(opt_mcmcfile,"r");
+
+  double * posterior = (double *)xcalloc(dmodels_count,sizeof(double));
+
+  assert(stree->inner_count < 2048);
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->nodes[i]->support = 0;
+
+  /* skip first header line */
+  getnextline(fp);
+
+  while (getnextline(fp))
+  {
+    sscanf(line,"%ld\t%ld\t %s", &i, &np, model);
+
+    i = delimit_getindexfromstring(model);
+    posterior[i]++;
+
+    line_count++;
+  }
+
+  for (i = 0; i < dmodels_count; ++i)
+    posterior[i] /= line_count;
+
+  for (i = 0; i < dmodels_count; ++i)
+  {
+    for (j = 0; j < stree->inner_count; ++j)
+      if (dmodels[i][j] == '1')
+        stree->nodes[stree->tip_count+j]->support += posterior[i];
+  }
+
+  for (i = 0; i < dmodels_count; ++i)
+    printf("%4ld %s %f   %f\n",
+           i+1,
+           dmodels[i],
+           dprior[i],
+           posterior[i]);
+  
+  /* print guide tree */
+  char * newick = stree_export_newick(stree->root, cb_serialize_support);
+  printf("Guide tree with posterior probability for presence of nodes:\n");
+  printf("%s;\n", newick);
+
+  free(newick);
+  free(posterior);
+  fclose(fp);
+}
+
 long delimitation_getparam_count()
 {
   return dmodels_count;
@@ -53,6 +185,17 @@ int cb_strcmp(const void * s1, const void * s2)
   return strcmp(key, *arg);
 }
 
+long delimit_getindexfromstring(char * model)
+{
+  bsearch(model,
+          dmodels,
+          dmodels_count,
+          sizeof(char *),
+          (int(*)(const void *, const void*))cb_strcmp);
+  
+  return (char **)bs_last_addr - dmodels;
+}
+
 long delimit_getindex(stree_t * stree)
 {
   unsigned int i;
@@ -61,6 +204,7 @@ long delimit_getindex(stree_t * stree)
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     model[i - stree->tip_count] = stree->nodes[i]->tau > 0 ? '1' : '0';
   model[stree->tip_count-1] = 0;
+  
   
   bsearch(model,
           dmodels,
@@ -155,17 +299,17 @@ static void explore(snode_t ** start, snode_t ** end)
 
 static void preorder_recursive(snode_t * node,
                                unsigned int * index,
-                               snode_t ** buffer)
+                               snode_t ** outbuffer)
 {
   if (!node->left)
     return;
 
-  buffer[*index] = node;
+  outbuffer[*index] = node;
 
   *index = *index + 1;
 
-  preorder_recursive(node->left,  index, buffer);
-  preorder_recursive(node->right, index, buffer);
+  preorder_recursive(node->left,  index, outbuffer);
+  preorder_recursive(node->right, index, outbuffer);
 }
 
 long delimitations_init(stree_t * stree)

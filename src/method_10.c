@@ -334,7 +334,7 @@ void cmd_a10()
   progress_init("Running MCMC...", total_steps);
   unsigned long curstep = 0;
   
-  delimit_resetpriors();
+  //delimit_resetpriors();
 
   mcmc_printheader(fp_mcmc,stree);
 
@@ -418,7 +418,12 @@ void cmd_a10()
 
   free(pjump);
 
+  /* close file for writing */
   fclose(fp_mcmc);
+
+  /* print summary using the MCMC file */
+  delimit_summary(stree);
+
   delimitations_fini();
 
   for (i = 0; i < msa_count; ++i)
