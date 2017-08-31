@@ -165,7 +165,11 @@ typedef struct snode_s
 
   void * data;
 
+  /* clade support when delimiting species */
   double support;
+
+  /* branch weight when inferring species tree */
+  double weight;
 
   /* list of per-locus coalescent events */
   dlist_t ** event;
@@ -200,7 +204,7 @@ typedef struct stree_s
 
   double root_age;
 
-  int mark;
+//  int mark;
 } stree_t;
 
 typedef struct gnode_s
@@ -518,6 +522,19 @@ void stree_fini(void);
 
 void stree_rootdist(stree_t * stree, list_t * maplist, msa_t ** msalist, unsigned int ** weights, int * ol);
 
+void fill_seqin_counts(stree_t * stree, int msa_index);
+
+void reset_gene_leaves_count(stree_t * stree);
+
+int stree_propose_spr(stree_t ** streeptr,
+                      gtree_t *** gtree_list_ptr,
+                      stree_t ** scloneptr,
+                      gtree_t *** gclonesptr);
+
+gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * stree);
+
+stree_t * stree_clone_init(stree_t * stree);
+
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
@@ -633,6 +650,7 @@ double reflect(double t, double minage, double maxage);
 gnode_t ** gtree_return_partials(gnode_t * root,
                                  unsigned int msa_index,
                                  unsigned int * trav_size);
+void unlink_event(gnode_t * node, int msa_index);
 
 /* functions in prop_mixing.c */
 
@@ -655,6 +673,8 @@ long prop_join(gtree_t ** gtree,
 void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count);
 
 void rj_fini();
+
+double lnprior_species_model(stree_t * stree); /* TODO: Move function */
 
 /* functions in locus.c */
 
@@ -839,6 +859,10 @@ void cmd_a00(void);
 /* functions in method_10.c */
 
 void cmd_a10(void);
+
+/* functions in method_01.c */
+
+void cmd_a01(void);
 
 /* functions in delimit.c */
 

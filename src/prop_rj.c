@@ -105,6 +105,7 @@ void rj_fini()
   free(feasible);
 }
 
+#if 0
 /* TODO : this is the same as gtree.c */
 static void unlink_event(gnode_t * node, int msa_index)
 {
@@ -120,6 +121,7 @@ static void unlink_event(gnode_t * node, int msa_index)
   else
     node->pop->event[msa_index]->tail = node->event->prev;
 }
+#endif
 static double pdf_gamma(double x, double alpha, double beta)
 {
 /* gamma density: mean=alpha/beta; var=alpha/beta^2
@@ -383,7 +385,7 @@ static int rubber_proportional(stree_t * stree,
   return changed_count > 0;
 }
 
-static double lnprior_species_model(stree_t * stree)
+double lnprior_species_model(stree_t * stree)
 {
   double p;
 

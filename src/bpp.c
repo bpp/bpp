@@ -459,6 +459,10 @@ int main (int argc, char * argv[])
   {
     cmd_a10();
   }
+  else if (!opt_delimit)
+  {
+    cmd_a01();
+  }
 
   free(cmdline);
   return (0);

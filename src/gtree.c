@@ -609,7 +609,7 @@ static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
                                  rnode->event_count[msa_index];
 }
 
-static void fill_seqin_counts(stree_t * stree, int msa_index)
+void fill_seqin_counts(stree_t * stree, int msa_index)
 {
   fill_seqin_counts_recursive(stree->root,msa_index);
 }
@@ -930,7 +930,7 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
                            node->right->gene_leaves[j];
 
 }
-static void reset_gene_leaves_count(stree_t * stree)
+void reset_gene_leaves_count(stree_t * stree)
 {
   unsigned int i,j;
 
@@ -1125,7 +1125,7 @@ double reflect(double t, double minage, double maxage)
   return t;
 }
 
-static void unlink_event(gnode_t * node, int msa_index)
+void unlink_event(gnode_t * node, int msa_index)
 {
   /* first re-link the event before the current node with the one after */
   if (node->event->prev)
@@ -1159,7 +1159,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   {
     gnode_t * node = gtree->nodes[i];
 
-    /* compute minimum age */
+    /* find minimum children age */
     minage = MAX(node->left->time,node->right->time);
 
     if (node->left->pop != node->right->pop)
@@ -1190,6 +1190,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     tnew = reflect(tnew, minage, maxage);
 
     /* find the first ancestral pop with age higher than the proposed tnew */
+    /* TODO: Improvement: probably this can start from lpop/rpop (LCA of
+        populations of two daughter nodes) */
     for (pop = node->left->pop; pop->parent; pop = pop->parent)
       if (pop->parent->tau > tnew)
         break;
