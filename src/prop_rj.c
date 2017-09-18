@@ -147,9 +147,12 @@ static void locate_nodes(stree_t * stree,
 
   /* mark all coalescent events (inner nodes) that belong to population snode
      and have two lineages */
+
+  #if 0
   /* TODO: Sanity check - Remove */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
     assert(gtree->nodes[i]->mark == 0);
+  #endif
 
   /* mark all nodes that are on a lineage that passes left ancestor, upto tau
      upper, which cannot exceed population snode */
@@ -190,7 +193,8 @@ static int rubber_update(gnode_t * node, double term, int msa_index)
   {
     if ((node->mark & MARK_BRANCH_UPDATE) == 0)
     {
-      node->mark = MARK_BRANCH_UPDATE;
+      /* TODO: It is not required to mark with FLAG_PARTIAL_UPDATE */
+      node->mark = MARK_BRANCH_UPDATE | FLAG_PARTIAL_UPDATE;
       nv_locus[nodevec_count[msa_index]++] = node;
     }
     
@@ -209,7 +213,7 @@ static int rubber_update(gnode_t * node, double term, int msa_index)
 
   node->old_time = node->time;
   node->time *= term;
-  node->mark |= MARK_AGE_UPDATE;
+  node->mark |= MARK_AGE_UPDATE | FLAG_PARTIAL_UPDATE;
 
   nwithin += rubber_update(node->left,term,msa_index);
   nwithin += rubber_update(node->right,term,msa_index);
@@ -252,6 +256,8 @@ static int rubber_proportional(stree_t * stree,
     if ((tmp->mark & (MARK_ANCESTOR_LNODE | MARK_ANCESTOR_RNODE)) != 
         (MARK_ANCESTOR_LNODE | MARK_ANCESTOR_RNODE))
       continue;
+
+    tmp->mark |= FLAG_PARTIAL_UPDATE;
 
     changed_count++;
 

@@ -104,18 +104,18 @@ static int return_partials_recursive(gnode_t * node,
   int mark = 0;
 
   if (!node->left)
-    return node->mark;
+    return node->mark & FLAG_PARTIAL_UPDATE;   /* TODO - SHOULD THIS BE 0 ? */
 
   mark |= return_partials_recursive(node->left,  trav_size, outbuffer);
   mark |= return_partials_recursive(node->right, trav_size, outbuffer);
 
-  if (node->mark || mark)
+  if ((node->mark & FLAG_PARTIAL_UPDATE) || mark)
   {
     outbuffer[*trav_size] = node;
     *trav_size = *trav_size + 1;
   }
 
-  return node->mark | mark;
+  return (node->mark & FLAG_PARTIAL_UPDATE) | mark;
 }
 
 gnode_t ** gtree_return_partials(gnode_t * root,
@@ -1035,12 +1035,20 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
     if (snode->parent)
       sortbuffer[j++] = snode->parent->tau;
 
+
+    /* TODO: Probably split the following qsort case into two:
+       in case snode->parent then sort j-2 elements, otherwise
+       j-1 elements.
+    */
+
     /* if there was at least one coalescent event, sort */
     if (j > 1)
       qsort(sortbuffer+1,j-1,sizeof(double),cb_cmp_double_asc);
 
     #if 0
-    printf("Population: %s    tau: %f   theta: %f\n", snode->label, snode->tau, snode->theta);
+    printf("Population: %s tau: %f theta: %f events: %d seqin_count: %d\n",
+           snode->label, snode->tau, snode->theta,
+           snode->event_count[msa_index], snode->seqin_count[msa_index]);
 
     if (snode->parent)
       n = j-1;
@@ -1051,6 +1059,8 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
     {
       printf("\t t = %f\n", sortbuffer[k]);
     }
+    if (snode->parent)
+      printf("\t tau = %f\n", sortbuffer[k]);
     printf("\n");
     #endif
 
@@ -1786,13 +1796,13 @@ static long propose_spr(locus_t * locus,
 
       /* mark the root-path starting from father */
       for (temp = father; temp; temp = temp->parent)
-        temp->mark = 1;
+        temp->mark |= FLAG_MISC;    /* set FLAG_MISC */
 
       /* fill traversal buffer with nodes on the root-path starting from
          sibling's parent and stop when the lowest common ancestor is found */
 
       /* TODO: Should this also check for temp != NULL, in case father was root ? */
-      for (temp = sibling->parent; temp->mark == 0; temp = temp->parent)
+      for (temp=sibling->parent; !(temp->mark & FLAG_MISC); temp=temp->parent)
       {
         travbuffer[msa_index][k++] = temp;
 
@@ -1805,7 +1815,7 @@ static long propose_spr(locus_t * locus,
          from father and reset markings */
       for (temp = father; temp; temp = temp->parent)
       {
-        temp->mark = 0;
+        temp->mark &= ~FLAG_MISC;   /* unset FLAG_MISC */
         travbuffer[msa_index][k++] = temp;
 
         /* swap clv index to compute partials in a new location. This is useful

@@ -255,7 +255,7 @@ static void print()
   char * delimitation = dmodels[dmodels_count++]; 
 
   for (i=0; i<trav_size; ++i)
-    delimitation[i] = trav[i]->mark ? '1' : '0';
+    delimitation[i] = (trav[i]->mark & FLAG_MISC) ? '1' : '0';
   delimitation[trav_size] = 0;
 }
 
@@ -283,14 +283,14 @@ static void explore(snode_t ** start, snode_t ** end)
   {
     snode_t * curnode = *end;
 
-    if (curnode->parent->mark)
+    if (curnode->parent->mark & FLAG_MISC)
     {
-      curnode->mark = 1;
+      curnode->mark |= FLAG_MISC;   /* set flag */
       print();
 
       explore(end, trav+trav_size-1);
 
-      curnode->mark = 0;
+      curnode->mark &= ~FLAG_MISC;  /* unset flag */
     }
 
     end--;
@@ -334,20 +334,20 @@ long delimitations_init(stree_t * stree)
   dprior = (double *)xmalloc(dmodels_count * sizeof(double));
 
   for (i = 0; i < stree->inner_count; ++i)
-    trav[i]->mark = 0;
+    trav[i]->mark &= ~FLAG_MISC;    /* unset flag */
 
   /* print current delimitation model, i.e. all zeros 000..0 */
   dmodels_count = 0;
   print();
 
   /* print next model with only one population at the root, i.e. 1000...0 */
-  stree->root->mark = 1;
+  stree->root->mark |= FLAG_MISC;   /* set flag */
   print();
 
   /* recursively explore all other possibilities */
   explore(trav,trav+trav_size-1);
 
-  stree->root->mark = 0;
+  stree->root->mark &= ~FLAG_MISC;  /* unset flag */
 
   for (i = 0; i < dmodels_count; ++i)
     printf("%s\n", dmodels[i]);

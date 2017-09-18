@@ -24,12 +24,13 @@
 #define PROP_THRESHOLD 10
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
 
 
 /* species tree spr move related */
-#define LINEAGE_A       1
-#define LINEAGE_OTHER   2
-#define NODE_SQUARE     4
+#define LINEAGE_A       16
+#define LINEAGE_OTHER   32
+#define NODE_SQUARE     64
 
 static gnode_t ** __gt_nodes = NULL;
 static double * __aux = NULL;
@@ -46,6 +47,8 @@ static gnode_t ** gtarget_temp_space;
 static gnode_t ** gtarget_space;
 static unsigned int * target_count;
 
+static snode_t ** snode_contrib_space;
+static unsigned int * snode_contrib_count;
 /* TODO: REMOVE */
 static gnode_t * pruned_nodes[10000];
 static gnode_t * gsources_list[10000];
@@ -357,7 +360,7 @@ static void stree_label_recursive(snode_t * node)
   strcat(node->label,node->right->label);
 }
 
-static void stree_label(stree_t * stree)
+void stree_label(stree_t * stree)
 {
   stree_label_recursive(stree->root);
 }
@@ -656,6 +659,12 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
 
     unsigned int sum_nodes = 2*sum_inner + msa_count;
     gtarget_temp_space = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
+
+    unsigned int stree_nodes = stree->inner_count + stree->tip_count;
+    snode_contrib_space = (snode_t **)xmalloc((size_t)(msa_count*stree_nodes) *
+                                              sizeof(snode_t *));
+    snode_contrib_count = (unsigned int *)xmalloc((size_t)msa_count *
+                                                  sizeof(unsigned int));
   }
 }
 
@@ -675,6 +684,8 @@ void stree_fini()
     free(moved_space);
     free(gtarget_temp_space);
     free(gtarget_space);
+    free(snode_contrib_space);
+    free(snode_contrib_count);
   }
 }
 
@@ -847,7 +858,7 @@ static long propose_tau(locus_t ** loci,
           if (node->time < minage) continue;
 
           gt_nodesptr[k] = node;
-          node->mark = 1;
+          node->mark = FLAG_PARTIAL_UPDATE;
           oldbranches[k++] = node->time;
 
           if (node->time >= oldage && snode != stree->root)
@@ -1217,19 +1228,20 @@ static void init_weights(stree_t * stree)
    Multispecies Coalescent.
    Systematic Biology, 2017
 */
-int stree_propose_spr(stree_t ** streeptr,
-                      gtree_t *** gtree_list_ptr,
-                      stree_t ** scloneptr,
-                      gtree_t *** gclonesptr)
+long stree_propose_spr(stree_t ** streeptr,
+                       gtree_t *** gtree_list_ptr,
+                       stree_t ** scloneptr,
+                       gtree_t *** gclonesptr,
+                       locus_t ** loci)
 {
-  unsigned int i,j,k;
+  unsigned int i,j,k=0;
+  unsigned int branch_update_count;
   long target_count = 0;
   long source_count = 0;
   double r;
   double sum = 0;
   double lnacceptance = 0;
 
-  printf("--- PROPOSE SPR ---\n");
   /* the following clones the species tree and gene trees, and then
      we work on a copy */
   stree_t * original_stree = *streeptr;
@@ -1241,10 +1253,8 @@ int stree_propose_spr(stree_t ** streeptr,
   stree_clone(original_stree, stree);
 
   for (i = 0; i < stree->locus_count; ++i)
-  {
     gtree_clone(original_gtree_list[i], gtree_list[i], stree);
-    events_clone(original_stree, stree, gtree_list);
-  }
+  events_clone(original_stree, stree, gtree_list);
 
   double oldprior = lnprior_species_model(stree);
 
@@ -1267,19 +1277,17 @@ int stree_propose_spr(stree_t ** streeptr,
 
   assert(stree->nodes[i]->weight);
   lnacceptance -= log(stree->nodes[i]->weight);
-  printf("1. lnacceptance = %f\n", lnacceptance);
 
   /* parent of node */
   snode_t * x = y->parent;
 
-  #ifdef UNUSED
-  /* sibling of y */
+  #if 0
+  /* sibling of y - not used */
   snode_t * c0 = (x->left == y) ? x->right : x->left;
   #endif
 
   /* Randomly select children of y in randomly selected order */
-  snode_t * a;
-  snode_t * b;
+  snode_t *a, *b;
   if ((int)(2*legacy_rndu()) == 0)
   {
     a = y->left;
@@ -1342,7 +1350,6 @@ int stree_propose_spr(stree_t ** streeptr,
   snode_t * c = target[i];
   
   lnacceptance -= log(target_weight[i]);
-  printf("2. lnacceptance = %f\n", lnacceptance);
 
   /* now compute node Z, i.e. the LCA of C and Y */
   snode_t * z;
@@ -1360,15 +1367,20 @@ int stree_propose_spr(stree_t ** streeptr,
   for (temp = y; temp != z; temp = temp->father)
     patha[.....
 
-  we do not need those actually
+  we do not need them actually
   */
 
   /* perform SPR to modify gene tree topologies */
   gnode_t ** moved_nodes = moved_space;
   gnode_t ** gtarget_list = gtarget_temp_space;
   gnode_t ** gtarget_nodes = gtarget_space;
+  gnode_t ** bl_list = __gt_nodes;
+  snode_t ** snode_contrib = snode_contrib_space;
   for (i = 0; i < stree->locus_count; ++i)
   {
+    snode_contrib_count[i] = 0; 
+
+    branch_update_count = 0;
     gtree_t * gtree = gtree_list[i];
 
     /* mark all nodes in gene tree paths starting from some tip and end at Z
@@ -1384,7 +1396,6 @@ int stree_propose_spr(stree_t ** streeptr,
         if (tmp->pop == z || stree->pptable[z->node_index][tmp->pop->node_index])
           break;
         tmp->mark = LINEAGE_A;
-        printf("Marking node %d with LINEAGE_A\n", tmp->node_index);
         if (!tmp->parent) break;
       }
     }
@@ -1408,17 +1419,15 @@ int stree_propose_spr(stree_t ** streeptr,
       if (stmp == z) continue;
 
       node->mark |= LINEAGE_OTHER;
-      printf("Marking node %d with LINEAGE_OTHER\n", node->node_index);
+
       for (gtmp=node->parent; !(gtmp->mark & LINEAGE_OTHER); gtmp=gtmp->parent)
       {
         if (gtmp->pop == z || stree->pptable[z->node_index][gtmp->pop->node_index])
           break;
         gtmp->mark |= LINEAGE_OTHER;
-        printf("Marking node %d with LINEAGE_OTHER\n", gtmp->node_index);
         if (!gtmp->parent) break;
       }
     }
-
 
 
     /* now identify Moved nodes */
@@ -1441,11 +1450,8 @@ int stree_propose_spr(stree_t ** streeptr,
           (node->right->mark & LINEAGE_OTHER))
       {
         node->mark |= NODE_SQUARE;
-        printf("Marking node %d with NODE_SQUARE\n", node->node_index);
         continue;
       }
-
-      printf("current node id = %d\n", node->node_index);
 
       /* now we need to ensure that only one child has descendants in A only */
       int count = 0;
@@ -1466,10 +1472,11 @@ int stree_propose_spr(stree_t ** streeptr,
 
       if (count != 1) continue;
 
-      printf("selected node id = %d\n", node->node_index);
-
       moved_nodes[moved_count[i]] = node;
       pruned_nodes[moved_count[i]++] = pruned;
+
+      node->mark |= FLAG_PARTIAL_UPDATE;
+      node->parent->mark |= FLAG_PARTIAL_UPDATE; /* required as the parent will change */
 
       snode_t * pop_cz = c;
       while (pop_cz->parent != z)
@@ -1478,8 +1485,6 @@ int stree_propose_spr(stree_t ** streeptr,
           break;
         pop_cz = pop_cz->parent;
       }
-
-      printf("ipopC index = %d\n", pop_cz->node_index);
 
       /* now make a list of feasible target node */
       target_count = 0;
@@ -1491,21 +1496,14 @@ int stree_propose_spr(stree_t ** streeptr,
           continue;
 
         if (stree->pptable[tmp->pop->node_index][pop_cz->node_index])
-        {
           gtarget_list[target_count++] = tmp;
-          printf("Target node %d\n", tmp->node_index);
-        }
       }
 
       if (!target_count)
-      {
         return 2;
-      }
 
       /* randomly select a target from list */
       gtarget_nodes[moved_count[i]-1] = gtarget_list[(int)(target_count*legacy_rndu())];
-
-      printf("Randomly selected target node %d\n", gtarget_nodes[moved_count[i]-1]->node_index);
 
       source_count = 1;
       gsources_list[0] = intact;
@@ -1524,16 +1522,11 @@ int stree_propose_spr(stree_t ** streeptr,
             tmp->mark != LINEAGE_A)
         {
           gsources_list[source_count++] = tmp;
-          printf("Source node %d\n", tmp->node_index);
         }
-
       }
 
-      printf("Dividing %ld / %ld\n", target_count, source_count);
       lnacceptance += log((double)target_count / source_count);
-      printf("   2b. lnacceptance %f\n", lnacceptance);
     }
-    printf("3. lnacceptance (locus %d) = %f\n", i, lnacceptance);
 
     /* All moves nodes for current locus are now identified. Apply SPR to gene
        tree. */
@@ -1547,15 +1540,44 @@ int stree_propose_spr(stree_t ** streeptr,
           break;
         pop_cz = pop_cz->parent;
       }
-      printf("Selected ipopC %d\n", pop_cz->node_index);
 
       /* TODO: We probably don't need to keep the pruned nodes array above, but only check the 'mark' */
       gnode_t * node = pruned_nodes[j]->parent;
+      assert(node==moved_nodes[j]);
       gnode_t * pruned = pruned_nodes[j]; 
       gnode_t * intact = (node->left == pruned) ? node->right : node->left;
 
+#if 0
+      if (!(intact->pop->mark & FLAG_POP_UPDATE))
+      {
+        intact->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = intact->pop;
+      }
+
+      if (!(node->pop->mark & FLAG_POP_UPDATE))
+      {
+        node->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = node->pop;
+      }
+
+      if (!(node->parent->pop->mark & FLAG_POP_UPDATE))
+      {
+        node->parent->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = node->parent->pop;
+      }
+       
+       
+      if (!(pruned->pop->mark & FLAG_POP_UPDATE))
+      {
+        pruned->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = pruned->pop;
+      }
+#endif
+
+      #if 0
       /* TODO: The above line should point to the same node as stored in moved_nodes. Let's check it */
       assert(node == moved_nodes[j]);
+      #endif
 
       /* link parent with child */
       intact->parent = node->parent;
@@ -1567,10 +1589,8 @@ int stree_propose_spr(stree_t ** streeptr,
       gnode_t * receiver;
       /* TODO: is the below loop necesary? target_nodes[i]->parent should ALWAYS have time larger than moved_nodes[i] */
       for (receiver = gtarget_nodes[j]; ; receiver = receiver->parent)
-        if (receiver->parent->time > moved_nodes[j]->time)
+        if (receiver->parent->time > moved_nodes[j]->time)  /* TODO: moved_nodes[j] is node */
           break;
-
-      printf("Receiver selected %d\n", receiver->node_index);
 
       /* regraft */
       if (receiver->parent->left == receiver)
@@ -1581,23 +1601,82 @@ int stree_propose_spr(stree_t ** streeptr,
       
       node->parent = receiver->parent;
       if (node->left == pruned)
-        node->left = receiver;
-      else
         node->right = receiver;
+      else
+        node->left = receiver;
+
+#if 0
+      /* TODO I THINK THE BELOW 1 CAN BE SET TO 0 */
+      #if 0
+      if (!(node->parent->pop->mark & FLAG_POP_UPDATE))
+      {
+        node->parent->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = node->parent->pop;
+      }
+      #endif
+
+      #if 0
+      if (!(receiver->pop->mark & FLAG_POP_UPDATE))
+      {
+        receiver->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = receiver->pop;
+      }
+      #endif
+#endif
 
       receiver->parent = node;
+
+      /* TODO : CHECK IF the following three IFs can fail, i.e. are they necessary? */
+
+      /* three nodes need to have their branches updated */
+      if (!(receiver->mark & FLAG_BRANCH_UPDATE))
+      {
+        bl_list[branch_update_count++] = receiver;
+        receiver->mark |= FLAG_BRANCH_UPDATE;
+      }
+        
+      if (!(node->mark & FLAG_BRANCH_UPDATE))
+      {
+        bl_list[branch_update_count++] = node;
+        node->mark |= FLAG_BRANCH_UPDATE;
+      }
+
+      if (!(intact->mark & FLAG_BRANCH_UPDATE))
+      {
+        bl_list[branch_update_count++] = intact;
+        intact->mark |= FLAG_BRANCH_UPDATE;
+      }
 
       /* remove  gene node from list of coalescent events of its old population */
       unlink_event(node,i);
 
       node->pop->event_count[i]--;
+      if (!(node->pop->mark & FLAG_POP_UPDATE))
+      {
+        node->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = node->pop;
+      }
 
       node->pop = pop_cz;
+      if (!(node->pop->mark & FLAG_POP_UPDATE))
+      {
+        node->pop->mark |= FLAG_POP_UPDATE;
+        snode_contrib[snode_contrib_count[i]++] = node->pop;
+      }
 
       dlist_item_append(node->pop->event[i],node->event);
 
       node->pop->event_count[i]++;
 
+      /* update leaf counts */
+      while (node)
+      {
+        node->leaves = node->left->leaves + node->right->leaves;
+        node = node->parent;
+      }
+
+      for (node = intact->parent; node; node = node->parent)
+        node->leaves = node->left->leaves + node->right->leaves;
     }
 
     /* Now process square nodes */
@@ -1611,8 +1690,18 @@ int stree_propose_spr(stree_t ** streeptr,
         unlink_event(node,i);
 
         node->pop->event_count[i]--;
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
 
         node->pop = b;
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
 
         dlist_item_append(node->pop->event[i],node->event);
 
@@ -1626,14 +1715,25 @@ int stree_propose_spr(stree_t ** streeptr,
         unlink_event(node,i);
 
         node->pop->event_count[i]--;
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
 
         node->pop = y;
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
 
         dlist_item_append(node->pop->event[i],node->event);
 
         node->pop->event_count[i]++;
       }
-      else if (node->mark == LINEAGE_A && node->time > y->tau && node->time < z->tau)
+      //else if (node->mark == LINEAGE_A && node->time > y->tau && node->time < z->tau)
+      else if ((node->mark & LINEAGE_A && !(node->mark & LINEAGE_OTHER)) && node->time > y->tau && node->time < z->tau)
       {
         /* circle and triangle nodes */
 
@@ -1646,11 +1746,22 @@ int stree_propose_spr(stree_t ** streeptr,
         unlink_event(node,i);
 
         node->pop->event_count[i]--;
-
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
+        
         if (pop == c)
           node->pop = y;
         else
           node->pop = pop;
+
+        if (!(node->pop->mark & FLAG_POP_UPDATE))
+        {
+          node->pop->mark |= FLAG_POP_UPDATE;
+          snode_contrib[snode_contrib_count[i]++] = node->pop;
+        }
 
         dlist_item_append(node->pop->event[i],node->event);
 
@@ -1658,17 +1769,38 @@ int stree_propose_spr(stree_t ** streeptr,
       }
     }
 
+    /* Flag populations Y,C and B for re-computing their contribution to the i-th gene tree probability only if:
+         (a) they have not been already flagged in a previous step
+         (b) there is more than one outgoing lineages (entering its parent population).
+    */
+    if (!(y->mark & FLAG_POP_UPDATE) && (y->seqin_count[i]-y->event_count[i]>1))
+      snode_contrib[snode_contrib_count[i]++] = y;
+    if (!(c->mark & FLAG_POP_UPDATE) && (c->seqin_count[i]-c->event_count[i]>1))
+      snode_contrib[snode_contrib_count[i]++] = c;
+    if (!(b->mark & FLAG_POP_UPDATE) && (b->seqin_count[i]-b->event_count[i]>1))
+      snode_contrib[snode_contrib_count[i]++] = b;
+
     moved_nodes += gtree->inner_count;
     gtarget_nodes += gtree->inner_count;
     gtarget_list += gtree->tip_count + gtree->inner_count;
+
+    __mark_count[i] = branch_update_count;
+    bl_list += branch_update_count;
+    snode_contrib += stree->tip_count + stree->inner_count;
+
+    /* reset species tree marks */
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      stree->nodes[j]->mark = 0;
   } /* end of locus */
 
   /* update species tree */
+#if 0
   printf("Y = %s\n", y->label);
   printf("A = %s\n", a->label);
   printf("B = %s\n", b->label);
   printf("C = %s\n", c->label);
   printf("Z = %s\n", z->label);
+#endif
 
   /* make b child of y->parent */
   if (y->parent->left == y)
@@ -1707,7 +1839,6 @@ int stree_propose_spr(stree_t ** streeptr,
 
   /* probability of choosing focus branch in reverse move */
   lnacceptance += log(y->weight);
-  printf("4. lnacceptance = %f\n", lnacceptance);
 
   /* probability of sampling target branches in reverse move */
 
@@ -1719,15 +1850,11 @@ int stree_propose_spr(stree_t ** streeptr,
     snode_t * tmp;
 
     c_cand = stree->nodes[i];
-    if (c_cand->parent)
-      printf("[%s] c->tau = %f c->parent->tau = %f pptable %d\n", c_cand->label, c_cand->tau, c_cand->parent->tau, stree->pptable[i][y->node_index]);
 
     if (stree->pptable[i][y->node_index] ||
         c_cand->tau >= y->tau ||
         c_cand->parent->tau <= y->tau)
       continue;
-
-    printf("C_cand = %d\n", c_cand->node_index);
 
     if (c_cand == b)
       k = target_count;
@@ -1744,32 +1871,109 @@ int stree_propose_spr(stree_t ** streeptr,
     for (tmp = c_cand; tmp != z_cand; tmp = tmp->parent)
       target_weight[target_count]++;
 
-    printf("target_weight = %f\n", target_weight[target_count]);
     target_weight[target_count] = 1 / target_weight[target_count];
     sum += target_weight[target_count++];
   }
-  printf("Target count = %ld\n", target_count);
-  printf("sum: %f\n", sum);
-
-  #if 0
-  for (i = 0; i < target_count; ++i)
-  {
-    target_weight[i] /= sum;
-    printf("final target_weight %f\n", target_weight[i]);
-  }
-  #endif
 
   lnacceptance += log(target_weight[k] / sum);
-  printf("5. lnacceptance = %f\n", lnacceptance);
 
   double newprior = lnprior_species_model(stree);
 
-  printf("oldprior = %f newprior = %f\n", oldprior, newprior);
-
   lnacceptance += newprior - oldprior;
-  printf("6. lnacceptance = %f\n", lnacceptance);
-  assert(0);
+
+  bl_list = __gt_nodes;
+  snode_contrib = snode_contrib_space;
+  for (i=0; i < stree->locus_count; ++i)
+  {
+    gtree_list[i]->old_logl = gtree_list[i]->logl;
+    if (moved_count[i])
+    {
+      /* update branch lengths and transition probability matrices */
+      for (j = 0; j < __mark_count[i]; ++j)
+      {
+        bl_list[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree_list[i]->edge_count,
+                                                    bl_list[j]->pmatrix_index);
+      }
+      
+      locus_update_matrices_jc69(loci[i],bl_list,__mark_count[i]);
+      
+      /* retrieve all nodes whose partials must be updates */
+      unsigned int partials_count;
+      gnode_t ** partials = gtree_return_partials(gtree_list[i]->root,
+                                                  i,
+                                                  &partials_count);
+      
+      /* point to the double-buffered partials space */
+      for (j = 0; j < partials_count; ++j)
+        partials[j]->clv_index = SWAP_CLV_INDEX(gtree_list[i]->tip_count,
+                                                partials[j]->clv_index);
+
+      /* update conditional probabilities (partials) of affected nodes */
+      locus_update_partials(loci[i],partials,partials_count);
+
+      /* evaluate log-likelihood */
+      unsigned int param_indices[1] = {0};
+      gtree_list[i]->logl = locus_root_loglikelihood(loci[i],
+                                                     gtree_list[i]->root,
+                                                     param_indices,
+                                                     NULL);
+    }
+
+    gtree_list[i]->old_logpr = gtree_list[i]->logpr;
+    #if 0
+    /* This recomputes the gene tree probabilities from scratch. It can be used to verify that
+       the code below, which only computes the gene tree probability for the changed components,
+       is correct. */
+    
+      double logpr = gtree_logprob(stree,i);
+    #else
+
+    /* locate additional populations that need to be updated */
+
+    /* find and mark those populations whose number of incoming lineages has
+       changed due to the reset_gene_leaves_count() call, but were previously
+       not marked for log-probability contribution update */
+    for (j = 0; j < snode_contrib_count[i]; ++j)
+      snode_contrib[j]->mark |= FLAG_POP_UPDATE;
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+    {
+      snode_t * snode = stree->nodes[j];
+      if (!(snode->mark & FLAG_POP_UPDATE) &&
+          (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
+        snode_contrib[snode_contrib_count[i]++] = snode;
+    }
+
+    /* now update the log-probability contributions for the affected, marked
+       populations */
+    for (j = 0; j < snode_contrib_count[i]; ++j)
+    {
+      gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
+      gtree_update_logprob_contrib(snode_contrib[j],i);
+      gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
+    }
+
+    /* reset markings on affected populations */
+    for (j = 0; j < snode_contrib_count[i]; ++j)
+      snode_contrib[j]->mark = 0;
+    #endif
 
 
-  /* TODO: Update species tree node labels in case of acceptance */
+    bl_list += __mark_count[i];
+
+    for (j = 0; j < gtree_list[i]->tip_count + gtree_list[i]->inner_count; ++j)
+      gtree_list[i]->nodes[j]->mark = 0;
+
+    snode_contrib += stree->tip_count + stree->inner_count;
+    
+    lnacceptance += gtree_list[i]->logpr - gtree_list[i]->old_logpr +
+                    gtree_list[i]->logl  - gtree_list[i]->old_logl;
+  }
+
+  if (opt_debug)
+    printf("[Debug] (SSPR) lnacceptance = %f\n", lnacceptance);
+
+  /* in case of acceptance, cloned trees are substituted with the original ones,
+     and species tree nodes are re-labeled, but all this is done in method_01.c
+  */
+  return (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance));
 }

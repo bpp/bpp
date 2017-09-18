@@ -382,6 +382,13 @@ typedef struct pair_s
 
 #define legacy_rndexp(mean) (-(mean)*log(legacy_rndu()))
 
+#define FLAG_AGE_UPDATE                 1 
+#define FLAG_POP_UPDATE                 2
+#define FLAG_BRANCH_UPDATE              4
+#define FLAG_MISC                       8
+#define FLAG_PARTIAL_UPDATE           128
+
+
 /* options */
 
 extern long opt_help;
@@ -526,14 +533,17 @@ void fill_seqin_counts(stree_t * stree, int msa_index);
 
 void reset_gene_leaves_count(stree_t * stree);
 
-int stree_propose_spr(stree_t ** streeptr,
-                      gtree_t *** gtree_list_ptr,
-                      stree_t ** scloneptr,
-                      gtree_t *** gclonesptr);
+long stree_propose_spr(stree_t ** streeptr,
+                       gtree_t *** gtree_list_ptr,
+                       stree_t ** scloneptr,
+                       gtree_t *** gclonesptr,
+                       locus_t ** loci);
 
 gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * stree);
 
 stree_t * stree_clone_init(stree_t * stree);
+
+void stree_label(stree_t * stree);
 
 /* functions in arch.c */
 

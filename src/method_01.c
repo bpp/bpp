@@ -161,6 +161,7 @@ void cmd_a01()
 {
   int i,j;
   int msa_count;
+  long ft_round_spr = 0;
   double logl,logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
@@ -252,7 +253,7 @@ void cmd_a01()
                             4,                          /* # states */
                             msa->length,                /* sequence length */
                             1,                          /* # subst matrices */
-                            gtree[i]->edge_count,       /* # prob matrices */
+                            2*gtree[i]->edge_count,     /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
                             PLL_ATTRIB_ARCH_AVX);       /* attributes */
@@ -306,6 +307,7 @@ void cmd_a01()
 
   double * pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
   long ft_round = 0;
+  long pjump_slider = 0;
 
   /* print header in mcmc file */
   mcmc_printheader(fp_mcmc,stree);
@@ -333,6 +335,8 @@ void cmd_a01()
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
+      ft_round_spr = 0;
+      pjump_slider = 0;
       memset(pjump,0,PROP_COUNT*sizeof(double));
     }
 
@@ -342,8 +346,21 @@ void cmd_a01()
     double ratio;
 
     if (legacy_rndu() > 0)
-      stree_propose_spr(&stree, &gtree, &sclone, &gclones);
-    assert(0);
+    {
+      long accepted = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
+      if (accepted)
+      {
+        /* swap the pointers of species tree and gene tree list with cloned */
+        SWAP(stree,sclone);
+        SWAP(gtree,gclones);
+
+        stree_label(stree);
+
+        pjump_slider++;
+      }
+
+      ft_round_spr++;
+    }
 
     /* proposal on gene tree ages */
     ratio = gtree_propose_ages(locus, gtree, stree);
