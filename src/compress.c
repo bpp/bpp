@@ -158,7 +158,7 @@ static void encode(char ** sequence,
   }
 }
 
-static unsigned char ** encode_jc69(char ** sequence,
+static unsigned char ** encode_jc69(char ** column,
                                     int count,
                                     int len)
 {
@@ -166,7 +166,7 @@ static unsigned char ** encode_jc69(char ** sequence,
   char * p;
   unsigned char ** jc69_invmaps;
   unsigned char sitemap[16];
-  int valid;
+  int convert;
 
   /* allocate memory for inverse map in order to later decode sequence data */
   jc69_invmaps = (unsigned char **)xcalloc(count,sizeof(unsigned char *)); 
@@ -174,26 +174,27 @@ static unsigned char ** encode_jc69(char ** sequence,
   /* go through the sites */
   for (i = 0; i < count; ++i)
   {
-    valid = 1;
-    p = sequence[i];
+    convert = 1;
+    p = column[i];
     j = len;
 
     /* we re-encode only sites that have no ambiguities with the exception of
        gaps */
     while (j--)
     {
-      valid &= (*p > 15) ? 0 : pll_map_validjc69[(unsigned int)*p];
+      convert &= (*p > 15) ? 0 : pll_map_validjc69[(unsigned int)*p];
       ++p;
     }
 
 
-    /* if no ambiguities apart gaps were found, encode the sequence and create
+    /* if no ambiguities apart gaps were found, encode the column and create
        an inverse map to decode back later */
-    if (valid)
+    if (convert)
     {
-      p = sequence[i];
+      p = column[i];
       jc69_invmaps[i] = (unsigned char *)xcalloc(16,sizeof(unsigned char));
       memset(sitemap,0,16*sizeof(unsigned char));
+      sitemap[15] = jc69_invmaps[i][15] = 15;  /* gaps do not get converted */
       unsigned char code = 1;
       for ( j = 0; j < len; ++j)
       {
@@ -289,7 +290,7 @@ unsigned int * compress_site_patterns(char ** sequence,
   for (i = 0; i < *length; ++i)
     oi[i] = i;
 
-    /* do the jc68 now */
+    /* do the jc69 now */
   if (attrib == COMPRESS_JC69)
     jc69_invmaps = encode_jc69(column,*length,count);
 
