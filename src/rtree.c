@@ -149,7 +149,7 @@ static char * stree_export_newick_recursive(const snode_t * root,
     {
       char * temp = cb_serialize(root);
       size_alloced = asprintf(&newick,
-                              "(%s,%s)%s",
+                              "(%s, %s)%s",
                               subtree1,
                               subtree2,
                               temp);
@@ -158,7 +158,7 @@ static char * stree_export_newick_recursive(const snode_t * root,
     else
     {
       size_alloced = asprintf(&newick,
-                              "(%s,%s)%s:%f",
+                              "(%s, %s)%s:%f",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",
@@ -208,7 +208,7 @@ char * stree_export_newick(const snode_t * root,
     {
       char * temp = cb_serialize(root);
       size_alloced = asprintf(&newick,
-                              "(%s,%s)%s",
+                              "(%s, %s)%s;",
                               subtree1,
                               subtree2,
                               temp);
@@ -217,7 +217,7 @@ char * stree_export_newick(const snode_t * root,
     else
     {
       size_alloced = asprintf(&newick,
-                              "(%s,%s)%s:%f;",
+                              "(%s, %s)%s:%f;",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",

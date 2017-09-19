@@ -85,42 +85,45 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f\n", opt_finetune_mix);
 }
 
-static void mcmc_printheader(FILE * fp, stree_t * stree)
+static char * cb_serialize_branch(const snode_t * node)
 {
-  int print_labels = 1;
-  unsigned int i;
-  fprintf(fp, "Gen");
+  char * s = NULL;
 
-  /* TODO: Account for integrated out theta */
-  /* TODO: If number of species > 10 do not print labels */
-
-  if (stree->tip_count > 10)
-    print_labels = 0;
-
-  /* 1. Print thetas */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->theta >= 0)
-    {
-      if (print_labels)
-        fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
-      else
-        fprintf(fp, "\ttheta_%d", i+1);
-    }
-
-  /* 2. Print taus for inner nodes */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  /* inner node */
+  if (node->left)
   {
-    if (stree->nodes[i]->tau)
+    if (node->parent)
     {
-      if (print_labels)
-        fprintf(fp, "\ttau_%d%s", i+1, stree->nodes[i]->label);
+      if (node->theta > 0)
+        asprintf(&s, " #%f: %f", node->theta, node->parent->tau - node->tau);
       else
-        fprintf(fp, "\ttau_%d", i+1);
+        asprintf(&s, ": %f", node->parent->tau - node->tau);
     }
+    else
+    {
+      if (node->theta > 0)
+        asprintf(&s, " #%f", node->theta);
+    }
+      
   }
+  else
+  {
+    if (node->theta > 0)
+      asprintf(&s, "%s #%f: %f",
+               node->label, node->theta, node->parent->tau - node->tau);
+    else
+      asprintf(&s, "%s: %f", node->label, node->parent->tau - node->tau);
+  }
+    
 
-  /* 3. Print log likelihood */
-  fprintf(fp, "\tlnL\n"); 
+  return s;
+}
+
+static void mcmc_printinitial(FILE * fp, stree_t * stree)
+{
+  char * newick = stree_export_newick(stree->root, cb_serialize_branch);
+  fprintf(fp, "%s\n", newick);
+  free(newick);
 }
 
 static void mcmc_logsample(FILE * fp,
@@ -128,6 +131,7 @@ static void mcmc_logsample(FILE * fp,
                            stree_t * stree,
                            gtree_t ** gtree)
 {
+#if 0
   unsigned int i;
   double logl = 0;
 
@@ -155,6 +159,10 @@ static void mcmc_logsample(FILE * fp,
     logl += gtree[i]->logl;
 
   fprintf(fp, "\t%.3f\n", logl);
+  #endif
+  char * newick = stree_export_newick(stree->root, cb_serialize_branch);
+  fprintf(fp, "%s\n", newick);
+  free(newick);
 }
 
 void cmd_a01()
@@ -310,7 +318,7 @@ void cmd_a01()
   long pjump_slider = 0;
 
   /* print header in mcmc file */
-  mcmc_printheader(fp_mcmc,stree);
+  mcmc_printinitial(fp_mcmc,stree);
 
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
