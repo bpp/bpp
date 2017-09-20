@@ -1889,7 +1889,7 @@ long stree_propose_spr(stree_t ** streeptr,
     if (moved_count[i])
     {
       /* update branch lengths and transition probability matrices */
-      for (j = 0; j < __mark_count[i]; ++j)
+      for (j = 0; j < (unsigned int)__mark_count[i]; ++j)
       {
         bl_list[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree_list[i]->edge_count,
                                                     bl_list[j]->pmatrix_index);

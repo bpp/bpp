@@ -32,10 +32,10 @@ static int trav_size = 0;
 
 const char * const * bs_last_addr = NULL;
 
-char buffer[LINEALLOC];
-char * line = NULL;
-size_t line_size = 0;
-size_t line_maxsize = 0;
+static char buffer[LINEALLOC];
+static char * line = NULL;
+static size_t line_size = 0;
+static size_t line_maxsize = 0;
 
 static void reallocline(size_t newmaxsize)
 {

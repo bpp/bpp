@@ -345,6 +345,7 @@ stree_t * stree_wraptree(snode_t * root,
   tree->edge_count = 2*tip_count-2;
   tree->inner_count = tip_count-1;
   tree->root = root;
+  tree->pptable = NULL;
 
   /* reorder tip nodes if specified */
   if (opt_reorder)

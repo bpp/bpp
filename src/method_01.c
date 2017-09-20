@@ -39,6 +39,221 @@ static stree_t * load_tree(void)
   return stree;
 }
 
+static char buffer[LINEALLOC];
+static char * line = NULL;
+static size_t line_size = 0;
+static size_t line_maxsize = 0;
+
+static char * cb_serialize_none(const snode_t * snode)
+{
+  if (!snode->left) return xstrdup(snode->label);
+
+  return xstrdup("");
+}
+
+static void reallocline(size_t newmaxsize)
+{
+  char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
+
+  if (line)
+  {
+    memcpy(temp,line,line_size*sizeof(char));
+    free(line);
+  }
+  line = temp;
+  line_maxsize = newmaxsize;
+}
+
+static char * getnextline(FILE * fp)
+{
+  size_t len = 0;
+
+  line_size = 0;
+
+  /* read from file until newline or eof */
+  while (fgets(buffer, LINEALLOC, fp))
+  {
+    len = strlen(buffer);
+
+    if (line_size + len > line_maxsize)
+      reallocline(line_maxsize + LINEALLOC);
+
+    memcpy(line+line_size,buffer,len*sizeof(char));
+    line_size += len;
+
+    if (buffer[len-1] == '\n')
+    {
+      #if 0
+      if (line_size+1 > line_maxsize)
+        reallocline(line_maxsize+1);
+
+      line[line_size] = 0;
+      #else
+        line[line_size-1] = 0;
+      #endif
+
+      return line;
+    }
+  }
+
+  if (!line_size)
+  {
+    free(line);
+    line_maxsize = 0;
+    line = NULL;
+    return NULL;
+  }
+
+  if (line_size == line_maxsize)
+    reallocline(line_maxsize+1);
+
+  line[line_size] = 0;
+  return line;
+}
+
+static void strip_attributes(char * s)
+{
+  char * p = s;
+
+  while (*s)
+  {
+    if (*s == '#' || *s == ':')
+    {
+      while (*s && *s != ',' && *s != ')' && *s != ';')
+        ++s;
+    }
+    else if (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')
+      ++s;
+    else
+      *p++ = *s++;
+  }
+  *p = 0;
+}
+
+static int cb_strcmp(const void * a, const void * b)
+{
+  const char ** pa = (const char **)a;
+  const char ** pb = (const char **)b;
+
+  return strcmp(*pa,*pb);
+}
+
+static void stree_sort_recursive(snode_t * node)
+{
+  if (!node->left)
+    return;
+
+  stree_sort_recursive(node->left);
+  stree_sort_recursive(node->right);
+
+  if (strcmp(node->left->label, node->right->label) > 0)
+    SWAP(node->left,node->right);
+
+  node->label = (char *)xmalloc(strlen(node->left->label) +
+                                strlen(node->right->label) + 1);
+
+  /* concatenate species labels */
+  node->label[0] = 0;
+  strcat(node->label,node->left->label);
+  strcat(node->label,node->right->label);
+}
+
+static void stree_sort(stree_t * stree)
+{
+  stree_sort_recursive(stree->root); 
+}
+
+struct freqtable_s
+{
+  long pos;
+  long count;
+};
+
+static int cb_ftcmp(const void * a, const void * b)
+{
+  const struct freqtable_s * pa = (const struct freqtable_s *)a;
+  const struct freqtable_s * pb = (const struct freqtable_s *)b;
+
+  if (pa->count < pb->count) return 1;
+  else if (pa->count > pb->count) return -1;
+
+  return 0;
+}
+
+static void stree_summary(char ** species_names, long species_count)
+{
+  long i,line_count = 0;
+  FILE * fp;
+  char ** treelist;
+
+  /* allocate space for holding all species tree samples */
+  treelist = (char **)xmalloc((opt_samples+1)*sizeof(char *));
+
+  /* open mcmc file */
+  fp = xopen(opt_mcmcfile,"r");
+
+  /* read each line from the file, and strip all thetas and branch lengths
+     such that only the tree topology and tip names remain, and store them
+     in treelist */
+  while (getnextline(fp))
+  {
+    strip_attributes(line);
+    stree_t * t = stree_parse_newick_string(line);
+    stree_sort(t);
+    treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
+    stree_destroy(t,NULL);
+  }
+
+  printf("Species in order:\n");
+  for (i = 0; i < species_count; ++i)
+  {
+    printf(" %3ld. %s\n", i+1, species_names[i]);
+  }
+  printf("\n");
+
+  qsort(treelist,line_count,sizeof(char *), cb_strcmp);
+
+  long distinct = 1;
+  long * uniquepos = (long *)xmalloc(line_count*sizeof(long));
+  uniquepos[0] = 0;
+  for (i = 1; i < line_count; ++i)
+  {
+    if (strcmp(treelist[i],treelist[i-1]))
+    {
+      uniquepos[distinct++] = i;
+    }
+  }
+
+  struct freqtable_s * ft = (struct freqtable_s *)xmalloc(distinct*sizeof(struct freqtable_s));
+  for (i = 0; i < distinct; ++i)
+  {
+    ft[i].pos   = uniquepos[i];
+    ft[i].count = (i == distinct - 1) ?
+                    line_count - uniquepos[i] : uniquepos[i+1] - uniquepos[i];
+  }
+
+  qsort(ft, distinct, sizeof(struct freqtable_s), cb_ftcmp);
+  printf("(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
+  double cdf = 0;
+  for (i = 0; i < distinct; ++i)
+  {
+    double pdf = ft[i].count / (double)line_count;
+    cdf += pdf;
+    printf(" %8ld %8.5f %8.5f %s\n",
+           ft[i].count, pdf, cdf, treelist[ft[i].pos]);
+  }
+
+  free(uniquepos);
+  free(ft);
+ 
+  /* deallocate list of trees */
+  for (i = 0; i < line_count; ++i)
+    free(treelist[i]);
+  free(treelist);
+
+  fclose(fp);
+}
+
 static void reset_finetune_onestep(double * pjump, double * param)
 {
   double maxstep = 99;
@@ -167,7 +382,7 @@ static void mcmc_logsample(FILE * fp,
 
 void cmd_a01()
 {
-  int i,j;
+  long i,j;
   int msa_count;
   long ft_round_spr = 0;
   double logl,logpr;
@@ -215,7 +430,7 @@ void cmd_a01()
                                         msa_list[i]->count,
                                         &(msa_list[i]->length),
                                         COMPRESS_JC69);
-    printf("Locus %d: original length %d, after compression %d\n", i, ol, msa_list[i]->length);
+    printf("Locus %ld: original length %d, after compression %d\n", i, ol, msa_list[i]->length);
   }
 
   #if 0
@@ -409,12 +624,24 @@ void cmd_a01()
 
   /* deallocate gene trees */
   for (i = 0; i < msa_count; ++i)
+  {
     gtree_destroy(gtree[i],NULL);
+    gtree_destroy(gclones[i],NULL);
+  }
   free(gtree);
+  free(gclones);
   gtree_fini(msa_count);
+
+  /* order of species */
+  char ** species_names = (char **)xmalloc(stree->tip_count * sizeof(char *));
+  unsigned int species_count = stree->tip_count;
+
+  for (i = 0; i < stree->tip_count; ++i)
+    species_names[i] = xstrdup(stree->nodes[i]->label);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);
+  stree_destroy(sclone,NULL);
   stree_fini();
 
   /* deallocate alignments */
@@ -425,6 +652,12 @@ void cmd_a01()
   /* deallocate maplist */
   list_clear(map_list,map_dealloc);
   free(map_list);
+
+  stree_summary(species_names,species_count);
+
+  for (i = 0; i < species_count; ++i)
+    free(species_names[i]);
+  free(species_names);
 
   if (!opt_quiet)
     fprintf(stdout, "Done...\n");

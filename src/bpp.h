@@ -482,6 +482,8 @@ void cmd_ml(void);
 
 stree_t * stree_parse_newick(const char * filename);
 
+stree_t * stree_parse_newick_string(const char * s);
+
 void stree_destroy(stree_t * tree,
                    void (*cb_destroy)(void *));
 
