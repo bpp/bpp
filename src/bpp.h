@@ -184,6 +184,7 @@ typedef struct snode_s
   //unsigned int * seqout_count;
 
   //unsigned int ** seqin_indices;
+  long * bitmask;
 
   unsigned int node_index;
 } snode_t;
@@ -615,6 +616,10 @@ int hashtable_insert(hashtable_t * ht,
                      unsigned long hash,
                      int (*cb_cmp)(void *, void *));
 
+void hashtable_insert_force(hashtable_t * ht,
+                            void * x,
+                            unsigned long hash);
+
 void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
 
 int cb_cmp_pairlabel(void * a, void * b);
@@ -732,12 +737,19 @@ double locus_root_loglikelihood(locus_t * locus,
 
 /* functions in compress.c */
 
-
 unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
                                       int attrib);
+
+/* functions in summary.c */
+
+void splits_init(long init, long increment, char ** species, long species_count);
+
+void splits_update(stree_t * stree);
+
+void splits_finalize(long trees_count);
 
 /* functions in core_partials.c */
 

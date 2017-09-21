@@ -192,6 +192,8 @@ static void stree_summary(char ** species_names, long species_count)
   /* open mcmc file */
   fp = xopen(opt_mcmcfile,"r");
 
+  splits_init(4096,4096,species_names,species_count);
+
   /* read each line from the file, and strip all thetas and branch lengths
      such that only the tree topology and tip names remain, and store them
      in treelist */
@@ -201,8 +203,11 @@ static void stree_summary(char ** species_names, long species_count)
     stree_t * t = stree_parse_newick_string(line);
     stree_sort(t);
     treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
+
+    splits_update(t);
     stree_destroy(t,NULL);
   }
+
 
   printf("Species in order:\n");
   for (i = 0; i < species_count; ++i)
@@ -242,6 +247,8 @@ static void stree_summary(char ** species_names, long species_count)
     printf(" %8ld %8.5f %8.5f %s\n",
            ft[i].count, pdf, cdf, treelist[ft[i].pos]);
   }
+
+  splits_finalize(line_count);
 
   free(uniquepos);
   free(ft);

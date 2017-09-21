@@ -179,3 +179,17 @@ int cb_cmp_pairlabel(void * a, void * b)
   return (!strcmp(pair->label,label));
 }
 
+void hashtable_insert_force(hashtable_t * ht,
+                            void * x,
+                            unsigned long hash)
+{
+  /* size is always a multiple of 2 and greater than 2 */
+  unsigned long index = hash & (ht->table_size-1);
+
+  list_t * list = ht->entries[index];
+
+  ht_item_t * item = hashitem_create(hash,x);
+  list_append(list, item);
+
+  ht->entries_count++;
+}

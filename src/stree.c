@@ -425,7 +425,7 @@ static int ** populations_seqcount(stree_t * stree,
                             hash_fnv(label),
                             cb_cmp_pairlabel);
       if (!pair)
-        fatal("Cannot find");
+        fatal("Internal error in populations_count");
 
       node = (snode_t *)(pair->data);
 
