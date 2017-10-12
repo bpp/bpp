@@ -190,7 +190,11 @@ static void stree_summary(char ** species_names, long species_count)
   treelist = (char **)xmalloc((opt_samples+1)*sizeof(char *));
 
   /* open mcmc file */
+  #ifndef DEBUG_MAJORITY
   fp = xopen(opt_mcmcfile,"r");
+  #else
+  fp = xopen("test.txt","r");
+  #endif
 
   splits_init(4096,4096,species_names,species_count);
 
@@ -248,7 +252,18 @@ static void stree_summary(char ** species_names, long species_count)
            ft[i].count, pdf, cdf, treelist[ft[i].pos]);
   }
 
-  splits_finalize(line_count);
+  splits_finalize(line_count,species_names);
+
+  fprintf(stdout, "\n(D) Best tree (or trees from the mastertree file) "
+          "with support values\n");
+  for (i = 0; i < distinct; ++i)
+  {
+    if (i && ft[i].count != ft[i-1].count)
+      break;
+
+    //printf("%s\n", treelist[ft[i].pos]);
+    print_stree_with_support(treelist[ft[i].pos],ft[i].count,line_count);
+  }
 
   free(uniquepos);
   free(ft);
@@ -547,6 +562,7 @@ void cmd_a01()
   unsigned long curstep = 0;
 
   /* start of MCMC loop */
+  #ifndef DEBUG_MAJORITY
   for (i = -opt_burnin; i < opt_samples*opt_samplefreq; ++i)
   {
     
@@ -618,6 +634,7 @@ void cmd_a01()
     
     curstep++;
   }
+  #endif
 
   progress_done();
 

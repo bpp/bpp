@@ -749,7 +749,9 @@ void splits_init(long init, long increment, char ** species, long species_count)
 
 void splits_update(stree_t * stree);
 
-void splits_finalize(long trees_count);
+void splits_finalize(long trees_count, char ** species);
+
+void print_stree_with_support(const char * treestr, long freq, long trees_count);
 
 /* functions in core_partials.c */
 

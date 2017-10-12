@@ -46,11 +46,11 @@ struct bipfreq_s
   long freq;
 };
 
-static struct bipfreq_s ** hashtable_serialize(hashtable_t * ht)
+static struct bipfreq_s ** hashtable_serialize1p(hashtable_t * ht)
 {
-  long i,k;
+  unsigned long i,k;
 
-  struct bipfreq_s ** bf = (struct bipfreq_s **)xmalloc(ht->entries_count *
+  struct bipfreq_s ** bf = (struct bipfreq_s **)xmalloc((ht->entries_count+1) *
                                                         sizeof(struct bipfreq_s *));
   for (i = 0, k = 0; i < ht->table_size; ++i)
   {
@@ -64,6 +64,8 @@ static struct bipfreq_s ** hashtable_serialize(hashtable_t * ht)
       head = head->next;
     }
   }
+
+  assert(k == ht->entries_count);
 
   return bf;
 }
@@ -105,6 +107,7 @@ static int cb_cmp_bmpair(void * a, void * b)
   return (!strcmp(bmpair->label,label));
 }
 
+/* returns an unary code with the i-th position set */
 static long * bitencode(long i, long count)
 {
   assert(count > 0);
@@ -148,14 +151,6 @@ static hashtable_t * bitmask_hash(char ** species, long count)
   return ht;
 }
 
-static void bitmask_set(snode_t * node)
-{
-  assert(!node->left);
-
-
-  
-}
-
 void splits_init(long init, long increment, char ** species, long species_count)
 {
   splits_initialsize = init;
@@ -172,6 +167,8 @@ void splits_init(long init, long increment, char ** species, long species_count)
 
   ht_bm = bitmask_hash(species,species_count);
   //ht_bp = hashtable_create(4194304);
+
+  /* TODO : CREATE HASHTABLE ACCORDING TO NUMBER OF SPECIES */
   ht_bp = hashtable_create(100);
 }
 
@@ -209,7 +206,7 @@ static void bitmask_print(long * bitmask)
   printf("\n");
 }
 
-void splits_update(stree_t * stree)
+static void bitmasks_init(stree_t * stree)
 {
   long i;
   struct bitmask_pair_s * bmpair;
@@ -230,16 +227,23 @@ void splits_update(stree_t * stree)
   /* now recursively create bitmasks */
 
   bitmask_update_recursive(stree->root);
+}
+
+void splits_update(stree_t * stree)
+{
+  long i;
+  struct bipfreq_s * bpf;
+
+  bitmasks_init(stree);
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->parent)
     {
-      //bitmask_print(stree->nodes[i]->bitmask);
-      struct bipfreq_s * bpf = hashtable_find(ht_bp,
-                                              (void *)(stree->nodes[i]->bitmask),
-                                              hash_fnv_long(stree->nodes[i]->bitmask, bitmask_elms),
-                                              cb_cmp_bitmask);
+      bpf = hashtable_find(ht_bp,
+                           (void *)(stree->nodes[i]->bitmask),
+                           hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
+                           cb_cmp_bitmask);
       if (bpf)
       {
         bpf->freq++;
@@ -253,12 +257,86 @@ void splits_update(stree_t * stree)
         hashtable_insert_force(ht_bp,
                                (void *)bpf,
                                hash_fnv_long(stree->nodes[i]->bitmask,
-                                             bitmask_elms)
-                              );
+                                             bitmask_elms));
       }
 
     }
   }
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->bitmask)
+      free(stree->nodes[i]->bitmask);
+}
+static void cb_bm_dealloc(void * data)
+{
+  struct bitmask_pair_s * bm = data;
+  free(bm->bitmask);
+  free(bm->label);
+  free(bm);
+}
+
+static void cb_bf_dealloc(void * data)
+{
+  struct bipfreq_s * bf = data;
+  free(bf->bitmask);
+  free(bf);
+}
+
+
+static char * cb_serialize_support(const snode_t * node)
+{
+  char * s = NULL;
+
+  /* inner node */
+  if (node->left)
+  {
+    if (node->parent)
+      asprintf(&s, " #%f", node->support);
+    else
+      s = xstrdup("");
+  }
+  else
+    asprintf(&s, "%s", node->label);
+
+  return s;
+}
+
+void print_stree_with_support(const char * treestr, long freq, long trees_count)
+{
+  long i;
+  struct bipfreq_s * bpf;
+
+  stree_t * stree = stree_parse_newick_string(treestr);
+
+  /* assign bitmasks to tree nodes (present bits indicate species in subtree) */
+  bitmasks_init(stree);
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    if (stree->nodes[i]->parent)
+    {
+      bpf = hashtable_find(ht_bp,
+                           (void *)(stree->nodes[i]->bitmask),
+                           hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
+                           cb_cmp_bitmask);
+      if (!bpf)
+        fatal("Internal error when printing best tree with support values");
+
+      stree->nodes[i]->support = bpf->freq / (double)trees_count;
+    }
+  }
+
+  char * newick = stree_export_newick(stree->root, cb_serialize_support);
+  fprintf(stdout, "%s   [P = %f]\n", newick, freq / (double)trees_count);
+  free(newick);
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->bitmask)
+      free(stree->nodes[i]->bitmask);
+
+  stree_destroy(stree,NULL);
+  hashtable_destroy(ht_bp,cb_bf_dealloc);
+  hashtable_destroy(ht_bm,cb_bm_dealloc);
 }
 
 static int cb_freqcmp(const void * a, const void * b)
@@ -273,17 +351,143 @@ static int cb_freqcmp(const void * a, const void * b)
 
 }
 
-void splits_finalize(long trees_count)
+static int cb_popcntcmp(const void * a, const void * b)
 {
   long i;
+  long bitsa = 0,bitsb = 0;
+  const struct bipfreq_s * pa = *((const struct bipfreq_s **)a);
+  const struct bipfreq_s * pb = *((const struct bipfreq_s **)b);
 
-  struct bipfreq_s ** x = hashtable_serialize(ht_bp);
-  printf("(B) Best splits in the sample of trees (%ld splits in all)\n",
+  for (i = 0; i < bitmask_elms; ++i)
+  {
+    bitsa += __builtin_popcountl(pa->bitmask[i]);
+    bitsb += __builtin_popcountl(pb->bitmask[i]);
+  }
+
+  if (bitsa > bitsb) return 1;
+  else if (bitsa < bitsb) return -1;
+
+  return 0;
+
+}
+
+void splits_finalize(long trees_count, char ** species)
+{
+  unsigned long i,j,k,entry;
+  unsigned long majority = 0;
+
+  struct bipfreq_s ** x = hashtable_serialize1p(ht_bp);
+  printf("\n(B) Best splits in the sample of trees (%ld splits in all)\n",
          ht_bp->entries_count);
   qsort(x,ht_bp->entries_count,sizeof(struct bipfreq_s *), cb_freqcmp);
   for (i = 0; i < ht_bp->entries_count; ++i)
   {
       printf("%6ld %f  ", x[i]->freq, x[i]->freq / (double)trees_count);
       bitmask_print(x[i]->bitmask);
+      if (x[i]->freq / (double)trees_count >= 0.5)
+        majority++;
   }
+
+
+  /* now sort them according to pop count */
+
+  /* we store an array of pointers to pointers of character strings. If sptr[i] == NULL then the name is taken from
+  species[i]. If sptr[i] != NULL then we check if *(sptr[i]) != NULL and if yes, we use that string in output, otherwise
+  if *(sptr[i]) == NULL it means that the string was already used in this round from another selected taxon */
+  char *** sptr = (char ***)xcalloc(bits_count,sizeof(char **));
+  char ** s = (char **)xmalloc(bits_count * sizeof(char *));
+  long * index = (long *)xmalloc(bits_count * sizeof(long));
+  long * index_all = (long *)xmalloc(bits_count * sizeof(long));
+  long ptrcount;
+  long allcount;
+
+
+  qsort(x, majority, sizeof(struct bipfreq_s *), cb_popcntcmp);
+
+  /* add one more entry of all ones set */
+
+  x[majority] = (struct bipfreq_s *)xmalloc(sizeof(struct bipfreq_s));
+  struct bipfreq_s * debug_free = x[majority];
+  x[majority]->freq = 0;
+  x[majority]->bitmask = (long *)xmalloc(bitmask_elms*sizeof(long));
+  memset(x[majority]->bitmask,0xff,bitmask_elms*sizeof(long));
+  majority++;
+
+
+  char ** newick = (char **)xcalloc(majority,sizeof(char *));
+  for (i = 0; i < majority; ++i)
+  {
+    ptrcount = 0;
+    entry = 0;
+    allcount = 0;
+
+    for (j = 0; j < (unsigned long)bitmask_elms; ++j)
+    {
+      for (k = 0; k < sizeof(long)*CHAR_BIT && entry < (unsigned long)bits_count; ++k)
+      {
+        if ((x[i]->bitmask[j] >> k) & 1)
+        {
+          if (!sptr[entry])
+          {
+            s[ptrcount] = xstrdup(species[entry]);
+            index[ptrcount++] = entry;
+          }
+          else if (*(sptr[entry]))
+          {
+            s[ptrcount] = *(sptr[entry]);
+            index[ptrcount++] = entry;
+            *(sptr[entry]) = NULL;
+          }
+          else
+          {
+            /* already used in this iteration, just skip */
+
+          }
+          index_all[allcount++] = entry;
+        }
+        entry++;
+      }
+    }
+    
+    /* assemble */
+    char * temp;
+    asprintf(newick+i,"(%s",s[0]);
+    free(s[0]);
+    for (j = 1; j < (unsigned long)ptrcount; ++j)
+    {
+      asprintf(&temp, "%s, %s", newick[i], s[j]);
+      free(newick[i]);
+      newick[i] = temp;
+      free(s[j]);
+    }
+
+    if (i == majority - 1)
+      asprintf(&temp, "%s);", newick[i]);
+    else
+      asprintf(&temp, "%s) #%f", newick[i], x[i]->freq / (double)trees_count);
+
+    free(newick[i]);
+    newick[i] = temp;
+
+    for (j = 0; j < (unsigned long)allcount; ++j)
+    {
+      sptr[index_all[j]] = newick+i;
+    }
+  }
+  printf("\n(C) Majority-rule consensus tree\n");
+  printf("%s\n", newick[majority-1]);
+  for (i = 0; i < majority; ++i)
+    free(newick[i]);
+  free(newick);
+
+  /* cleanup */
+  free(debug_free->bitmask);
+  free(debug_free);
+  free(x);
+  free(s);
+  free(index);
+  free(index_all);
+
+  free(sptr);
+  free(splits);
 }
