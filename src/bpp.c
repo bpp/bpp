@@ -60,6 +60,7 @@ double opt_finetune_mix;
 double opt_rjmcmc_alpha;
 double opt_rjmcmc_mean;
 double opt_rjmcmc_epsilon;
+char * opt_cfile;
 char * opt_mapfile;
 char * opt_msafile;
 char * opt_mapfile;
@@ -67,6 +68,7 @@ char * opt_mcmcfile;
 char * opt_outfile;
 char * opt_reorder;
 char * opt_streefile;
+char * opt_streenewick;
 
 long opt_debugflag = 0;
 
@@ -98,6 +100,7 @@ static struct option long_options[] =
   {"rjmcmc_alpha",    required_argument, 0, 0 },  /* 23 */
   {"rjmcmc_mean",     required_argument, 0, 0 },  /* 24 */
   {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 25 */
+  {"cfile",           required_argument, 0, 0 },  /* 26 */
   { 0, 0, 0, 0 }
 };
 
@@ -180,12 +183,14 @@ void args_init(int argc, char ** argv)
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
   opt_version = 0;
+  opt_cfile = NULL;
   opt_msafile = NULL;
   opt_mapfile = NULL;
   opt_mcmcfile = NULL;
   opt_outfile = NULL;
   opt_seed = (long)time(NULL);
   opt_streefile = NULL;
+  opt_streenewick = NULL;
   opt_rjmcmc_alpha = -1;
   opt_rjmcmc_mean = -1;
   opt_rjmcmc_epsilon = -1;
@@ -315,6 +320,10 @@ void args_init(int argc, char ** argv)
         opt_rjmcmc_epsilon = args_getdouble(optarg);
         opt_rjmcmc_method = 0;
         break;
+
+      case 26:
+        opt_cfile = optarg;
+        break;
         
       default:
         fatal("Internal error in option parsing");
@@ -326,8 +335,11 @@ void args_init(int argc, char ** argv)
 
   int commands  = 0;
 
+  if (opt_cfile)
+    load_cfile();
+
   /* check for mandatory options */
-  if (opt_streefile)
+  if (opt_streefile || opt_streenewick)
     mand_options++;
   if (opt_outfile)
     mand_options++;
@@ -343,11 +355,15 @@ void args_init(int argc, char ** argv)
 //    commands++;
   if (opt_streefile)
     commands++;
+  if (opt_cfile)
+    commands++;
+
+  if (opt_streefile && opt_streenewick)
+    fatal("Cannot use --stree when using a control file (--cfile)");
 
   /* if more than one independent command, fail */
   if (commands > 1)
     fatal("More than one command specified");
-
 
   /* if no command specified, turn on --help */
   if (!commands)
@@ -357,7 +373,7 @@ void args_init(int argc, char ** argv)
   }
   /* check for mandatory options */
   if (!opt_version && !opt_help)
-    if (mand_options != mandatory_options_count)
+    if (mand_options != mandatory_options_count && !opt_cfile)
       fatal("Mandatory options are:\n\n%s", mandatory_options_list);
 }
 
@@ -447,6 +463,9 @@ int main (int argc, char * argv[])
   //srand48(opt_seed);
   legacy_init();
 
+  printf("opt_stree = %ld\n", opt_stree);
+  printf("opt_delimit = %ld\n", opt_delimit);
+
   if (opt_help)
   {
     cmd_help();
@@ -461,6 +480,7 @@ int main (int argc, char * argv[])
   }
   else if (!opt_delimit)
   {
+    printf("HERE!!!\n");
     cmd_a01();
   }
 

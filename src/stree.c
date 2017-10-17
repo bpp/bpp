@@ -72,9 +72,8 @@ hashtable_t * species_hash(stree_t * tree)
     {
       /* this should never happen because duplicate taxa were
          already checked for during tree parsing */
-      fatal("Duplicate taxon or node label (%s) in file %s",
-            tree->nodes[i]->label,
-            opt_streefile);
+      fatal("Duplicate taxon or node label (%s) in species tree",
+            tree->nodes[i]->label);
     }
   }
 

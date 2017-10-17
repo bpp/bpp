@@ -418,6 +418,7 @@ extern double opt_finetune_mix;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern char * opt_cfile;
 extern char * opt_mapfile;
 extern char * opt_msafile;
 extern char * opt_mapfile;
@@ -425,6 +426,7 @@ extern char * opt_mcmcfile;
 extern char * opt_reorder;
 extern char * opt_outfile;
 extern char * opt_streefile;
+extern char * opt_streenewick;
 extern char * cmdline;
 
 /* common data */
@@ -914,6 +916,10 @@ void delimit_setindex(long index);
 void delimit_resetpriors(void);
 
 void delimit_summary(stree_t * stree);
+
+/* functions in cfile.c */
+
+void load_cfile(void);
 
 /* functions in core_partials_sse.c */
 

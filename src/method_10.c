@@ -28,13 +28,22 @@ static double pj_optimum = 0.3;
 
 static stree_t * load_tree(void)
 {
+  stree_t * stree;
+
   /* parse tree */
   if (!opt_quiet)
     fprintf(stdout, "Parsing tree file...\n");
 
-  stree_t * stree = stree_parse_newick(opt_streefile);
+  assert(opt_streefile || opt_streenewick);
+  assert(!(opt_streefile && opt_streenewick));
+
+  if (opt_streefile)
+    stree = stree_parse_newick(opt_streefile);
+  else
+    stree = stree_parse_newick_string(opt_streenewick);
+
   if (!stree)
-    fatal("Error while reading tree file %s\n.", opt_streefile);
+    fatal("Error while reading species tree");
 
   return stree;
 }
