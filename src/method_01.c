@@ -341,24 +341,24 @@ static char * cb_serialize_branch(const snode_t * node)
     if (node->parent)
     {
       if (node->theta > 0)
-        asprintf(&s, " #%f: %f", node->theta, node->parent->tau - node->tau);
+        xasprintf(&s, " #%f: %f", node->theta, node->parent->tau - node->tau);
       else
-        asprintf(&s, ": %f", node->parent->tau - node->tau);
+        xasprintf(&s, ": %f", node->parent->tau - node->tau);
     }
     else
     {
       if (node->theta > 0)
-        asprintf(&s, " #%f", node->theta);
+        xasprintf(&s, " #%f", node->theta);
     }
       
   }
   else
   {
     if (node->theta > 0)
-      asprintf(&s, "%s #%f: %f",
+      xasprintf(&s, "%s #%f: %f",
                node->label, node->theta, node->parent->tau - node->tau);
     else
-      asprintf(&s, "%s: %f", node->label, node->parent->tau - node->tau);
+      xasprintf(&s, "%s: %f", node->label, node->parent->tau - node->tau);
   }
     
 

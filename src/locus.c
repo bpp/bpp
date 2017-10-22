@@ -586,7 +586,7 @@ locus_t * locus_create(unsigned int tips,
   sites_alloc = sites;
 
   /* make sure that multiple ARCH were not specified */
-  if (__builtin_popcount(attributes & PLL_ATTRIB_ARCH_MASK) > 1)
+  if (PLL_POPCOUNT(attributes & PLL_ATTRIB_ARCH_MASK) > 1)
     fatal("Internal error in setting locus attributes");
 
   /* allocate locus partition */

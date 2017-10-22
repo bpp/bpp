@@ -259,7 +259,7 @@ static char * export_newick_recursive(const gnode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
     }
   }
   else
@@ -279,7 +279,7 @@ static char * export_newick_recursive(const gnode_t * root,
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = asprintf(&newick,
+      size_alloced = xasprintf(&newick,
                               "(%s,%s)%s",
                               subtree1,
                               subtree2,
@@ -288,7 +288,7 @@ static char * export_newick_recursive(const gnode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick,
+      size_alloced = xasprintf(&newick,
                               "(%s,%s)%s:%f",
                               subtree1,
                               subtree2,
@@ -320,7 +320,7 @@ char * gtree_export_newick(const gnode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
     }
   }
   else
@@ -336,7 +336,7 @@ char * gtree_export_newick(const gnode_t * root,
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = asprintf(&newick,
+      size_alloced = xasprintf(&newick,
                               "(%s,%s)%s",
                               subtree1,
                               subtree2,
@@ -345,7 +345,7 @@ char * gtree_export_newick(const gnode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick,
+      size_alloced = xasprintf(&newick,
                               "(%s,%s)%s:%f;",
                               subtree1,
                               subtree2,

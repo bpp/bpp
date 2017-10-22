@@ -21,13 +21,17 @@
 
 #include "bpp.h"
 
+#ifdef _MSC_VER
+#include "getopt.h"
+#endif
+
 static char * progname;
 static char progheader[80];
 char * cmdline;
 
 /* global error message buffer */
-__thread int bpp_errno;
-__thread char bpp_errmsg[200] = {0};
+__THREAD int bpp_errno;
+__THREAD char bpp_errmsg[200] = {0};
 
 /* number of mandatory options for the user to input */
 static const char mandatory_options_count = 3;

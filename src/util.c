@@ -122,12 +122,14 @@ char * xstrndup(const char * s, size_t len)
   return p;
 }
 
+#if 0
 long getusec(void)
 {
   struct timeval tv;
   if(gettimeofday(&tv,0) != 0) return 0;
   return tv.tv_sec * 1000000 + tv.tv_usec;
 }
+#endif
 
 FILE * xopen(const char * filename, const char * mode)
 {
@@ -142,7 +144,7 @@ void * pll_aligned_alloc(size_t size, size_t alignment)
 {
   void * mem;
 
-#if (defined(__WIN32__) || defined(__WIN64__))
+#if (defined(_WIN32) || defined(_WIN64))
   mem = _aligned_malloc(size, alignment);
 #else
   if (posix_memalign(&mem, alignment, size))
@@ -154,9 +156,41 @@ void * pll_aligned_alloc(size_t size, size_t alignment)
 
 void pll_aligned_free(void * ptr)
 {
-#if (defined(__WIN32__) || defined(__WIN64__))
+#if (defined(_WIN32) || defined(_WIN64))
   _aligned_free(ptr);
 #else
   free(ptr);
 #endif
 }
+
+#ifdef _MSC_VER
+static int vasprintf(char **strp, const char *fmt, va_list ap)
+{
+  int len = _vscprintf(fmt, ap);
+  if (len == -1) return -1;
+
+  size_t size = (size_t)len+1;
+
+  char * str = (char *)malloc(size);
+  if (!str) return -1;
+
+  int r = vsprintf_s(str, len + 1, fmt, ap);
+  if (r == -1)
+  {
+    free(str);
+    return -1;
+  }
+
+  *strp = str;
+  return r;
+}
+
+int xasprintf(char ** strp, const char * fmt, ...)
+{
+  va_list ap;
+  va_start(ap,fmt);
+  int r = vasprintf(strp,fmt,ap);
+  va_end(ap);
+  return r;
+}
+#endif

@@ -25,18 +25,53 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <pthread.h>
-#include <getopt.h>
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
 #include <locale.h>
 #include <math.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <stdint.h>
-#include <unistd.h>
+
+#ifdef _MSC_VER
+#include <pmmintrin.h>
+#include <immintrin.h>
+#else
 #include <x86intrin.h>
+#endif
+
+#ifndef _MSC_VER
+#include <getopt.h>
+#endif
+
+#ifndef _MSC_VER
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+/* platform specific */
+
+#if (defined(__BORLANDC__) || defined(_MSC_VER))
+#define __THREAD __declspec(thread)
+#else
+#define __THREAD __thread
+#endif
+
+#ifdef _MSC_VER
+#define PLL_ALIGN_HEADER(X) __declspec(align(X))
+#define PLL_ALIGN_FOOTER(X)
+#else
+#define PLL_ALIGN_HEADER(X)
+#define PLL_ALIGN_FOOTER(X) __attribute__((aligned(X)))
+#endif
+
+#ifndef _MSC_VER
+#define xasprintf asprintf
+#endif
+
+#ifdef _MSC_VER
+#define strncasecmp _strnicmp
+#endif
 
 /* constants */
 
@@ -379,7 +414,28 @@ typedef struct pair_s
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
+
+#ifdef _MSC_VER
+#define SWAP(x,y) do                                              \
+  {                                                                   \
+    size_t s = MAX(sizeof(x),sizeof(y));                          \
+    unsigned char * temp = (unsigned char *)malloc(s*sizeof(char));   \
+    memcpy(temp,&y,s);                                                \
+    memcpy(&y,&x,s);                                                \
+    memcpy(&x,temp,s);                                                \
+    free(temp);                                                       \
+  } while(0)
+#else
 #define SWAP(x,y) do { __typeof__ (x) _t = x; x = y; y = _t; } while(0)
+#endif
+
+#ifdef _MSC_VER
+#define PLL_POPCOUNT pll_popcount
+#define PLL_CTZ pll_ctz
+#else
+#define PLL_POPCOUNT __builtin_popcount
+#define PLL_CTZ __builtin_ctz
+#endif
 
 #define legacy_rndexp(mean) (-(mean)*log(legacy_rndu()))
 
@@ -431,8 +487,8 @@ extern char * cmdline;
 
 /* common data */
 
-extern __thread int bpp_errno;
-extern __thread char bpp_errmsg[200];
+extern __THREAD int bpp_errno;
+extern __THREAD char bpp_errmsg[200];
 
 extern const unsigned int pll_map_nt[256];
 extern const unsigned int pll_map_fasta[256];
@@ -452,7 +508,12 @@ extern long avx2_present;
 
 /* functions in util.c */
 
+#ifdef _MSC_VER
+__declspec(noreturn) void fatal(const char * format, ...);
+int xasprintf(char ** strp, const char * fmt, ...);
+#else
 void fatal(const char * format, ...) __attribute__ ((noreturn));
+#endif
 void progress_init(const char * prompt, unsigned long size);
 void progress_update(unsigned int progress);
 void progress_done(void);

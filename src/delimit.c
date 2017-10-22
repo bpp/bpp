@@ -100,9 +100,9 @@ static char * cb_serialize_support(const snode_t * node)
 
   /* inner node */
   if (node->left)
-    asprintf(&s, "#%f", node->support);
+    xasprintf(&s, "#%f", node->support);
   else
-    asprintf(&s, "%s", node->label);
+    xasprintf(&s, "%s", node->label);
 
   return s;
 }

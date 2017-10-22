@@ -291,12 +291,12 @@ static char * cb_serialize_support(const snode_t * node)
   if (node->left)
   {
     if (node->parent)
-      asprintf(&s, " #%f", node->support);
+      xasprintf(&s, " #%f", node->support);
     else
       s = xstrdup("");
   }
   else
-    asprintf(&s, "%s", node->label);
+    xasprintf(&s, "%s", node->label);
 
   return s;
 }
@@ -360,8 +360,10 @@ static int cb_popcntcmp(const void * a, const void * b)
 
   for (i = 0; i < bitmask_elms; ++i)
   {
-    bitsa += __builtin_popcountl(pa->bitmask[i]);
-    bitsb += __builtin_popcountl(pb->bitmask[i]);
+    bitsa += PLL_POPCOUNT(pa->bitmask[i]);
+    //bitsa += __builtin_popcountl(pa->bitmask[i]);
+    bitsb += PLL_POPCOUNT(pb->bitmask[i]);
+    //bitsb += __builtin_popcountl(pb->bitmask[i]);
   }
 
   if (bitsa > bitsb) return 1;
@@ -451,20 +453,20 @@ void splits_finalize(long trees_count, char ** species)
     
     /* assemble */
     char * temp;
-    asprintf(newick+i,"(%s",s[0]);
+    xasprintf(newick+i,"(%s",s[0]);
     free(s[0]);
     for (j = 1; j < (unsigned long)ptrcount; ++j)
     {
-      asprintf(&temp, "%s, %s", newick[i], s[j]);
+      xasprintf(&temp, "%s, %s", newick[i], s[j]);
       free(newick[i]);
       newick[i] = temp;
       free(s[j]);
     }
 
     if (i == majority - 1)
-      asprintf(&temp, "%s);", newick[i]);
+      xasprintf(&temp, "%s);", newick[i]);
     else
-      asprintf(&temp, "%s) #%f", newick[i], x[i]->freq / (double)trees_count);
+      xasprintf(&temp, "%s) #%f", newick[i], x[i]->freq / (double)trees_count);
 
     free(newick[i]);
     newick[i] = temp;

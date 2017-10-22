@@ -181,7 +181,7 @@ void pll_core_create_lookup_20x20_avx(unsigned int rate_cats,
 
     unsigned int state = tipmap[j];
 
-    int ss = __builtin_popcount(state) == 1 ? __builtin_ctz(state) : -1;
+    int ss = PLL_POPCOUNT(state) == 1 ? PLL_CTZ(state) : -1;
 
     for (n = 0; n < rate_cats; ++n)
     {
@@ -1129,7 +1129,7 @@ void pll_core_update_partial_ti_20x20_avx(unsigned int sites,
 
     unsigned int state = tipmap[j];
 
-    int ss = __builtin_popcount(state) == 1 ? __builtin_ctz(state) : -1;
+    int ss = PLL_POPCOUNT(state) == 1 ? PLL_CTZ(state) : -1;
 
     for (n = 0; n < rate_cats; ++n)
     {

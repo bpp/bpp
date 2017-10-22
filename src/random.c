@@ -97,7 +97,7 @@ double legacy_rndgamma (double a)
    ACM Transactions on Mathematical Software, 26 (3): 363-372.
    This is not entirely safe and is noted to produce zero when a is small (0.001).
  */
-   double a0 = a, c, d, u, v, x, small=1E-300;
+   double a0 = a, c, d, u, v, x, smallv=1E-300;
 
    if (a < 1) a++;
 
@@ -123,7 +123,7 @@ double legacy_rndgamma (double a)
    if (a0 < 1)    /* this may cause underflow if a is small, like 0.01 */
       v *= pow(legacy_rndu( ), 1 / a0);
    if (v == 0)   /* underflow */
-      v = small;
+      v = smallv;
    return v;
 }
 

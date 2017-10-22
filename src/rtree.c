@@ -128,7 +128,7 @@ static char * stree_export_newick_recursive(const snode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
     }
   }
   else
@@ -148,21 +148,21 @@ static char * stree_export_newick_recursive(const snode_t * root,
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = asprintf(&newick,
-                              "(%s, %s)%s",
-                              subtree1,
-                              subtree2,
-                              temp);
+      size_alloced = xasprintf(&newick,
+                               "(%s, %s)%s",
+                               subtree1,
+                               subtree2,
+                               temp);
       free(temp);
     }
     else
     {
-      size_alloced = asprintf(&newick,
-                              "(%s, %s)%s:%f",
-                              subtree1,
-                              subtree2,
-                              root->label ? root->label : "",
-                              root->length);
+      size_alloced = xasprintf(&newick,
+                               "(%s, %s)%s:%f",
+                               subtree1,
+                               subtree2,
+                               root->label ? root->label : "",
+                               root->length);
     }
     free(subtree1);
     free(subtree2);
@@ -191,7 +191,7 @@ char * stree_export_newick(const snode_t * root,
     }
     else
     {
-      size_alloced = asprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
     }
   }
   else
@@ -207,21 +207,21 @@ char * stree_export_newick(const snode_t * root,
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = asprintf(&newick,
-                              "(%s, %s)%s;",
-                              subtree1,
-                              subtree2,
-                              temp);
+      size_alloced = xasprintf(&newick,
+                               "(%s, %s)%s;",
+                               subtree1,
+                               subtree2,
+                               temp);
       free(temp);
     }
     else
     {
-      size_alloced = asprintf(&newick,
-                              "(%s, %s)%s:%f;",
-                              subtree1,
-                              subtree2,
-                              root->label ? root->label : "",
-                              root->length);
+      size_alloced = xasprintf(&newick,
+                               "(%s, %s)%s:%f;",
+                               subtree1,
+                               subtree2,
+                               root->label ? root->label : "",
+                               root->length);
     }
     free(subtree1);
     free(subtree2);

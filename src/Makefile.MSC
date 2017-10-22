@@ -1,0 +1,81 @@
+OBJ_AVX=core_likelihood_avx.obj core_partials_avx.obj
+SRC_AVX=core_likelihood_avx.c core_partials_avx.c
+
+OBJ_AVX2=core_likelihood_avx2.obj core_partials_avx2.obj
+SRC_AVX2=core_likelihood_avx2.c core_partials_avx2.c
+
+OBJ_SSE=core_likelihood_sse.obj core_partials_sse.obj
+SRC_SSE=core_likelihood_sse.c core_partials_sse.c
+
+PROG = bpp.exe
+
+OBJ_LIBPLL = \
+  core_likelihood.obj \
+  core_partials.obj \
+  hardware.obj
+
+SRC_LIBPLL = \
+  core_likelihood.c \
+  core_partials.c \
+  hardware.c
+
+OBJ_BPP = \
+  arch.obj \
+  bpp.obj \
+  cfile.obj \
+  compress.obj \
+  delimit.obj \
+  dlist.obj \
+  gtree.obj \
+  hash.obj \
+  list.obj \
+  locus.obj \
+  mapping.obj \
+  maps.obj \
+  method_00.obj \
+  method_01.obj \
+  method_10.obj \
+  msa.obj \
+  output.obj \
+  lex_map.obj \
+  parse_map.obj \
+  lex_stree.obj \
+  parse_stree.obj \
+  phylip.obj \
+  prop_mixing.obj \
+  prop_rj.obj \
+  random.obj \
+  rtree.obj \
+  stree.obj \
+  summary.obj \
+  util.obj
+
+all: $(PROG)
+
+parse_map.c: parse_map.y
+	c:\GIT\winflexbison\bin\Release\win_bison -p map_ -d -o parse_map.c parse_map.y
+
+lex_map.c: lex_map.l
+	C:\GIT\winflexbison\bin\Release\win_flex -P map_ -o lex_map.c lex_map.l
+
+parse_stree.c: parse_stree.y
+	c:\GIT\winflexbison\bin\Release\win_bison -p stree_ -d -o parse_stree.c parse_stree.y
+
+lex_stree.c: lex_stree.l
+	C:\GIT\winflexbison\bin\Release\win_flex -P stree_ -o lex_stree.c lex_stree.l
+
+$(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP)
+	link /out:$@ $**
+
+.c.obj::
+	@echo Compiling $<
+	cl -c -DYY_NO_UNISTD_H -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox $<
+
+$(OBJ_AVX2): $(SRC_AVX2)
+	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:AVX2 $**
+
+$(OBJ_AVX): $(SRC_AVX)
+	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:AVX $**
+
+$(OBJ_SSE): $(SRC_SSE)
+	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:SSE2 $**
