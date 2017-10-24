@@ -667,14 +667,10 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"usedata",7))
       {
-        long opt_usedata; /* TODO: Implement this */
-        /* TODO: Currently only accepting 1 for usedata */
         if (!parse_long(value,&opt_usedata) ||
             (opt_usedata != 0 && opt_usedata != 1))
           fatal("Option 'usedata' expects value 0 or 1 (line %ld)",
                 line_count);
-        if (opt_usedata == 0)
-          fatal("usedata=0 not implemented yet (line %ld)", line_count);
 
         printf("usedata = %ld\n", opt_usedata);
       }

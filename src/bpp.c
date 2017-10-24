@@ -52,6 +52,7 @@ long opt_samplefreq;
 long opt_burnin;
 long opt_finetune_reset;
 long opt_rjmcmc_method;
+long opt_usedata;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -105,6 +106,7 @@ static struct option long_options[] =
   {"rjmcmc_mean",     required_argument, 0, 0 },  /* 24 */
   {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 25 */
   {"cfile",           required_argument, 0, 0 },  /* 26 */
+  {"nodata",          no_argument,       0, 0 },  /* 27 */
   { 0, 0, 0, 0 }
 };
 
@@ -199,6 +201,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_mean = -1;
   opt_rjmcmc_epsilon = -1;
   opt_rjmcmc_method = -1;
+  opt_usedata = 1;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -327,6 +330,10 @@ void args_init(int argc, char ** argv)
 
       case 26:
         opt_cfile = optarg;
+        break;
+
+      case 27:
+        opt_usedata = 0;
         break;
         
       default:

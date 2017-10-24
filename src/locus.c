@@ -796,6 +796,8 @@ void locus_update_matrices_jc69(locus_t * locus,
   unsigned int states = locus->states;
   unsigned int states_padded = locus->states_padded;
 
+  if (!opt_usedata) return;
+
   for (i = 0; i < count; ++i)
   {
     node = traversal[i];
@@ -868,6 +870,8 @@ void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count)
   gnode_t * lnode;
   gnode_t * rnode;
 
+  if (!opt_usedata) return;
+
   for (i = 0; i < count; ++i)
   {
     node  = traversal[i];
@@ -905,6 +909,8 @@ double locus_root_loglikelihood(locus_t * locus,
                                 double * persite_lnl)
 {
   unsigned int * scaler;
+
+  if (!opt_usedata) return 0;
 
   scaler = (root->scaler_index == PLL_SCALE_BUFFER_NONE) ?
              NULL : locus->scale_buffer[root->scaler_index];
