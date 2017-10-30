@@ -391,6 +391,8 @@ static long parse_finetune(const char * line)
   /* is it a blank line or comment ? */
   if (p[ws] != '0' && p[ws] != '1') goto l_unwind;
 
+  if (p[ws] == '1') opt_finetune_reset = 1;
+
   p += ws+1;
 
   /* skip all white-space */
