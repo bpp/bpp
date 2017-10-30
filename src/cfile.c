@@ -201,6 +201,44 @@ static long get_double(const char * line, double * value)
   return ws + end - start;
 }
 
+static long get_e(const char * line, long * value)
+{
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    *value = 0;
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  if ((*start != 'E' && *start != 'e') || (start+1 != end))
+  {
+    free(s);
+    *value = 2;         /* erroneous value */
+    return 0;
+  }
+
+  *value = 1;
+
+  free(s);
+  return ws + end - start;
+}
+
 static int parse_speciestree(const char * line)
 {
   long ret = 0;
@@ -294,6 +332,13 @@ static long parse_thetaprior(const char * line)
   /* now read second token */
   count = get_double(p, &opt_theta_beta);
   if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
+  count = get_e(p, &opt_est_theta);
+  if (opt_est_theta > 1) goto l_unwind;
 
   p += count;
 

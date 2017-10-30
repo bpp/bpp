@@ -47,6 +47,7 @@ long opt_delimit;
 long opt_delimit_prior;
 long opt_cleandata;
 long opt_debug;
+long opt_est_theta;
 long opt_samples;
 long opt_samplefreq;
 long opt_burnin;
@@ -171,6 +172,7 @@ void args_init(int argc, char ** argv)
   opt_burnin = 100;
   opt_cleandata = 0;
   opt_debug = 0;
+  opt_est_theta = 1;
   opt_delimit = 0;
   opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
   opt_finetune_gtage = 5;

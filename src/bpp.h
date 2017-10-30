@@ -416,12 +416,12 @@ typedef struct pair_s
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
 #ifdef _MSC_VER
-#define SWAP(x,y) do                                              \
+#define SWAP(x,y) do                                                  \
   {                                                                   \
-    size_t s = MAX(sizeof(x),sizeof(y));                          \
+    size_t s = MAX(sizeof(x),sizeof(y));                              \
     unsigned char * temp = (unsigned char *)malloc(s*sizeof(char));   \
     memcpy(temp,&y,s);                                                \
-    memcpy(&y,&x,s);                                                \
+    memcpy(&y,&x,s);                                                  \
     memcpy(&x,temp,s);                                                \
     free(temp);                                                       \
   } while(0)
@@ -457,6 +457,7 @@ extern long opt_delimit;
 extern long opt_delimit_prior;
 extern long opt_cleandata;
 extern long opt_debug;
+extern long opt_est_theta;
 extern long opt_samples;
 extern long opt_samplefreq;
 extern long opt_burnin;
