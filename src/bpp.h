@@ -822,6 +822,21 @@ void print_stree_with_support(const char * treestr, long freq, long trees_count)
 
 void summary_dealloc_hashtables(void);
 
+/* functions in hardware.c */
+
+void cpu_features_show(void);
+
+void cpu_features_detect(void);
+
+void cpu_setarch(void);
+
+#ifdef _MSC_VER
+int pll_ctz(unsigned int x);
+unsigned int pll_popcount(unsigned int x);
+#endif
+
+
+
 /* functions in core_partials.c */
 
 void pll_core_update_partial_tt_4x4(unsigned int sites,

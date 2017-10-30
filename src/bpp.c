@@ -217,7 +217,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_epsilon = -1;
   opt_rjmcmc_method = -1;
   opt_usedata = 1;
-  opt_arch = PLL_ATTRIB_ARCH_CPU;
+  opt_arch = -1;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -506,6 +506,10 @@ int main (int argc, char * argv[])
   args_init(argc, argv);
 
   show_header();
+
+  cpu_features_detect();
+  cpu_features_show();
+  cpu_setarch();
 
   /* intiialize random number generators */
   //srand48(opt_seed);
