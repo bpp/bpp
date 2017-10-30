@@ -339,6 +339,13 @@ void phylip_close(phylip_t * fd)
   free(fd);
 }
 
+static long emptyline(const char * line)
+{
+  size_t ws = strspn(line, " \t\r\n");
+  if (!line[ws]) return 1;
+  return 0;
+}
+
 msa_t * phylip_parse_interleaved(phylip_t * fd)
 {
   int i;
@@ -348,6 +355,8 @@ msa_t * phylip_parse_interleaved(phylip_t * fd)
   long headerlen;
 
   msa_t * msa = (msa_t *)xmalloc(sizeof(msa_t));
+
+  while (emptyline(fd->line)) getnextline(fd);
 
   /* read header */
   if (!parse_header(fd->line,
@@ -505,6 +514,8 @@ msa_t * phylip_parse_sequential(phylip_t * fd)
 
   msa_t * msa = (msa_t *)xmalloc(sizeof(msa_t));
 
+  while (emptyline(fd->line)) getnextline(fd);
+    
   /* read header */
   if (!parse_header(fd->line,
                     &(msa->count),
