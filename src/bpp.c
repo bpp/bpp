@@ -93,21 +93,20 @@ static struct option long_options[] =
   {"tauprior",        required_argument, 0, 0 },  /* 10 */
   {"thetaprior",      required_argument, 0, 0 },  /* 11 */
   {"cleandata",       no_argument,       0, 0 },  /* 12 */
-  {"map_file",        required_argument, 0, 0 },  /* 13 */
-  {"debug",           no_argument,       0, 0 },  /* 14 */
-  {"samples",         required_argument, 0, 0 },  /* 15 */
-  {"samplefreq",      required_argument, 0, 0 },  /* 16 */
-  {"burnin",          required_argument, 0, 0 },  /* 17 */
-  {"finetune_reset",  no_argument,       0, 0 },  /* 18 */
-  {"finetune_params", required_argument, 0, 0 },  /* 19 */
-  {"mcmc_file",       required_argument, 0, 0 },  /* 20 */
-  {"reorder",         required_argument, 0, 0 },  /* 21 */
-  {"delimit_prior",   required_argument, 0, 0 },  /* 22 */
-  {"rjmcmc_alpha",    required_argument, 0, 0 },  /* 23 */
-  {"rjmcmc_mean",     required_argument, 0, 0 },  /* 24 */
-  {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 25 */
-  {"cfile",           required_argument, 0, 0 },  /* 26 */
-  {"nodata",          no_argument,       0, 0 },  /* 27 */
+  {"debug",           no_argument,       0, 0 },  /* 13 */
+  {"samples",         required_argument, 0, 0 },  /* 14 */
+  {"samplefreq",      required_argument, 0, 0 },  /* 15 */
+  {"burnin",          required_argument, 0, 0 },  /* 16 */
+  {"finetune_reset",  no_argument,       0, 0 },  /* 17 */
+  {"finetune_params", required_argument, 0, 0 },  /* 18 */
+  {"mcmc_file",       required_argument, 0, 0 },  /* 19 */
+  {"reorder",         required_argument, 0, 0 },  /* 20 */
+  {"delimit_prior",   required_argument, 0, 0 },  /* 21 */
+  {"rjmcmc_alpha",    required_argument, 0, 0 },  /* 22 */
+  {"rjmcmc_mean",     required_argument, 0, 0 },  /* 23 */
+  {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 24 */
+  {"cfile",           required_argument, 0, 0 },  /* 25 */
+  {"nodata",          no_argument,       0, 0 },  /* 26 */
   { 0, 0, 0, 0 }
 };
 
@@ -222,19 +221,19 @@ void args_init(int argc, char ** argv)
         break;
 
       case 3:
-        opt_streefile = optarg;
+        opt_streefile = xstrdup(optarg);
         break;
 
       case 4:
-        opt_mapfile = optarg;
+        opt_mapfile = xstrdup(optarg);
         break;
 
       case 5:
-        opt_outfile = optarg;
+        opt_outfile = xstrdup(optarg);
         break;
 
       case 6:
-        opt_msafile = optarg;
+        opt_msafile = xstrdup(optarg);
         break;
 
       case 7:
@@ -264,43 +263,39 @@ void args_init(int argc, char ** argv)
         break;
 
       case 13:
-        opt_mapfile = optarg;
-        break;
-
-      case 14:
         opt_debug = 1;
         break;
 
-      case 15:
+      case 14:
         opt_samples = args_getlong(optarg);
         break;
 
-      case 16:
+      case 15:
         opt_samplefreq = args_getlong(optarg);
         break;
 
-      case 17:
+      case 16:
         opt_burnin = args_getlong(optarg);
         break;
 
-      case 18:
+      case 17:
         opt_finetune_reset = 1;
         break;
 
-      case 19:
+      case 18:
         if (!args_getftparams(optarg))
           fatal("Illegal format for --finetune_params");
         break;
 
+      case 19:
+        opt_mcmcfile = xstrdup(optarg);
+        break;
+
       case 20:
-        opt_mcmcfile = optarg;
+        opt_reorder = xstrdup(optarg);
         break;
 
       case 21:
-        opt_reorder = optarg;
-        break;
-
-      case 22:
         if (!strcmp(optarg,"dirichlet"))
           opt_delimit_prior = BPP_DELIMIT_PRIOR_DIRICHLET;
         else if (!strcmp(optarg,"uniform"))
@@ -309,32 +304,32 @@ void args_init(int argc, char ** argv)
           fatal("Unknown species delimitation prior: %s", optarg);
         break;
 
-      case 23:
+      case 22:
         if (opt_rjmcmc_method == 0)
           fatal("Cannot use --rjmcmc_alpha with --rjmcmc_epsilon");
         opt_rjmcmc_alpha = args_getdouble(optarg);
         opt_rjmcmc_method = 1;
         break;
 
-      case 24:
+      case 23:
         if (opt_rjmcmc_method == 0)
           fatal("Cannot use --rjmcmc_mean with --rjmcmc_epsilon");
         opt_rjmcmc_mean = args_getdouble(optarg);
         opt_rjmcmc_method = 1;
         break;
 
-      case 25:
+      case 24:
         if (opt_rjmcmc_method == 1)
           fatal("Cannot use --rjmcmc_epsilon with --rjmcmc_alpha/--rjmcmc_mean");
         opt_rjmcmc_epsilon = args_getdouble(optarg);
         opt_rjmcmc_method = 0;
         break;
 
-      case 26:
-        opt_cfile = optarg;
+      case 25:
+        opt_cfile = xstrdup(optarg);
         break;
 
-      case 27:
+      case 26:
         opt_usedata = 0;
         break;
         
@@ -388,6 +383,18 @@ void args_init(int argc, char ** argv)
   if (!opt_version && !opt_help)
     if (mand_options != mandatory_options_count && !opt_cfile)
       fatal("Mandatory options are:\n\n%s", mandatory_options_list);
+}
+
+static void dealloc_switches()
+{
+  if (opt_streefile) free(opt_streefile);
+  if (opt_mapfile) free(opt_mapfile);
+  if (opt_outfile) free(opt_outfile);
+  if (opt_msafile) free(opt_msafile);
+  if (opt_mcmcfile) free(opt_mcmcfile);
+  if (opt_reorder) free(opt_reorder);
+  if (opt_cfile) free(opt_cfile);
+  if (opt_streenewick) free(opt_streenewick);
 }
 
 void cmd_help()
@@ -497,6 +504,7 @@ int main (int argc, char * argv[])
     cmd_a01();
   }
 
+  dealloc_switches();
   free(cmdline);
   return (0);
 }

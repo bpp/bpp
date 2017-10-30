@@ -883,4 +883,6 @@ void load_cfile()
       }
     }
   }
+
+  fclose(fp);
 }
