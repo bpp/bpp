@@ -274,6 +274,7 @@ static void stree_summary(char ** species_names, long species_count)
     print_stree_with_support(treelist[ft[i].pos],ft[i].count,line_count);
   }
 
+  summary_dealloc_hashtables();
   free(uniquepos);
   free(ft);
  

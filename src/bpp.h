@@ -818,6 +818,8 @@ void splits_finalize(long trees_count, char ** species);
 
 void print_stree_with_support(const char * treestr, long freq, long trees_count);
 
+void summary_dealloc_hashtables(void);
+
 /* functions in core_partials.c */
 
 void pll_core_update_partial_tt_4x4(unsigned int sites,

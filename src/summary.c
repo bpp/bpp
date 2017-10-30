@@ -335,6 +335,10 @@ void print_stree_with_support(const char * treestr, long freq, long trees_count)
       free(stree->nodes[i]->bitmask);
 
   stree_destroy(stree,NULL);
+}
+
+void summary_dealloc_hashtables()
+{
   hashtable_destroy(ht_bp,cb_bf_dealloc);
   hashtable_destroy(ht_bm,cb_bm_dealloc);
 }
