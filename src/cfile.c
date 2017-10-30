@@ -669,6 +669,25 @@ void load_cfile()
         else
           printf("seed = %ld\n", opt_seed);
       }
+      else if (!strncasecmp(token,"arch",4))
+      {
+        char * temp;
+        if (!get_string(value,&temp))
+          fatal("Option %s expects a string (line %ld)", token, line_count);
+
+        if (!strcmp(temp,"cpu"))
+          opt_arch = PLL_ATTRIB_ARCH_CPU;
+        else if (!strcasecmp(temp,"sse"))
+          opt_arch = PLL_ATTRIB_ARCH_SSE;
+        else if (!strcasecmp(temp,"avx"))
+          opt_arch = PLL_ATTRIB_ARCH_AVX;
+        else if (!strcasecmp(temp,"avx2"))
+          opt_arch = PLL_ATTRIB_ARCH_AVX2;
+        else
+          fatal("Invalid instruction set (%s) (line %ld)", optarg, line_count);
+
+        free(temp);
+      }
     }
     else if (token_len == 5)
     {

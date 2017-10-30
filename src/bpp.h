@@ -453,6 +453,7 @@ extern long opt_version;
 extern long opt_quiet;
 extern long opt_seed;
 extern long opt_stree;
+extern long opt_arch;
 extern long opt_delimit;
 extern long opt_delimit_prior;
 extern long opt_cleandata;
@@ -507,6 +508,7 @@ extern long sse42_present;
 extern long popcnt_present;
 extern long avx_present;
 extern long avx2_present;
+extern long altivec_present;
 
 /* functions in util.c */
 

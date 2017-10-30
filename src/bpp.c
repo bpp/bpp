@@ -43,6 +43,7 @@ long opt_version;
 long opt_quiet;
 long opt_seed;
 long opt_stree;
+long opt_arch;
 long opt_delimit;
 long opt_delimit_prior;
 long opt_cleandata;
@@ -78,6 +79,18 @@ char * opt_streenewick;
 
 long opt_debugflag = 0;
 
+long mmx_present;
+long sse_present;
+long sse2_present;
+long sse3_present;
+long ssse3_present;
+long sse41_present;
+long sse42_present;
+long popcnt_present;
+long avx_present;
+long avx2_present;
+long altivec_present;
+
 static struct option long_options[] =
 {
   {"help",            no_argument,       0, 0 },  /*  0 */
@@ -107,6 +120,7 @@ static struct option long_options[] =
   {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 24 */
   {"cfile",           required_argument, 0, 0 },  /* 25 */
   {"nodata",          no_argument,       0, 0 },  /* 26 */
+  {"arch",            required_argument, 0, 0 },  /* 27 */
   { 0, 0, 0, 0 }
 };
 
@@ -203,6 +217,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_epsilon = -1;
   opt_rjmcmc_method = -1;
   opt_usedata = 1;
+  opt_arch = PLL_ATTRIB_ARCH_CPU;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -331,6 +346,19 @@ void args_init(int argc, char ** argv)
 
       case 26:
         opt_usedata = 0;
+        break;
+
+      case 27:
+        if (!strcmp(optarg,"cpu"))
+          opt_arch = PLL_ATTRIB_ARCH_CPU;
+        else if (!strcasecmp(optarg,"sse"))
+          opt_arch = PLL_ATTRIB_ARCH_SSE;
+        else if (!strcasecmp(optarg,"avx"))
+          opt_arch = PLL_ATTRIB_ARCH_AVX;
+        else if (!strcasecmp(optarg,"avx2"))
+          opt_arch = PLL_ATTRIB_ARCH_AVX2;
+        else
+          fatal("Invalid instruction set (%s)", optarg);
         break;
         
       default:

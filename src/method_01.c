@@ -306,7 +306,7 @@ static void reset_finetune(double * pjump)
 {
   int i;
 
-  fprintf(stdout, "Current Pjump:    ");
+  fprintf(stdout, "\nCurrent Pjump:    ");
   for (i = 0; i < PROP_COUNT; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   fprintf(stdout, "\n");
@@ -511,7 +511,7 @@ void cmd_a01()
                             2*gtree[i]->edge_count,     /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
-                            PLL_ATTRIB_ARCH_AVX);       /* attributes */
+                            opt_arch);                  /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
