@@ -662,12 +662,7 @@ void load_cfile()
           fatal("Option 'seed' expects one integer (line %ld)", line_count);
 
         if (opt_seed == -1)
-        {
           opt_seed = (long)time(NULL);
-          printf("seed = %ld (timestamp)\n", opt_seed);
-        }
-        else
-          printf("seed = %ld\n", opt_seed);
       }
       else if (!strncasecmp(token,"arch",4))
       {
@@ -697,13 +692,11 @@ void load_cfile()
         if (!parse_long(value,&opt_nloci) || opt_nloci < 1)
           fatal("Option 'nloci' expects one positive integer (line %ld)",
                 line_count);
-        printf("nloci = %ld\n", opt_nloci);
       }
       else if (!strncasecmp(token,"print",5))
       {
         if (!parse_print(value))
           fatal("Option 'print' expects four bits (line %ld)", line_count);
-        printf("print = ignored\n");
       }
     }
     else if (token_len == 6)
@@ -713,7 +706,6 @@ void load_cfile()
         if (!parse_long(value,&opt_burnin) || opt_burnin < 0)
           fatal("Option 'burnin' expects one positive (or zero) integer (line %ld)",
                  line_count);
-        printf("burnin = %ld\n", opt_burnin);
       }
     }
     else if (token_len == 7)
@@ -722,14 +714,11 @@ void load_cfile()
       {
         if (!get_string(value, &opt_msafile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
-        
-        printf("seqfile = %s\n", opt_msafile);
       }
       else if (!strncasecmp(token,"outfile",7))
       {
         if (!get_string(value, &opt_outfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
-        printf("outfile = %s\n", opt_outfile);
       }
       else if (!strncasecmp(token,"usedata",7))
       {
@@ -737,8 +726,6 @@ void load_cfile()
             (opt_usedata != 0 && opt_usedata != 1))
           fatal("Option 'usedata' expects value 0 or 1 (line %ld)",
                 line_count);
-
-        printf("usedata = %ld\n", opt_usedata);
       }
       else if (!strncasecmp(token,"nsample",7))
       {
@@ -753,20 +740,17 @@ void load_cfile()
       {
         if (!get_string(value, &opt_mapfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
-        printf("seqfile = %s\n", opt_mapfile);
       }
       else if (!strncasecmp(token,"mcmcfile",8))
       {
         if (!get_string(value,&opt_mcmcfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
-        printf("mcmcfile = %s\n", opt_mcmcfile);
       }
       else if (!strncasecmp(token,"tauprior",8))
       {
         if (!parse_tauprior(value))
           fatal("Option 'tauprior' expects two doubles (line %ld)",
                 line_count);
-        printf("tauprior = %f %f\n", opt_tau_alpha, opt_tau_beta);
       }
       else if (!strncasecmp(token,"heredity",8))
       {
@@ -776,14 +760,6 @@ void load_cfile()
       {
         if (!parse_finetune(value))
           fatal("Option 'finetune' in wrong format (line %ld)", line_count);
-
-        printf("finetune = %ld %f %f %f %f %f\n",
-                opt_finetune_reset,
-                opt_finetune_gtage,
-                opt_finetune_gtspr,
-                opt_finetune_theta,
-                opt_finetune_tau,
-                opt_finetune_mix);
       }
       else if (!strncasecmp(token,"sampfreq",8))
       {
@@ -800,7 +776,6 @@ void load_cfile()
             (opt_cleandata != 0 && opt_cleandata != 1))
           fatal("Option 'cleandata' expects value 0 or 1 (line %ld)",
                 line_count);
-        printf("cleandata = %ld\n", opt_cleandata);
       }
       else if (!strncasecmp(token,"locusrate",9))
       {
@@ -814,7 +789,6 @@ void load_cfile()
         if (!parse_thetaprior(value))
           fatal("Option 'thetaprior' expects two doubles (line %ld)",
                 line_count);
-        printf("thetaprior = %f %f\n", opt_theta_alpha, opt_theta_beta);
       }
     }
     else if (token_len == 11)
@@ -824,7 +798,6 @@ void load_cfile()
         if (!parse_speciestree(value))
           fatal("Erroneous format of options speciestree (line %ld)",
                 line_count);
-        printf("speciestree = %ld\n", opt_stree);
       }
     }
     else if (token_len == 12)
@@ -836,7 +809,6 @@ void load_cfile()
 
         if (!parse_speciesandtree(value))
           fatal("Erroneous format of 'species&tree' (line %ld)", line_count);
-        printf("reorder: %s\n", opt_reorder);
 
         if (!getnextline(fp))
           fatal("Incomplete 'species&tree' record (line %ld)", line_count);
@@ -849,10 +821,6 @@ void load_cfile()
         if (!get_string (line,&opt_streenewick))
           fatal("Expected newick tree string in 'species&tree' (line %ld)",
                  line_count);
-
-        printf("   stree = %s\n", opt_streenewick);
-
-
       }
     }
     else if (token_len == 13)
@@ -882,23 +850,6 @@ void load_cfile()
       {
         if (!parse_speciesdelimitation(value))
           fatal("Erroneous format of option %s (line %ld)", token, line_count);
-        
-        if (!opt_delimit)
-          printf("speciesdelimitation = 0\n");
-        else
-        {
-          if (opt_rjmcmc_method == 0)
-            printf("speciesdelimitation = %ld %ld %f\n",
-                   opt_delimit,
-                   opt_rjmcmc_method,
-                   opt_rjmcmc_epsilon);
-          else
-            printf("speciesdelimitation = %ld %ld %f %f\n",
-                   opt_delimit,
-                   opt_rjmcmc_method,
-                   opt_rjmcmc_alpha,
-                   opt_rjmcmc_mean);
-        }
       }
     }
   }

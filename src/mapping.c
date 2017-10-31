@@ -70,7 +70,9 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht)
             mapping->species,
             opt_mapfile);
 
+#if 0
     printf("Mapped %s -> %s\n", pair->label, node->label);
+#endif
     li = li->next;
   }
   

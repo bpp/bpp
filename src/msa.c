@@ -32,11 +32,12 @@ void msa_print(msa_t * msa)
     printf("%s %s\n", msa->label[i], msa->sequence[i]);
 }
 
-static int * mark_ambiguous_sites(msa_t * msa, const unsigned int * map)
+void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map)
 {
   int i,j;
   int amb;
-  int * ambvector = (int *)xcalloc(msa->length, sizeof(int));
+
+  msa->amb_sites_count = 0;
 
   for (i = 0; i < msa->length; ++i)
   {
@@ -45,7 +46,28 @@ static int * mark_ambiguous_sites(msa_t * msa, const unsigned int * map)
       amb |= map[(int)(msa->sequence[j][i])];
 
     if (amb)
+      msa->amb_sites_count++;
+  }
+}
+static int * mark_ambiguous_sites(msa_t * msa, const unsigned int * map)
+{
+  int i,j;
+  int amb;
+  int * ambvector = (int *)xcalloc(msa->length, sizeof(int));
+
+  msa->amb_sites_count = 0;
+
+  for (i = 0; i < msa->length; ++i)
+  {
+    amb = 0;
+    for (j = 0; j < msa->count; ++j)
+      amb |= map[(int)(msa->sequence[j][i])];
+
+    if (amb)
+    {
       ambvector[i] = 1;
+      msa->amb_sites_count++;
+    }
   }
 
   return ambvector;
@@ -135,4 +157,95 @@ void msa_destroy(msa_t * msa)
   }
 
   free(msa);
+}
+
+#define COLUMNS 5
+
+static int longint_len(long x)
+{
+  return x ? (int)floor(log10(abs(x)))+1 : 1;
+}
+
+void msa_summary(msa_t ** msa_list, int msa_count)
+{
+  long i,j,k;
+
+  char * labels[COLUMNS] = {"Locus",
+                            "Sequences",
+                            "Length",
+                            "Ambiguous sites",
+                            "JC69 Compressed"};
+
+  int col_len[COLUMNS];
+
+  /* initialize length of each column according to labels */
+  for (i = 0; i < COLUMNS; ++i)
+    col_len[i] = strlen(labels[i]) + 2;
+
+  /* 'locus count' column length */
+  col_len[0] = MAX(col_len[0], longint_len(msa_count)+2);
+
+  /* 'sequences' column length */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+    k = MAX(k,msa_list[i]->count);
+  col_len[1] = MAX(col_len[1], longint_len(k)+2);
+
+  /* 'length' column length */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+    k = MAX(k,msa_list[i]->length);
+  col_len[2] = MAX(col_len[2], longint_len(k)+2);
+
+  /* 'Ambiguous sites' column length */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+    k = MAX(k,msa_list[i]->amb_sites_count);
+  col_len[3] = MAX(col_len[3], longint_len(k)+2);
+
+  /* 'JC69 compressed length' column length */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+    k = MAX(k,msa_list[i]->length);
+  col_len[4] = MAX(col_len[4], longint_len(k)+2);
+
+  printf("\n");
+
+  /* print header column with labels centered */
+  for (i = 0; i < COLUMNS; ++i)
+  {
+    long blanks = (col_len[i] - strlen(labels[i]))/2;
+    for (j = 0; j < blanks; ++j) printf(" ");
+
+    printf("%s", labels[i]);
+
+    blanks = col_len[i] - blanks - strlen(labels[i]);
+    for (j = 0; j < blanks; ++j) printf(" ");
+
+    if (i != COLUMNS-1)
+      printf("|");
+  }
+  printf("\n");
+
+  /* print separator */
+  for (i = 0; i < COLUMNS; ++i)
+  {
+    for (j = 0; j < col_len[i]; ++j)
+      printf("-");
+    if (i != COLUMNS-1)
+      printf("+");
+  }
+  printf("\n");
+
+  /* print table rows */
+  for (i = 0; i < msa_count; ++i)
+  {
+    printf("%*ld |", col_len[0]-1, i+1);
+    printf("%*d |", col_len[1]-1, msa_list[i]->count);
+    printf("%*d |", col_len[2]-1, msa_list[i]->original_length);
+    printf("%*d |", col_len[3]-1, msa_list[i]->amb_sites_count);
+    printf("%*d ", col_len[4]-1, msa_list[i]->length);
+    printf("\n");
+  }
+  printf("\n");
 }

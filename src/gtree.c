@@ -633,7 +633,6 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   snode_t ** epoch;
   gnode_t * inner = NULL;
 
-  printf("Generating gtree %d\n", msa_index);
   /* get a list of inner nodes (epochs) */
   epoch = (snode_t  **)xmalloc(stree->inner_count*sizeof(snode_t *));
   memcpy(epoch,
@@ -964,8 +963,10 @@ gtree_t ** gtree_init(stree_t * stree,
   mht = maplist_hash(maplist,sht);
 
   /* generate random starting gene trees for each alignment */
+  printf("Generating gene trees....");
   for (i = 0; i < msa_count; ++i)
     gtree[i] = gtree_simulate(stree, msalist[i],i);
+  printf(" Done\n");
 
   /* destroy the hash tables */
   hashtable_destroy(sht,NULL);

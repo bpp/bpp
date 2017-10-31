@@ -298,6 +298,9 @@ typedef struct msa_s
   char ** sequence;
   char ** label;
 
+  int amb_sites_count;
+  int original_length;
+
 } msa_t;
 
 typedef struct locus_s
@@ -615,6 +618,8 @@ stree_t * stree_clone_init(stree_t * stree);
 
 void stree_label(stree_t * stree);
 
+void stree_show_pptable(stree_t * stree);
+
 /* functions in arch.c */
 
 unsigned long arch_get_memused(void);
@@ -630,6 +635,10 @@ void msa_print(msa_t * msa);
 void msa_destroy(msa_t * msa);
 
 int msa_remove_ambiguous(msa_t * msa);
+
+void msa_summary(msa_t ** msa_list, int msa_count);
+
+void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map);
 
 /* functions in parse_map.y */
 

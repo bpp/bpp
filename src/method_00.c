@@ -32,7 +32,7 @@ static stree_t * load_tree(void)
 
   /* parse tree */
   if (!opt_quiet)
-    fprintf(stdout, "Parsing tree file...\n");
+    fprintf(stdout, "Parsing species tree...\n");
 
   assert(opt_streefile || opt_streenewick);
   assert(!(opt_streefile && opt_streenewick));
@@ -184,24 +184,33 @@ void cmd_a00()
 
   /* load species tree */
   stree_t * stree = load_tree();
+  printf(" Done\n");
 
   /* parse the phylip file */
-  printf("Parsed tree\n");
 
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
   assert(fd);
 
+  printf("Parsing phylip file...");
   msa_list = phylip_parse_multisequential(fd, &msa_count);
   assert(msa_list);
+  printf(" Done\n");
 
   phylip_close(fd);
 
   /* remove ambiguous sites */
   if (opt_cleandata)
   {
+    printf("Removing sites containing ambiguous characters...");
     for (i = 0; i < msa_count; ++i)
       if (!msa_remove_ambiguous(msa_list[i]))
         fatal("All sites in locus %d contain ambiguous characters",i);
+    printf(" Done\n");
+  }
+  else
+  {
+    for (i = 0; i < msa_count; ++i)
+      msa_count_ambiguous_sites(msa_list[i], pll_map_amb);
   }
 
   /* compress it */
@@ -210,13 +219,14 @@ void cmd_a00()
   for (i = 0; i < msa_count; ++i)
   {
     int ol = msa_list[i]->length;
+    msa_list[i]->original_length = ol;
     weights[i] = compress_site_patterns(msa_list[i]->sequence,
                                         pll_map_nt,
                                         msa_list[i]->count,
                                         &(msa_list[i]->length),
                                         COMPRESS_JC69);
-    printf("Locus %d: original length %d, after compression %d\n", i, ol, msa_list[i]->length);
   }
+  msa_summary(msa_list,msa_count);
 
   #if 0
   /* print the alignments */
@@ -226,15 +236,19 @@ void cmd_a00()
 
 
   /* parse map file */
-  printf("Parsing map file...\n");
+  printf("Parsing map file...");
   list_t * map_list = yy_parse_map(opt_mapfile);
+  printf(" Done\n");
+  #if 0
   maplist_print(map_list);
+  #endif
 
   if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
     fatal("Cannot open file %s for writing...");
 
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count);
+  stree_show_pptable(stree);
 
   gtree_t ** gtree = gtree_init(stree,msa_list,map_list,msa_count);
 
@@ -297,7 +311,8 @@ void cmd_a00()
     logpr_sum += logpr;
   }
 
-  printf("logL0 = %f   logP0 = %f\n", logl_sum, logpr_sum);
+  printf("\nInitial MSC density and log-likelihood of observing data:\n");
+  printf("log-P0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
 
   /* free weights array */
   free(weights);

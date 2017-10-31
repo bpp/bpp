@@ -80,6 +80,51 @@ hashtable_t * species_hash(stree_t * tree)
   return ht;
 }
 
+static int longint_len(long x)
+{
+  return x ? (int)floor(log10(abs(x)))+1 : 1;
+}
+
+void stree_show_pptable(stree_t * stree)
+{
+  long i,j;
+  long nodes_count = stree->tip_count + stree->inner_count;
+  int index_digits = longint_len(nodes_count);
+  size_t maxlen = strlen("Species");
+
+  for (i = 0; i < nodes_count; ++i)
+    maxlen = MAX(maxlen, strlen(stree->nodes[i]->label));
+
+  printf("\nMap of populations and ancestors (1 in map indicates ancestor):\n");
+
+  /* print space before horizontal species enumeration */
+  for (i = 0; i < index_digits; ++i)
+    printf(" ");
+  printf(" ");
+  printf("Species");
+  for (i = 0; i < (long)(maxlen - strlen("Species")); ++i)
+    printf(" ");
+
+  printf(" ");
+  for (i = 0; i < nodes_count; ++i)
+  printf("  %ld",i);
+  printf("\n");
+
+  for (i = 0; i < nodes_count; ++i)
+  {
+    printf("%*ld %-*s ", index_digits, i, (int)maxlen, stree->nodes[i]->label);
+
+    for (j = 0; j < nodes_count; ++j)
+      printf("  %*d", longint_len(j), stree->pptable[i][j]);
+
+    printf("\n");
+  }
+
+  printf("\n");
+
+
+}
+
 static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
 {
   unsigned int i;

@@ -515,9 +515,6 @@ int main (int argc, char * argv[])
   //srand48(opt_seed);
   legacy_init();
 
-  printf("opt_stree = %ld\n", opt_stree);
-  printf("opt_delimit = %ld\n", opt_delimit);
-
   if (opt_help)
   {
     cmd_help();
@@ -532,7 +529,6 @@ int main (int argc, char * argv[])
   }
   else if (!opt_delimit)
   {
-    printf("HERE!!!\n");
     cmd_a01();
   }
 
