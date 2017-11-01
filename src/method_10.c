@@ -32,7 +32,7 @@ static stree_t * load_tree(void)
 
   /* parse tree */
   if (!opt_quiet)
-    fprintf(stdout, "Parsing species tree...\n");
+    fprintf(stdout, "Parsing species tree...");
 
   assert(opt_streefile || opt_streenewick);
   assert(!(opt_streefile && opt_streenewick));
@@ -471,7 +471,4 @@ void cmd_a10()
   /* deallocate maplist */
   list_clear(map_list,map_dealloc);
   free(map_list);
-
-  if (!opt_quiet)
-    fprintf(stdout, "Done...\n");
 }

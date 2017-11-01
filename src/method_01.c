@@ -708,7 +708,4 @@ void cmd_a01()
   for (i = 0; i < species_count; ++i)
     free(species_names[i]);
   free(species_names);
-
-  if (!opt_quiet)
-    fprintf(stdout, "Done...\n");
 }
