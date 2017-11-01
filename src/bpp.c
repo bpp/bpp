@@ -55,6 +55,7 @@ long opt_burnin;
 long opt_finetune_reset;
 long opt_rjmcmc_method;
 long opt_usedata;
+double opt_bfbeta;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -218,6 +219,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_method = -1;
   opt_usedata = 1;
   opt_arch = -1;
+  opt_bfbeta = 1;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {

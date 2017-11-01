@@ -468,6 +468,7 @@ extern long opt_burnin;
 extern long opt_finetune_reset;
 extern long opt_rjmcmc_method;
 extern long opt_usedata;
+extern double opt_bfbeta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
 extern double opt_theta_alpha;

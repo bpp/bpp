@@ -417,9 +417,13 @@ void cmd_a01()
   long i,j;
   int msa_count;
   long ft_round_spr = 0;
+  long printk = opt_samplefreq * opt_samples;
   double logl,logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
+  double mean_logl = 0;
+  double mean_root_age = 0;
+  double mean_root_theta = 0;
   msa_t ** msa_list;
   FILE * fp_mcmc;
 
@@ -610,6 +614,10 @@ void cmd_a01()
       ft_round_spr = 0;
       pjump_slider = 0;
       memset(pjump,0,PROP_COUNT*sizeof(double));
+
+      mean_logl = 0;
+      mean_root_theta = 0;
+      mean_root_age = 0;
     }
 
     ++ft_round;
@@ -656,7 +664,32 @@ void cmd_a01()
       mcmc_logsample(fp_mcmc,i+1,stree,gtree);
     }
 
+    /* update stats for printing on screen */
+    mean_root_theta = (mean_root_theta*(ft_round-1) + stree->root->theta) / ft_round;
+    mean_root_age   = (mean_root_age*(ft_round-1) + stree->root->tau) / ft_round;
+    for (logl_sum = 0, j = 0; j < msa_count; ++j)
+      logl_sum += gtree[j]->logl;
+    mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)  / ft_round;
+
     /* TODO: print on screen */
+    if (printk <= 500 || (i+1) % (printk / 200) == 0)
+    {
+      printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
+      for (j = 0; j < 5; ++j)
+        printf(" %4.2f", pjump[j]);
+      printf(" ");
+
+      printf(" %5.3f  %6.4f  %6.4f", ft_round_spr ? 
+                                       (double)pjump_slider / ft_round_spr : 0.,
+                                     mean_root_theta,
+                                     mean_root_age);
+
+      if (opt_usedata)
+        printf(" %8.4f", mean_logl);
+
+      if (printk >= 50 && (i+1) % (printk / 20) == 0)
+        printf("\n");
+    }
     
     curstep++;
   }
