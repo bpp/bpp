@@ -55,6 +55,8 @@ long opt_burnin;
 long opt_finetune_reset;
 long opt_rjmcmc_method;
 long opt_usedata;
+long opt_experimental_method;
+long opt_experimental_debug;
 double opt_bfbeta;
 double opt_tau_alpha;
 double opt_tau_beta;
@@ -77,8 +79,6 @@ char * opt_outfile;
 char * opt_reorder;
 char * opt_streefile;
 char * opt_streenewick;
-
-long opt_debugflag = 0;
 
 long mmx_present;
 long sse_present;
@@ -122,6 +122,8 @@ static struct option long_options[] =
   {"cfile",           required_argument, 0, 0 },  /* 25 */
   {"nodata",          no_argument,       0, 0 },  /* 26 */
   {"arch",            required_argument, 0, 0 },  /* 27 */
+  {"exp_method",      required_argument, 0, 0 },  /* 28 */
+  {"exp_debug",       no_argument,       0, 0 },  /* 29 */
   { 0, 0, 0, 0 }
 };
 
@@ -220,6 +222,8 @@ void args_init(int argc, char ** argv)
   opt_usedata = 1;
   opt_arch = -1;
   opt_bfbeta = 1;
+  opt_experimental_method = 0;
+  opt_experimental_debug = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -361,6 +365,14 @@ void args_init(int argc, char ** argv)
           opt_arch = PLL_ATTRIB_ARCH_AVX2;
         else
           fatal("Invalid instruction set (%s)", optarg);
+        break;
+
+      case 28:
+        opt_experimental_method = args_getlong(optarg);
+        break;
+
+      case 29:
+        opt_experimental_debug = 1;
         break;
         
       default:

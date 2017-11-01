@@ -31,6 +31,7 @@
 #define LINEAGE_A       16
 #define LINEAGE_OTHER   32
 #define NODE_SQUARE     64
+#define NODE_MOVED      256
 
 static gnode_t ** __gt_nodes = NULL;
 static double * __aux = NULL;
@@ -1516,6 +1517,7 @@ long stree_propose_spr(stree_t ** streeptr,
 
       if (count != 1) continue;
 
+      node->mark |= NODE_MOVED;
       moved_nodes[moved_count[i]] = node;
       pruned_nodes[moved_count[i]++] = pruned;
 
@@ -1546,8 +1548,51 @@ long stree_propose_spr(stree_t ** streeptr,
       if (!target_count)
         return 2;
 
-      /* randomly select a target from list */
-      gtarget_nodes[moved_count[i]-1] = gtarget_list[(int)(target_count*legacy_rndu())];
+      /* experimental methods */
+      double twgt = 0;
+      if (opt_experimental_method)
+      {
+        unsigned int n;
+        /* allocate space for target nodes weights */
+        double * tweight = (double *)xmalloc(target_count * sizeof(double));
+
+        /* compute weights for each target node in gtarget_list and store them
+           in tweight */
+        experimental_tselect_logl(pruned,
+                                  gtarget_list,
+                                  target_count,
+                                  loci[i],
+                                  tweight);
+
+        /* normalize target node weights */
+        for (sum=0,n=0; n < target_count; ++n)
+          sum += tweight[n];
+        for (n = 0; n < target_count; ++n)
+          tweight[n] /= sum;
+
+        /* randomly select a target node according to weights */
+        r = legacy_rndu();
+        for (sum=0,n=0; n < target_count; ++n)
+        {
+          sum += tweight[n];
+          if (r < sum) break;
+        }
+
+        assert(n != target_count);
+
+        gtarget_nodes[moved_count[i]-1] = gtarget_list[n];
+
+        twgt = tweight[n];
+
+        /* free weights */
+        free(tweight);     
+
+      }
+      else
+      {
+        /* randomly select a target from list */
+        gtarget_nodes[moved_count[i]-1] = gtarget_list[(int)(target_count*legacy_rndu())];
+      }
 
       source_count = 1;
       gsources_list[0] = intact;
@@ -1569,7 +1614,58 @@ long stree_propose_spr(stree_t ** streeptr,
         }
       }
 
-      lnacceptance += log((double)target_count / source_count);
+      if (opt_experimental_method)
+      {
+        unsigned int n;
+
+        double * tweight = (double *)xmalloc(source_count * sizeof(double));
+
+        /* if a moved node appears in the sources, then replace it by 
+           descending until we find a non-moved node (not in LINEAGE_A) */
+        for (n = 0; n < source_count; ++n)
+        {
+          while (gsources_list[n]->mark & NODE_MOVED)
+          {
+            gsources_list[n] = gsources_list[n]->left->mark & LINEAGE_A ?
+                                 gsources_list[n]->right : gsources_list[n]->left;
+          }
+        }
+        
+        /* compute weights and store in tweight */
+        experimental_tselect_logl(pruned,
+                                  gsources_list,
+                                  source_count,
+                                  loci[i],
+                                  tweight);
+
+        /* normalize target node weights */
+        for (sum=0,n=0; n < source_count; ++n)
+          sum += tweight[n];
+        for (n = 0; n < source_count; ++n)
+          tweight[n] /= sum;
+
+        /* we do not select randomly, as we already know the branch */
+        gnode_t * srcnode = intact;
+        while (srcnode->mark & NODE_MOVED)
+          srcnode = srcnode->left->mark & LINEAGE_A ?
+                      srcnode->right : srcnode->left;
+
+        for (n = 0; n < source_count; ++n)
+          if (gsources_list[n] == srcnode)
+            break;
+        assert(n != source_count);
+
+        double swgt = tweight[n];
+
+        /* free weights */
+        free(tweight);
+
+        lnacceptance += log(swgt/twgt);
+      }
+      else
+      {
+        lnacceptance += log((double)target_count / source_count);
+      }
     }
 
     /* All moves nodes for current locus are now identified. Apply SPR to gene

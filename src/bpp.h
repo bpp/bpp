@@ -468,6 +468,8 @@ extern long opt_burnin;
 extern long opt_finetune_reset;
 extern long opt_rjmcmc_method;
 extern long opt_usedata;
+extern long opt_experimental_method;
+extern long opt_experimental_debug;
 extern double opt_bfbeta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
@@ -971,6 +973,14 @@ void pll_show_clv(const locus_t * locus,
                              unsigned int clv_index,
                              int scaler_index,
                              unsigned int float_precision);
+
+/* functions in experimental.c */
+
+void experimental_tselect_logl(gnode_t * mnode,
+                               gnode_t ** target_list,
+                               long target_count,
+                               locus_t * locus,
+                               double * weights);
 
 /* functions in method_00.c */
 
