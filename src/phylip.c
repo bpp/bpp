@@ -654,6 +654,10 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count)
 
     *count = *count + 1;
 
+    /* if 'nloci' option was specified, break when the respective number of loci
+       was read */
+    if (*count == opt_nloci) break;
+
     /* skip empty lines */
 
     while (1)

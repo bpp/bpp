@@ -469,6 +469,7 @@ extern long opt_burnin;
 extern long opt_finetune_reset;
 extern long opt_rjmcmc_method;
 extern long opt_usedata;
+extern long opt_nloci;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern double opt_bfbeta;

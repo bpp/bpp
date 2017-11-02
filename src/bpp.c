@@ -55,6 +55,7 @@ long opt_burnin;
 long opt_finetune_reset;
 long opt_rjmcmc_method;
 long opt_usedata;
+long opt_nloci;
 long opt_experimental_method;
 long opt_experimental_debug;
 double opt_bfbeta;
@@ -224,6 +225,7 @@ void args_init(int argc, char ** argv)
   opt_bfbeta = 1;
   opt_experimental_method = 0;
   opt_experimental_debug = 0;
+  opt_nloci = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {

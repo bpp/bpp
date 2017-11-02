@@ -688,9 +688,8 @@ void load_cfile()
     {
       if (!strncasecmp(token,"nloci",5))
       {
-        long opt_nloci; /* TODO: This is not used in the program, implement */
-        if (!parse_long(value,&opt_nloci) || opt_nloci < 1)
-          fatal("Option 'nloci' expects one positive integer (line %ld)",
+        if (!parse_long(value,&opt_nloci) || opt_nloci < 0)
+          fatal("Option 'nloci' expects a positive integer or zero (line %ld)",
                 line_count);
       }
       else if (!strncasecmp(token,"print",5))
