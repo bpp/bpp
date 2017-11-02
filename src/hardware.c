@@ -28,41 +28,50 @@
     https://github.com/xflouris/libpll/issues/138
 
 */
-#if (defined(__APPLE__)) || \
+#if (defined(__APPLE__) || defined(_MSC_VER)) || \
     (!defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 4 || \
       (__GNUC__ == 4 && __GNUC_MINOR__ < 8))) || \
     (defined(__clang__) && (__clang_major__ < 3 || \
       (__clang_major__ == 3 && __clang_minor__ < 9)))
   
-  #if defined(__i386__) && defined(__PIC__)
-    #if (defined(__GNUC__) && __GNUC__ < 3)
+  #ifndef _MSC_VER
+    #if defined(__i386__) && defined(__PIC__)
+      #if (defined(__GNUC__) && __GNUC__ < 3)
 #define cpuid(level, count, a, b, c, d)                 \
   __asm__ ("xchgl\t%%ebx, %k1\n\t"                      \
            "cpuid\n\t"                                  \
            "xchgl\t%%ebx, %k1\n\t"                      \
            : "=a" (a), "=&r" (b), "=c" (c), "=d" (d)    \
            : "0" (level), "2" (count))
-    #else
+      #else
 #define cpuid(level, count, a, b, c, d)                 \
   __asm__ ("xchg{l}\t{%%}ebx, %k1\n\t"                  \
            "cpuid\n\t"                                  \
            "xchg{l}\t{%%}ebx, %k1\n\t"                  \
            : "=a" (a), "=&r" (b), "=c" (c), "=d" (d)    \
            : "0" (level), "2" (count))
-    #endif
-  #elif defined(__x86_64__) && (defined(__code_model_medium__) || \
-        defined(__code_model_large__)) && defined(__PIC__)
+      #endif
+    #elif defined(__x86_64__) && (defined(__code_model_medium__) || \
+          defined(__code_model_large__)) && defined(__PIC__)
 #define cpuid(level, count, a, b, c, d)                 \
   __asm__ ("xchg{q}\t{%%}rbx, %q1\n\t"                  \
            "cpuid\n\t"                                  \
            "xchg{q}\t{%%}rbx, %q1\n\t"                  \
            : "=a" (a), "=&r" (b), "=c" (c), "=d" (d)    \
            : "0" (level), "2" (count))
-  #else
+    #else
 #define cpuid(level, count, a, b, c, d)                 \
   __asm__ ("cpuid\n\t"                                  \
            : "=a" (a), "=b" (b), "=c" (c), "=d" (d)     \
            : "0" (level), "2" (count))
+    #endif
+  #else
+#define cpuid(level,count,a,b,c,d)                      \
+    {                                                   \
+      int cpui[4];                                      \
+      __cpuidex(cpui,level,count)                       \
+      a=cpui[0]; b=cpui[1]; c=cpui[3]; d=cpui[4];       \
+    }
   #endif
 
 void cpu_features_detect()
