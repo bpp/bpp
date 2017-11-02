@@ -70,7 +70,7 @@
     {                                                   \
       int cpui[4];                                      \
       __cpuidex(cpui,level,count);                      \
-      a=cpui[0]; b=cpui[1]; c=cpui[3]; d=cpui[4];       \
+      a=cpui[0]; b=cpui[1]; c=cpui[2]; d=cpui[3];       \
     }
   #endif
 
