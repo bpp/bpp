@@ -69,7 +69,7 @@
 #define cpuid(level,count,a,b,c,d)                      \
     {                                                   \
       int cpui[4];                                      \
-      __cpuidex(cpui,level,count)                       \
+      __cpuidex(cpui,level,count);                      \
       a=cpui[0]; b=cpui[1]; c=cpui[3]; d=cpui[4];       \
     }
   #endif
