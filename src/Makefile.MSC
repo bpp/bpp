@@ -13,11 +13,13 @@ PROG = bpp.exe
 OBJ_LIBPLL = \
   core_likelihood.obj \
   core_partials.obj \
+  core_pmatrix.obj \
   hardware.obj
 
 SRC_LIBPLL = \
   core_likelihood.c \
   core_partials.c \
+  core_pmatrix.c \
   hardware.c
 
 OBJ_BPP = \

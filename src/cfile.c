@@ -679,7 +679,7 @@ void load_cfile()
         else if (!strcasecmp(temp,"avx2"))
           opt_arch = PLL_ATTRIB_ARCH_AVX2;
         else
-          fatal("Invalid instruction set (%s) (line %ld)", optarg, line_count);
+          fatal("Invalid instruction set (%s) (line %ld)", temp, line_count);
 
         free(temp);
       }
