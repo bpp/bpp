@@ -220,7 +220,7 @@ typedef struct snode_s
   //unsigned int * seqout_count;
 
   //unsigned int ** seqin_indices;
-  long * bitmask;
+  unsigned long * bitmask;
 
   unsigned int node_index;
 } snode_t;
@@ -435,9 +435,11 @@ typedef struct pair_s
 
 #ifdef _MSC_VER
 #define PLL_POPCOUNT pll_popcount
+#define PLL_POPCOUNTL pll_popcount64
 #define PLL_CTZ pll_ctz
 #else
 #define PLL_POPCOUNT __builtin_popcount
+#define PLL_POPCOUNTL __builtin_popcountl
 #define PLL_CTZ __builtin_ctz
 #endif
 
@@ -847,6 +849,7 @@ void cpu_setarch(void);
 #ifdef _MSC_VER
 int pll_ctz(unsigned int x);
 unsigned int pll_popcount(unsigned int x);
+unsigned int pll_popcount64(unsigned long x);
 #endif
 
 

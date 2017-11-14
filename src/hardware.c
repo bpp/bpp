@@ -244,4 +244,16 @@ unsigned int pll_popcount(unsigned int x)
   x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
   return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
+
+unsigned int popcount64(unsigned long x)
+{
+  if (popcnt_present)
+    return __popcnt64(x);
+
+  x = (x & 0x5555555555555555ul) + ((x >> 1) & 0x5555555555555555ul);
+  x = (x & 0x3333333333333333ul) + ((x >> 2) & 0x3333333333333333ul);
+  x = (x & 0x0F0F0F0F0F0F0F0Ful) + ((x >> 4) & 0x0F0F0F0F0F0F0F0Ful);
+  return (x * 0x0101010101010101ul) >> 56;
+}
+
 #endif

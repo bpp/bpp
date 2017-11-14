@@ -28,21 +28,22 @@ static long splits_maxsize;
 static long splits_incrementsize;
 static long splits_initialsize;
 
-static long bitmask_elms;
-static long bits_count;
+static long ulong_bits;      /* number of bits in unsigned long */
+static long bitmask_bits;    /* number of bits in bitmask */
+static long bitmask_elms;    /* how many unsigned long a bitmask is made of */
 
-static hashtable_t * ht_bm;     /* tip node bitmasks */
-static hashtable_t * ht_bp;     /* bipartitions */
+static hashtable_t * ht_bm;  /* tip node bitmasks */
+static hashtable_t * ht_bp;  /* bipartitions */
 
 struct bitmask_pair_s
 {
-  long * bitmask;
+  unsigned long * bitmask;
   char * label;
 };
 
 struct bipfreq_s
 {
-  long * bitmask;
+  unsigned long * bitmask;
   long freq;
 };
 
@@ -70,14 +71,14 @@ static struct bipfreq_s ** hashtable_serialize1p(hashtable_t * ht)
   return bf;
 }
 
-static unsigned long hash_fnv_long(long * l, long count)
+static unsigned long hash_fnv_long(unsigned long * l, long count)
 {
   unsigned long i;
   char * s = (char *)l;
   unsigned long hash = 14695981039346656037UL;
   unsigned long c;
 
-  for (i = 0; i < count * sizeof(long); ++i)
+  for (i = 0; i < (size_t)count * sizeof(long); ++i)
   {
     c = (unsigned long)*s++;
     hash ^= c;
@@ -91,7 +92,7 @@ static int cb_cmp_bitmask(void * a, void * b)
 {
   long i;
   struct bipfreq_s * bpf = (struct bipfreq_s *)a;
-  long * bitmask = (long *)b;
+  unsigned long * bitmask = (unsigned long *)b;
 
   for (i = 0; i < bitmask_elms; ++i)
     if (bpf->bitmask[i] != bitmask[i])
@@ -108,18 +109,19 @@ static int cb_cmp_bmpair(void * a, void * b)
 }
 
 /* returns an unary code with the i-th position set */
-static long * bitencode(long i, long count)
+static unsigned long * bitencode(long i, long count)
 {
   assert(count > 0);
 
-  long lsize_bits = sizeof(long) * CHAR_BIT;
-  long alloc_elms = (count / lsize_bits) + ((count % lsize_bits) ? 1 : 0);
+  //long alloc_elms = (count / ulong_bits) + ((count % ulong_bits) ? 1 : 0);
 
-  long * bitmask = (long *)xmalloc(alloc_elms * sizeof(long));
+  unsigned long * bitmask = (unsigned long *)xcalloc((size_t)bitmask_elms,
+                                                     sizeof(unsigned long));
+  //long * bitmask = (long *)xcalloc(alloc_elms,sizeof(long));
 
-  long index = count / lsize_bits;
+  long index = i / ulong_bits;
 
-  bitmask[index] = 1 << i;
+  bitmask[index] = 1ul << (i - index*ulong_bits);
 
   return bitmask;
 }
@@ -129,7 +131,9 @@ static hashtable_t * bitmask_hash(char ** species, long count)
   long i;
   struct bitmask_pair_s * bmpair;
 
-  hashtable_t * ht = hashtable_create(count);
+  assert(count > 0);
+
+  hashtable_t * ht = hashtable_create((unsigned long)count);
 
   for (i = 0; i < count; ++i)
   {
@@ -157,13 +161,18 @@ void splits_init(long init, long increment, char ** species, long species_count)
   splits_incrementsize = increment;
   splits_size = 0;
 
-  splits = (int **)xmalloc(init*sizeof(int *));
+  assert(init > 0);
+
+  splits = (int **)xmalloc((size_t)init*sizeof(int *));
   splits_maxsize = init;
 
-  long lsize_bits = sizeof(long) * CHAR_BIT;
-  bitmask_elms = (species_count / lsize_bits) +
-                 ((species_count % lsize_bits) ? 1 : 0);
-  bits_count = species_count;
+  ulong_bits = sizeof(unsigned long) * CHAR_BIT;
+  bitmask_elms = (species_count / ulong_bits) + !!(species_count % ulong_bits);
+  bitmask_bits = species_count;
+
+  assert(bitmask_elms > 0);
+  assert(bitmask_bits > 0);
+  assert(ulong_bits > 0);
 
   ht_bm = bitmask_hash(species,species_count);
   //ht_bp = hashtable_create(4194304);
@@ -180,26 +189,27 @@ static void bitmask_update_recursive(snode_t * node)
   bitmask_update_recursive(node->left);
   bitmask_update_recursive(node->right);
 
-  node->bitmask = (long *)xmalloc(bitmask_elms * sizeof(long));
+  node->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
+                                           sizeof(unsigned long));
 
   for (i = 0; i < bitmask_elms; ++i)
     node->bitmask[i] = node->left->bitmask[i] | node->right->bitmask[i];
 }
 
-static void bitmask_print(long * bitmask)
+static void bitmask_print(unsigned long * bitmask)
 {
   long i,j;
-  long bits_left = bits_count;
-  long bits_per_elm = sizeof(long)*CHAR_BIT;
+  long bits_left = bitmask_bits;
+  long bits_per_elm = ulong_bits;
 
   for (i = 0; i < bitmask_elms; ++i)
   {
-    long bits = bitmask[i];
+    unsigned long bits = bitmask[i];
     long bits_avail = MIN(bits_left,bits_per_elm);
     for (j = 0; j < bits_avail; ++j)
     {
       printf("%c", (char)((bits & 1) + 0x30));
-      bits >>= 1;
+      bits >>= 1ul;
     }
     bits_left -= bits_per_elm; 
   }
@@ -251,9 +261,12 @@ void splits_update(stree_t * stree)
       else
       {
         bpf = (struct bipfreq_s *)xmalloc(sizeof(struct bipfreq_s));
-        bpf->bitmask = (long *)xmalloc(bitmask_elms*sizeof(long));
+        bpf->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
+                                                sizeof(unsigned long));
         bpf->freq = 1;
-        memcpy(bpf->bitmask,stree->nodes[i]->bitmask,bitmask_elms*sizeof(long));
+        memcpy(bpf->bitmask,
+               stree->nodes[i]->bitmask,
+               (size_t)bitmask_elms*sizeof(unsigned long));
         hashtable_insert_force(ht_bp,
                                (void *)bpf,
                                hash_fnv_long(stree->nodes[i]->bitmask,
@@ -364,10 +377,8 @@ static int cb_popcntcmp(const void * a, const void * b)
 
   for (i = 0; i < bitmask_elms; ++i)
   {
-    bitsa += PLL_POPCOUNT(pa->bitmask[i]);
-    //bitsa += __builtin_popcountl(pa->bitmask[i]);
-    bitsb += PLL_POPCOUNT(pb->bitmask[i]);
-    //bitsb += __builtin_popcountl(pb->bitmask[i]);
+    bitsa += PLL_POPCOUNTL(pa->bitmask[i]);
+    bitsb += PLL_POPCOUNTL(pb->bitmask[i]);
   }
 
   if (bitsa > bitsb) return 1;
@@ -400,10 +411,12 @@ void splits_finalize(long trees_count, char ** species)
   /* we store an array of pointers to pointers of character strings. If sptr[i] == NULL then the name is taken from
   species[i]. If sptr[i] != NULL then we check if *(sptr[i]) != NULL and if yes, we use that string in output, otherwise
   if *(sptr[i]) == NULL it means that the string was already used in this round from another selected taxon */
-  char *** sptr = (char ***)xcalloc(bits_count,sizeof(char **));
-  char ** s = (char **)xmalloc(bits_count * sizeof(char *));
-  long * index = (long *)xmalloc(bits_count * sizeof(long));
-  long * index_all = (long *)xmalloc(bits_count * sizeof(long));
+  char *** sptr = (char ***)xcalloc((size_t)bitmask_bits,sizeof(char **));
+  char ** s = (char **)xmalloc((size_t)bitmask_bits * sizeof(char *));
+  unsigned long * index = (unsigned long *)xmalloc((size_t)bitmask_bits *
+                                                   sizeof(unsigned long));
+  unsigned long * index_all = (unsigned long *)xmalloc((size_t)bitmask_bits *
+                                                       sizeof(unsigned long));
   long ptrcount;
   long allcount;
 
@@ -415,8 +428,9 @@ void splits_finalize(long trees_count, char ** species)
   x[majority] = (struct bipfreq_s *)xmalloc(sizeof(struct bipfreq_s));
   struct bipfreq_s * debug_free = x[majority];
   x[majority]->freq = 0;
-  x[majority]->bitmask = (long *)xmalloc(bitmask_elms*sizeof(long));
-  memset(x[majority]->bitmask,0xff,bitmask_elms*sizeof(long));
+  x[majority]->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
+                                                  sizeof(unsigned long));
+  memset(x[majority]->bitmask,0xff,(size_t)bitmask_elms*sizeof(unsigned long));
   majority++;
 
 
@@ -429,7 +443,7 @@ void splits_finalize(long trees_count, char ** species)
 
     for (j = 0; j < (unsigned long)bitmask_elms; ++j)
     {
-      for (k = 0; k < sizeof(long)*CHAR_BIT && entry < (unsigned long)bits_count; ++k)
+      for (k = 0; k < (unsigned long)ulong_bits && entry < (unsigned long)bitmask_bits; ++k)
       {
         if ((x[i]->bitmask[j] >> k) & 1)
         {
