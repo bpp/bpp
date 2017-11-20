@@ -529,7 +529,7 @@ int xasprintf(char ** strp, const char * fmt, ...);
 void fatal(const char * format, ...) __attribute__ ((noreturn));
 #endif
 void progress_init(const char * prompt, unsigned long size);
-void progress_update(unsigned int progress);
+void progress_update(unsigned long progress);
 void progress_done(void);
 void * xmalloc(size_t size);
 void * xcalloc(size_t nmemb, size_t size);
@@ -743,8 +743,8 @@ double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 
 void gtree_fini(int msa_count);
 
-double gtree_logprob(stree_t * stree, int msa_index);
-double gtree_update_logprob_contrib(snode_t * snode, int msa_index);
+double gtree_logprob(stree_t * stree, long msa_index);
+double gtree_update_logprob_contrib(snode_t * snode, long msa_index);
 double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 double reflect(double t, double minage, double maxage);
 gnode_t ** gtree_return_partials(gnode_t * root,
@@ -804,7 +804,7 @@ void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies);
 
-void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count);
+void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count);
 
 void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights);
@@ -828,13 +828,13 @@ unsigned int * compress_site_patterns(char ** sequence,
 
 /* functions in summary.c */
 
-void splits_init(long init, long increment, char ** species, long species_count);
+void bipartitions_init(char ** species, long species_count);
 
-void splits_update(stree_t * stree);
+void bipartitions_update(stree_t * stree);
 
-void splits_finalize(long trees_count, char ** species);
+void bipartitions_finalize(size_t trees_count, char ** species);
 
-void print_stree_with_support(const char * treestr, long freq, long trees_count);
+void print_stree_with_support(const char * treestr, size_t freq, size_t trees_count);
 
 void summary_dealloc_hashtables(void);
 

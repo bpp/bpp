@@ -24,6 +24,13 @@
 #define PI  3.1415926535897932384626433832795
 #define PROP_COUNT 5
 
+/* store information on distinct trees from mcmc sample */
+struct distinct_s 
+{
+  size_t start;
+  size_t count;
+};
+
 static double pj_optimum = 0.3;
 
 static stree_t * load_tree(void)
@@ -172,16 +179,10 @@ static void stree_sort(stree_t * stree)
   stree_sort_recursive(stree->root); 
 }
 
-struct freqtable_s
+static int cb_dtree_cmp(const void * a, const void * b)
 {
-  long pos;
-  long count;
-};
-
-static int cb_ftcmp(const void * a, const void * b)
-{
-  const struct freqtable_s * pa = (const struct freqtable_s *)a;
-  const struct freqtable_s * pb = (const struct freqtable_s *)b;
+  const struct distinct_s * pa = (const struct distinct_s *)a;
+  const struct distinct_s * pb = (const struct distinct_s *)b;
 
   if (pa->count < pb->count) return 1;
   else if (pa->count > pb->count) return -1;
@@ -191,12 +192,14 @@ static int cb_ftcmp(const void * a, const void * b)
 
 static void stree_summary(char ** species_names, long species_count)
 {
-  long i,line_count = 0;
+  size_t i,distinct;
+  size_t line_count = 0;
   FILE * fp;
   char ** treelist;
+  struct distinct_s * dtree;
 
   /* allocate space for holding all species tree samples */
-  treelist = (char **)xmalloc((opt_samples+1)*sizeof(char *));
+  treelist = (char **)xmalloc((size_t)(opt_samples+1)*sizeof(char *));
 
   /* open mcmc file */
   #ifndef DEBUG_MAJORITY
@@ -205,7 +208,7 @@ static void stree_summary(char ** species_names, long species_count)
   fp = xopen("test.txt","r");
   #endif
 
-  splits_init(4096,4096,species_names,species_count);
+  bipartitions_init(species_names,species_count);
 
   /* read each line from the file, and strip all thetas and branch lengths
      such that only the tree topology and tip names remain, and store them
@@ -217,22 +220,22 @@ static void stree_summary(char ** species_names, long species_count)
     stree_sort(t);
     treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
 
-    splits_update(t);
+    bipartitions_update(t);
     stree_destroy(t,NULL);
   }
 
 
   printf("Species in order:\n");
-  for (i = 0; i < species_count; ++i)
+  for (i = 0; i < (size_t)species_count; ++i)
   {
     printf(" %3ld. %s\n", i+1, species_names[i]);
   }
   printf("\n");
 
-  qsort(treelist,line_count,sizeof(char *), cb_strcmp);
+  qsort(treelist,(size_t)line_count,sizeof(char *), cb_strcmp);
 
-  long distinct = 1;
-  long * uniquepos = (long *)xmalloc(line_count*sizeof(long));
+  distinct = 1;
+  size_t * uniquepos = (size_t *)xmalloc(line_count*sizeof(size_t));
   uniquepos[0] = 0;
   for (i = 1; i < line_count; ++i)
   {
@@ -242,41 +245,42 @@ static void stree_summary(char ** species_names, long species_count)
     }
   }
 
-  struct freqtable_s * ft = (struct freqtable_s *)xmalloc(distinct*sizeof(struct freqtable_s));
+  assert(distinct > 0);
+
+  dtree = (struct distinct_s *)xmalloc(distinct * sizeof(struct distinct_s));
   for (i = 0; i < distinct; ++i)
   {
-    ft[i].pos   = uniquepos[i];
-    ft[i].count = (i == distinct - 1) ?
-                    line_count - uniquepos[i] : uniquepos[i+1] - uniquepos[i];
+    dtree[i].start = uniquepos[i];
+    dtree[i].count = (i == distinct - 1) ?
+                      line_count - uniquepos[i] : uniquepos[i+1] - uniquepos[i];
   }
 
-  qsort(ft, distinct, sizeof(struct freqtable_s), cb_ftcmp);
+  qsort(dtree, distinct, sizeof(struct distinct_s), cb_dtree_cmp);
   printf("(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
   double cdf = 0;
   for (i = 0; i < distinct; ++i)
   {
-    double pdf = ft[i].count / (double)line_count;
+    double pdf = dtree[i].count / (double)line_count;
     cdf += pdf;
     printf(" %8ld %8.5f %8.5f %s\n",
-           ft[i].count, pdf, cdf, treelist[ft[i].pos]);
+           dtree[i].count, pdf, cdf, treelist[dtree[i].start]);
   }
 
-  splits_finalize(line_count,species_names);
+  bipartitions_finalize(line_count,species_names);
 
   fprintf(stdout, "\n(D) Best tree (or trees from the mastertree file) "
           "with support values\n");
   for (i = 0; i < distinct; ++i)
   {
-    if (i && ft[i].count != ft[i-1].count)
+    if (i && dtree[i].count != dtree[i-1].count)
       break;
 
-    //printf("%s\n", treelist[ft[i].pos]);
-    print_stree_with_support(treelist[ft[i].pos],ft[i].count,line_count);
+    print_stree_with_support(treelist[dtree[i].start],dtree[i].count,line_count);
   }
 
   summary_dealloc_hashtables();
   free(uniquepos);
-  free(ft);
+  free(dtree);
  
   /* deallocate list of trees */
   for (i = 0; i < line_count; ++i)
@@ -373,10 +377,7 @@ static void mcmc_printinitial(FILE * fp, stree_t * stree)
   free(newick);
 }
 
-static void mcmc_logsample(FILE * fp,
-                           int step,
-                           stree_t * stree,
-                           gtree_t ** gtree)
+static void mcmc_logsample(FILE * fp, stree_t * stree)
 {
 #if 0
   unsigned int i;
@@ -465,7 +466,7 @@ void cmd_a01()
   }
 
   /* compress it */
-  unsigned int ** weights = (unsigned int **)xmalloc(msa_count *
+  unsigned int ** weights = (unsigned int **)xmalloc((size_t)msa_count *
                                                      sizeof(unsigned int *));
   for (i = 0; i < msa_count; ++i)
   {
@@ -513,7 +514,9 @@ void cmd_a01()
     gclones[i] = gtree_clone_init(gtree[i], sclone);
 
 
-  locus_t ** locus = (locus_t **)xcalloc(msa_count, sizeof(locus_t *));
+  locus_t ** locus = (locus_t **)xcalloc((size_t)msa_count, sizeof(locus_t *));
+
+  assert(opt_arch < (1l << 32)-1);
 
   gtree_update_branch_lengths(gtree, msa_count);
   for (i = 0; i < msa_count; ++i)
@@ -522,15 +525,15 @@ void cmd_a01()
     double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
 
     /* create the locus structure */
-    locus[i] = locus_create(gtree[i]->tip_count,        /* # tip sequence */
-                            2*gtree[i]->inner_count,    /* # CLV vectors */
-                            4,                          /* # states */
-                            msa->length,                /* sequence length */
-                            1,                          /* # subst matrices */
-                            2*gtree[i]->edge_count,     /* # prob matrices */
-                            1,                          /* # rate categories */
-                            0,                          /* # scale buffers */
-                            opt_arch);                  /* attributes */
+    locus[i] = locus_create(gtree[i]->tip_count,         /* # tip sequence */
+                            2*gtree[i]->inner_count,     /* # CLV vectors */
+                            4,                           /* # states */
+                            (unsigned int)(msa->length), /* sequence length */
+                            1,                           /* # subst matrices */
+                            2*gtree[i]->edge_count,      /* # prob matrices */
+                            1,                           /* # rate categories */
+                            0,                           /* # scale buffers */
+                            (unsigned int)opt_arch);     /* attributes */
 
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
@@ -587,8 +590,8 @@ void cmd_a01()
   /* print header in mcmc file */
   mcmc_printinitial(fp_mcmc,stree);
 
-  unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
-  progress_init("Running MCMC...", total_steps);
+  long total_steps = opt_samples * opt_samplefreq + opt_burnin;
+  progress_init("Running MCMC...", (unsigned long)total_steps);
   unsigned long curstep = 0;
 
   /* start of MCMC loop */
@@ -660,9 +663,7 @@ void cmd_a01()
 
     /* log into file */
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
-    {
-      mcmc_logsample(fp_mcmc,i+1,stree,gtree);
-    }
+      mcmc_logsample(fp_mcmc,stree);
 
     /* update stats for printing on screen */
     mean_root_theta = (mean_root_theta*(ft_round-1) + stree->root->theta) / ft_round;
@@ -735,6 +736,8 @@ void cmd_a01()
   /* deallocate maplist */
   list_clear(map_list,map_dealloc);
   free(map_list);
+
+  assert(species_count > 0);
 
   stree_summary(species_names,species_count);
 

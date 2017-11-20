@@ -860,9 +860,9 @@ void locus_update_matrices_jc69(locus_t * locus,
   }
 }
 
-void locus_update_partials(locus_t * locus, gnode_t ** traversal, int count)
+void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count)
 {
-  int i;
+  unsigned int i;
   unsigned int * scaler;
   unsigned int * lscaler;
   unsigned int * rscaler;

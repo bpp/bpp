@@ -247,7 +247,7 @@ static char * export_newick_recursive(const gnode_t * root,
                                       char * (*cb_serialize)(const gnode_t *))
 {
   char * newick;
-  int size_alloced;
+  long size_alloced;
   assert(root != NULL);
 
   if (!(root->left) || !(root->right))
@@ -255,7 +255,7 @@ static char * export_newick_recursive(const gnode_t * root,
     if (cb_serialize)
     {
       newick = cb_serialize(root);
-      size_alloced = strlen(newick);
+      size_alloced = (long)strlen(newick);
     }
     else
     {
@@ -308,7 +308,7 @@ char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *))
 {
   char * newick;
-  int size_alloced;
+  long size_alloced;
   if (!root) return NULL;
 
   if (!(root->left) || !(root->right))
@@ -316,7 +316,7 @@ char * gtree_export_newick(const gnode_t * root,
     if (cb_serialize)
     {
       newick = cb_serialize(root);
-      size_alloced = strlen(newick);
+      size_alloced = (long)strlen(newick);
     }
     else
     {
@@ -690,7 +690,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   unsigned int e = 0;
 
   /* create a list of tip nodes for the target gene tree */
-  gnode_t ** gtips = (gnode_t **)xcalloc(msa->count,
+  gnode_t ** gtips = (gnode_t **)xcalloc((size_t)(msa->count),
                                          sizeof(gnode_t *));
   for (i = 0; i < (unsigned int)(msa->count); ++i)
   {
@@ -956,7 +956,7 @@ gtree_t ** gtree_init(stree_t * stree,
 
   assert(msa_count > 0);
 
-  gtree = (gtree_t **)xmalloc(msa_count*sizeof(gtree_t *));
+  gtree = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
 
   /* create mapping hash tables */
   sht = species_hash(stree);
@@ -980,10 +980,10 @@ gtree_t ** gtree_init(stree_t * stree,
 
   /* alloate buffer for sorting coalescent times plus two for the beginning
      and end of epoch */
-  sortbuffer = (double *)xmalloc((max_count+2) * sizeof(double));
+  sortbuffer = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
   
   /* allocate traversal buffers */
-  travbuffer = (gnode_t ***)xmalloc(msa_count * sizeof(gnode_t **));
+  travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
   for (i = 0; i < msa_count; ++i)
     travbuffer[i] = (gnode_t **)xmalloc(gtree[i]->inner_count *
                                         sizeof(gnode_t *));
@@ -1018,7 +1018,7 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
+double gtree_update_logprob_contrib(snode_t * snode, long msa_index)
 {
     unsigned int j,k,n;
     double logpr = 0;
@@ -1086,7 +1086,7 @@ double gtree_update_logprob_contrib(snode_t * snode, int msa_index)
     return logpr;
 }
 
-double gtree_logprob(stree_t * stree, int msa_index)
+double gtree_logprob(stree_t * stree, long msa_index)
 {
   unsigned int i;
 
@@ -1175,8 +1175,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
     if (node->left->pop != node->right->pop)
     {
-      snode_t * lpop;
-      snode_t * rpop;
+      snode_t * lpop = NULL;
+      snode_t * rpop = NULL;
 
       /* find most recent ancestral population to the two child populations */
       /* TODO: Speed this up by using a lookup table */

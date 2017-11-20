@@ -98,8 +98,10 @@ hashtable_t * hashtable_create(unsigned long items_count)
 
   if (!items_count) return NULL;
 
-  /* compute a size of at least double the items count that is a
-     multiple of 2 */
+  /* check that items_count has not the most-significant bit set */
+  assert(!(items_count & (1ul << (sizeof(unsigned long)*CHAR_BIT - 1))));
+
+  /* compute a size of greater than items count that is a multiple of 2 */
   items_count <<= 1;
   while (size < items_count)
     size <<= 1;

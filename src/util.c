@@ -50,7 +50,7 @@ void progress_init(const char * prompt, unsigned long size)
   }
 }
 
-void progress_update(unsigned int progress)
+void progress_update(unsigned long progress)
 {
   if (!opt_quiet)
   {

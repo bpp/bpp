@@ -21,38 +21,34 @@
 
 #include "bpp.h"
 
-static int ** splits;
-static long splits_size;
-static long splits_maxsize;
-
-static long splits_incrementsize;
-static long splits_initialsize;
-
 static long ulong_bits;      /* number of bits in unsigned long */
 static long bitmask_bits;    /* number of bits in bitmask */
 static long bitmask_elms;    /* how many unsigned long a bitmask is made of */
 
-static hashtable_t * ht_bm;  /* tip node bitmasks */
-static hashtable_t * ht_bp;  /* bipartitions */
+static hashtable_t * ht_trivial = NULL;  /* tip node bitmasks */
+static hashtable_t * ht_biparts = NULL;  /* bipartitions */
 
-struct bitmask_pair_s
+struct bptrivial_s
 {
   unsigned long * bitmask;
   char * label;
 };
 
-struct bipfreq_s
+struct bipartition_s
 {
   unsigned long * bitmask;
-  long freq;
+  long count;
 };
 
-static struct bipfreq_s ** hashtable_serialize1p(hashtable_t * ht)
+/* serialize hashtable of bipartitions to an array of bipartitions */
+static struct bipartition_s ** hashtable_serialize1p(hashtable_t * ht)
 {
   unsigned long i,k;
+  struct bipartition_s ** blist;
 
-  struct bipfreq_s ** bf = (struct bipfreq_s **)xmalloc((ht->entries_count+1) *
-                                                        sizeof(struct bipfreq_s *));
+  blist = (struct bipartition_s **)xmalloc((ht->entries_count+1) *
+                                           sizeof(struct bipartition_s *));
+
   for (i = 0, k = 0; i < ht->table_size; ++i)
   {
     list_t * list = ht->entries[i];
@@ -61,14 +57,14 @@ static struct bipfreq_s ** hashtable_serialize1p(hashtable_t * ht)
     while (head)
     {
       ht_item_t * hi = (ht_item_t *)(head->data);
-      bf[k++] = (struct bipfreq_s *)(hi->value);
+      blist[k++] = (struct bipartition_s *)(hi->value);
       head = head->next;
     }
   }
 
   assert(k == ht->entries_count);
 
-  return bf;
+  return blist;
 }
 
 static unsigned long hash_fnv_long(unsigned long * l, long count)
@@ -78,7 +74,7 @@ static unsigned long hash_fnv_long(unsigned long * l, long count)
   unsigned long hash = 14695981039346656037UL;
   unsigned long c;
 
-  for (i = 0; i < (size_t)count * sizeof(long); ++i)
+  for (i = 0; i < (size_t)count * sizeof(unsigned long); ++i)
   {
     c = (unsigned long)*s++;
     hash ^= c;
@@ -91,21 +87,21 @@ static unsigned long hash_fnv_long(unsigned long * l, long count)
 static int cb_cmp_bitmask(void * a, void * b)
 {
   long i;
-  struct bipfreq_s * bpf = (struct bipfreq_s *)a;
+  struct bipartition_s * bp = (struct bipartition_s *)a;
   unsigned long * bitmask = (unsigned long *)b;
 
   for (i = 0; i < bitmask_elms; ++i)
-    if (bpf->bitmask[i] != bitmask[i])
+    if (bp->bitmask[i] != bitmask[i])
       return 0;
 
   return 1;
 }
-static int cb_cmp_bmpair(void * a, void * b)
+static int cb_cmp_trivial(void * a, void * b)
 {
-  struct bitmask_pair_s * bmpair = (struct bitmask_pair_s *)a;
+  struct bptrivial_s * trivial = (struct bptrivial_s *)a;
   char * label = (char *)b;
 
-  return (!strcmp(bmpair->label,label));
+  return (!strcmp(trivial->label,label));
 }
 
 /* returns an unary code with the i-th position set */
@@ -126,46 +122,38 @@ static unsigned long * bitencode(long i, long count)
   return bitmask;
 }
 
-static hashtable_t * bitmask_hash(char ** species, long count)
+static void hash_trivial_bp(char ** species, long count)
 {
   long i;
-  struct bitmask_pair_s * bmpair;
+  struct bptrivial_s * trivial;
 
+  assert(ht_trivial);
   assert(count > 0);
-
-  hashtable_t * ht = hashtable_create((unsigned long)count);
 
   for (i = 0; i < count; ++i)
   {
-    bmpair = (struct bitmask_pair_s *)xmalloc(sizeof(struct bitmask_pair_s));
-    bmpair->label = xstrdup(species[i]);
-    bmpair->bitmask = bitencode(i,count);
+    trivial = (struct bptrivial_s *)xmalloc(sizeof(struct bptrivial_s));
+    trivial->label = xstrdup(species[i]);
+    trivial->bitmask = bitencode(i,count);
 
-    if (!hashtable_insert(ht,
-                          (void *)(bmpair),
-                          hash_fnv(bmpair->label),
+    if (!hashtable_insert(ht_trivial,
+                          (void *)(trivial),
+                          hash_fnv(trivial->label),
                           hashtable_strcmp))
     {
       /* this should never happen because duplicate taxa were
          already checked for during tree parsing */
-      fatal("Duplicate label (%s)", bmpair->label);
+      fatal("Duplicate label (%s)", trivial->label);
     }
   }
-
-  return ht;
 }
 
-void splits_init(long init, long increment, char ** species, long species_count)
+void bipartitions_init(char ** species, long species_count)
 {
-  splits_initialsize = init;
-  splits_incrementsize = increment;
-  splits_size = 0;
+  assert(species_count > 0);
 
-  assert(init > 0);
-
-  splits = (int **)xmalloc((size_t)init*sizeof(int *));
-  splits_maxsize = init;
-
+  /* compute the size (in bits) of an 'unsigned long' and how many of them we
+     need to store a bipartition bitmask (bitmask_elms) */
   ulong_bits = sizeof(unsigned long) * CHAR_BIT;
   bitmask_elms = (species_count / ulong_bits) + !!(species_count % ulong_bits);
   bitmask_bits = species_count;
@@ -174,11 +162,17 @@ void splits_init(long init, long increment, char ** species, long species_count)
   assert(bitmask_bits > 0);
   assert(ulong_bits > 0);
 
-  ht_bm = bitmask_hash(species,species_count);
-  //ht_bp = hashtable_create(4194304);
+  /* create a hash table of trivial bipartitions; i.e. one bitmask for each
+     species label with a single set bit indicating the position of the label
+     in the list */
+  ht_trivial = hashtable_create((size_t)species_count);
+  hash_trivial_bp(species,species_count);
 
-  /* TODO : CREATE HASHTABLE ACCORDING TO NUMBER OF SPECIES */
-  ht_bp = hashtable_create(100);
+  /* now initialize a hash table where we will be storing unique non-trivial
+     bipartitions as bitmasks along with their frequencies */
+  ht_biparts = hashtable_create(100*(size_t)species_count);
+
+  /* TODO - think of a better size to initialize hashtable */
 }
 
 static void bitmask_update_recursive(snode_t * node)
@@ -196,6 +190,7 @@ static void bitmask_update_recursive(snode_t * node)
     node->bitmask[i] = node->left->bitmask[i] | node->right->bitmask[i];
 }
 
+/* prints a bitmask as a sequence of zeroes and ones */
 static void bitmask_print(unsigned long * bitmask)
 {
   long i,j;
@@ -216,22 +211,25 @@ static void bitmask_print(unsigned long * bitmask)
   printf("\n");
 }
 
-static void bitmasks_init(stree_t * stree)
+/* assign trivial bipartition bitmasks from hashtable to the tips of stree and
+then recursively compute bitmasks for all nodes */
+static void assign_bitmasks(stree_t * stree)
 {
   long i;
-  struct bitmask_pair_s * bmpair;
+  struct bptrivial_s * trivial;
 
   /* attach bitmasks at tip nodes */
   for (i = 0; i < stree->tip_count; ++i)
   {
-    bmpair = hashtable_find(ht_bm,
-                            (void *)(stree->nodes[i]->label),
-                            hash_fnv(stree->nodes[i]->label),
-                            cb_cmp_bmpair);
-    if (!bmpair)
-      fatal("Internal error in splits_init");
+    trivial = hashtable_find(ht_trivial,
+                             (void *)(stree->nodes[i]->label),
+                             hash_fnv(stree->nodes[i]->label),
+                             cb_cmp_trivial);
+    if (!trivial)
+      fatal("Internal error in locating tip label %s (assign_bitmasks())",
+             stree->nodes[i]->label);
 
-    stree->nodes[i]->bitmask = bmpair->bitmask;
+    stree->nodes[i]->bitmask = trivial->bitmask;
   }
 
   /* now recursively create bitmasks */
@@ -239,40 +237,40 @@ static void bitmasks_init(stree_t * stree)
   bitmask_update_recursive(stree->root);
 }
 
-void splits_update(stree_t * stree)
+/* updates counts in hashtable with bipartitions of current tree */
+void bipartitions_update(stree_t * stree)
 {
   long i;
-  struct bipfreq_s * bpf;
+  struct bipartition_s * bp;
 
-  bitmasks_init(stree);
+  assign_bitmasks(stree);
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->parent)
     {
-      bpf = hashtable_find(ht_bp,
-                           (void *)(stree->nodes[i]->bitmask),
-                           hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
-                           cb_cmp_bitmask);
-      if (bpf)
+      bp = hashtable_find(ht_biparts,
+                          (void *)(stree->nodes[i]->bitmask),
+                          hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
+                          cb_cmp_bitmask);
+      if (bp)
       {
-        bpf->freq++;
+        bp->count++;
       }
       else
       {
-        bpf = (struct bipfreq_s *)xmalloc(sizeof(struct bipfreq_s));
-        bpf->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
-                                                sizeof(unsigned long));
-        bpf->freq = 1;
-        memcpy(bpf->bitmask,
+        bp = (struct bipartition_s *)xmalloc(sizeof(struct bipartition_s));
+        bp->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
+                                               sizeof(unsigned long));
+        bp->count = 1;
+        memcpy(bp->bitmask,
                stree->nodes[i]->bitmask,
                (size_t)bitmask_elms*sizeof(unsigned long));
-        hashtable_insert_force(ht_bp,
-                               (void *)bpf,
+        hashtable_insert_force(ht_biparts,
+                               (void *)bp,
                                hash_fnv_long(stree->nodes[i]->bitmask,
                                              bitmask_elms));
       }
-
     }
   }
 
@@ -280,19 +278,20 @@ void splits_update(stree_t * stree)
     if (stree->nodes[i]->bitmask)
       free(stree->nodes[i]->bitmask);
 }
-static void cb_bm_dealloc(void * data)
+
+static void cb_bptrivial_dealloc(void * data)
 {
-  struct bitmask_pair_s * bm = data;
-  free(bm->bitmask);
-  free(bm->label);
-  free(bm);
+  struct bptrivial_s * trivial = data;
+  free(trivial->bitmask);
+  free(trivial->label);
+  free(trivial);
 }
 
-static void cb_bf_dealloc(void * data)
+static void cb_bipartition_dealloc(void * data)
 {
-  struct bipfreq_s * bf = data;
-  free(bf->bitmask);
-  free(bf);
+  struct bipartition_s * bp = data;
+  free(bp->bitmask);
+  free(bp);
 }
 
 
@@ -314,28 +313,28 @@ static char * cb_serialize_support(const snode_t * node)
   return s;
 }
 
-void print_stree_with_support(const char * treestr, long freq, long trees_count)
+void print_stree_with_support(const char * treestr, size_t freq, size_t trees_count)
 {
   long i;
-  struct bipfreq_s * bpf;
+  struct bipartition_s * bp;
 
   stree_t * stree = stree_parse_newick_string(treestr);
 
   /* assign bitmasks to tree nodes (present bits indicate species in subtree) */
-  bitmasks_init(stree);
+  assign_bitmasks(stree);
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->parent)
     {
-      bpf = hashtable_find(ht_bp,
-                           (void *)(stree->nodes[i]->bitmask),
-                           hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
-                           cb_cmp_bitmask);
-      if (!bpf)
+      bp = hashtable_find(ht_biparts,
+                          (void *)(stree->nodes[i]->bitmask),
+                          hash_fnv_long(stree->nodes[i]->bitmask,bitmask_elms),
+                          cb_cmp_bitmask);
+      if (!bp)
         fatal("Internal error when printing best tree with support values");
 
-      stree->nodes[i]->support = bpf->freq / (double)trees_count;
+      stree->nodes[i]->support = bp->count / (double)trees_count;
     }
   }
 
@@ -352,17 +351,17 @@ void print_stree_with_support(const char * treestr, long freq, long trees_count)
 
 void summary_dealloc_hashtables()
 {
-  hashtable_destroy(ht_bp,cb_bf_dealloc);
-  hashtable_destroy(ht_bm,cb_bm_dealloc);
+  hashtable_destroy(ht_biparts,cb_bipartition_dealloc);
+  hashtable_destroy(ht_trivial,cb_bptrivial_dealloc);
 }
 
-static int cb_freqcmp(const void * a, const void * b)
+static int cb_countcmp(const void * a, const void * b)
 {
-  const struct bipfreq_s * pa = *((const struct bipfreq_s **)a);
-  const struct bipfreq_s * pb = *((const struct bipfreq_s **)b);
+  const struct bipartition_s * pa = *((const struct bipartition_s **)a);
+  const struct bipartition_s * pb = *((const struct bipartition_s **)b);
 
-  if (pa->freq < pb->freq) return 1;
-  else if (pa->freq > pb->freq) return -1;
+  if (pa->count < pb->count) return 1;
+  else if (pa->count > pb->count) return -1;
 
   return 0;
 
@@ -372,8 +371,8 @@ static int cb_popcntcmp(const void * a, const void * b)
 {
   long i;
   long bitsa = 0,bitsb = 0;
-  const struct bipfreq_s * pa = *((const struct bipfreq_s **)a);
-  const struct bipfreq_s * pb = *((const struct bipfreq_s **)b);
+  const struct bipartition_s * pa = *((const struct bipartition_s **)a);
+  const struct bipartition_s * pb = *((const struct bipartition_s **)b);
 
   for (i = 0; i < bitmask_elms; ++i)
   {
@@ -388,20 +387,22 @@ static int cb_popcntcmp(const void * a, const void * b)
 
 }
 
-void splits_finalize(long trees_count, char ** species)
+void bipartitions_finalize(size_t trees_count, char ** species)
 {
   unsigned long i,j,k,entry;
   unsigned long majority = 0;
 
-  struct bipfreq_s ** x = hashtable_serialize1p(ht_bp);
+  struct bipartition_s ** x = hashtable_serialize1p(ht_biparts);
   printf("\n(B) Best splits in the sample of trees (%ld splits in all)\n",
-         ht_bp->entries_count);
-  qsort(x,ht_bp->entries_count,sizeof(struct bipfreq_s *), cb_freqcmp);
-  for (i = 0; i < ht_bp->entries_count; ++i)
+         ht_biparts->entries_count);
+
+  /* find number of bipartitions appearing in at least 50% of the samples */
+  qsort(x,ht_biparts->entries_count,sizeof(struct bipartition_s *), cb_countcmp);
+  for (i = 0; i < ht_biparts->entries_count; ++i)
   {
-      printf("%6ld %f  ", x[i]->freq, x[i]->freq / (double)trees_count);
+      printf("%6ld %f  ", x[i]->count, x[i]->count / (double)trees_count);
       bitmask_print(x[i]->bitmask);
-      if (x[i]->freq / (double)trees_count >= 0.5)
+      if (x[i]->count / (double)trees_count >= 0.5)
         majority++;
   }
 
@@ -421,19 +422,21 @@ void splits_finalize(long trees_count, char ** species)
   long allcount;
 
 
-  qsort(x, majority, sizeof(struct bipfreq_s *), cb_popcntcmp);
+  /* sort bipartitions by number of set bits in bitmask */
+  qsort(x, majority, sizeof(struct bipartition_s *), cb_popcntcmp);
 
-  /* add one more entry of all ones set */
+  /* add one more bitmask with all bits set */
 
-  x[majority] = (struct bipfreq_s *)xmalloc(sizeof(struct bipfreq_s));
-  struct bipfreq_s * debug_free = x[majority];
-  x[majority]->freq = 0;
+  x[majority] = (struct bipartition_s *)xmalloc(sizeof(struct bipartition_s));
+  struct bipartition_s * debug_free = x[majority];
+  x[majority]->count = 0;
   x[majority]->bitmask = (unsigned long *)xmalloc((size_t)bitmask_elms *
                                                   sizeof(unsigned long));
   memset(x[majority]->bitmask,0xff,(size_t)bitmask_elms*sizeof(unsigned long));
   majority++;
 
 
+  /* now construct the newick string for the majority rule consensus tree */
   char ** newick = (char **)xcalloc(majority,sizeof(char *));
   for (i = 0; i < majority; ++i)
   {
@@ -443,8 +446,10 @@ void splits_finalize(long trees_count, char ** species)
 
     for (j = 0; j < (unsigned long)bitmask_elms; ++j)
     {
-      for (k = 0; k < (unsigned long)ulong_bits && entry < (unsigned long)bitmask_bits; ++k)
+      for (k = 0; k < (unsigned long)ulong_bits; ++k)
       {
+        if (entry == (unsigned long)bitmask_bits) break;
+
         if ((x[i]->bitmask[j] >> k) & 1)
         {
           if (!sptr[entry])
@@ -484,7 +489,7 @@ void splits_finalize(long trees_count, char ** species)
     if (i == majority - 1)
       xasprintf(&temp, "%s);", newick[i]);
     else
-      xasprintf(&temp, "%s) #%f", newick[i], x[i]->freq / (double)trees_count);
+      xasprintf(&temp, "%s) #%f", newick[i], x[i]->count / (double)trees_count);
 
     free(newick[i]);
     newick[i] = temp;
@@ -509,5 +514,4 @@ void splits_finalize(long trees_count, char ** species)
   free(index_all);
 
   free(sptr);
-  free(splits);
 }
