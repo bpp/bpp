@@ -1141,13 +1141,16 @@ void stree_rootdist(stree_t * stree,
   char * jseq;
   char * kseq;
 
-  hashtable_t * sht = species_hash(stree);
-  hashtable_t * mht = maplist_hash(maplist,sht);
-
   assert(msa_count);
 
   stree->root_age = opt_tau_beta / (opt_tau_alpha-1)*4;
   printf("Root age beginning = %f\n", stree->root_age);
+
+  if (!opt_usedata) return;
+
+  hashtable_t * sht = species_hash(stree);
+  hashtable_t * mht = maplist_hash(maplist,sht);
+
   /* find max alignment length */
   size_t maxalloc = 0;
   for (i = 0; i < msa_count; ++i)
