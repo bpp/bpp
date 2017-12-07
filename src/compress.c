@@ -266,9 +266,9 @@ unsigned int * compress_site_patterns(char ** sequence,
   column = (char **)xmalloc((size_t)(*length)*sizeof(char *));
 
   /* allocate memory for the alignment */
-  memptr = column[0] = (char *)xmalloc((size_t)((*length)+1) *
-                                       (size_t)count *
-                                       sizeof(char *));
+  memptr = column[0] = (char *)xmalloc((size_t)(*length) *
+                                       (size_t)(count+1) *
+                                       sizeof(char));
 
   /* map memory to each column */
   for (i = 1; i < *length; ++i)
