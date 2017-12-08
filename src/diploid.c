@@ -336,16 +336,6 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
     hptr += msa->length;
   }
 
-  /* TODO: DEBUG * - print matrix */
-  printf("HMATRIX:\n");
-  for (i = 0; i < msa->count; ++i)
-  {
-    for (j = 0; j < msa->length; ++j)
-      printf(" %d", hmat[i*msa->length + j]);
-    printf("\n");
-  }
-  printf("\n\n");
-
   /* 2. Create a list of indices to singleton sites with at least one het */
   for (i=0,k=0; i < msa->length; ++i)
     if (weight[i] == 1 && sitehets[i])
@@ -354,14 +344,11 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
   /* 3. Resolve one individual at a time */
   for (round = 0; round < msa->count && unresolved_count; ++round)
   {
-    printf("Round = %ld\n", round);
 
     /* sort list of indices by number of hets (descending order) */
     ext_qsort_arg = sitehets;
     qsort(single_indices,(size_t)k,sizeof(long),cb_cmp_indices);
 
-    /* TODO: DEBUG */
-    if (round == 1 && sitehets[single_indices[0]] == 2 && sitehets[single_indices[1]] == 2) { SWAP(single_indices[0],single_indices[1]);}
     /* find most variable singleton site */
     long chosen = -1;
     for (i = 0; i < k; ++i)
@@ -373,7 +360,6 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
       long y = msa->length+1;
       for (j = 0; j < msa->count; ++j)  
       {
-        //printf("%ld resolved[j] = %ld hptr[site] = %d singletons %ld y %ld\n", site, resolved[j], hptr[site], singletons[j],y);
         if (resolved[j] || hptr[site] == 0) 
         {
           hptr += msa->length;
@@ -388,7 +374,6 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
 
         hptr += msa->length;
       }
-      printf("\n");
       
       /* we found a site to resolve */
       if (chosen >= 0)
@@ -410,25 +395,7 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
 
     /* if no singletons to resolve, break */
     if (chosen == -1) { break;}
-  printf("HMATRIX:\n");
-  for (i = 0; i < msa->count; ++i)
-  {
-    for (j = 0; j < msa->length; ++j)
-      printf(" %d", hmat[i*msa->length + j]);
-    printf("\n");
   }
-  printf("\n\n");
-  }
-
-  /* TODO: DEBUG * - print matrix */
-  printf("HMATRIX:\n");
-  for (i = 0; i < msa->count; ++i)
-  {
-    for (j = 0; j < msa->length; ++j)
-      printf(" %d", hmat[i*msa->length + j]);
-    printf("\n");
-  }
-  printf("\n\n");
 
   /* 4. Construct alignment A2 of expanded site patterns. Done in several steps  */
 
@@ -579,15 +546,9 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
   msa->length = patterns;
 
   /* 5b. compress for JC69 */
-  /* TODO: DO THIS OUTSIDE */
-//  unsigned long mapping = compress_site_patterns_diploid(msa->sequence,
-//                                                         pll_map_nt,
-//                                                         msa->count,
-//                                                         &(msa->length),
-//                                                         COMPRESS_JC69);
-//
-//
+  /* This is done outside of this function */
 
+  /* free allocated memory */
   free(hets);
   free(mapping);
   free(newsite);
@@ -622,7 +583,6 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                                sizeof(unsigned long *));
   for (i = 0; i < msa_count; ++i)
   {
-    printf("Processing MSA %ld\n", i);
     resolution_count[i] = diploid_resolve_locus(msa_list[i],
                                                 (int)i,
                                                 weights[i],
@@ -631,7 +591,6 @@ unsigned long ** diploid_resolve(stree_t * stree,
   }
 
   /* update map file with new labels */
-  /* TODO */
   update_map_list(maplist);
 
   /* deallocate hash tables */
