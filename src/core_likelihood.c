@@ -204,29 +204,30 @@ void pll_core_root_likelihood_vector(unsigned int states,
   {
     if (states == 4)
     {
-      return pll_core_root_likelihood_vec_4x4_sse(sites,
-                                                  rate_cats,
-                                                  clv,
-                                                  scaler,
-                                                  frequencies,
-                                                  rate_weights,
-                                                  pattern_weights,
-                                                  freqs_indices,
-                                                  persite_lh);
+      pll_core_root_likelihood_vec_4x4_sse(sites,
+                                           rate_cats,
+                                           clv,
+                                           scaler,
+                                           frequencies,
+                                           rate_weights,
+                                           pattern_weights,
+                                           freqs_indices,
+                                           persite_lh);
     }
     else
     {
-      return pll_core_root_likelihood_vec_sse(states,
-                                             sites,
-                                             rate_cats,
-                                             clv,
-                                             scaler,
-                                             frequencies,
-                                             rate_weights,
-                                             pattern_weights,
-                                             freqs_indices,
-                                             persite_lh);
+      pll_core_root_likelihood_vec_sse(states,
+                                       sites,
+                                       rate_cats,
+                                       clv,
+                                       scaler,
+                                       frequencies,
+                                       rate_weights,
+                                       pattern_weights,
+                                       freqs_indices,
+                                       persite_lh);
     }
+    return;
     /* this line is never called, but should we disable the else case above,
        then states_padded must be set to this value */
     states_padded = (states+1) & 0xFFFFFFFE;
@@ -237,29 +238,30 @@ void pll_core_root_likelihood_vector(unsigned int states,
   {
     if (states == 4)
     {
-      return pll_core_root_likelihood_vec_4x4_avx(sites,
-                                                  rate_cats,
-                                                  clv,
-                                                  scaler,
-                                                  frequencies,
-                                                  rate_weights,
-                                                  pattern_weights,
-                                                  freqs_indices,
-                                                  persite_lh);
+      pll_core_root_likelihood_vec_4x4_avx(sites,
+                                           rate_cats,
+                                           clv,
+                                           scaler,
+                                           frequencies,
+                                           rate_weights,
+                                           pattern_weights,
+                                           freqs_indices,
+                                           persite_lh);
     }
     else
     {
-      return pll_core_root_likelihood_vec_avx(states,
-                                              sites,
-                                              rate_cats,
-                                              clv,
-                                              scaler,
-                                              frequencies,
-                                              rate_weights,
-                                              pattern_weights,
-                                              freqs_indices,
-                                              persite_lh);
+      pll_core_root_likelihood_vec_avx(states,
+                                       sites,
+                                       rate_cats,
+                                       clv,
+                                       scaler,
+                                       frequencies,
+                                       rate_weights,
+                                       pattern_weights,
+                                       freqs_indices,
+                                       persite_lh);
     }
+    return;
     /* this line is never called, but should we disable the else case above,
        then states_padded must be set to this value */
     states_padded = (states+3) & 0xFFFFFFFC;
@@ -270,29 +272,30 @@ void pll_core_root_likelihood_vector(unsigned int states,
   {
     if (states == 4)
     {
-      return pll_core_root_likelihood_vec_4x4_avx(sites,
-                                                  rate_cats,
-                                                  clv,
-                                                  scaler,
-                                                  frequencies,
-                                                  rate_weights,
-                                                  pattern_weights,
-                                                  freqs_indices,
-                                                  persite_lh);
+      pll_core_root_likelihood_vec_4x4_avx(sites,
+                                           rate_cats,
+                                           clv,
+                                           scaler,
+                                           frequencies,
+                                           rate_weights,
+                                           pattern_weights,
+                                           freqs_indices,
+                                           persite_lh);
     }
     else
     {
-      return pll_core_root_likelihood_vec_avx2(states,
-                                               sites,
-                                               rate_cats,
-                                               clv,
-                                               scaler,
-                                               frequencies,
-                                               rate_weights,
-                                               pattern_weights,
-                                               freqs_indices,
-                                               persite_lh);
+      pll_core_root_likelihood_vec_avx2(states,
+                                        sites,
+                                        rate_cats,
+                                        clv,
+                                        scaler,
+                                        frequencies,
+                                        rate_weights,
+                                        pattern_weights,
+                                        freqs_indices,
+                                        persite_lh);
     }
+    return;
     /* this line is never called, but should we disable the else case above,
        then states_padded must be set to this value */
     states_padded = (states+3) & 0xFFFFFFFC;
