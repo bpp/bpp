@@ -374,3 +374,149 @@ unsigned int * compress_site_patterns(char ** sequence,
 
   return weight;
 }
+
+unsigned long * compress_site_patterns_diploid(char ** sequence,
+                                               const unsigned int * map,
+                                               int count,
+                                               int * length,
+                                               int attrib)
+{
+  int i,j;
+  char * memptr;
+  char ** column;
+  unsigned long * mapping;
+  unsigned char ** jc69_invmaps = NULL;
+
+  unsigned char charmap[ASCII_SIZE];
+  unsigned char inv_charmap[ASCII_SIZE];
+
+  /* check that at least one sequence is given */
+  if (!count) return NULL;
+
+  /* a map must be given */
+  if (!map) return NULL;
+
+  /* a zero can never be used as a state */
+  if (map[0]) return NULL;
+
+  /* if map states are out of the BYTE range, remap */
+  if (findmax(map) >= ASCII_SIZE)
+  {
+    remap_range(map,charmap);
+
+    /* for now only DNA with pll_map_nt */
+    assert(0);
+  }
+  else
+  {
+    for (i = 0; i < ASCII_SIZE; ++i)
+      charmap[i] = (unsigned char)(map[i]);
+  }
+
+  /* create inverse charmap to decode states back to characters when
+     compression is finished */
+  for (i = 0; i < ASCII_SIZE; ++i)
+    if (map[i])
+      inv_charmap[charmap[i]] = (unsigned char)i;
+
+  /* encode sequences using charmap */
+  encode(sequence,charmap,count,*length);
+
+  /* allocate memory for columns */
+  column = (char **)xmalloc((size_t)(*length)*sizeof(char *));
+
+  /* allocate memory for the alignment */
+  memptr = column[0] = (char *)xmalloc((size_t)(*length) *
+                                       (size_t)(count+1) *
+                                       sizeof(char));
+
+  /* map memory to each column */
+  for (i = 1; i < *length; ++i)
+    column[i] = column[i-1] + (count+1);
+
+  /* allocate space for mapping vector */
+  mapping = (unsigned long *)xmalloc((size_t)(*length)*sizeof(unsigned long));
+
+  /* split alignment into columns instead of rows */
+  for (i = 0; i < (*length); ++i)
+  {
+    for (j = 0; j < count; ++j)
+      column[i][j] = sequence[j][i];
+    column[i][j] = 0;
+  }
+
+  /* allocate space for storing original indices (before sorting sites) */
+  int * oi = (int *)xmalloc(*length * sizeof(int));
+  for (i = 0; i < *length; ++i)
+    oi[i] = i;
+
+    /* do the jc69 now */
+  if (attrib == COMPRESS_JC69)
+    jc69_invmaps = encode_jc69(column,*length,count);
+
+  /* sort the columns and keep original indices */
+  ssort1(column, *length, 0, oi);
+
+  /*first site in uncompressed alignment maps to first site in compressed */
+  int compressed_length = 1;
+  size_t ref = 0;
+  mapping[0] = 0;
+
+  /* find all unique columns and set their mappings A2->A3 */
+  int * compressed_oi = (int *)xmalloc(*length * sizeof(int));
+
+  compressed_oi[0] = oi[0];
+  for (i = 1; i < *length; ++i)
+  {
+    if (strcmp(column[i],column[i-1]))
+    {
+      column[ref+1] = column[i];
+      compressed_oi[ref+1] = oi[i];
+      ++ref;
+      ++compressed_length;
+    }
+
+    /* map original index i in uncompressed alignment to index in compressed */
+    mapping[oi[i]] = ref;
+  }
+
+  /* decode the jc69 encoding */
+  if (attrib == COMPRESS_JC69)
+  {
+    for (i=0; i < compressed_length; ++i)
+    {
+      unsigned char * sitemap = jc69_invmaps[compressed_oi[i]];
+      if (sitemap)
+        for (j=0; j < count; ++j)
+          column[i][j] = sitemap[(unsigned int)column[i][j]];
+    }
+    for (i = 0; i < *length; ++i)
+      if (jc69_invmaps[i])
+        free(jc69_invmaps[i]);
+    free(jc69_invmaps);
+  }
+
+  /* copy the unique columns over the original sequences */
+  for (i = 0; i < compressed_length; ++i)
+    for (j = 0; j < count; ++j)
+      sequence[j][i] = column[i][j];
+
+  /* add terminating zero */
+  for (j = 0; j < count; ++j)
+    sequence[j][compressed_length] = 0;
+
+  /* deallocate memory */
+  free(memptr);
+  free(column);
+
+  /* update length */
+  *length = compressed_length;
+
+  /* decode sequences using inv_charmap */
+  encode(sequence,inv_charmap,count,compressed_length);
+
+  free(oi);
+  free(compressed_oi);
+
+  return mapping;
+}

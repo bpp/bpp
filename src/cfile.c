@@ -262,6 +262,67 @@ l_unwind:
   return ret;
 }
 
+static long parse_diploid(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  size_t ws;
+  size_t count = 0;
+
+  assert(line);
+
+  while (1)
+  {
+    /* check if 0 or 1 */
+    if (*p == '0' || *p == '1')
+    {
+      count++;
+      p++;
+    }
+
+    if ((*p == '*') || (*p == '#') || (*p == '\0')) break;
+
+    /* make sure we have only white-space and skip it all */
+    ws = strspn(p, " \t\r\n");
+    if (!ws) goto l_unwind;
+
+    p += ws;
+  }
+
+  if (!count) goto l_unwind;
+
+  /* allocate memory */
+  opt_diploid_size = count;
+  opt_diploid = (long *)xmalloc(count*sizeof(long));
+
+  /* go through the string once more */
+  p = s;
+  count = 0;
+  while (1)
+  {
+    /* check if 0 or 1 */
+    if (*p == '0' || *p == '1')
+    {
+      opt_diploid[count++] = *p - '0';
+      p++;
+    }
+
+    if ((*p == '*') || (*p == '#') || (*p == '\0')) break;
+
+    /* skip all white-space */
+    ws = strspn(p, " \t\r\n");
+    if (!ws) goto l_unwind;
+
+    p += ws;
+  }
+  ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_speciesdelimitation(const char * line)
 {
   long ret = 0;
@@ -709,7 +770,13 @@ void load_cfile()
     }
     else if (token_len == 7)
     {
-      if (!strncasecmp(token,"seqfile",7))
+      if (!strncasecmp(token,"diploid",7))
+      {
+        if (!parse_diploid(value))
+          fatal("Option %s expects values 0 or 1 for each species (line %ld)",
+                token,line_count);
+      }
+      else if (!strncasecmp(token,"seqfile",7))
       {
         if (!get_string(value, &opt_msafile))
           fatal("Option %s expects a string (line %ld)", token, line_count);

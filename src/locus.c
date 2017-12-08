@@ -96,6 +96,13 @@ static void dealloc_locus_data(locus_t * locus)
   if (locus->pattern_weights)
     free(locus->pattern_weights);
 
+  if (locus->diploid)
+  {
+    free(locus->diploid_mapping);
+    free(locus->diploid_resolution_count);
+    free(locus->likelihood_vector);
+  }
+
   free(locus);
 }
 
@@ -597,6 +604,12 @@ locus_t * locus_create(unsigned int tips,
   locus->attributes = attributes;
   locus->states_padded = states;
 
+  /* by default we assume the locus does not contain diploid sequences */
+  locus->diploid = 0;
+  locus->diploid_mapping = NULL;
+  locus->diploid_resolution_count = NULL;
+  locus->likelihood_vector = NULL;
+
   if (attributes & PLL_ATTRIB_ARCH_SSE)
   {
     locus->alignment = PLL_ALIGNMENT_SSE;
@@ -916,6 +929,38 @@ double locus_root_loglikelihood(locus_t * locus,
              NULL : locus->scale_buffer[root->scaler_index];
 
   assert(scaler == NULL);
+
+  if (locus->diploid)
+  {
+    pll_core_root_likelihood_vector(locus->states,
+                                    locus->sites,
+                                    locus->rate_cats,
+                                    locus->clv[root->clv_index],
+                                    scaler,
+                                    locus->frequencies,
+                                    locus->rate_weights,
+                                    locus->pattern_weights,
+                                    freqs_indices,
+                                    locus->likelihood_vector,
+                                    locus->attributes);
+    
+    long i,j,k=0;
+    double logl = 0;
+
+    for (i = 0; i < locus->unphased_length; ++i)
+    {
+      double meanl = 0;
+
+      for (j = 0; j < locus->diploid_resolution_count[i]; ++j)
+        meanl += locus->likelihood_vector[locus->diploid_mapping[k++]];
+
+      meanl /= locus->diploid_resolution_count[i];
+
+      logl += log(meanl) * locus->pattern_weights[i];
+    }
+    return logl;
+  }
+
   return pll_core_root_loglikelihood(locus->states,
                                      locus->sites,
                                      locus->rate_cats,

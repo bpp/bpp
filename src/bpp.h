@@ -223,6 +223,7 @@ typedef struct snode_s
   unsigned long * bitmask;
 
   unsigned int node_index;
+  unsigned int diploid;
 } snode_t;
 
 typedef struct stree_s
@@ -341,6 +342,15 @@ typedef struct locus_s
   unsigned char * charmap;
   double * ttlookup;
   unsigned int * tipmap;
+
+  /* diploid related */
+  int diploid;
+  unsigned long * diploid_mapping;
+  unsigned long * diploid_resolution_count;
+  double * likelihood_vector;
+  int unphased_length;
+
+
 } locus_t;
 
 /* Simple structure for handling PHYLIP parsing */
@@ -474,6 +484,7 @@ extern long opt_usedata;
 extern long opt_nloci;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
+extern long opt_diploid_size;
 extern double opt_bfbeta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
@@ -487,6 +498,7 @@ extern double opt_finetune_mix;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern long * opt_diploid;
 extern char * opt_cfile;
 extern char * opt_mapfile;
 extern char * opt_msafile;
@@ -826,6 +838,11 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       int * length,
                                       int attrib);
 
+unsigned long * compress_site_patterns_diploid(char ** sequence,
+                                               const unsigned int * map,
+                                               int count,
+                                               int * length,
+                                               int attrib);
 /* functions in summary.c */
 
 void bipartitions_init(char ** species, long species_count);
@@ -845,6 +862,15 @@ void cpu_features_show(void);
 void cpu_features_detect(void);
 
 void cpu_setarch(void);
+
+/* functions in diploid.c */
+
+unsigned long ** diploid_resolve(stree_t * stree,
+                                 msa_t ** msa_list,
+                                 list_t * maplist,
+                                 unsigned int ** weights,
+                                 int msa_count,
+                                 const unsigned int * map);
 
 #ifdef _MSC_VER
 int pll_ctz(unsigned int x);
@@ -968,6 +994,17 @@ double pll_core_root_loglikelihood(unsigned int states,
                                    double * persite_lnl,
                                    unsigned int attrib);
 
+void pll_core_root_likelihood_vector(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     const double * clv,
+                                     const unsigned int * scaler,
+                                     double * const * frequencies,
+                                     const double * rate_weights,
+                                     const unsigned int * pattern_weights,
+                                     const unsigned int * freqs_indices,
+                                     double * persite_lnl,
+                                     unsigned int attrib);
 /* functions in output.c */
 
 void pll_show_pmatrix(const locus_t * locus,
@@ -1138,6 +1175,27 @@ double pll_core_root_loglikelihood_4x4_sse(unsigned int sites,
                                            const unsigned int * pattern_weights,
                                            const unsigned int * freqs_indices,
                                            double * persite_lnl);
+
+void pll_core_root_likelihood_vec_sse(unsigned int states,
+                                      unsigned int sites,
+                                      unsigned int rate_cats,
+                                      const double * clv,
+                                      const unsigned int * scaler,
+                                      double * const * frequencies,
+                                      const double * rate_weights,
+                                      const unsigned int * pattern_weights,
+                                      const unsigned int * freqs_indices,
+                                      double * persite_lh);
+
+void pll_core_root_likelihood_vec_4x4_sse(unsigned int sites,
+                                          unsigned int rate_cats,
+                                          const double * clv,
+                                          const unsigned int * scaler,
+                                          double * const * frequencies,
+                                          const double * rate_weights,
+                                          const unsigned int * pattern_weights,
+                                          const unsigned int * freqs_indices,
+                                          double * persite_lh);
 #endif
 
 /* functions in core_partials_avx.c */
@@ -1269,6 +1327,27 @@ double pll_core_root_loglikelihood_4x4_avx(unsigned int sites,
                                            const unsigned int * pattern_weights,
                                            const unsigned int * freqs_indices,
                                            double * persite_lnl);
+
+void pll_core_root_likelihood_vec_avx(unsigned int states,
+                                      unsigned int sites,
+                                      unsigned int rate_cats,
+                                      const double * clv,
+                                      const unsigned int * scaler,
+                                      double * const * frequencies,
+                                      const double * rate_weights,
+                                      const unsigned int * pattern_weights,
+                                      const unsigned int * freqs_indices,
+                                      double * persite_lh);
+
+void pll_core_root_likelihood_vec_4x4_avx(unsigned int sites,
+                                          unsigned int rate_cats,
+                                          const double * clv,
+                                          const unsigned int * scaler,
+                                          double * const * frequencies,
+                                          const double * rate_weights,
+                                          const unsigned int * pattern_weights,
+                                          const unsigned int * freqs_indices,
+                                          double * persite_lh);
 #endif
 
 
@@ -1330,4 +1409,14 @@ double pll_core_root_loglikelihood_avx2(unsigned int states,
                                         const unsigned int * freqs_indices,
                                         double * persite_lnl);
 
+void pll_core_root_likelihood_vec_avx2(unsigned int states,
+                                       unsigned int sites,
+                                       unsigned int rate_cats,
+                                       const double * clv,
+                                       const unsigned int * scaler,
+                                       double * const * frequencies,
+                                       const double * rate_weights,
+                                       const unsigned int * pattern_weights,
+                                       const unsigned int * freqs_indices,
+                                       double * persite_lh);
 #endif

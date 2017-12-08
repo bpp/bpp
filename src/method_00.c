@@ -671,6 +671,49 @@ void cmd_a00()
   if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
     fatal("Cannot open file %s for writing...");
 
+  /* mapping from A2 -> A3 if diploid sequences used */
+  unsigned long ** mapping = NULL;
+  unsigned long ** resolution_count = NULL;
+  int * unphased_length = NULL;
+
+  if (opt_diploid)
+  {
+    /* store length of alignment A1 */
+    unphased_length = (int *)xmalloc((size_t)msa_count * sizeof(int));
+    for (i = 0; i < msa_count; ++i)
+      unphased_length[i] = msa_list[i]->length;
+
+    /* compute and replace msa_list with alignments A3. resolution_count
+       contains the number of resolved sites in A2 for each site in A1,
+       i.e. resolution_count[0][3] contains the number of resolved sites in A2
+       for the fourth site of locus 0 */
+    resolution_count = diploid_resolve(stree,
+                                       msa_list,
+                                       map_list,
+                                       weights,
+                                       msa_count,
+                                       pll_map_nt);
+
+    for (i = 0; i < msa_count; ++i)
+      msa_print(msa_list[i]);
+
+    /* TODO: KEEP WEIGHTS */
+    //for (i = 0; i < msa_count; ++i) free(weights[i]);
+
+    mapping = (unsigned long **)xmalloc((size_t)msa_count *
+                                        sizeof(unsigned long *));
+
+    for (i = 0; i < msa_count; ++i)
+    {
+      /* compress again for JC69 and get mappings */
+      mapping[i] = compress_site_patterns_diploid(msa_list[i]->sequence,
+                                                  pll_map_nt,
+                                                  msa_list[i]->count,
+                                                  &(msa_list[i]->length),
+                                                  COMPRESS_JC69);
+    }
+  }
+
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count);
   stree_show_pptable(stree);
@@ -699,9 +742,33 @@ void cmd_a00()
     /* set frequencies for model with index 0 */
     pll_set_frequencies(locus[i],0,frequencies);
 
+    if (opt_diploid)
+    {
+      for (j = 0; j < (int)(stree->tip_count); ++j)
+        if (stree->nodes[j]->diploid)
+        {
+          locus[i]->diploid = 1;
+          break;
+        }
+    }
+
     /* set pattern weights and free the weights array */
-    pll_set_pattern_weights(locus[i], weights[i]);
-    free(weights[i]);
+    if (locus[i]->diploid)
+    {
+      locus[i]->diploid_mapping = mapping[i];
+      locus[i]->diploid_resolution_count = resolution_count[i];
+      /* since PLL does not support diploid sequences we make a small hack */
+      memcpy(locus[i]->pattern_weights, weights[i], unphased_length[i]);
+      free(weights[i]);
+      locus[i]->likelihood_vector = (double *)xmalloc((size_t)(msa->length) *
+                                                      sizeof(double));
+      locus[i]->unphased_length = unphased_length[i];
+    }
+    else
+    {
+      pll_set_pattern_weights(locus[i], weights[i]);
+      free(weights[i]);
+    }
 
 
     /* set tip sequences */
@@ -735,6 +802,15 @@ void cmd_a00()
     gtree[i]->logpr = logpr;
     logpr_sum += logpr;
   }
+
+  /* deallocate unnecessary arrays */
+  if (opt_diploid)
+  {
+    free(mapping);
+    free(unphased_length);
+    free(resolution_count);
+  }
+
 
   printf("\nInitial MSC density and log-likelihood of observing data:\n");
   printf("log-P0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
@@ -833,6 +909,9 @@ void cmd_a00()
   for (i = 0; i < msa_count; ++i)
     msa_destroy(msa_list[i]);
   free(msa_list);
+
+  if (opt_diploid)
+    free(opt_diploid);
 
   /* deallocate maplist */
   list_clear(map_list,map_dealloc);

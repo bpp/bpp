@@ -1148,6 +1148,13 @@ void stree_rootdist(stree_t * stree,
 
   if (!opt_usedata) return;
 
+  if (opt_diploid)
+  {
+    for (i = 0; i < stree->tip_count; ++i)
+      if (stree->nodes[i]->diploid)
+        return;
+  }
+
   hashtable_t * sht = species_hash(stree);
   hashtable_t * mht = maplist_hash(maplist,sht);
 

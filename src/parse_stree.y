@@ -354,6 +354,16 @@ stree_t * stree_wraptree(snode_t * root,
   for (i = 0; i < 2*tip_count-1; ++i)
     tree->nodes[i]->node_index = i;
 
+  /* apply diploid information */
+  if (opt_diploid)
+  {
+    if (opt_diploid_size != tree->tip_count)
+      fatal("Number of 'diploid' assignments mismatch number of species");
+
+    for (i = 0; i < tip_count; ++i)
+      tree->nodes[i]->diploid = opt_diploid[i];
+  }
+
   return tree;
 }
 
