@@ -539,6 +539,10 @@ int main (int argc, char * argv[])
   {
     cmd_help();
   }
+  else if (opt_version)
+  {
+    ;
+  }
   else if (!opt_stree && !opt_delimit)
   {
     cmd_a00();
