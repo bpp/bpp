@@ -245,7 +245,7 @@ unsigned int pll_popcount(unsigned int x)
   return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
 
-unsigned int popcount64(unsigned long x)
+unsigned int pll_popcount64(unsigned long x)
 {
   if (popcnt_present)
     return __popcnt64(x);
