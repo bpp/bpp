@@ -323,6 +323,39 @@ l_unwind:
   return ret;
 }
 
+static long parse_checkpoint(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  printf("Entered here!!\n");
+
+  count = get_long(p, &opt_checkpoint_initial);
+  if (!count) goto l_unwind;
+  printf("First long count: %ld\n", count);
+
+  p += count;
+
+  ret = 1;
+
+  count = get_long(p, &opt_checkpoint_step);
+  if (!count) goto l_unwind;
+  printf("Second long count: %ld\n", count);
+
+  p += count;
+
+  ret = 0;
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_speciesdelimitation(const char * line)
 {
   long ret = 0;
@@ -855,6 +888,12 @@ void load_cfile()
         if (!parse_thetaprior(value))
           fatal("Option 'thetaprior' expects two doubles (line %ld)",
                 line_count);
+      }
+      else if (!strncasecmp(token,"checkpoint",10))
+      {
+        printf("Found 'checkpoint'\n");
+        if (!parse_checkpoint(value))
+          fatal("Erroneous format of 'checkpoint' (line %ld)", line_count);
       }
     }
     else if (token_len == 11)

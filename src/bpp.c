@@ -59,6 +59,9 @@ long opt_nloci;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_diploid_size;
+long opt_checkpoint_initial;
+long opt_checkpoint_step;
+long opt_checkpoint_current;
 double opt_bfbeta;
 double opt_tau_alpha;
 double opt_tau_beta;
@@ -230,6 +233,9 @@ void args_init(int argc, char ** argv)
   opt_nloci = 0;
   opt_diploid_size = 0;
   opt_diploid = NULL;
+  opt_checkpoint_initial = 0;
+  opt_checkpoint_step = 0;
+  opt_checkpoint_current = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {

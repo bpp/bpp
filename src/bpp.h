@@ -77,7 +77,19 @@
 /* constants */
 
 #define PROG_NAME "bpp"
-#define PROG_VERSION "v0.0.0"
+
+#define PLL_STRING(x) #x
+#define PLL_C2S(x) PLL_STRING(x)
+
+
+#define VERSION_MAJOR 0
+#define VERSION_MINOR 1
+#define VERSION_PATCH 0
+
+#define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
+        PLL_C2S(VERSION_PATCH)
+
+#define BPP_MAGIC "BPPX"
 
 #ifdef __PPC__
 
@@ -485,6 +497,9 @@ extern long opt_nloci;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern long opt_diploid_size;
+extern long opt_checkpoint_initial;
+extern long opt_checkpoint_step;
+extern long opt_checkpoint_current;
 extern double opt_bfbeta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
