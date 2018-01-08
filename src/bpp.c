@@ -62,6 +62,7 @@ long opt_diploid_size;
 long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_checkpoint_current;
+long opt_method;
 double opt_bfbeta;
 double opt_tau_alpha;
 double opt_tau_beta;
@@ -85,6 +86,7 @@ char * opt_outfile;
 char * opt_reorder;
 char * opt_streefile;
 char * opt_streenewick;
+char * opt_resume;
 
 long mmx_present;
 long sse_present;
@@ -130,6 +132,7 @@ static struct option long_options[] =
   {"arch",            required_argument, 0, 0 },  /* 27 */
   {"exp_method",      required_argument, 0, 0 },  /* 28 */
   {"exp_debug",       no_argument,       0, 0 },  /* 29 */
+  {"resume",          required_argument, 0, 0 },  /* 30 */
   { 0, 0, 0, 0 }
 };
 
@@ -236,6 +239,8 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_initial = 0;
   opt_checkpoint_step = 0;
   opt_checkpoint_current = 0;
+  opt_resume = NULL;
+  opt_method = -1;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -386,6 +391,10 @@ void args_init(int argc, char ** argv)
       case 29:
         opt_experimental_debug = 1;
         break;
+
+      case 30:
+        opt_resume = optarg;
+        break;
         
       default:
         fatal("Internal error in option parsing");
@@ -419,6 +428,8 @@ void args_init(int argc, char ** argv)
     commands++;
   if (opt_cfile)
     commands++;
+  if (opt_resume)
+    commands++;
 
   if (opt_streefile && opt_streenewick)
     fatal("Cannot use --stree when using a control file (--cfile)");
@@ -435,7 +446,7 @@ void args_init(int argc, char ** argv)
   }
   /* check for mandatory options */
   if (!opt_version && !opt_help)
-    if (mand_options != mandatory_options_count && !opt_cfile)
+    if (mand_options != mandatory_options_count && !opt_cfile && !opt_resume)
       fatal("Mandatory options are:\n\n%s", mandatory_options_list);
 }
 
@@ -549,17 +560,9 @@ int main (int argc, char * argv[])
   {
     ;
   }
-  else if (!opt_stree && !opt_delimit)
+  else if (!opt_resume)
   {
-    cmd_a00();
-  }
-  else if (!opt_stree)
-  {
-    cmd_a10();
-  }
-  else if (!opt_delimit)
-  {
-    cmd_a01();
+    cmd_run();
   }
 
   dealloc_switches();

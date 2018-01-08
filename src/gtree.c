@@ -97,6 +97,20 @@ static void gtree_reset_leaves(gnode_t * root)
 }
 #endif
 
+void gtree_reset_leaves(gnode_t * node)
+{
+  if (!node->left)
+  {
+    node->leaves = 1;
+    return;
+  }
+
+  gtree_reset_leaves(node->left);
+  gtree_reset_leaves(node->right);
+  
+  node->leaves = node->left->leaves + node->right->leaves;
+}
+
 static int return_partials_recursive(gnode_t * node,
                                      unsigned int * trav_size,
                                      gnode_t ** outbuffer)
@@ -946,6 +960,27 @@ void reset_gene_leaves_count(stree_t * stree)
 
 }
 
+void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
+{
+  long i;
+
+  /* allocate sort buffer */
+  int max_count = 0;
+  for (i = 0; i < msa_count; ++i)
+    if (gtree[i]->tip_count > max_count)
+      max_count = gtree[i]->tip_count;
+
+  /* alloate buffer for sorting coalescent times plus two for the beginning
+     and end of epoch */
+  sortbuffer = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+  
+  /* allocate traversal buffers */
+  travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
+  for (i = 0; i < msa_count; ++i)
+    travbuffer[i] = (gnode_t **)xmalloc(gtree[i]->inner_count *
+                                        sizeof(gnode_t *));
+}
+
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
@@ -972,21 +1007,8 @@ gtree_t ** gtree_init(stree_t * stree,
   hashtable_destroy(sht,NULL);
   hashtable_destroy(mht,cb_dealloc_pairlabel);
 
-  /* allocate sort buffer */
-  int max_count = 0;
-  for (i = 0; i < msa_count; ++i)
-    if (msalist[i]->count > max_count)
-      max_count = msalist[i]->count;
-
-  /* alloate buffer for sorting coalescent times plus two for the beginning
-     and end of epoch */
-  sortbuffer = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
-  
-  /* allocate traversal buffers */
-  travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
-  for (i = 0; i < msa_count; ++i)
-    travbuffer[i] = (gnode_t **)xmalloc(gtree[i]->inner_count *
-                                        sizeof(gnode_t *));
+  /* allocate static internal arrays sortbuffer and travbuffer */
+  gtree_alloc_internals(gtree,msa_count);
 
   /* reset number of gene leaves associated with each species tree subtree */
   reset_gene_leaves_count(stree);

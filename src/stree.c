@@ -418,6 +418,8 @@ static void cb_dealloc_pairlabel(void * data)
   free(pair);
 }
 
+/* return an array of per-locus number of sequences for each species (tip in
+   species tree) */
 static int ** populations_seqcount(stree_t * stree,
                                    msa_t ** msalist,
                                    list_t * maplist,
@@ -590,7 +592,7 @@ static void stree_init_theta(stree_t * stree,
   free(seqcount);
 }
 
-static void stree_reset_pptable(stree_t * stree)
+void stree_reset_pptable(stree_t * stree)
 {
   unsigned int i;
   snode_t * ancnode;
@@ -608,73 +610,19 @@ static void stree_reset_pptable(stree_t * stree)
         stree->pptable[curnode->node_index][ancnode->node_index] = 1;
   }
 }
-
-void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
+void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long msa_count)
 {
-  unsigned int i,j;
-  #if 0
-  snode_t * curnode;
-  snode_t * ancnode;
-  #endif
-
-  assert(msa_count > 0);
-
-  /* label each inner node of the species tree with the concatenated labels of
-     its two children */
-  stree_label(stree);
-
-  /* allocate space for keeping track of coalescent events at each species tree
-     node for each locus */
-  stree->locus_count = (unsigned int)msa_count;
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-  {
-    stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count,sizeof(dlist_t *));
-    stree->nodes[i]->event_count = (int *)xcalloc(msa_count,sizeof(int));
-    stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count,sizeof(int));
-    stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,
-                                                           sizeof(unsigned int));
-    stree->nodes[i]->logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
-    stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,
-                                                           sizeof(double));
-
-    for (j = 0; j < stree->locus_count; ++j)
-      stree->nodes[i]->event[j] = dlist_create();
-  }
-
-  /* Initialize population sizes */
-  stree_init_theta(stree, msa, maplist, msa_count);
-
-  /* Initialize speciation times and create extinct species groups */
-  stree_init_tau(stree);
-
-  /* initialize pptable, where pptable[i][j] indicates whether population j
-     (that is, node with index j) is ancestral to population i */
-  stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count),
-                                   sizeof(int *));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count),
-                                       sizeof(int));
-
-  
-  stree_reset_pptable(stree);
-  #if 0
-  for (i = 0; i < stree->tip_count; ++i)
-  {
-    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
-      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
-        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
-  }
-  #endif
-  
-
   /* allocate traversal buffer to be the size of all nodes for all loci */
-  unsigned int sum_count = 0;
-  for (i = 0; i < (unsigned int)msa_count; ++i)
-    sum_count += (unsigned int)(msa[i]->count);
+//  unsigned int sum_count = 0;
+  unsigned int sum_nodes = 2*gtree_inner_sum + msa_count;
+//  for (i = 0; i < (unsigned int)msa_count; ++i)
+//    sum_count += (unsigned int)(msa[i]->count);
 
-  sum_count = 2*sum_count - msa_count;
-  __gt_nodes = (gnode_t **)xmalloc(sum_count * sizeof(gnode_t *));
-  __aux = (double *)xmalloc((sum_count - msa_count)*sizeof(double *));
+//  sum_count = 2*sum_count - msa_count;
+//  __gt_nodes = (gnode_t **)xmalloc(sum_count * sizeof(gnode_t *));
+//  __aux = (double *)xmalloc((sum_count - msa_count)*sizeof(double *));
+  __gt_nodes = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
+  __aux = (double *)xmalloc((sum_nodes - msa_count)*sizeof(double *));
 
   /* The following two arrays are used purely for the tau proposal.
      Entry i of marked_count indicates how many nodes from locus i are marked.
@@ -696,13 +644,15 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
     /* TODO: memory is allocated for all loci to aid parallelization */
     moved_count = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
     target_count = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
-    unsigned int sum_inner = 0;
-    for (i = 0; i < (unsigned int)msa_count; ++i)
-      sum_inner += msa[i]->count-1;
-    moved_space = (gnode_t **)xmalloc(sum_inner * sizeof(gnode_t *));
-    gtarget_space = (gnode_t **)xmalloc(sum_inner * sizeof(gnode_t *));
+//    unsigned int sum_inner = 0;
+//    for (i = 0; i < (unsigned int)msa_count; ++i)
+//      sum_inner += msa[i]->count-1;
+//    moved_space = (gnode_t **)xmalloc(sum_inner * sizeof(gnode_t *));
+//    gtarget_space = (gnode_t **)xmalloc(sum_inner * sizeof(gnode_t *));
+    moved_space = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
+    gtarget_space = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
 
-    unsigned int sum_nodes = 2*sum_inner + msa_count;
+//    unsigned int sum_nodes = 2*sum_inner + msa_count;
     gtarget_temp_space = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
 
     unsigned int stree_nodes = stree->inner_count + stree->tip_count;
@@ -711,6 +661,69 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
     snode_contrib_count = (unsigned int *)xmalloc((size_t)msa_count *
                                                   sizeof(unsigned int));
   }
+}
+
+void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
+{
+  unsigned int i,j;
+  #if 0
+  snode_t * curnode;
+  snode_t * ancnode;
+  #endif
+
+  assert(msa_count > 0);
+
+  /* label each inner node of the species tree with the concatenated labels of
+     its two children */
+  stree_label(stree);
+
+  /* Initialize population sizes */
+  stree_init_theta(stree, msa, maplist, msa_count);
+
+  /* Initialize speciation times and create extinct species groups */
+  stree_init_tau(stree);
+
+  /* allocate space for keeping track of coalescent events at each species tree
+     node for each locus */
+  stree->locus_count = (unsigned int)msa_count;
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count,sizeof(dlist_t *));
+    stree->nodes[i]->event_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count,sizeof(int));
+    stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,
+                                                           sizeof(unsigned int));
+    stree->nodes[i]->logpr_contrib = (double *)xcalloc(msa_count,sizeof(double));
+    stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,
+                                                           sizeof(double));
+
+    for (j = 0; j < stree->locus_count; ++j)
+      stree->nodes[i]->event[j] = dlist_create();
+  }
+
+  /* initialize pptable, where pptable[i][j] indicates whether population j
+     (that is, node with index j) is ancestral to population i */
+  stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count),
+                                   sizeof(int *));
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count),
+                                       sizeof(int));
+
+  
+  stree_reset_pptable(stree);
+  #if 0
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
+      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
+        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
+  }
+  #endif
+
+  unsigned int sum_inner = 0;
+  for (i = 0; i < (unsigned int)msa_count; ++i)
+    sum_inner += msa[i]->count-1;
+  stree_alloc_internals(stree,sum_inner,msa_count);
 }
 
 void stree_fini()
@@ -1126,8 +1139,7 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 void stree_rootdist(stree_t * stree,
                     list_t * maplist,
                     msa_t ** msalist,
-                    unsigned int ** weights,
-                    int * ol)
+                    unsigned int ** weights)
 {
   unsigned int i,j,k,n;
   unsigned int msa_count = stree->locus_count;
@@ -1223,7 +1235,7 @@ void stree_rootdist(stree_t * stree,
             if (jseq[n] != kseq[n])
               diff_pair += weights[i][n];
           }
-          diff_pair  /= ol[i];
+          diff_pair  /= msalist[i]->original_length;
           diff_locus += diff_pair;
           ++diff_count;
         }

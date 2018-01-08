@@ -515,3 +515,248 @@ void bipartitions_finalize(size_t trees_count, char ** species)
 
   free(sptr);
 }
+
+
+
+/* TODO: New summary code */
+
+struct distinct_s 
+{
+  size_t start;
+  size_t count;
+};
+
+static char buffer[LINEALLOC];
+static char * line = NULL;
+static size_t line_size = 0;
+static size_t line_maxsize = 0;
+
+static char * cb_serialize_none(const snode_t * snode)
+{
+  if (!snode->left) return xstrdup(snode->label);
+
+  return xstrdup("");
+}
+
+static void reallocline(size_t newmaxsize)
+{
+  char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
+
+  if (line)
+  {
+    memcpy(temp,line,line_size*sizeof(char));
+    free(line);
+  }
+  line = temp;
+  line_maxsize = newmaxsize;
+}
+
+static char * getnextline(FILE * fp)
+{
+  size_t len = 0;
+
+  line_size = 0;
+
+  /* read from file until newline or eof */
+  while (fgets(buffer, LINEALLOC, fp))
+  {
+    len = strlen(buffer);
+
+    if (line_size + len > line_maxsize)
+      reallocline(line_maxsize + LINEALLOC);
+
+    memcpy(line+line_size,buffer,len*sizeof(char));
+    line_size += len;
+
+    if (buffer[len-1] == '\n')
+    {
+      #if 0
+      if (line_size+1 > line_maxsize)
+        reallocline(line_maxsize+1);
+
+      line[line_size] = 0;
+      #else
+        line[line_size-1] = 0;
+      #endif
+
+      return line;
+    }
+  }
+
+  if (!line_size)
+  {
+    free(line);
+    line_maxsize = 0;
+    line = NULL;
+    return NULL;
+  }
+
+  if (line_size == line_maxsize)
+    reallocline(line_maxsize+1);
+
+  line[line_size] = 0;
+  return line;
+}
+
+static void strip_attributes(char * s)
+{
+  char * p = s;
+
+  while (*s)
+  {
+    if (*s == '#' || *s == ':')
+    {
+      while (*s && *s != ',' && *s != ')' && *s != ';')
+        ++s;
+    }
+    else if (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')
+      ++s;
+    else
+      *p++ = *s++;
+  }
+  *p = 0;
+}
+
+static int cb_strcmp(const void * a, const void * b)
+{
+  const char ** pa = (const char **)a;
+  const char ** pb = (const char **)b;
+
+  return strcmp(*pa,*pb);
+}
+
+static void stree_sort_recursive(snode_t * node)
+{
+  if (!node->left)
+    return;
+
+  stree_sort_recursive(node->left);
+  stree_sort_recursive(node->right);
+
+  if (strcmp(node->left->label, node->right->label) > 0)
+    SWAP(node->left,node->right);
+
+  node->label = (char *)xmalloc(strlen(node->left->label) +
+                                strlen(node->right->label) + 1);
+
+  /* concatenate species labels */
+  node->label[0] = 0;
+  strcat(node->label,node->left->label);
+  strcat(node->label,node->right->label);
+}
+
+static void stree_sort(stree_t * stree)
+{
+  stree_sort_recursive(stree->root); 
+}
+
+static int cb_dtree_cmp(const void * a, const void * b)
+{
+  const struct distinct_s * pa = (const struct distinct_s *)a;
+  const struct distinct_s * pb = (const struct distinct_s *)b;
+
+  if (pa->count < pb->count) return 1;
+  else if (pa->count > pb->count) return -1;
+
+  return 0;
+}
+
+void stree_summary(char ** species_names, long species_count)
+{
+  size_t i,distinct;
+  size_t line_count = 0;
+  FILE * fp;
+  char ** treelist;
+  struct distinct_s * dtree;
+
+  /* allocate space for holding all species tree samples */
+  treelist = (char **)xmalloc((size_t)(opt_samples+1)*sizeof(char *));
+
+  /* open mcmc file */
+  #ifndef DEBUG_MAJORITY
+  fp = xopen(opt_mcmcfile,"r");
+  #else
+  fp = xopen("test.txt","r");
+  #endif
+
+  bipartitions_init(species_names,species_count);
+
+  /* read each line from the file, and strip all thetas and branch lengths
+     such that only the tree topology and tip names remain, and store them
+     in treelist */
+  while (getnextline(fp))
+  {
+    strip_attributes(line);
+    stree_t * t = stree_parse_newick_string(line);
+    stree_sort(t);
+    treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
+
+    bipartitions_update(t);
+    stree_destroy(t,NULL);
+  }
+
+
+  printf("Species in order:\n");
+  for (i = 0; i < (size_t)species_count; ++i)
+  {
+    printf(" %3ld. %s\n", i+1, species_names[i]);
+  }
+  printf("\n");
+
+  qsort(treelist,(size_t)line_count,sizeof(char *), cb_strcmp);
+
+  distinct = 1;
+  size_t * uniquepos = (size_t *)xmalloc(line_count*sizeof(size_t));
+  uniquepos[0] = 0;
+  for (i = 1; i < line_count; ++i)
+  {
+    if (strcmp(treelist[i],treelist[i-1]))
+    {
+      uniquepos[distinct++] = i;
+    }
+  }
+
+  assert(distinct > 0);
+
+  dtree = (struct distinct_s *)xmalloc(distinct * sizeof(struct distinct_s));
+  for (i = 0; i < distinct; ++i)
+  {
+    dtree[i].start = uniquepos[i];
+    dtree[i].count = (i == distinct - 1) ?
+                      line_count - uniquepos[i] : uniquepos[i+1] - uniquepos[i];
+  }
+
+  qsort(dtree, distinct, sizeof(struct distinct_s), cb_dtree_cmp);
+  printf("(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
+  double cdf = 0;
+  for (i = 0; i < distinct; ++i)
+  {
+    double pdf = dtree[i].count / (double)line_count;
+    cdf += pdf;
+    printf(" %8ld %8.5f %8.5f %s\n",
+           dtree[i].count, pdf, cdf, treelist[dtree[i].start]);
+  }
+
+  bipartitions_finalize(line_count,species_names);
+
+  fprintf(stdout, "\n(D) Best tree (or trees from the mastertree file) "
+          "with support values\n");
+  for (i = 0; i < distinct; ++i)
+  {
+    if (i && dtree[i].count != dtree[i-1].count)
+      break;
+
+    print_stree_with_support(treelist[dtree[i].start],dtree[i].count,line_count);
+  }
+
+  summary_dealloc_hashtables();
+  free(uniquepos);
+  free(dtree);
+ 
+  /* deallocate list of trees */
+  for (i = 0; i < line_count; ++i)
+    free(treelist[i]);
+  free(treelist);
+
+  fclose(fp);
+}

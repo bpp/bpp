@@ -873,6 +873,54 @@ void locus_update_matrices_jc69(locus_t * locus,
   }
 }
 
+static void locus_update_all_partials_recursive(locus_t * locus, gnode_t * root)
+{
+  unsigned int * scaler;
+  unsigned int * lscaler;
+  unsigned int * rscaler;
+  gnode_t * lnode;
+  gnode_t * rnode;
+
+
+  if (!(root->left)) return;
+
+  locus_update_all_partials_recursive(locus,root->left);
+  locus_update_all_partials_recursive(locus,root->right);
+
+  lnode = root->left;
+  rnode = root->right;
+
+  /* check if we use scalers */
+  scaler = (root->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+             NULL : locus->scale_buffer[root->scaler_index];
+
+  lscaler = (lnode->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+              NULL : locus->scale_buffer[lnode->scaler_index];
+
+  rscaler = (rnode->scaler_index == PLL_SCALE_BUFFER_NONE) ?
+              NULL : locus->scale_buffer[rnode->scaler_index];
+
+  pll_core_update_partial_ii(locus->states,
+                             locus->sites,
+                             locus->rate_cats,
+                             locus->clv[root->clv_index],
+                             scaler,
+                             locus->clv[lnode->clv_index],
+                             locus->clv[rnode->clv_index],
+                             locus->pmatrix[lnode->pmatrix_index],
+                             locus->pmatrix[rnode->pmatrix_index],
+                             lscaler,
+                             rscaler,
+                             locus->attributes);
+}
+
+void locus_update_all_partials(locus_t * locus, gtree_t * gtree)
+{
+  if (!opt_usedata) return;
+
+  locus_update_all_partials_recursive(locus,gtree->root);
+}
+
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count)
 {
   unsigned int i;

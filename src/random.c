@@ -32,6 +32,16 @@ void legacy_init()
   z_rndu = (unsigned int)opt_seed;
 }
 
+unsigned int get_legacy_rndu_status()
+{
+  return z_rndu;
+}
+
+void set_legacy_rndu_status(unsigned int x)
+{
+  z_rndu = x;
+}
+
 double legacy_rndu()
 {
 /* 32-bit integer assumed.

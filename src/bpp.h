@@ -86,9 +86,13 @@
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
 
+/* checkpoint version */
+#define VERSION_CHKP 1
+
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
 
+#define BPP_MAGIC_BYTES 4
 #define BPP_MAGIC "BPPX"
 
 #ifdef __PPC__
@@ -169,6 +173,7 @@
 #define PLL_SCALE_BUFFER_NONE -1
 
 #define PLL_MISC_EPSILON 1e-8
+
 /* error codes */
 
 #define ERROR_PHYLIP_SYNTAX            106
@@ -176,6 +181,13 @@
 #define ERROR_PHYLIP_NONALIGNED        108
 #define ERROR_PHYLIP_ILLEGALCHAR       109
 #define ERROR_PHYLIP_UNPRINTABLECHAR   110
+
+/* available methods */
+
+#define METHOD_00       0
+#define METHOD_01       1
+#define METHOD_10       2
+#define METHOD_11       3
 
 /* structures and data types */
 
@@ -500,6 +512,7 @@ extern long opt_diploid_size;
 extern long opt_checkpoint_initial;
 extern long opt_checkpoint_step;
 extern long opt_checkpoint_current;
+extern long opt_method;
 extern double opt_bfbeta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
@@ -523,6 +536,7 @@ extern char * opt_reorder;
 extern char * opt_outfile;
 extern char * opt_streefile;
 extern char * opt_streenewick;
+extern char * opt_resume;
 extern char * cmdline;
 
 /* common data */
@@ -634,11 +648,16 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 
 void stree_fini(void);
 
-void stree_rootdist(stree_t * stree, list_t * maplist, msa_t ** msalist, unsigned int ** weights, int * ol);
+void stree_rootdist(stree_t * stree,
+                    list_t * maplist,
+                    msa_t ** msalist,
+                    unsigned int ** weights);
 
 void fill_seqin_counts(stree_t * stree, int msa_index);
 
 void reset_gene_leaves_count(stree_t * stree);
+
+void stree_reset_pptable(stree_t * stree);
 
 long stree_propose_spr(stree_t ** streeptr,
                        gtree_t *** gtree_list_ptr,
@@ -653,6 +672,13 @@ stree_t * stree_clone_init(stree_t * stree);
 void stree_label(stree_t * stree);
 
 void stree_show_pptable(stree_t * stree);
+
+void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
+
+void stree_alloc_internals(stree_t * stree,
+                           unsigned int gtree_inner_sum,
+                           long msa_count);
+
 
 /* functions in arch.c */
 
@@ -734,10 +760,6 @@ void hashtable_destroy(hashtable_t * ht, void (*cb_dealloc)(void *));
 
 int cb_cmp_pairlabel(void * a, void * b);
 
-/* functions in stree.c */
-
-void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
-
 /* functions in random.c */
 
 double legacy_rndu(void);
@@ -745,8 +767,12 @@ double legacy_rnd_symmetrical(void);
 void legacy_init(void);
 double legacy_rndbeta (double p, double q);
 double legacy_rndgamma (double a);
+unsigned int get_legacy_rndu_status(void);
+void set_legacy_rndu_status(unsigned int x);
 
 /* functions in gtree.c */
+
+void gtree_alloc_internals(gtree_t ** gtree, long msa_count);
 
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
@@ -767,6 +793,8 @@ int gtree_traverse(gnode_t * root,
 void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
 
 double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
+
+void gtree_reset_leaves(gnode_t * node);
 
 void gtree_fini(int msa_count);
 
@@ -833,6 +861,8 @@ void pll_set_frequencies(locus_t * locus,
 
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count);
 
+void locus_update_all_partials(locus_t * locus, gtree_t * gtree);
+
 void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights);
 
@@ -858,6 +888,10 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                int count,
                                                int * length,
                                                int attrib);
+/* functions in allfixed.c */
+
+void allfixed_summary(stree_t * stree);
+
 /* functions in summary.c */
 
 void bipartitions_init(char ** species, long species_count);
@@ -870,6 +904,8 @@ void print_stree_with_support(const char * treestr, size_t freq, size_t trees_co
 
 void summary_dealloc_hashtables(void);
 
+void stree_summary(char ** species_names, long species_count);
+
 /* functions in hardware.c */
 
 void cpu_features_show(void);
@@ -877,6 +913,12 @@ void cpu_features_show(void);
 void cpu_features_detect(void);
 
 void cpu_setarch(void);
+
+#ifdef _MSC_VER
+int pll_ctz(unsigned int x);
+unsigned int pll_popcount(unsigned int x);
+unsigned int pll_popcount64(unsigned long x);
+#endif
 
 /* functions in diploid.c */
 
@@ -887,13 +929,20 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                  int msa_count,
                                  const unsigned int * map);
 
-#ifdef _MSC_VER
-int pll_ctz(unsigned int x);
-unsigned int pll_popcount(unsigned int x);
-unsigned int pll_popcount64(unsigned long x);
-#endif
+/* functions in dump.c */
 
+int checkpoint_dump(stree_t * stree,
+                    gtree_t ** gtree_list,
+                    locus_t ** locus_list,
+                    double * pjump,
+                    long curstep,
+                    long ft_round,
+                    long mcmc_offset);
 
+/* functions in load.c */
+
+int checkpoint_load(gtree_t *** gtreep, locus_t *** locusp, stree_t ** streep, double ** pjump, long * curstep, long * ft_round, long * mcmc_offset);
+void checkpoint_truncate(long mcmc_offset);
 
 /* functions in core_partials.c */
 
@@ -1039,17 +1088,23 @@ void experimental_tselect_logl(gnode_t * mnode,
                                locus_t * locus,
                                double * weights);
 
-/* functions in method_00.c */
 
-void cmd_a00(void);
+/* functions in method.c */
 
-/* functions in method_10.c */
+void cmd_run(void);
 
-void cmd_a10(void);
-
-/* functions in method_01.c */
-
-void cmd_a01(void);
+///* functions in method_00.c */
+//
+//void cmd_a00(void);
+//void cmd_a00_chk(void);
+//
+///* functions in method_10.c */
+//
+//void cmd_a10(void);
+//
+///* functions in method_01.c */
+//
+//void cmd_a01(void);
 
 /* functions in delimit.c */
 

@@ -959,5 +959,15 @@ void load_cfile()
     }
   }
 
+  /* set method */
+  if (!opt_stree && !opt_delimit)
+    opt_method = METHOD_00;
+  else if (!opt_stree)
+    opt_method = METHOD_10;
+  else if (!opt_delimit)
+    opt_method = METHOD_01;
+  else
+    fatal("Method 11 not yet implemented");
+
   fclose(fp);
 }
