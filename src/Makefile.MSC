@@ -24,23 +24,24 @@ SRC_LIBPLL = \
 
 OBJ_BPP = \
   arch.obj \
+  allfixed.obj
   bpp.obj \
   cfile.obj \
   compress.obj \
   delimit.obj \
   dlist.obj \
+  dump.obj \
   gtree.obj \
   hash.obj \
   list.obj \
   locus.obj \
   mapping.obj \
   maps.obj \
-  method_00.obj \
-  method_01.obj \
-  method_10.obj \
+  method.obj \
   msa.obj \
   output.obj \
   lex_map.obj \
+  load.obj \
   parse_map.obj \
   lex_stree.obj \
   parse_stree.obj \

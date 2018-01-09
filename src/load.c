@@ -196,7 +196,11 @@ int load_string(FILE * fp, char ** buffer)
   return 1;
 }
 
-static void load_chk_section_1(FILE * fp, double * pjump, long * curstep, long * ft_round, long * mcmc_offset)
+static void load_chk_section_1(FILE * fp,
+                               double * pjump,
+                               unsigned long * curstep,
+                               long * ft_round,
+                               long * mcmc_offset)
 {
   long i;
 
@@ -358,7 +362,7 @@ static void load_chk_section_1(FILE * fp, double * pjump, long * curstep, long *
     fatal("Cannot read 'sampfreq' tag");
   if (fread((void *)&opt_samples,sizeof(long),1,fp) != 1)
     fatal("Cannot read 'nsample' tag");
-  if (fread((void *)curstep,sizeof(long),1,fp) != 1)
+  if (fread((void *)curstep,sizeof(unsigned long),1,fp) != 1)
     fatal("Cannot read current MCMC step");
   if (fread((void *)ft_round,sizeof(long),1,fp) != 1)
     fatal("Cannot read current finetune round");
@@ -406,7 +410,7 @@ static void load_chk_section_1(FILE * fp, double * pjump, long * curstep, long *
   {
     stree->nodes[i]->event_count = (int *)xmalloc((size_t)opt_nloci*sizeof(int));
     stree->nodes[i]->seqin_count = (int *)xmalloc((size_t)opt_nloci*sizeof(int));
-    stree->nodes[i]->gene_leaves = (int *)xmalloc((size_t)opt_nloci*sizeof(int));
+    stree->nodes[i]->gene_leaves = (unsigned int *)xmalloc((size_t)opt_nloci*sizeof(unsigned int));
 
     stree->nodes[i]->logpr_contrib = (double *)xmalloc((size_t)opt_nloci*sizeof(double));
     stree->nodes[i]->old_logpr_contrib = (double *)xmalloc((size_t)opt_nloci*sizeof(double));
@@ -718,7 +722,7 @@ static void load_chk_section_3(FILE * fp, long msa_count)
   }
 }
 
-static locus_t * load_locus(FILE * fp, long index)
+static void load_locus(FILE * fp, long index)
 {
   long i;
 
@@ -827,7 +831,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
-                    long * curstep,
+                    unsigned long * curstep,
                     long * ft_round,
                     long * mcmc_offset)
 {

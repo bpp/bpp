@@ -59,6 +59,7 @@ long opt_nloci;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_diploid_size;
+long opt_checkpoint;
 long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_checkpoint_current;
@@ -241,6 +242,7 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_current = 0;
   opt_resume = NULL;
   opt_method = -1;
+  opt_checkpoint = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -560,7 +562,7 @@ int main (int argc, char * argv[])
   {
     ;
   }
-  else if (!opt_resume)
+  else if (opt_resume || opt_cfile)
   {
     cmd_run();
   }

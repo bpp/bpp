@@ -509,6 +509,7 @@ extern long opt_nloci;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern long opt_diploid_size;
+extern long opt_checkpoint;
 extern long opt_checkpoint_initial;
 extern long opt_checkpoint_step;
 extern long opt_checkpoint_current;
@@ -935,13 +936,13 @@ int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
                     double * pjump,
-                    long curstep,
+                    unsigned long curstep,
                     long ft_round,
                     long mcmc_offset);
 
 /* functions in load.c */
 
-int checkpoint_load(gtree_t *** gtreep, locus_t *** locusp, stree_t ** streep, double ** pjump, long * curstep, long * ft_round, long * mcmc_offset);
+int checkpoint_load(gtree_t *** gtreep, locus_t *** locusp, stree_t ** streep, double ** pjump, unsigned long * curstep, long * ft_round, long * mcmc_offset);
 void checkpoint_truncate(long mcmc_offset);
 
 /* functions in core_partials.c */

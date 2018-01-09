@@ -894,6 +894,7 @@ void load_cfile()
         printf("Found 'checkpoint'\n");
         if (!parse_checkpoint(value))
           fatal("Erroneous format of 'checkpoint' (line %ld)", line_count);
+        opt_checkpoint = 1;
       }
     }
     else if (token_len == 11)

@@ -429,7 +429,13 @@ static void dump_chk_section_4(FILE * fp, gtree_t ** gtree_list, locus_t ** locu
 
 }
 
-int checkpoint_dump(stree_t * stree, gtree_t ** gtree_list, locus_t ** locus_list, double * pjump, long curstep, long ft_round,long mcmc_offset)
+int checkpoint_dump(stree_t * stree,
+                    gtree_t ** gtree_list,
+                    locus_t ** locus_list,
+                    double * pjump,
+                    unsigned long curstep,
+                    long ft_round,
+                    long mcmc_offset)
 {
   FILE * fp;
   char * s = NULL;
