@@ -329,7 +329,6 @@ void allfixed_summary(stree_t * stree)
   printf("\n");
 
   /* compute standard deviation */
-  printf("Computing Stdev...\n");
   for (i = 0; i < col_count; ++i)
   {
     double sd = 0;
@@ -338,16 +337,12 @@ void allfixed_summary(stree_t * stree)
 
     stdev[i] = sqrt(sd/(opt_samples-1));
   }
-  printf("Finsihed stdev!\n");
   
   /* compute tint */
-  printf("Computing tint...\n");
   for (i = 0; i < col_count; ++i)
     tint[i] = eff_ict(matrix[i],opt_samples,mean[i],stdev[i]);
-  printf("Finsihed tint...\n");
 
   /* compute and print medians */
-  printf("Starting qsort...\n");
   printf("median  ");
   long median_line = opt_samples / 2;
 

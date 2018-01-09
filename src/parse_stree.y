@@ -318,7 +318,7 @@ stree_t * stree_wraptree(snode_t * root,
 {
   unsigned int i;
 
-  stree_t * tree = (stree_t *)xmalloc(sizeof(stree_t));
+  stree_t * tree = (stree_t *)xcalloc(1,sizeof(stree_t));
 
   if (tip_count < 2 && tip_count != 0)
     fatal("Invalid number of tips in input tree (%u).", tip_count);
