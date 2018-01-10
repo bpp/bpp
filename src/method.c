@@ -966,6 +966,7 @@ void cmd_run()
   {
     delimit_summary(stree);
     delimitations_fini();
+    rj_fini();
   }
 
   for (i = 0; i < opt_nloci; ++i)

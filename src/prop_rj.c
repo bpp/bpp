@@ -103,6 +103,8 @@ void rj_fini()
   free(nodevec_offset);
   free(nodevec_count);
   free(feasible);
+  free(partials);
+  free(partials_count);
 }
 
 #if 0
