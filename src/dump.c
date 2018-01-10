@@ -125,12 +125,15 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(unsigned long);              /* MCMC file offset */
 
   size_section += PROP_COUNT*sizeof(double);          /* pjump */
+  size_section += sizeof(long);                       /* dparam_count */
+  size_section += sizeof(long);                       /* ft_round_rj*/
+  size_section += sizeof(double);                     /* pjump_rj*/
 
   /* write section 1 size */
   DUMP(&size_section,1,fp);
 }
 
-static void dump_chk_section_1(FILE * fp, stree_t * stree, double * pjump, long curstep, long ft_round, long mcmc_offset)
+static void dump_chk_section_1(FILE * fp, stree_t * stree, double * pjump, long curstep, long ft_round, long mcmc_offset, long dparam_count, long ft_round_rj, double pjump_rj)
 {
   size_t i;
 
@@ -222,6 +225,10 @@ static void dump_chk_section_1(FILE * fp, stree_t * stree, double * pjump, long 
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
+
+  DUMP(&dparam_count,1,fp);
+  DUMP(&ft_round_rj,1,fp);
+  DUMP(&pjump_rj,1,fp);
 }
 
 
@@ -411,7 +418,10 @@ int checkpoint_dump(stree_t * stree,
                     double * pjump,
                     unsigned long curstep,
                     long ft_round,
-                    long mcmc_offset)
+                    long mcmc_offset,
+                    long dparam_count,
+                    long ft_round_rj,
+                    double pjump_rj)
 {
   FILE * fp;
   char * s = NULL;
@@ -433,7 +443,15 @@ int checkpoint_dump(stree_t * stree,
   dump_chk_header(fp,stree);
 
   /* write section 1 */
-  dump_chk_section_1(fp,stree,pjump,curstep,ft_round,mcmc_offset);
+  dump_chk_section_1(fp,
+                     stree,
+                     pjump,
+                     curstep,
+                     ft_round,
+                     mcmc_offset,
+                     dparam_count,
+                     ft_round_rj,
+                     pjump_rj);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

@@ -938,11 +938,24 @@ int checkpoint_dump(stree_t * stree,
                     double * pjump,
                     unsigned long curstep,
                     long ft_round,
-                    long mcmc_offset);
+                    long mcmc_offset,
+                    long dparam_count,
+                    long ft_round_rj,
+                    double pjump_rj);
 
 /* functions in load.c */
 
-int checkpoint_load(gtree_t *** gtreep, locus_t *** locusp, stree_t ** streep, double ** pjump, unsigned long * curstep, long * ft_round, long * mcmc_offset);
+int checkpoint_load(gtree_t *** gtreep,
+                    locus_t *** locusp,
+                    stree_t ** streep,
+                    double ** pjump,
+                    unsigned long * curstep,
+                    long * ft_round,
+                    long * mcmc_offset,
+                    long * dparam_count,
+                    long * ft_round_rj,
+                    double * pjump_rj);
+
 void checkpoint_truncate(long mcmc_offset);
 
 /* functions in core_partials.c */

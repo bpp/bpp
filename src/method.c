@@ -259,7 +259,10 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_pjump,
                   ptr_curstep,
                   ptr_ft_round,
-                  &mcmc_offset);
+                  &mcmc_offset,
+                  ptr_dparam_count,
+                  ptr_ft_round_rj,
+                  ptr_pjump_rj);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(mcmc_offset);
@@ -281,9 +284,9 @@ static FILE * resume(stree_t ** ptr_stree,
 
   /* TODO: remaining parameters for METHOD 01 and 10 not implemented yet */
   /* method 10 */
-  *ptr_dparam_count = 0;
-  *ptr_ft_round_rj = 0;
-  *ptr_pjump_rj = 0;
+//  *ptr_dparam_count = 0;
+//  *ptr_ft_round_rj = 0;
+//  *ptr_pjump_rj = 0;
 
   /* method 01 */
   *ptr_ft_round_spr = 0;
@@ -308,6 +311,34 @@ static FILE * resume(stree_t ** ptr_stree,
   /* open truncated MCMC file for appending */
   if (!(fp_mcmc = fopen(opt_mcmcfile, "a")))
     fatal("Cannot open file %s for appending...");
+
+  if (opt_method == METHOD_10)          /* species delimitation */
+  {
+    /* quite ugly hack to resume species delimitation from a checkpoint.
+
+     The idea is to:
+     1) Store the taus in old_tau (0s in tau indicate a collapsed species)
+     2) Call delimitations_init which computes all delimitation models,
+        does all allocations, but has the side-effect of resetting the
+        taus to a random delimitation
+     3) Restore taus from old_tau
+     4) Find delimittion string and return index using delimit_getindex()
+     5) Set delimitation index using delimit_setindex()
+    */
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      stree->nodes[i]->old_tau = stree->nodes[i]->tau;
+
+    long dmodels_count = delimitations_init(stree);
+    printf("Number of delimitation models: %ld\n", dmodels_count);
+    rj_init(gtree,stree,opt_nloci);
+
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      stree->nodes[i]->tau = stree->nodes[i]->old_tau;
+    
+    long dindex = delimit_getindex(stree);
+    delimit_setindex(dindex);
+  }
+    
 
   return fp_mcmc;
 }
@@ -346,7 +377,6 @@ static FILE * init(stree_t ** ptr_stree,
   locus_t ** locus;
 
   /* method 10 specific variables */
-  long dmodels_count;
   long dparam_count = 0;
 
   /* method 01 specific variables */
@@ -492,7 +522,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_method == METHOD_10)          /* species delimitation */
   {
-    dmodels_count = delimitations_init(stree);
+    long dmodels_count = delimitations_init(stree);
     printf("Number of delimitation models: %ld\n", dmodels_count);
   }
 
@@ -667,9 +697,10 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_pjump = pjump;
 
   *ptr_curstep = 0;
+  *ptr_ft_round = 0;
 
   /* species delimitation relevant */
-  *ptr_ft_round = 0;
+  *ptr_ft_round_rj = 0;
   *ptr_dparam_count = dparam_count;
   *ptr_pjump_rj = 0;
 
@@ -915,7 +946,10 @@ void cmd_run()
                         pjump,
                         curstep,
                         ft_round,
-                        ftell(fp_mcmc));
+                        ftell(fp_mcmc),
+                        dparam_count,
+                        ft_round_rj,
+                        pjump_rj);
       }
     }
 

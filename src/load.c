@@ -195,7 +195,10 @@ static void load_chk_section_1(FILE * fp,
                                double * pjump,
                                unsigned long * curstep,
                                long * ft_round,
-                               long * mcmc_offset)
+                               long * mcmc_offset,
+                               long * dparam_count,
+                               long * ft_round_rj,
+                               double * pjump_rj)
 {
   long i;
 
@@ -251,7 +254,8 @@ static void load_chk_section_1(FILE * fp,
     if (!LOAD(&opt_rjmcmc_mean,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
     if (opt_delimit)
-      printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_delimit, opt_rjmcmc_method, opt_rjmcmc_alpha, opt_rjmcmc_mean);
+      printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_delimit,
+             opt_rjmcmc_method, opt_rjmcmc_alpha, opt_rjmcmc_mean);
     else
       printf(" Speciesdelimitation: Disabled\n");
   }
@@ -325,7 +329,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
-  printf(" Current finetune: %ld: %f %f %f %f %f\n", opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
+  printf(" Current finetune: %ld: %f %f %f %f %f\n",
+         opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
 
   /* read diploid */
@@ -366,7 +371,16 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read pjump");
 
   if (!LOAD(mcmc_offset,1,fp))
-    fatal("Cannot read current finetune round");
+    fatal("Cannot read MCMC offset");
+
+  if (!LOAD(dparam_count,1,fp))
+    fatal("Cannot read dparam_count");
+
+  if (!LOAD(ft_round_rj,1,fp))
+    fatal("Cannot read RJ finetune round"); 
+
+  if (!LOAD(pjump_rj,1,fp))
+    fatal("Cannot read RJ pjump"); 
 
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -828,7 +842,10 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** pjump,
                     unsigned long * curstep,
                     long * ft_round,
-                    long * mcmc_offset)
+                    long * mcmc_offset,
+                    long * dparam_count,
+                    long * ft_round_rj,
+                    double * pjump_rj)
 {
   long i;
   FILE * fp;
@@ -848,7 +865,14 @@ int checkpoint_load(gtree_t *** gtreep,
   fprintf(stdout,"SECTION 1:\n");
 
   *pjump = (double *)xmalloc(PROP_COUNT*sizeof(double));
-  load_chk_section_1(fp,*pjump,curstep,ft_round,mcmc_offset);
+  load_chk_section_1(fp,
+                     *pjump,
+                     curstep,
+                     ft_round,
+                     mcmc_offset,
+                     dparam_count,
+                     ft_round_rj,
+                     pjump_rj);
 
   /* load section 2 */
   load_chk_section_2(fp);
