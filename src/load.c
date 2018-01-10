@@ -23,6 +23,8 @@
 
 #define PROP_COUNT 5
 
+#define LOAD(x,n,fp) (fread((void *)(x),sizeof(*(x)),n,fp) == (size_t)(n))
+
 size_t chk_size_int;
 size_t chk_size_long;
 size_t chk_size_double;
@@ -77,16 +79,13 @@ void load_chk_header(FILE * fp)
   long version_minor;
   long version_patch;
   long version_chkp;
-  size_t sys_size_int;
-  size_t sys_size_long;
-  size_t sys_size_double;
   BYTE magic[BPP_MAGIC_BYTES];
   BYTE buffer[16];
 
-  if (fread((void *)magic,1,BPP_MAGIC_BYTES,fp) != BPP_MAGIC_BYTES)
+  if (!LOAD(magic,BPP_MAGIC_BYTES,fp))
     fatal(" Magic header mismatch");
 
-  if (fread((void *)buffer,1,16,fp) != 16)
+  if (!LOAD(buffer,16,fp))
     fatal("Cannot read version information");
 
 
@@ -121,7 +120,7 @@ void load_chk_header(FILE * fp)
     fatal("Incompatible CHKP: Checkpoint file version %ld, BPP version %ld",
           version_chkp, VERSION_CHKP);
 
-  if (fread((void *)(buffer),1,3,fp) != 3)
+  if (!LOAD(buffer,3,fp))
     fatal("Cannot read data type sizes");
 
   chk_size_int    = buffer[0];
@@ -132,31 +131,27 @@ void load_chk_header(FILE * fp)
   printf(" Type sizes: int(%zu) long(%zu) double(%zu)\n",
          chk_size_int, chk_size_long, chk_size_double);
 
-  sys_size_int = sizeof(int);
-  sys_size_long = sizeof(long);
-  sys_size_double = sizeof(double);
-
-  if (sys_size_int != chk_size_int)
+  if (sizeof(int) != chk_size_int)
     fatal("Mismatching int size");
-  if (sys_size_long != chk_size_long)
+  if (sizeof(long) != chk_size_long)
     fatal("Mismatching long size");
-  if (sys_size_double != chk_size_double)
+  if (sizeof(double) != chk_size_double)
     fatal("Mismatching double size");
 
   unsigned int rng_state;
   unsigned int sections;
   unsigned long size_section;
 
-  if (fread((void *)(&rng_state),sys_size_int,1,fp) != 1)
+  if (!LOAD(&rng_state,1,fp))
     fatal("Cannot read RNG state");
   printf(" RNG state: %u\n", rng_state);
   set_legacy_rndu_status(rng_state);
 
-  if (fread((void *)(&sections),sys_size_int,1,fp) != 1)
+  if (!LOAD(&sections,1,fp))
     fatal("Cannot read number of sections");
   printf(" Sections: %u\n", sections);
 
-  if (fread((void *)(&size_section),sys_size_long,1,fp) != 1)
+  if (!LOAD(&size_section,1,fp))
     fatal("Cannot read number of sections");
   printf("   Section 1: %ld bytes\n\n", size_section);
 }
@@ -204,7 +199,7 @@ static void load_chk_section_1(FILE * fp,
 {
   long i;
 
-  if (fread((void *)&opt_seed, sizeof(long), 1, fp) != 1)
+  if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
   printf(" Seed: %ld\n", opt_seed);
 
@@ -229,10 +224,10 @@ static void load_chk_section_1(FILE * fp,
   printf(" MCMC file: %s\n", opt_mcmcfile);
 
   /* read speciesdelimitation */
-  if (fread((void *)&opt_delimit, sizeof(long), 1, fp) != 1)
+  if (!LOAD(&opt_delimit,1,fp))
     fatal("Cannot read 'speciesdelimitation' tag");
 
-  if (fread((void *)&opt_rjmcmc_method, sizeof(long), 1, fp) != 1)
+  if (!LOAD(&opt_rjmcmc_method,1,fp))
     fatal("Cannot read 'speciesdelimitation' tag");
 
   if (opt_delimit && opt_rjmcmc_method != 0 && opt_rjmcmc_method != 1)
@@ -240,9 +235,9 @@ static void load_chk_section_1(FILE * fp,
 
   if (opt_rjmcmc_method == 0)
   {
-    if (fread((void *)&opt_rjmcmc_epsilon, sizeof(double), 1, fp) != 1)
+    if (!LOAD(&opt_rjmcmc_epsilon,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
-    if (fread((void *)dummy, sizeof(double), 1, fp) != 1)
+    if (!LOAD(dummy,sizeof(double),fp))
       fatal("Cannot read 'speciesdelimitation' tag");
     if (opt_delimit)
       printf(" Speciesdelimitation: %ld %ld %f\n", opt_delimit, opt_rjmcmc_method, opt_rjmcmc_epsilon);
@@ -251,9 +246,9 @@ static void load_chk_section_1(FILE * fp,
   }
   else
   {
-    if (fread((void *)&opt_rjmcmc_alpha, sizeof(double), 1, fp) != 1)
+    if (!LOAD(&opt_rjmcmc_alpha,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
-    if (fread((void *)&opt_rjmcmc_mean, sizeof(double), 1, fp) != 1)
+    if (!LOAD(&opt_rjmcmc_mean,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
     if (opt_delimit)
       printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_delimit, opt_rjmcmc_method, opt_rjmcmc_alpha, opt_rjmcmc_mean);
@@ -262,21 +257,21 @@ static void load_chk_section_1(FILE * fp,
   }
 
   /* read speciestree */
-  if (fread((void *)&opt_stree, sizeof(long), 1, fp) != 1)
+  if (!LOAD(&opt_stree,1,fp))
     fatal("Cannot read 'speciestree' tag");
   printf(" Speciestree: %ld\n", opt_stree);
 
-  if (fread((void *)dummy, sizeof(double), 3, fp) != 3)
+  if (!LOAD(dummy,3*sizeof(double),fp))
     fatal("Cannot read 'speciestree' tag");
 
   /* read speciesmodelprior */
-  if (fread((void *)&opt_delimit_prior, sizeof(long), 1, fp) != 1)
+  if (!LOAD(&opt_delimit_prior,1,fp))
     fatal("Cannot read 'speciesmodelprior' tag");
   printf(" Speciesmodelprior: %ld\n", opt_delimit_prior);
 
   /* read species&tree */
   unsigned int stree_tip_count;
-  if (fread((void *)&stree_tip_count,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&stree_tip_count,1,fp))
     fatal("Cannot read 'species&tree' tag");
 
   char ** labels = (char **)xmalloc((size_t)stree_tip_count*sizeof(char *));
@@ -291,51 +286,51 @@ static void load_chk_section_1(FILE * fp,
   printf(")\n");
 
   /* read usedata, cleandata and nloci */
-  if (fread((void *)&opt_usedata,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_usedata,1,fp))
     fatal("Cannot read 'usedata' tag");
   printf(" usedata: %ld\n", opt_usedata);
-  if (fread((void *)&opt_cleandata,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_cleandata,1,fp))
     fatal("Cannot read 'cleandata' tag");
   printf(" cleandata: %ld\n", opt_cleandata);
-  if (fread((void *)&opt_nloci,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_nloci,1,fp))
     fatal("Cannot read 'nloci' tag");
   printf(" nloci: %ld\n", opt_nloci);
 
   /* read theta prior */
-  if (fread((void *)&opt_theta_alpha,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_theta_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
-  if (fread((void *)&opt_theta_beta,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_theta_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
-  if (fread((void *)&opt_est_theta,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_est_theta,1,fp))
     fatal("Cannot read est 'theta' tag");
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
   
   /* read tau prior */
-  if (fread((void *)&opt_tau_alpha,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_tau_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
-  if (fread((void *)&opt_tau_beta,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_tau_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
 
   /* read finetune */
-  if (fread((void *)&opt_finetune_reset,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
-  if (fread((void *)&opt_finetune_gtage,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_finetune_gtage,1,fp))
     fatal("Cannot read gene tree age finetune parameter");
-  if (fread((void *)&opt_finetune_gtspr,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_finetune_gtspr,1,fp))
     fatal("Cannot read gene tree SPR finetune parameter");
-  if (fread((void *)&opt_finetune_theta,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_finetune_theta,1,fp))
     fatal("Cannot read species tree theta finetune parameter");
-  if (fread((void *)&opt_finetune_tau,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_finetune_tau,1,fp))
     fatal("Cannot read species tree tau finetune parameter");
-  if (fread((void *)&opt_finetune_mix,sizeof(double),1,fp) != 1)
+  if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
   printf(" Current finetune: %ld: %f %f %f %f %f\n", opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
-  if (fread((void *)opt_diploid,sizeof(long),stree_tip_count,fp) != stree_tip_count)
+  if (!LOAD(opt_diploid,stree_tip_count,fp))
     fatal("Cannot read 'diploid' tag");
 
   for  (i = 0; i < stree_tip_count; ++i)
@@ -356,21 +351,21 @@ static void load_chk_section_1(FILE * fp,
   }
 
   /* read MCMC run info  */
-  if (fread((void *)&opt_burnin,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_burnin,1,fp))
     fatal("Cannot read 'burnin' tag");
-  if (fread((void *)&opt_samplefreq,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_samplefreq,1,fp))
     fatal("Cannot read 'sampfreq' tag");
-  if (fread((void *)&opt_samples,sizeof(long),1,fp) != 1)
+  if (!LOAD(&opt_samples,1,fp))
     fatal("Cannot read 'nsample' tag");
-  if (fread((void *)curstep,sizeof(unsigned long),1,fp) != 1)
+  if (!LOAD(curstep,1,fp))
     fatal("Cannot read current MCMC step");
-  if (fread((void *)ft_round,sizeof(long),1,fp) != 1)
+  if (!LOAD(ft_round,1,fp))
     fatal("Cannot read current finetune round");
 
-  if (fread((void *)pjump,sizeof(double),PROP_COUNT,fp) != PROP_COUNT)
+  if (!LOAD(pjump,PROP_COUNT,fp))
     fatal("Cannot read pjump");
 
-  if (fread((void *)mcmc_offset,sizeof(long),1,fp) != 1)
+  if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read current finetune round");
 
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
@@ -442,7 +437,7 @@ void load_chk_section_2(FILE * fp)
   for (i = 0; i < stree->inner_count; ++i)
   {
     unsigned int left_child_index;
-    if (fread((void *)&left_child_index,sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&left_child_index,1,fp))
       fatal("Cannot read species tree topology");
     stree->nodes[stree->tip_count+i]->left = stree->nodes[left_child_index];
     stree->nodes[left_child_index]->parent = stree->nodes[stree->tip_count+i];
@@ -452,7 +447,7 @@ void load_chk_section_2(FILE * fp)
   for (i = 0; i < stree->inner_count; ++i)
   {
     unsigned int right_child_index;
-    if (fread((void *)&right_child_index,sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&right_child_index,1,fp))
       fatal("Cannot read species tree topology");
     stree->nodes[stree->tip_count+i]->right = stree->nodes[right_child_index];
     stree->nodes[right_child_index]->parent = stree->nodes[stree->tip_count+i];
@@ -501,22 +496,22 @@ void load_chk_section_2(FILE * fp)
 
   /* read thetas */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (fread((void *)&(stree->nodes[i]->theta),sizeof(double),1,fp) != 1)
+    if (!LOAD(&(stree->nodes[i]->theta),1,fp))
       fatal("Cannot read species nodes theta");
 
   /* read taus */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (fread((void *)&(stree->nodes[i]->tau),sizeof(double),1,fp) != 1)
+    if (!LOAD(&(stree->nodes[i]->tau),1,fp))
       fatal("Cannot read species nodes tau");
 
   /* read support */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (fread((void *)&(stree->nodes[i]->support),sizeof(double),1,fp) != 1)
+    if (!LOAD(&(stree->nodes[i]->support),1,fp))
       fatal("Cannot read species nodes support values");
 
   /* read number of coalescent events */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (fread((void *)(stree->nodes[i]->event_count),sizeof(int),opt_nloci,fp) != opt_nloci)
+    if (!LOAD(stree->nodes[i]->event_count,opt_nloci,fp))
         fatal("Cannot read species event counts");
 
 //  /* read MSC density contributions */
@@ -525,12 +520,12 @@ void load_chk_section_2(FILE * fp)
 //      fatal("Cannot read species MSC density contribution");
 
   /* read root_tau */
-  if (fread((void *)&(stree->root_age),sizeof(double),1,fp) != 1)
+  if (!LOAD(&(stree->root_age),1,fp))
     fatal("Cannot read species root tau");
 
   /* read number of incoming sequences for each node node */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (fread((void *)(stree->nodes[i]->seqin_count),sizeof(int),opt_nloci,fp) != opt_nloci)
+    if (!LOAD(stree->nodes[i]->seqin_count,opt_nloci,fp))
         fatal("Cannot read incoming sequence counts");
 
   alloc_gtree();
@@ -555,7 +550,7 @@ void load_chk_section_2(FILE * fp)
     {
       snode->event[j] = dlist_create();
 
-      if (fread((void *)buffer,sizeof(unsigned int),snode->event_count[j],fp) != snode->event_count[j])
+      if (!LOAD(buffer,snode->event_count[j],fp))
         fatal("Cannot read coalescent events");
 
       for (k = 0; k < snode->event_count[j]; ++k)
@@ -625,7 +620,7 @@ static void load_gene_tree(FILE * fp, long index)
   for (i = 0; i < gt->inner_count; ++i)
   {
     unsigned int left_child_index;
-    if (fread((void *)&left_child_index,sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&left_child_index,1,fp))
       fatal("Cannot read species tree topology");
     gt->nodes[gt->tip_count+i]->left = gt->nodes[left_child_index];
     gt->nodes[left_child_index]->parent = gt->nodes[gt->tip_count+i];
@@ -635,7 +630,7 @@ static void load_gene_tree(FILE * fp, long index)
   for (i = 0; i < gt->inner_count; ++i)
   {
     unsigned int right_child_index;
-    if (fread((void *)&right_child_index,sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&right_child_index,1,fp))
       fatal("Cannot read species tree topology");
     gt->nodes[gt->tip_count+i]->right = gt->nodes[right_child_index];
     gt->nodes[right_child_index]->parent = gt->nodes[gt->tip_count+i];
@@ -674,41 +669,41 @@ static void load_gene_tree(FILE * fp, long index)
 
   /* load branch lengths - TODO: Candidate for removal */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->length),sizeof(double),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->length),1,fp))
       fatal("Cannot read gene tree branch lengths");
 
   /* load ages */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->time),sizeof(double),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->time),1,fp))
       fatal("Cannot read gene tree node ages");
 
   /* load population index (corresponding species tree node index) */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
   {
     unsigned int pop_index;
-    if (fread((void *)&(pop_index),sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&(pop_index),1,fp))
       fatal("Cannot read gene tree population indices");
     gt->nodes[i]->pop = stree->nodes[pop_index];
   }
 
   /* load CLV indices */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->clv_index),sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->clv_index),1,fp))
       fatal("Cannot read gene tree clv indices");
 
   /* load scaler indices */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->scaler_index),sizeof(int),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->scaler_index),1,fp))
       fatal("Cannot read gene tree scaler indices");
 
   /* load pmatrix indices */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->pmatrix_index),sizeof(unsigned int),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->pmatrix_index),1,fp))
       fatal("Cannot read gene tree pmatrix indices");
 
   /* load mark - TODO: Candidate for removal */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (fread((void *)&(gt->nodes[i]->mark),sizeof(int),1,fp) != 1)
+    if (!LOAD(&(gt->nodes[i]->mark),1,fp))
       fatal("Cannot read gene tree marks");
 }
 
@@ -735,23 +730,23 @@ static void load_locus(FILE * fp, long index)
 
   gtree_t * gt = gtree[index];
 
-  if (fread((void *)&sites,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&sites,1,fp))
     fatal("Cannot read number of sites");
 
   /* load number of states */
-  if (fread((void *)&states,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&states,1,fp))
     fatal("Cannot read number of states");
 
   /* load number of rate categories */
-  if (fread((void *)&rate_cats,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&rate_cats,1,fp))
     fatal("Cannot read number of rate categories");
 
   /* load number of rate matrices */
-  if (fread((void *)&rate_matrices,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&rate_matrices,1,fp))
     fatal("Cannot read number of rate matrices");
 
   /* load attributes */
-  if (fread((void *)&attributes,sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&attributes,1,fp))
     fatal("Cannot read attributes");
 
   locus[index] = locus_create(gt->tip_count,
@@ -770,11 +765,11 @@ static void load_locus(FILE * fp, long index)
   pll_set_frequencies(locus[index],0,frequencies);
 
   /* load pattern weights sum */
-  if (fread((void *)&(locus[index]->pattern_weights_sum),sizeof(unsigned int),1,fp) != 1)
+  if (!LOAD(&(locus[index]->pattern_weights_sum),1,fp))
     fatal("Cannot read pattern weights sum");
 
   /* load diploid */
-  if (fread((void *)&(locus[index]->diploid),sizeof(int),1,fp) != 1)
+  if (!LOAD(&(locus[index]->diploid),1,fp))
     fatal("Cannot read locus %ld diploid", index);
   
   if (locus[index]->diploid)
@@ -784,25 +779,25 @@ static void load_locus(FILE * fp, long index)
        Free and reallocate here with 'unphased_length' */
 
     /* load original diploid number of sites */
-    if (fread((void *)&(locus[index]->unphased_length),sizeof(int),1,fp) != 1)
+    if (!LOAD(&(locus[index]->unphased_length),1,fp))
       fatal("Cannot read locus %ld unphased length", index);
     
     /* load diploid mapping A1 -> A3 */
-    if (fread((void *)(locus[index]->diploid_mapping),sizeof(unsigned int),locus[index]->unphased_length,fp) != locus[index]->unphased_length)
+    if (!LOAD(locus[index]->diploid_mapping,locus[index]->unphased_length,fp))
       fatal("Cannot read locus %ld diploid mapping", index);
 
     /* load diploid resolution count */
-    if (fread((void *)locus[index]->diploid_resolution_count,sizeof(unsigned int),locus[index]->unphased_length,fp) != locus[index]->unphased_length)
+    if (!LOAD(locus[index]->diploid_resolution_count,locus[index]->unphased_length,fp))
       fatal("Cannot read locus %ld diploid resolution count", index);
 
     /* load pattern weights for original diploid A1 alignment */
-    if (fread((void *)locus[index]->pattern_weights,sizeof(unsigned int),locus[index]->unphased_length,fp) != locus[index]->unphased_length)
+    if (!LOAD(locus[index]->pattern_weights,locus[index]->unphased_length,fp))
       fatal("Cannot read pattern weights");
   }
   else
   {
     /* load pattern weights */
-    if (fread((void *)locus[index]->pattern_weights,sizeof(unsigned int),locus[index]->sites,fp) != locus[index]->sites)
+    if (!LOAD(locus[index]->pattern_weights,locus[index]->sites,fp))
       fatal("Cannot read pattern weights");
   }
 
@@ -812,7 +807,7 @@ static void load_locus(FILE * fp, long index)
     unsigned int clv_index = gt->nodes[i]->clv_index;
     size_t span = locus[index]->sites * locus[index]->states * locus[index]->rate_cats;
 
-    if (fread((void *)(locus[index]->clv[clv_index]),sizeof(double),span,fp) != span)
+    if (!LOAD(locus[index]->clv[clv_index],span,fp))
       fatal("Cannot read gene tree %ld tip CLV", index);
   }
 }

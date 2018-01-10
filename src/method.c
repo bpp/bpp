@@ -249,6 +249,9 @@ static FILE * resume(stree_t ** ptr_stree,
   FILE * fp_mcmc;
   long mcmc_offset;
 
+  if (sizeof(BYTE) != 1)
+    fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
+
   /* load data from checkpoint file */
   checkpoint_load(ptr_gtree,
                   ptr_locus,
