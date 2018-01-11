@@ -55,8 +55,6 @@ static void alloc_gtree()
     for (j = 0; j < stree->tip_count; ++j)
       gt->tip_count += stree->nodes[j]->seqin_count[i];
 
-    printf("Gene tree %ld tip nodes %d\n", i, gt->tip_count);
-
     gt->inner_count = gt->tip_count-1;
     gt->edge_count = 2*gt->tip_count-2;
     gt->root = NULL;
@@ -198,7 +196,12 @@ static void load_chk_section_1(FILE * fp,
                                long * mcmc_offset,
                                long * dparam_count,
                                long * ft_round_rj,
-                               double * pjump_rj)
+                               double * pjump_rj,
+                               long * ft_round_spr,
+                               long * pjump_slider,
+                               double * mean_logl,
+                               double * mean_root_age,
+                               double * mean_root_theta)
 {
   long i;
 
@@ -381,6 +384,21 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(pjump_rj,1,fp))
     fatal("Cannot read RJ pjump"); 
+
+  if (!LOAD(ft_round_spr,1,fp))
+    fatal("Cannot read finetune round for species tree SPR"); 
+
+  if (!LOAD(pjump_slider,1,fp))
+    fatal("Cannot read species tree SPR pjump"); 
+
+  if (!LOAD(mean_logl,1,fp))
+    fatal("Cannot read mean logl"); 
+
+  if (!LOAD(mean_root_age,1,fp))
+    fatal("Cannot read mean root age"); 
+
+  if (!LOAD(mean_root_theta,1,fp))
+    fatal("Cannot read mean root theta"); 
 
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -740,6 +758,7 @@ static void load_locus(FILE * fp, long index)
   unsigned int states;
   unsigned int rate_cats;
   unsigned int rate_matrices;
+  unsigned int prob_matrices;
   unsigned int attributes;
 
   gtree_t * gt = gtree[index];
@@ -759,6 +778,10 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&rate_matrices,1,fp))
     fatal("Cannot read number of rate matrices");
 
+  /* load number of prob matrices */
+  if (!LOAD(&prob_matrices,1,fp))
+    fatal("Cannot read number of rate matrices");
+
   /* load attributes */
   if (!LOAD(&attributes,1,fp))
     fatal("Cannot read attributes");
@@ -768,7 +791,7 @@ static void load_locus(FILE * fp, long index)
                               states,
                               sites,
                               rate_matrices,
-                              gt->edge_count,
+                              prob_matrices,
                               rate_cats,
                               0,
                               attributes);
@@ -814,6 +837,7 @@ static void load_locus(FILE * fp, long index)
     if (!LOAD(locus[index]->pattern_weights,locus[index]->sites,fp))
       fatal("Cannot read pattern weights");
   }
+    
 
   /* load tip CLVs */
   for (i = 0; i < gt->tip_count; ++i)
@@ -845,7 +869,12 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * dparam_count,
                     long * ft_round_rj,
-                    double * pjump_rj)
+                    double * pjump_rj,
+                    long * ft_round_spr,
+                    long * pjump_slider,
+                    double * mean_logl,
+                    double * mean_root_age,
+                    double * mean_root_theta)
 {
   long i;
   FILE * fp;
@@ -872,7 +901,12 @@ int checkpoint_load(gtree_t *** gtreep,
                      mcmc_offset,
                      dparam_count,
                      ft_round_rj,
-                     pjump_rj);
+                     pjump_rj,
+                     ft_round_spr,
+                     pjump_slider,
+                     mean_logl,
+                     mean_root_age,
+                     mean_root_theta);
 
   /* load section 2 */
   load_chk_section_2(fp);

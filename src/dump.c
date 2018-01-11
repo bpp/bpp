@@ -128,12 +128,30 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* dparam_count */
   size_section += sizeof(long);                       /* ft_round_rj*/
   size_section += sizeof(double);                     /* pjump_rj*/
+  size_section += sizeof(long);                       /* ft_round_spr */
+  size_section += sizeof(long);                     /* pjump_slider */
+  size_section += sizeof(double);                     /* mean_logl */
+  size_section += sizeof(double);                     /* mean_root_age */
+  size_section += sizeof(double);                     /* mean_root_theta */
 
   /* write section 1 size */
   DUMP(&size_section,1,fp);
 }
 
-static void dump_chk_section_1(FILE * fp, stree_t * stree, double * pjump, long curstep, long ft_round, long mcmc_offset, long dparam_count, long ft_round_rj, double pjump_rj)
+static void dump_chk_section_1(FILE * fp,
+                               stree_t * stree,
+                               double * pjump,
+                               long curstep,
+                               long ft_round,
+                               long mcmc_offset,
+                               long dparam_count,
+                               long ft_round_rj,
+                               double pjump_rj,
+                               long ft_round_spr,
+                               long pjump_slider,
+                               double mean_logl,
+                               double mean_root_age,
+                               double mean_root_theta)
 {
   size_t i;
 
@@ -229,6 +247,11 @@ static void dump_chk_section_1(FILE * fp, stree_t * stree, double * pjump, long 
   DUMP(&dparam_count,1,fp);
   DUMP(&ft_round_rj,1,fp);
   DUMP(&pjump_rj,1,fp);
+  DUMP(&ft_round_spr,1,fp);
+  DUMP(&pjump_slider,1,fp);
+  DUMP(&mean_logl,1,fp);
+  DUMP(&mean_root_age,1,fp);
+  DUMP(&mean_root_theta,1,fp);
 }
 
 
@@ -353,6 +376,9 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   /* write number of rate matrices */
   DUMP(&(locus->rate_matrices),1,fp);
 
+  /* write number of prob matrices */
+  DUMP(&(locus->prob_matrices),1,fp);
+
   /* write attributes */
   DUMP(&(locus->attributes),1,fp);
 
@@ -421,7 +447,12 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long dparam_count,
                     long ft_round_rj,
-                    double pjump_rj)
+                    double pjump_rj,
+                    long ft_round_spr,
+                    long pjump_slider,
+                    double mean_logl,
+                    double mean_root_age,
+                    double mean_root_theta)
 {
   FILE * fp;
   char * s = NULL;
@@ -451,7 +482,12 @@ int checkpoint_dump(stree_t * stree,
                      mcmc_offset,
                      dparam_count,
                      ft_round_rj,
-                     pjump_rj);
+                     pjump_rj,
+                     ft_round_spr,
+                     pjump_slider,
+                     mean_logl,
+                     mean_root_age,
+                     mean_root_theta);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

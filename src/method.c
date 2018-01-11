@@ -245,7 +245,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones)
 {
-  long i;
+  long i,j;
   FILE * fp_mcmc;
   long mcmc_offset;
 
@@ -262,7 +262,12 @@ static FILE * resume(stree_t ** ptr_stree,
                   &mcmc_offset,
                   ptr_dparam_count,
                   ptr_ft_round_rj,
-                  ptr_pjump_rj);
+                  ptr_pjump_rj,
+                  ptr_ft_round_spr,
+                  ptr_pjump_slider,
+                  ptr_mean_logl,
+                  ptr_mean_root_age,
+                  ptr_mean_root_theta);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(mcmc_offset);
@@ -282,20 +287,13 @@ static FILE * resume(stree_t ** ptr_stree,
   for (i = 0; i < opt_nloci; ++i)
     printf("Gene tree %ld - logl: %f   logp: %f\n", i, gtree[i]->logl, gtree[i]->logpr);
 
-  /* TODO: remaining parameters for METHOD 01 and 10 not implemented yet */
-  /* method 10 */
-//  *ptr_dparam_count = 0;
-//  *ptr_ft_round_rj = 0;
-//  *ptr_pjump_rj = 0;
+  /* set old_pop to NULL */
+  for (i = 0; i < opt_nloci; ++i)
+    for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+      gtree[i]->nodes[j]->old_pop = NULL;
 
-  /* method 01 */
-  *ptr_ft_round_spr = 0;
-  *ptr_pjump_slider = 0;
-  *ptr_mean_logl = 0;
-  *ptr_mean_root_age = 0;
-  *ptr_mean_root_theta = 0;
-  *ptr_sclone = NULL;
-  *ptr_gclones = NULL;
+  for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+    stree->nodes[j]->mark = 0;
 
 
   /* set method */
@@ -312,6 +310,13 @@ static FILE * resume(stree_t ** ptr_stree,
   if (!(fp_mcmc = fopen(opt_mcmcfile, "a")))
     fatal("Cannot open file %s for appending...");
 
+  if (opt_method == METHOD_01)
+  {
+    *ptr_sclone = stree_clone_init(stree);
+    *ptr_gclones = (gtree_t **)xmalloc((size_t)opt_nloci*sizeof(gtree_t *));
+    for (i = 0; i < opt_nloci; ++i)
+      (*ptr_gclones)[i] = gtree_clone_init(gtree[i], *ptr_sclone);
+  }
   if (opt_method == METHOD_10)          /* species delimitation */
   {
     /* quite ugly hack to resume species delimitation from a checkpoint.
@@ -949,7 +954,12 @@ void cmd_run()
                         ftell(fp_mcmc),
                         dparam_count,
                         ft_round_rj,
-                        pjump_rj);
+                        pjump_rj,
+                        ft_round_spr,
+                        pjump_slider,
+                        mean_logl,
+                        mean_root_age,
+                        mean_root_theta);
       }
     }
 

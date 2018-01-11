@@ -941,7 +941,12 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long dparam_count,
                     long ft_round_rj,
-                    double pjump_rj);
+                    double pjump_rj,
+                    long ft_round_spr,
+                    long pjump_slider,
+                    double mean_logl,
+                    double mean_root_age,
+                    double mean_root_theta);
 
 /* functions in load.c */
 
@@ -954,7 +959,12 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * dparam_count,
                     long * ft_round_rj,
-                    double * pjump_rj);
+                    double * pjump_rj,
+                    long * ft_round_spr,
+                    long * pjump_slider,
+                    double * mean_logl,
+                    double * mean_root_age,
+                    double * mean_root_theta);
 
 void checkpoint_truncate(long mcmc_offset);
 
