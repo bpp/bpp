@@ -33,10 +33,6 @@ char * cmdline;
 __THREAD int bpp_errno;
 __THREAD char bpp_errmsg[200] = {0};
 
-/* number of mandatory options for the user to input */
-static const char mandatory_options_count = 3;
-static const char * mandatory_options_list = " --stree_file --output_file --mcmc_file";
-
 /* options */
 long opt_help;
 long opt_version;
@@ -55,7 +51,7 @@ long opt_burnin;
 long opt_finetune_reset;
 long opt_rjmcmc_method;
 long opt_usedata;
-long opt_nloci;
+long opt_locus_count;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_diploid_size;
@@ -85,7 +81,6 @@ char * opt_mapfile;
 char * opt_mcmcfile;
 char * opt_outfile;
 char * opt_reorder;
-char * opt_streefile;
 char * opt_streenewick;
 char * opt_resume;
 
@@ -103,66 +98,16 @@ long altivec_present;
 
 static struct option long_options[] =
 {
-  {"help",            no_argument,       0, 0 },  /*  0 */
-  {"version",         no_argument,       0, 0 },  /*  1 */
-  {"quiet",           no_argument,       0, 0 },  /*  2 */
-  {"stree_file",      required_argument, 0, 0 },  /*  3 */
-  {"map_file",        required_argument, 0, 0 },  /*  4 */
-  {"output_file",     required_argument, 0, 0 },  /*  5 */
-  {"msa_file",        required_argument, 0, 0 },  /*  6 */
-  {"seed",            required_argument, 0, 0 },  /*  7 */
-  {"stree",           no_argument,       0, 0 },  /*  8 */
-  {"delimit",         no_argument,       0, 0 },  /*  9 */
-  {"tauprior",        required_argument, 0, 0 },  /* 10 */
-  {"thetaprior",      required_argument, 0, 0 },  /* 11 */
-  {"cleandata",       no_argument,       0, 0 },  /* 12 */
-  {"debug",           no_argument,       0, 0 },  /* 13 */
-  {"samples",         required_argument, 0, 0 },  /* 14 */
-  {"samplefreq",      required_argument, 0, 0 },  /* 15 */
-  {"burnin",          required_argument, 0, 0 },  /* 16 */
-  {"finetune_reset",  no_argument,       0, 0 },  /* 17 */
-  {"finetune_params", required_argument, 0, 0 },  /* 18 */
-  {"mcmc_file",       required_argument, 0, 0 },  /* 19 */
-  {"reorder",         required_argument, 0, 0 },  /* 20 */
-  {"delimit_prior",   required_argument, 0, 0 },  /* 21 */
-  {"rjmcmc_alpha",    required_argument, 0, 0 },  /* 22 */
-  {"rjmcmc_mean",     required_argument, 0, 0 },  /* 23 */
-  {"rjmcmc_epsilon",  required_argument, 0, 0 },  /* 24 */
-  {"cfile",           required_argument, 0, 0 },  /* 25 */
-  {"nodata",          no_argument,       0, 0 },  /* 26 */
-  {"arch",            required_argument, 0, 0 },  /* 27 */
-  {"exp_method",      required_argument, 0, 0 },  /* 28 */
-  {"exp_debug",       no_argument,       0, 0 },  /* 29 */
-  {"resume",          required_argument, 0, 0 },  /* 30 */
+  {"help",            no_argument,       0, 0 },  /* 0 */
+  {"version",         no_argument,       0, 0 },  /* 1 */
+  {"quiet",           no_argument,       0, 0 },  /* 2 */
+  {"cfile",           required_argument, 0, 0 },  /* 3 */
+  {"arch",            required_argument, 0, 0 },  /* 4 */
+  {"exp_method",      required_argument, 0, 0 },  /* 6 */
+  {"exp_debug",       no_argument,       0, 0 },  /* 7 */
+  {"resume",          required_argument, 0, 0 },  /* 8 */
   { 0, 0, 0, 0 }
 };
-
-static int args_getgammaprior(char * arg, double * a, double * b)
-{
-  int len = 0;
-
-  int ret = sscanf(arg, "%lf,%lf%n", a, b, &len);
-  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
-    return 0;
-  return 1;
-}
-
-static int args_getftparams(char * arg)
-{
-  int len = 0;
-
-  int ret = sscanf(arg,
-                   "%lf,%lf,%lf,%lf,%lf%n", 
-                   &opt_finetune_gtage,
-                   &opt_finetune_gtspr,
-                   &opt_finetune_theta,
-                   &opt_finetune_tau,
-                   &opt_finetune_mix,
-                   &len);
-  if ((ret == 0) || (((unsigned int)(len)) < strlen(arg)))
-    return 0;
-  return 1;
-}
 
 static long args_getlong(char * arg)
 {
@@ -175,6 +120,7 @@ static long args_getlong(char * arg)
   return temp;
 }
 
+#if 0
 static double args_getdouble(char * arg)
 {
   int len = 0;
@@ -184,12 +130,12 @@ static double args_getdouble(char * arg)
     fatal("Illegal option argument");
   return temp;
 }
+#endif
 
 void args_init(int argc, char ** argv)
 {
   int option_index = 0;
   int c;
-  int mand_options = 0;
 
   /* set defaults */
 
@@ -200,7 +146,7 @@ void args_init(int argc, char ** argv)
   opt_debug = 0;
   opt_est_theta = 1;
   opt_delimit = 0;
-  opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
+  opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_mix   = 0.3;
@@ -210,7 +156,7 @@ void args_init(int argc, char ** argv)
   opt_help = 0;
   opt_quiet = 0;
   opt_samplefreq = 10;
-  opt_samples = 10000;
+  opt_samples = 0;
   opt_stree = 0;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
@@ -223,7 +169,6 @@ void args_init(int argc, char ** argv)
   opt_mcmcfile = NULL;
   opt_outfile = NULL;
   opt_seed = (long)time(NULL);
-  opt_streefile = NULL;
   opt_streenewick = NULL;
   opt_rjmcmc_alpha = -1;
   opt_rjmcmc_mean = -1;
@@ -234,7 +179,7 @@ void args_init(int argc, char ** argv)
   opt_bfbeta = 1;
   opt_experimental_method = 0;
   opt_experimental_debug = 0;
-  opt_nloci = 0;
+  opt_locus_count = 0;
   opt_diploid_size = 0;
   opt_diploid = NULL;
   opt_checkpoint_initial = 0;
@@ -261,119 +206,10 @@ void args_init(int argc, char ** argv)
         break;
 
       case 3:
-        opt_streefile = xstrdup(optarg);
-        break;
-
-      case 4:
-        opt_mapfile = xstrdup(optarg);
-        break;
-
-      case 5:
-        opt_outfile = xstrdup(optarg);
-        break;
-
-      case 6:
-        opt_msafile = xstrdup(optarg);
-        break;
-
-      case 7:
-        opt_seed = args_getlong(optarg);
-        break;
-
-      case 8:
-        opt_stree = 1;
-        break;
-
-      case 9:
-        opt_delimit = 1;
-        break;
-
-      case 10:
-        if (!args_getgammaprior(optarg, &opt_tau_alpha, &opt_tau_beta))
-          fatal("Illegal format for --tauprior");
-        break;
-
-      case 11:
-        if (!args_getgammaprior(optarg, &opt_theta_alpha, &opt_theta_beta))
-          fatal("Illegal format for --thetaprior");
-        break;
-
-      case 12:
-        opt_cleandata = 1;
-        break;
-
-      case 13:
-        opt_debug = 1;
-        break;
-
-      case 14:
-        opt_samples = args_getlong(optarg);
-        break;
-
-      case 15:
-        opt_samplefreq = args_getlong(optarg);
-        break;
-
-      case 16:
-        opt_burnin = args_getlong(optarg);
-        break;
-
-      case 17:
-        opt_finetune_reset = 1;
-        break;
-
-      case 18:
-        if (!args_getftparams(optarg))
-          fatal("Illegal format for --finetune_params");
-        break;
-
-      case 19:
-        opt_mcmcfile = xstrdup(optarg);
-        break;
-
-      case 20:
-        opt_reorder = xstrdup(optarg);
-        break;
-
-      case 21:
-        if (!strcmp(optarg,"dirichlet"))
-          opt_delimit_prior = BPP_DELIMIT_PRIOR_DIRICHLET;
-        else if (!strcmp(optarg,"uniform"))
-          opt_delimit_prior = BPP_DELIMIT_PRIOR_UNIFORM;
-        else
-          fatal("Unknown species delimitation prior: %s", optarg);
-        break;
-
-      case 22:
-        if (opt_rjmcmc_method == 0)
-          fatal("Cannot use --rjmcmc_alpha with --rjmcmc_epsilon");
-        opt_rjmcmc_alpha = args_getdouble(optarg);
-        opt_rjmcmc_method = 1;
-        break;
-
-      case 23:
-        if (opt_rjmcmc_method == 0)
-          fatal("Cannot use --rjmcmc_mean with --rjmcmc_epsilon");
-        opt_rjmcmc_mean = args_getdouble(optarg);
-        opt_rjmcmc_method = 1;
-        break;
-
-      case 24:
-        if (opt_rjmcmc_method == 1)
-          fatal("Cannot use --rjmcmc_epsilon with --rjmcmc_alpha/--rjmcmc_mean");
-        opt_rjmcmc_epsilon = args_getdouble(optarg);
-        opt_rjmcmc_method = 0;
-        break;
-
-      case 25:
         opt_cfile = xstrdup(optarg);
         break;
 
-      case 26:
-        opt_usedata = 0;
-        break;
-
-      case 27:
+      case 4:
         if (!strcmp(optarg,"cpu"))
           opt_arch = PLL_ATTRIB_ARCH_CPU;
         else if (!strcasecmp(optarg,"sse"))
@@ -386,15 +222,15 @@ void args_init(int argc, char ** argv)
           fatal("Invalid instruction set (%s)", optarg);
         break;
 
-      case 28:
+      case 5:
         opt_experimental_method = args_getlong(optarg);
         break;
 
-      case 29:
+      case 6:
         opt_experimental_debug = 1;
         break;
 
-      case 30:
+      case 7:
         opt_resume = optarg;
         break;
         
@@ -411,30 +247,15 @@ void args_init(int argc, char ** argv)
   if (opt_cfile)
     load_cfile();
 
-  /* check for mandatory options */
-  if (opt_streefile || opt_streenewick)
-    mand_options++;
-  if (opt_outfile)
-    mand_options++;
-  if (opt_mcmcfile)
-    mand_options++;
-
   /* check for number of independent commands selected */
   if (opt_version)
     commands++;
   if (opt_help)
     commands++;
-//  if (opt_stree || opt_delimit)
-//    commands++;
-  if (opt_streefile)
-    commands++;
   if (opt_cfile)
     commands++;
   if (opt_resume)
     commands++;
-
-  if (opt_streefile && opt_streenewick)
-    fatal("Cannot use --stree when using a control file (--cfile)");
 
   /* if more than one independent command, fail */
   if (commands > 1)
@@ -446,15 +267,10 @@ void args_init(int argc, char ** argv)
     opt_help = 1;
     return;
   }
-  /* check for mandatory options */
-  if (!opt_version && !opt_help)
-    if (mand_options != mandatory_options_count && !opt_cfile && !opt_resume)
-      fatal("Mandatory options are:\n\n%s", mandatory_options_list);
 }
 
 static void dealloc_switches()
 {
-  if (opt_streefile) free(opt_streefile);
   if (opt_mapfile) free(opt_mapfile);
   if (opt_outfile) free(opt_outfile);
   if (opt_msafile) free(opt_msafile);
@@ -474,28 +290,12 @@ void cmd_help()
   fprintf(stderr,
           "\n"
           "General options:\n"
-          "  --help                    display help information\n"
-          "  --version                 display version information\n"
-          "  --quiet                   only output warnings and fatal errors to stderr\n"
-          "  --samples INT             total number of MCMC samples to log (default: 10000)\n"
-          "  --samplefreq INT          log every INT sample (default: 10)\n"
-          "  --burnin INT              discard first INT MCMC samples (default: 100)\n"
-          "  --seed INT                seed for pseudo-random number generator\n"
-          "  --stree                   estimate species tree (not implemented)\n"
-          "  --delimit                 estimate species delimitation (not implemented)\n"
-          "  --cleandata               remove sites containing ambiguous characters\n"
-          "  --finetune_reset          reset finetune steps during MCMC\n"
-          "  --finetune_params STRING  specify fine-tuning parameters\n"
-          "  --tauprior REAL,REAL      specify prior for species tree ages\n"
-          "  --thetaprior REAL,REAL    specify prior for population size\n"
-          "  --reorder STRING          reorder sequence of species tips\n"
-          "\n"
-          "Input and output options:\n"
-          "  --stree_file FILENAME     species tree file in newick format\n"
-          "  --msa_file FILENAME       PHYLIP file containing loci\n"
-          "  --map_file FILENAME       file containing mapping of sequences to species\n"
-          "  --output_file FILENAME    output file name\n"
-          "  --mcmc_file FILENAME      output file containing logged MCMC samples\n"
+          "  --help             display help information\n"
+          "  --version          display version information\n"
+          "  --quiet            only output warnings and fatal errors to stderr\n"
+          "  --cfile FILENAME   run analysis for the specified control file\n"
+          "  --resume FILENAME  resume analysis from a specified checkpoint file\n"
+          "  --arch SIMD        force specific vector instruction set (default: auto)\n"
           "\n"
          );
 
@@ -548,10 +348,10 @@ int main (int argc, char * argv[])
 
   cpu_features_detect();
   cpu_features_show();
-  cpu_setarch();
+  if (!opt_version && !opt_help)
+    cpu_setarch();
 
   /* intiialize random number generators */
-  //srand48(opt_seed);
   legacy_init();
 
   if (opt_help)

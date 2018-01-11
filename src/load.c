@@ -40,10 +40,10 @@ static void alloc_gtree()
   long i,j;
 
   /* initialize gene trees */
-  gtree = (gtree_t **)xmalloc((size_t)opt_nloci * sizeof(gtree_t *));
+  gtree = (gtree_t **)xmalloc((size_t)opt_locus_count * sizeof(gtree_t *));
 
   /* allocate gene tree structures */
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
   {
     gtree[i] = (gtree_t *)xmalloc(sizeof(gtree_t));
     gtree_t * gt = gtree[i];
@@ -299,9 +299,9 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_cleandata,1,fp))
     fatal("Cannot read 'cleandata' tag");
   printf(" cleandata: %ld\n", opt_cleandata);
-  if (!LOAD(&opt_nloci,1,fp))
+  if (!LOAD(&opt_locus_count,1,fp))
     fatal("Cannot read 'nloci' tag");
-  printf(" nloci: %ld\n", opt_nloci);
+  printf(" nloci: %ld\n", opt_locus_count);
 
   /* read theta prior */
   if (!LOAD(&opt_theta_alpha,1,fp))
@@ -411,9 +411,10 @@ static void load_chk_section_1(FILE * fp,
   stree->tip_count = stree_tip_count;
   stree->inner_count = stree_tip_count-1;
   stree->edge_count = stree->tip_count + stree->inner_count - 1;
-  stree->locus_count = opt_nloci;
+  stree->locus_count = opt_locus_count;
 
-  stree->nodes = (snode_t **)xmalloc((size_t)(stree->tip_count + stree->inner_count)*sizeof(snode_t *));
+  size_t alloc = stree->tip_count + stree->inner_count;
+  stree->nodes = (snode_t **)xmalloc(alloc*sizeof(snode_t *));
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     stree->nodes[i] = (snode_t *)xmalloc(sizeof(snode_t));
 
@@ -435,22 +436,23 @@ static void load_chk_section_1(FILE * fp,
   /* allocate coalescent events */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
-    stree->nodes[i]->event_count = (int *)xmalloc((size_t)opt_nloci*sizeof(int));
-    stree->nodes[i]->seqin_count = (int *)xmalloc((size_t)opt_nloci*sizeof(int));
-    stree->nodes[i]->gene_leaves = (unsigned int *)xmalloc((size_t)opt_nloci*sizeof(unsigned int));
+    snode_t * node = stree->nodes[i];
 
-    stree->nodes[i]->logpr_contrib = (double *)xmalloc((size_t)opt_nloci*sizeof(double));
-    stree->nodes[i]->old_logpr_contrib = (double *)xmalloc((size_t)opt_nloci*sizeof(double));
-
-    stree->nodes[i]->event = (dlist_t **)xmalloc((size_t)opt_nloci *
-                                                 sizeof(dlist_t *));
+    node->event_count = (int *)xmalloc((size_t)opt_locus_count * sizeof(int));
+    node->seqin_count = (int *)xmalloc((size_t)opt_locus_count * sizeof(int));
+    node->gene_leaves = (unsigned int *)xmalloc((size_t)opt_locus_count *
+                                                sizeof(unsigned int));
+    node->logpr_contrib = (double *)xmalloc((size_t)opt_locus_count *
+                                            sizeof(double));
+    node->old_logpr_contrib = (double *)xmalloc((size_t)opt_locus_count *
+                                                sizeof(double));
+    node->event = (dlist_t **)xmalloc((size_t)opt_locus_count *
+                                      sizeof(dlist_t *));
   }
 
-  stree->pptable = (int **)xcalloc((size_t)(stree->tip_count + stree->inner_count),
-                                   sizeof(int *));
+  stree->pptable = (int**)xcalloc(alloc,sizeof(int *));
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    stree->pptable[i] = (int *)xcalloc((size_t)(stree->tip_count + stree->inner_count),
-                                       sizeof(int));
+    stree->pptable[i] = (int *)xcalloc(alloc,sizeof(int));
 }
 
 void load_chk_section_2(FILE * fp)
@@ -543,7 +545,7 @@ void load_chk_section_2(FILE * fp)
 
   /* read number of coalescent events */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (!LOAD(stree->nodes[i]->event_count,opt_nloci,fp))
+    if (!LOAD(stree->nodes[i]->event_count,opt_locus_count,fp))
         fatal("Cannot read species event counts");
 
 //  /* read MSC density contributions */
@@ -557,19 +559,19 @@ void load_chk_section_2(FILE * fp)
 
   /* read number of incoming sequences for each node node */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (!LOAD(stree->nodes[i]->seqin_count,opt_nloci,fp))
+    if (!LOAD(stree->nodes[i]->seqin_count,opt_locus_count,fp))
         fatal("Cannot read incoming sequence counts");
 
   alloc_gtree();
   unsigned int max_tips = 0;
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     if (gtree[i]->tip_count > max_tips)
       max_tips = gtree[i]->tip_count;
 
   unsigned int gtree_inner_sum = 0;
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     gtree_inner_sum += gtree[i]->inner_count;
-  stree_alloc_internals(stree,gtree_inner_sum,opt_nloci);
+  stree_alloc_internals(stree,gtree_inner_sum,opt_locus_count);
 
   /* read event indices for each node */
   unsigned int * buffer = (unsigned int *)xmalloc((size_t)(max_tips*2-1) *
@@ -578,7 +580,7 @@ void load_chk_section_2(FILE * fp)
   {
     snode_t * snode = stree->nodes[i];
 
-    for (j = 0; j < opt_nloci; ++j)
+    for (j = 0; j < opt_locus_count; ++j)
     {
       snode->event[j] = dlist_create();
 
@@ -760,6 +762,7 @@ static void load_locus(FILE * fp, long index)
   unsigned int rate_matrices;
   unsigned int prob_matrices;
   unsigned int attributes;
+  size_t span;
 
   gtree_t * gt = gtree[index];
 
@@ -843,7 +846,7 @@ static void load_locus(FILE * fp, long index)
   for (i = 0; i < gt->tip_count; ++i)
   {
     unsigned int clv_index = gt->nodes[i]->clv_index;
-    size_t span = locus[index]->sites * locus[index]->states * locus[index]->rate_cats;
+    span = locus[index]->sites * locus[index]->states * locus[index]->rate_cats;
 
     if (!LOAD(locus[index]->clv[clv_index],span,fp))
       fatal("Cannot read gene tree %ld tip CLV", index);
@@ -854,8 +857,8 @@ void load_chk_section_4(FILE * fp)
 {
   long i;
 
-  locus = (locus_t **)xmalloc((size_t)opt_nloci * sizeof(locus_t));
-  for (i = 0; i < opt_nloci; ++i)
+  locus = (locus_t **)xmalloc((size_t)opt_locus_count * sizeof(locus_t));
+  for (i = 0; i < opt_locus_count; ++i)
     load_locus(fp,i);
 
 }
@@ -912,10 +915,10 @@ int checkpoint_load(gtree_t *** gtreep,
   load_chk_section_2(fp);
 
   /* initialize gene trees */
-//  gtree = init_gtrees(opt_nloci);
+//  gtree = init_gtrees(opt_locus_count);
 
   /* load section 3 */
-  load_chk_section_3(fp,opt_nloci);
+  load_chk_section_3(fp,opt_locus_count);
 
   /* load section 4 */
   load_chk_section_4(fp);
@@ -923,7 +926,7 @@ int checkpoint_load(gtree_t *** gtreep,
   /* TODO: set tip sequences, charmap etc when using tipchars */
 
   /* update pmatrices and CLVs */
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
   {
     gtree_reset_leaves(gtree[i]->root);
     locus_update_matrices_jc69(locus[i],gtree[i]->nodes,gtree[i]->edge_count);

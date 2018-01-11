@@ -399,11 +399,11 @@ double lnprior_species_model(stree_t * stree)
 
   switch (opt_delimit_prior)
   {
-    case BPP_DELIMIT_PRIOR_DIRICHLET:
+    case BPP_SPECIES_PRIOR_LH:
       p = 1.0;
       break;
 
-    case BPP_DELIMIT_PRIOR_UNIFORM:
+    case BPP_SPECIES_PRIOR_UNIFORM:
       p = 1.0 / histories(stree);
       break;
 

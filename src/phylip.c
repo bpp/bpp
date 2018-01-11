@@ -627,10 +627,10 @@ msa_t * phylip_parse_sequential(phylip_t * fd)
   return msa;
 }
 
-msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count)
+msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count)
 {
-  int msa_slotalloc = 10;
-  int msa_maxcount = 0;
+  long msa_slotalloc = 10;
+  long msa_maxcount = 0;
   char * p;
   
   *count = 0;
@@ -656,7 +656,7 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count)
 
     /* if 'nloci' option was specified, break when the respective number of loci
        was read */
-    if (*count == opt_nloci) break;
+    if (*count == opt_locus_count) break;
 
     /* skip empty lines */
 

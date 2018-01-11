@@ -129,7 +129,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* ft_round_rj*/
   size_section += sizeof(double);                     /* pjump_rj*/
   size_section += sizeof(long);                       /* ft_round_spr */
-  size_section += sizeof(long);                     /* pjump_slider */
+  size_section += sizeof(long);                       /* pjump_slider */
   size_section += sizeof(double);                     /* mean_logl */
   size_section += sizeof(double);                     /* mean_root_age */
   size_section += sizeof(double);                     /* mean_root_theta */
@@ -203,7 +203,7 @@ static void dump_chk_section_1(FILE * fp,
   /* write usedata, cleandata and nloci */
   DUMP(&opt_usedata,1,fp);
   DUMP(&opt_cleandata,1,fp);
-  DUMP(&opt_nloci,1,fp);
+  DUMP(&opt_locus_count,1,fp);
 
   /* write theta prior */
   DUMP(&opt_theta_alpha,1,fp);
@@ -280,9 +280,9 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&(stree->nodes[i]->support),1,fp);
 
   /* write number of coalescent events */
-  assert(opt_nloci == stree->locus_count);
+  assert(opt_locus_count == stree->locus_count);
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    DUMP(stree->nodes[i]->event_count,opt_nloci,fp);
+    DUMP(stree->nodes[i]->event_count,opt_locus_count,fp);
 
 //  /* write MSC density contribution - TODO: Candidate for removal */
 //  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -293,12 +293,12 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   /* TODO : Perhaps write only seqin_count for tips? */
   /* write number of incoming sequences for each node */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    DUMP(stree->nodes[i]->seqin_count,opt_nloci,fp);
+    DUMP(stree->nodes[i]->seqin_count,opt_locus_count,fp);
 
   /* write event indices for each node */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
-    for (j = 0; j < opt_nloci; ++j)
+    for (j = 0; j < opt_locus_count; ++j)
     {
       dlist_item_t * di = stree->nodes[i]->event[j]->head;
       while (di)
@@ -427,7 +427,10 @@ static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, long msa_count)
   }
 }
 
-static void dump_chk_section_4(FILE * fp, gtree_t ** gtree_list, locus_t ** locus_list, long msa_count)
+static void dump_chk_section_4(FILE * fp,
+                               gtree_t ** gtree_list,
+                               locus_t ** locus_list,
+                               long msa_count)
 {
   long i;
 

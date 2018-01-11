@@ -371,11 +371,11 @@ long delimitations_init(stree_t * stree)
 
     switch (opt_delimit_prior)
     {
-      case BPP_DELIMIT_PRIOR_DIRICHLET:
+      case BPP_SPECIES_PRIOR_LH:
         p = 1.0;
         break;
 
-      case BPP_DELIMIT_PRIOR_UNIFORM:
+      case BPP_SPECIES_PRIOR_UNIFORM:
         p = 1.0 / n;
         break;
 
@@ -396,8 +396,8 @@ long delimitations_init(stree_t * stree)
     dprior[i] *= norm;
   
   for (i = 0; i < dmodels_count; ++i)
-    printf("delimitation model %3ld: %s  prior  %f\n",
-           i, dmodels[i], dprior[i]);
+    printf("delimitation model %3ld: %s  LH: %ld   prior  %f\n",
+           i, dmodels[i], hist[i],dprior[i]);
 
   return dmodels_count;
 }

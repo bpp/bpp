@@ -34,13 +34,9 @@ static stree_t * load_tree(void)
   if (!opt_quiet)
     fprintf(stdout, "Parsing species tree...");
 
-  assert(opt_streefile || opt_streenewick);
-  assert(!(opt_streefile && opt_streenewick));
+  assert(opt_streenewick);
 
-  if (opt_streefile)
-    stree = stree_parse_newick(opt_streefile);
-  else
-    stree = stree_parse_newick_string(opt_streenewick);
+  stree = stree_parse_newick_string(opt_streenewick);
 
   if (!stree)
     fatal("Error while reading species tree");
@@ -68,7 +64,7 @@ static void reset_finetune(double * pjump)
 {
   int i;
 
-  fprintf(stdout, "Current Pjump:    ");
+  fprintf(stdout, "\nCurrent Pjump:    ");
   for (i = 0; i < PROP_COUNT; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   fprintf(stdout, "\n");
@@ -275,20 +271,20 @@ static FILE * resume(stree_t ** ptr_stree,
   gtree_t ** gtree = *ptr_gtree;
   stree_t  * stree = *ptr_stree;
 
-  gtree_alloc_internals(gtree,opt_nloci);
+  gtree_alloc_internals(gtree,opt_locus_count);
   reset_gene_leaves_count(stree);
   stree_reset_pptable(stree);
 
 
   /* compute MSC density */
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     gtree[i]->logpr = gtree_logprob(stree,i);
 
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     printf("Gene tree %ld - logl: %f   logp: %f\n", i, gtree[i]->logl, gtree[i]->logpr);
 
   /* set old_pop to NULL */
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
       gtree[i]->nodes[j]->old_pop = NULL;
 
@@ -313,8 +309,8 @@ static FILE * resume(stree_t ** ptr_stree,
   if (opt_method == METHOD_01)
   {
     *ptr_sclone = stree_clone_init(stree);
-    *ptr_gclones = (gtree_t **)xmalloc((size_t)opt_nloci*sizeof(gtree_t *));
-    for (i = 0; i < opt_nloci; ++i)
+    *ptr_gclones = (gtree_t **)xmalloc((size_t)opt_locus_count*sizeof(gtree_t *));
+    for (i = 0; i < opt_locus_count; ++i)
       (*ptr_gclones)[i] = gtree_clone_init(gtree[i], *ptr_sclone);
   }
   if (opt_method == METHOD_10)          /* species delimitation */
@@ -335,7 +331,7 @@ static FILE * resume(stree_t ** ptr_stree,
 
     long dmodels_count = delimitations_init(stree);
     printf("Number of delimitation models: %ld\n", dmodels_count);
-    rj_init(gtree,stree,opt_nloci);
+    rj_init(gtree,stree,opt_locus_count);
 
     for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
       stree->nodes[i]->tau = stree->nodes[i]->old_tau;
@@ -369,8 +365,8 @@ static FILE * init(stree_t ** ptr_stree,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones)
 {
-  int i,j;
-  int msa_count;
+  long i,j;
+  long msa_count;
   double logl,logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
@@ -388,37 +384,6 @@ static FILE * init(stree_t ** ptr_stree,
   stree_t * sclone = NULL;
   gtree_t ** gclones = NULL;
   
-  /* TODO: We can safely remove the next pair of conditions as they are
-     now checked when reading the control file */
-  if (opt_method < 0 || opt_method > 3)
-    fatal("Invalid method");
-
-  if (opt_samples < 1)
-    fatal("--samples must be a positive integer greater than zero");
-
-  if (opt_burnin < 0)
-    fatal("--burnin must be a positive integer");
-
-  /* TODO: rj-mcmc specific checks. Move them to control file instead */
-  if (opt_method == METHOD_10)          /* species delimitation */
-  {
-    if (opt_rjmcmc_method == 0)
-    {
-      if (opt_rjmcmc_epsilon <= 0)
-        fatal("--rjmcmc_epsilon must be a positive real greater than zero");
-    }
-    else if (opt_rjmcmc_method == 1)
-    {
-      if (opt_rjmcmc_alpha <= 0)
-        fatal("--rjmcmc_alpha must be a positive real greater than zero");
-
-      if (opt_rjmcmc_mean <= 0)
-        fatal("--rjmcmc_mean must be a positive real greater than zero");
-    }
-    else
-      fatal("Internal error in deciding rjMCMC algorithm");
-  }
-  
   /* load species tree */
   stree = load_tree();
   printf(" Done\n");
@@ -434,6 +399,10 @@ static FILE * init(stree_t ** ptr_stree,
   printf(" Done\n");
 
   phylip_close(fd);
+
+  /* set global variable with number of loci, if not set */
+  if (!opt_locus_count)
+    opt_locus_count = msa_count;
 
   /* remove ambiguous sites */
   if (opt_cleandata)
@@ -587,7 +556,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     if (opt_diploid)
     {
-      for (j = 0; j < (int)(stree->tip_count); ++j)
+      for (j = 0; j < (long)(stree->tip_count); ++j)
         if (stree->nodes[j]->diploid)
         {
           locus[i]->diploid = 1;
@@ -907,7 +876,7 @@ void cmd_run()
       /* update stats for printing on screen */
       mean_root_theta = (mean_root_theta*(ft_round-1) + stree->root->theta)/ft_round;
       mean_root_age = (mean_root_age*(ft_round-1) + stree->root->tau)/ft_round;
-      for (logl_sum = 0, j = 0; j < opt_nloci; ++j)
+      for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
         logl_sum += gtree[j]->logl;
       mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
     }
@@ -979,24 +948,24 @@ void cmd_run()
     rj_fini();
   }
 
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     locus_destroy(locus[i]);
   free(locus);
 
   /* deallocate gene trees */
-  for (i = 0; i < opt_nloci; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     gtree_destroy(gtree[i],NULL);
   free(gtree);
 
   /* if species tree inference, deallocate cloned gene trees */
   if (opt_method == METHOD_01)          /* species tree inference */
   {
-    for (i = 0; i < opt_nloci; ++i)
+    for (i = 0; i < opt_locus_count; ++i)
       gtree_destroy(gclones[i],NULL);
     free(gclones);
   }
 
-  gtree_fini(opt_nloci);
+  gtree_fini(opt_locus_count);
 
   if (opt_method == METHOD_00)
     allfixed_summary(stree);

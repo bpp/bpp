@@ -144,8 +144,8 @@
 #define COMPRESS_GENERAL                1
 #define COMPRESS_JC69                   2
 
-#define BPP_DELIMIT_PRIOR_DIRICHLET     0
-#define BPP_DELIMIT_PRIOR_UNIFORM       1
+#define BPP_SPECIES_PRIOR_LH            0
+#define BPP_SPECIES_PRIOR_UNIFORM       1
 
 /* libpll related definitions */
 
@@ -505,7 +505,7 @@ extern long opt_burnin;
 extern long opt_finetune_reset;
 extern long opt_rjmcmc_method;
 extern long opt_usedata;
-extern long opt_nloci;
+extern long opt_locus_count;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern long opt_diploid_size;
@@ -535,7 +535,6 @@ extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_reorder;
 extern char * opt_outfile;
-extern char * opt_streefile;
 extern char * opt_streenewick;
 extern char * opt_resume;
 extern char * cmdline;
@@ -620,7 +619,7 @@ msa_t * phylip_parse_interleaved(phylip_t * fd);
 
 msa_t * phylip_parse_sequential(phylip_t * fd);
 
-msa_t ** phylip_parse_multisequential(phylip_t * fd, int * count);
+msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
 /* functions in stree.c */
 

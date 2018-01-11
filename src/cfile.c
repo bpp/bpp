@@ -331,11 +331,8 @@ static long parse_checkpoint(const char * line)
 
   long count;
 
-  printf("Entered here!!\n");
-
   count = get_long(p, &opt_checkpoint_initial);
   if (!count) goto l_unwind;
-  printf("First long count: %ld\n", count);
 
   p += count;
 
@@ -343,7 +340,6 @@ static long parse_checkpoint(const char * line)
 
   count = get_long(p, &opt_checkpoint_step);
   if (!count) goto l_unwind;
-  printf("Second long count: %ld\n", count);
 
   p += count;
 
@@ -727,6 +723,50 @@ static long get_token(char * line, char ** token, char ** value)
   return p - *token + 1;
 }
 
+static void check_validity()
+{
+  if (!opt_streenewick)
+    fatal("Initial species tree newick format is required in 'species&tree'");
+
+  if (!opt_outfile)
+    fatal("Option 'outfile' is required");
+
+  if (!opt_mcmcfile)
+    fatal("Option 'mcmcfile' is required");
+
+  if (opt_method < 0 || opt_method > 3)
+    fatal("Invalid method");
+
+  if (opt_samples < 1)
+    fatal("Option 'nsample' must be a positive integer greater than zero");
+  
+  if (opt_samplefreq < 1)
+    fatal("Option 'sampfreq' must be a positive integer greater than zero");
+
+  if (opt_burnin < 0)
+    fatal("Option 'burnin' must be a positive integer or zero");
+
+  /* species delimitation specific checks */
+  if (opt_method == METHOD_10)          /* species delimitation */
+  {
+    if (opt_rjmcmc_method == 0)
+    {
+      if (opt_rjmcmc_epsilon <= 0)
+        fatal("--rjmcmc_epsilon must be a positive real greater than zero");
+    }
+    else if (opt_rjmcmc_method == 1)
+    {
+      if (opt_rjmcmc_alpha <= 0)
+        fatal("--rjmcmc_alpha must be a positive real greater than zero");
+
+      if (opt_rjmcmc_mean <= 0)
+        fatal("--rjmcmc_mean must be a positive real greater than zero");
+    }
+    else
+      fatal("Internal error in deciding rjMCMC algorithm");
+  }
+}
+
 void load_cfile()
 {
   FILE * fp;
@@ -782,7 +822,7 @@ void load_cfile()
     {
       if (!strncasecmp(token,"nloci",5))
       {
-        if (!parse_long(value,&opt_nloci) || opt_nloci < 0)
+        if (!parse_long(value,&opt_locus_count) || opt_locus_count < 0)
           fatal("Option 'nloci' expects a positive integer or zero (line %ld)",
                 line_count);
       }
@@ -891,7 +931,6 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"checkpoint",10))
       {
-        printf("Found 'checkpoint'\n");
         if (!parse_checkpoint(value))
           fatal("Erroneous format of 'checkpoint' (line %ld)", line_count);
         opt_checkpoint = 1;
@@ -971,6 +1010,9 @@ void load_cfile()
     opt_method = METHOD_01;
   else
     fatal("Method 11 not yet implemented");
+
+  check_validity();
+
 
   fclose(fp);
 }
