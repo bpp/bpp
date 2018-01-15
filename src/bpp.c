@@ -45,6 +45,7 @@ long opt_delimit_prior;
 long opt_cleandata;
 long opt_debug;
 long opt_est_theta;
+long opt_est_locusrate;
 long opt_samples;
 long opt_samplefreq;
 long opt_burnin;
@@ -70,10 +71,11 @@ double opt_finetune_gtspr;
 double opt_finetune_theta;
 double opt_finetune_tau;
 double opt_finetune_mix;
+double opt_finetune_locusrate;
 double opt_rjmcmc_alpha;
 double opt_rjmcmc_mean;
 double opt_rjmcmc_epsilon;
-long * opt_diploid;
+double opt_locusrate_alpha;
 char * opt_cfile;
 char * opt_mapfile;
 char * opt_msafile;
@@ -83,6 +85,8 @@ char * opt_outfile;
 char * opt_reorder;
 char * opt_streenewick;
 char * opt_resume;
+char * opt_locusrate_filename;
+long * opt_diploid;
 
 long mmx_present;
 long sse_present;
@@ -98,14 +102,14 @@ long altivec_present;
 
 static struct option long_options[] =
 {
-  {"help",            no_argument,       0, 0 },  /* 0 */
-  {"version",         no_argument,       0, 0 },  /* 1 */
-  {"quiet",           no_argument,       0, 0 },  /* 2 */
-  {"cfile",           required_argument, 0, 0 },  /* 3 */
-  {"arch",            required_argument, 0, 0 },  /* 4 */
-  {"exp_method",      required_argument, 0, 0 },  /* 6 */
-  {"exp_debug",       no_argument,       0, 0 },  /* 7 */
-  {"resume",          required_argument, 0, 0 },  /* 8 */
+  {"help",       no_argument,       0, 0 },  /* 0 */
+  {"version",    no_argument,       0, 0 },  /* 1 */
+  {"quiet",      no_argument,       0, 0 },  /* 2 */
+  {"cfile",      required_argument, 0, 0 },  /* 3 */
+  {"arch",       required_argument, 0, 0 },  /* 4 */
+  {"exp_method", required_argument, 0, 0 },  /* 6 */
+  {"exp_debug",  no_argument,       0, 0 },  /* 7 */
+  {"resume",     required_argument, 0, 0 },  /* 8 */
   { 0, 0, 0, 0 }
 };
 
@@ -153,6 +157,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_reset = 0;
   opt_finetune_tau   = 0.001;
   opt_finetune_theta = 0.001;
+  opt_finetune_locusrate = 0.33;
   opt_help = 0;
   opt_quiet = 0;
   opt_samplefreq = 10;

@@ -24,6 +24,8 @@
 #define PI  3.1415926535897932384626433832795
 #define PROP_COUNT 5
 
+const static int rate_matrices = 1;
+
 static double pj_optimum = 0.3;
 
 static stree_t * load_tree(void)
@@ -65,7 +67,7 @@ static void reset_finetune(double * pjump)
   int i;
 
   fprintf(stdout, "\nCurrent Pjump:    ");
-  for (i = 0; i < PROP_COUNT; ++i)
+  for (i = 0; i < PROP_COUNT + (opt_est_locusrate == 1); ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   fprintf(stdout, "\n");
 
@@ -74,7 +76,11 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_gtspr);
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
-  fprintf(stdout, " %8.5f\n", opt_finetune_mix);
+  fprintf(stdout, " %8.5f", opt_finetune_mix);
+  if (opt_est_locusrate)
+    fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
+  else
+    fprintf(stdout, "\n");
 
   reset_finetune_onestep(pjump+0,&opt_finetune_gtage);
   reset_finetune_onestep(pjump+1,&opt_finetune_gtspr);
@@ -82,12 +88,19 @@ static void reset_finetune(double * pjump)
   reset_finetune_onestep(pjump+3,&opt_finetune_tau);
   reset_finetune_onestep(pjump+4,&opt_finetune_mix);
 
+  if (opt_est_locusrate)
+    reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
+
   fprintf(stdout, "New finetune:     ");
   fprintf(stdout, " %8.5f", opt_finetune_gtage);
   fprintf(stdout, " %8.5f", opt_finetune_gtspr);
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
-  fprintf(stdout, " %8.5f\n", opt_finetune_mix);
+  fprintf(stdout, " %8.5f", opt_finetune_mix);
+  if (opt_est_locusrate)
+    fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
+  else
+    fprintf(stdout, "\n");
 }
 
 static char * cb_serialize_branch(const snode_t * node)
@@ -504,6 +517,25 @@ static FILE * init(stree_t ** ptr_stree,
   stree_init(stree,msa_list,map_list,msa_count);
   stree_show_pptable(stree);
 
+  double * lrate = (double *)xmalloc((size_t)opt_locus_count*sizeof(long));
+  if (opt_est_locusrate == 1)
+  {
+    double mean = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      lrate[i] = 0.8 + 0.4*legacy_rndu();
+      mean += lrate[i];
+    }
+
+    mean /= opt_locus_count;
+
+    for (i = 0; i < opt_locus_count; ++i)
+      lrate[i] /= mean;
+
+    for (i = 0; i < opt_locus_count; ++i)
+      printf("locusrate %ld: %f\n", i, lrate[i]);
+  }
+
   /* TODO CALL HERE */
   /* We must first link tip sequences (gene tips) to populations */
   if (opt_method == METHOD_10)          /* species delimitation */
@@ -533,7 +565,9 @@ static FILE * init(stree_t ** ptr_stree,
     double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
     unsigned int pmatrix_count = gtree[i]->edge_count;
 
-    if (opt_method == METHOD_01)        /* species tree inference */
+    /* if species tree inference or locusrate enabled, activate twice as many
+       transition probability matrices */
+    if (opt_method == METHOD_01 || opt_est_locusrate == 1)
       pmatrix_count *= 2;               /* double to account for cloned */
 
     /* TODO: In the future we can allocate double amount of p-matrices
@@ -545,7 +579,7 @@ static FILE * init(stree_t ** ptr_stree,
                             2*gtree[i]->inner_count,    /* # CLV vectors */
                             4,                          /* # states */
                             msa->length,                /* sequence length */
-                            1,                          /* # subst matrices */
+                            rate_matrices,              /* subst matrices (1) */
                             pmatrix_count,              /* # prob matrices */
                             1,                          /* # rate categories */
                             0,                          /* # scale buffers */
@@ -562,6 +596,14 @@ static FILE * init(stree_t ** ptr_stree,
           locus[i]->diploid = 1;
           break;
         }
+    }
+
+    if (opt_est_locusrate)
+    {
+      /* TODO with more complex mixture models where rate_matrices > 1 we need
+         to revisit this */
+      assert(rate_matrices == 1);
+      pll_set_mut_rates(locus[i],lrate+i);
     }
 
     /* set pattern weights and free the weights array */
@@ -621,6 +663,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* deallocate unnecessary arrays */
+  free(lrate);
   if (opt_diploid)
   {
     free(mapping);
@@ -638,7 +681,10 @@ static FILE * init(stree_t ** ptr_stree,
     rj_init(gtree,stree,msa_count);
 
   /* initialize pjump and finetune rounds */
-  pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
+  if (opt_est_locusrate)
+    pjump = (double *)xcalloc(PROP_COUNT+1, sizeof(double));
+  else
+    pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
@@ -780,14 +826,15 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
+      int pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(pjump);
-      for (j = 0; j < PROP_COUNT; ++j)
+      for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
-      memset(pjump,0,PROP_COUNT*sizeof(double));
+      memset(pjump,0,pjump_size*sizeof(double));
 
       if (opt_method == METHOD_10)      /* species delimitation */
       {
@@ -867,6 +914,12 @@ void cmd_run()
     ratio = proposal_mixing(gtree,stree,locus);
     pjump[4] = (pjump[4]*(ft_round-1) + ratio) / (double)ft_round;
 
+    if (opt_est_locusrate)
+    {
+      ratio = prop_locusrate(gtree,stree,locus);
+      pjump[5] = (pjump[5]*(ft_round-1) + ratio) / (double)ft_round;
+    }
+
     /* log sample into file (dparam_count is only used in method 10) */
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
       mcmc_logsample(fp_mcmc,i+1,stree,gtree,dparam_count);
@@ -888,7 +941,7 @@ void cmd_run()
       if (printk <= 500 || (i+1) % (printk / 200) == 0)
       {
         printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
-        for (j = 0; j < 5; ++j)
+        for (j = 0; j < 5 + (opt_est_locusrate == 1); ++j)
           printf(" %4.2f", pjump[j]);
         printf(" ");
 
@@ -907,7 +960,6 @@ void cmd_run()
 
     curstep++;
 
-    /* TODO: Checkpoint from method 00 */
     if (opt_checkpoint)
     {
       if (((long)curstep == opt_checkpoint_initial) ||

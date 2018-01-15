@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
 
 
 /* association of gene nodes to species populations. offset[i] is the 'nodes'
@@ -1993,3 +1994,115 @@ double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
 
   return ((double)accepted/proposal_count);
 }
+
+double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+{
+  long i,j;
+  long ref;
+  long accepted = 0;
+  double lnacceptance; 
+  double new_locrate;
+  double new_refrate;
+  double old_locrate;
+  double old_refrate;
+
+  /* set reference locus as the one with the highest number of site patterns */
+  for (i = 1, ref = 0; i < opt_locus_count; ++i)
+    if (locus[i]->sites > locus[ref]->sites)
+      ref = i;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    if (i == ref) continue;
+
+    gnode_t ** refnodes = gtree[ref]->nodes;
+    for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
+      if (refnodes[j]->parent)
+        SWAP_PMAT_INDEX(gtree[ref]->edge_count, refnodes[j]->pmatrix_index);
+
+    gnode_t ** locnodes = gtree[i]->nodes;
+    for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+      if (locnodes[j]->parent)
+        SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+
+    old_locrate = locus[i]->mut_rates[0];
+    old_refrate = locus[ref]->mut_rates[0];
+
+    new_locrate = reflect(old_locrate+opt_finetune_locusrate*legacy_rnd_symmetrical(),
+                          0, old_locrate + old_refrate);
+    new_refrate = locus[ref]->mut_rates[0] - (new_locrate - old_locrate);
+
+    locus[i]->mut_rates[0] = new_locrate;
+    locus[ref]->mut_rates[0] = new_refrate;
+
+    lnacceptance = (opt_locusrate_alpha - 1) *
+                   log((new_locrate*new_refrate) / (old_locrate*old_refrate));
+
+    /* update selected locus */
+    locus_update_all_matrices_jc69(locus[i],gtree[i]);
+
+    gnode_t ** gnodeptr = gtree[i]->nodes;
+    for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                              gnodeptr[j]->clv_index);
+    locus_update_all_partials(locus[i],gtree[i]);
+
+    /* update reference locus */
+    locus_update_all_matrices_jc69(locus[ref],gtree[ref]);
+
+    gnodeptr = gtree[ref]->nodes;
+    for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
+                                              gnodeptr[j]->clv_index);
+    locus_update_all_partials(locus[ref],gtree[ref]);
+
+    unsigned int param_indices[1] = {0};
+
+    double loc_logl = locus_root_loglikelihood(locus[i],
+                                               gtree[i]->root,
+                                               param_indices,
+                                               NULL);
+    double ref_logl = locus_root_loglikelihood(locus[ref],
+                                               gtree[ref]->root,
+                                               param_indices,
+                                               NULL);
+
+    lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
+
+    if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+    {
+      /* accept */
+      accepted++;
+
+      gtree[i]->logl = loc_logl;
+      gtree[ref]->logl = ref_logl;
+    }
+    else
+    {
+      /* reject */
+      locus[i]->mut_rates[0] = old_locrate;
+      locus[ref]->mut_rates[0] = old_refrate;
+
+      /* reset selected locus */
+      gnodeptr = gtree[i]->nodes;
+      for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+        gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                gnodeptr[j]->clv_index);
+
+      /* reset reference locus */
+      gnodeptr = gtree[ref]->nodes;
+      for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+        gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
+                                                gnodeptr[j]->clv_index);
+      
+      for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
+        if (refnodes[j]->parent)
+          SWAP_PMAT_INDEX(gtree[ref]->edge_count,refnodes[j]->pmatrix_index);
+      for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+        if (locnodes[j]->parent)
+          SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+    }
+  }
+  return (accepted / (double)(opt_locus_count-1));
+}
+

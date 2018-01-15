@@ -190,7 +190,7 @@ int load_string(FILE * fp, char ** buffer)
 }
 
 static void load_chk_section_1(FILE * fp,
-                               double * pjump,
+                               double ** pjump,
                                unsigned long * curstep,
                                long * ft_round,
                                long * mcmc_offset,
@@ -319,6 +319,14 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read beta 'theta' tag");
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
 
+  /* load locus rate estimation flag */
+  if (!LOAD(&opt_est_locusrate,1,fp))
+    fatal("Cannot read locusrate tag"); 
+
+  /* load locus rate alpha */
+  if (!LOAD(&opt_locusrate_alpha,1,fp))
+    fatal("Cannot read locusrate alpha"); 
+
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
@@ -332,6 +340,11 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
+  if (opt_est_locusrate)
+  {
+    if (!LOAD(&opt_finetune_locusrate,1,fp))
+      fatal("Cannot read species locusrate step finetune parameter");
+  }
   printf(" Current finetune: %ld: %f %f %f %f %f\n",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
@@ -370,7 +383,10 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round,1,fp))
     fatal("Cannot read current finetune round");
 
-  if (!LOAD(pjump,PROP_COUNT,fp))
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+  *pjump = (double *)xmalloc(pjump_size*sizeof(double));
+
+  if (!LOAD(*pjump,pjump_size,fp))
     fatal("Cannot read pjump");
 
   if (!LOAD(mcmc_offset,1,fp))
@@ -808,6 +824,10 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&(locus[index]->pattern_weights_sum),1,fp))
     fatal("Cannot read pattern weights sum");
 
+  /* load mutation rates */
+  if (!LOAD(locus[index]->mut_rates,locus[index]->rate_matrices,fp))
+    fatal("Cannot read locus mutation rates");
+
   /* load diploid */
   if (!LOAD(&(locus[index]->diploid),1,fp))
     fatal("Cannot read locus %ld diploid", index);
@@ -896,9 +916,8 @@ int checkpoint_load(gtree_t *** gtreep,
   /* load section 1 */
   fprintf(stdout,"SECTION 1:\n");
 
-  *pjump = (double *)xmalloc(PROP_COUNT*sizeof(double));
   load_chk_section_1(fp,
-                     *pjump,
+                     pjump,
                      curstep,
                      ft_round,
                      mcmc_offset,

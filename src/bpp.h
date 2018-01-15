@@ -352,6 +352,7 @@ typedef struct locus_s
   double ** subst_params;
   unsigned int ** scale_buffer;
   double ** frequencies;
+  double * mut_rates;
   unsigned int * pattern_weights;
   unsigned int pattern_weights_sum;
 
@@ -499,6 +500,7 @@ extern long opt_delimit_prior;
 extern long opt_cleandata;
 extern long opt_debug;
 extern long opt_est_theta;
+extern long opt_est_locusrate;
 extern long opt_samples;
 extern long opt_samplefreq;
 extern long opt_burnin;
@@ -524,9 +526,11 @@ extern double opt_finetune_gtspr;
 extern double opt_finetune_theta;
 extern double opt_finetune_tau;
 extern double opt_finetune_mix;
+extern double opt_finetune_locusrate;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern double opt_locusrate_alpha;
 extern long * opt_diploid;
 extern char * opt_cfile;
 extern char * opt_mapfile;
@@ -537,6 +541,7 @@ extern char * opt_reorder;
 extern char * opt_outfile;
 extern char * opt_streenewick;
 extern char * opt_resume;
+extern char * opt_locusrate_filename;
 extern char * cmdline;
 
 /* common data */
@@ -807,6 +812,8 @@ gnode_t ** gtree_return_partials(gnode_t * root,
                                  unsigned int * trav_size);
 void unlink_event(gnode_t * node, int msa_index);
 
+double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+
 /* functions in prop_mixing.c */
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
@@ -859,6 +866,8 @@ void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies);
 
+int pll_set_mut_rates(locus_t * locus, const double * mut_rates);
+
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count);
 
 void locus_update_all_partials(locus_t * locus, gtree_t * gtree);
@@ -869,6 +878,8 @@ void pll_set_pattern_weights(locus_t * locus,
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,
                                 unsigned int count);
+
+void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree);
 
 double locus_root_loglikelihood(locus_t * locus,
                                 gnode_t * root,

@@ -124,7 +124,9 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
 
-  size_section += PROP_COUNT*sizeof(double);          /* pjump */
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+
+  size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
   size_section += sizeof(long);                       /* ft_round_rj*/
   size_section += sizeof(double);                     /* pjump_rj*/
@@ -133,6 +135,11 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(double);                     /* mean_logl */
   size_section += sizeof(double);                     /* mean_root_age */
   size_section += sizeof(double);                     /* mean_root_theta */
+  size_section += sizeof(long);                       /* opt_est_locusrate */
+  size_section += sizeof(double);                     /* opt_locusrate_alpha */
+  if (opt_est_locusrate)
+    size_section += sizeof(double);                   /* locusrate finetune */
+
 
   /* write section 1 size */
   DUMP(&size_section,1,fp);
@@ -214,6 +221,10 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_tau_alpha,1,fp);
   DUMP(&opt_tau_beta,1,fp);
 
+  /* whether locus mutation rate is estimated */
+  DUMP(&opt_est_locusrate,1,fp);
+  DUMP(&opt_locusrate_alpha,1,fp);
+
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
@@ -221,6 +232,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_theta,1,fp);
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
+  if (opt_est_locusrate)
+    DUMP(&opt_finetune_locusrate,1,fp);
+
 
   /* write diploid */
   if (opt_diploid)
@@ -238,8 +252,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&curstep,1,fp);
   DUMP(&ft_round,1,fp);
 
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
   /* write pjump */
-  DUMP(pjump,PROP_COUNT,fp);
+  DUMP(pjump,pjump_size,fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -384,6 +399,9 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   /* write pattern weights sum */
   DUMP(&(locus->pattern_weights_sum),1,fp);
+
+  /* write mutation rates */
+  DUMP(locus->mut_rates,locus->rate_matrices,fp);
 
   /* write diploid */
   DUMP(&(locus->diploid),1,fp);

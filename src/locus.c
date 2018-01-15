@@ -93,6 +93,8 @@ static void dealloc_locus_data(locus_t * locus)
       pll_aligned_free(locus->frequencies[i]);
   free(locus->frequencies);
 
+  free(locus->mut_rates);
+
   if (locus->pattern_weights)
     free(locus->pattern_weights);
 
@@ -575,6 +577,8 @@ int pll_set_tip_clv(locus_t * locus,
 
   return BPP_SUCCESS;
 }
+
+
 locus_t * locus_create(unsigned int tips,
                        unsigned int clv_buffers,
                        unsigned int states,
@@ -751,6 +755,11 @@ locus_t * locus_create(unsigned int tips,
     memset(locus->frequencies[i],0,states_padded*sizeof(double));
   }
 
+  /* mutation rates */
+  locus->mut_rates = (double *)xcalloc(locus->rate_matrices,sizeof(double));
+  for (i = 0; i < locus->rate_matrices; ++i)
+    locus->mut_rates[i] = 1;
+
   /* rates */
   locus->rates = (double *)xcalloc(locus->rate_cats,sizeof(double));
 
@@ -797,6 +806,88 @@ void pll_set_frequencies(locus_t * locus,
   locus->eigen_decomp_valid[freqs_index] = 0;
 }
 
+int pll_set_mut_rates(locus_t * locus, const double * mut_rates)
+{
+  /* one mutation rate per substitution matrix available */
+  memcpy(locus->mut_rates, mut_rates, locus->rate_matrices*sizeof(double));
+}
+
+static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
+                                                     gnode_t * root)
+{
+  long n;
+  double t;
+  double * pmat;
+  unsigned int states = locus->states;
+  unsigned int states_padded = locus->states_padded;
+
+  t = root->length = (root->parent->time - root->time)*locus->mut_rates[0];
+
+  for (n = 0; n < locus->rate_cats; ++n)
+  {
+    pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
+
+    if (t < 1e-100)
+    {
+      pmat[0]  = 1;
+      pmat[1]  = 0;
+      pmat[2]  = 0;
+      pmat[3]  = 0;
+
+      pmat[4]  = 0;
+      pmat[5]  = 1;
+      pmat[6]  = 0;
+      pmat[7]  = 0;
+
+      pmat[8]  = 0;
+      pmat[9]  = 0;
+      pmat[10] = 1;
+      pmat[11] = 0;
+
+      pmat[12] = 0;
+      pmat[13] = 0;
+      pmat[14] = 0;
+      pmat[15] = 1;
+    }
+    else
+    {
+      double a =  (1 + 3*exp(-4*t/3) ) / 4;
+      double b = (1 - a) / 3;
+
+      pmat[0]  = a;
+      pmat[1]  = b;
+      pmat[2]  = b;
+      pmat[3]  = b;
+
+      pmat[4]  = b;
+      pmat[5]  = a;
+      pmat[6]  = b;
+      pmat[7]  = b;
+
+      pmat[8]  = b;
+      pmat[9]  = b;
+      pmat[10] = a;
+      pmat[11] = b;
+
+      pmat[12] = b;
+      pmat[13] = b;
+      pmat[14] = b;
+      pmat[15] = a;
+    }
+  }
+
+  if (!(root->left)) return;
+
+  locus_update_all_matrices_jc69_recursive(locus,root->left);
+  locus_update_all_matrices_jc69_recursive(locus,root->right);
+}
+
+void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
+{
+  locus_update_all_matrices_jc69_recursive(locus,gtree->root->left);
+  locus_update_all_matrices_jc69_recursive(locus,gtree->root->right);
+}
+
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,
                                 unsigned int count)
@@ -815,8 +906,7 @@ void locus_update_matrices_jc69(locus_t * locus,
   {
     node = traversal[i];
 
-      /* TODO: multiply by rate if different than one */
-    t = node->length = node->parent->time- node->time;
+    t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
 
     for (n = 0; n < locus->rate_cats; ++n)
     {

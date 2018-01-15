@@ -404,6 +404,46 @@ l_unwind:
   return ret;
 }
 
+static long parse_locusrate(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_long(p, &opt_est_locusrate);
+  if (!count) goto l_unwind;
+
+  printf("est_locusrate = %ld\n", opt_est_locusrate);
+
+  p += count;
+
+  if (is_emptyline(p) && !opt_est_locusrate) ret = 1;
+
+  count = 0;
+  if (opt_est_locusrate == 1)
+  {
+    count = get_double(p, &opt_locusrate_alpha);
+    if (!count) goto l_unwind;
+    printf("alpha = %f\n", opt_locusrate_alpha);
+  }
+  else if (opt_est_locusrate == 2)
+  {
+    count = get_string(p,&opt_locusrate_filename);
+    if (!count) goto l_unwind;
+  }
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+  printf("ret= %ld\n", ret);
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_thetaprior(const char * line)
 {
   long ret = 0;
@@ -525,8 +565,7 @@ static long parse_finetune(const char * line)
 
   p += count;
 
-  /* TODO: The next two are not implemented yet */
-  double opt_finetune_locusrate;
+  /* TODO: The next is not implemented yet */
   double opt_finetune_seqerr;
 
   /* 6. locusrate finetune param */
@@ -918,7 +957,8 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"locusrate",9))
       {
-        fatal("Not implemented (%s)", token);
+        if (!parse_locusrate(value))
+          fatal("Erroneous format of 'locusrate' (line %ld)", line_count);
       }
     }
     else if (token_len == 10)
