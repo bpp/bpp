@@ -189,6 +189,10 @@
 #define METHOD_10       2
 #define METHOD_11       3
 
+/* other */
+#define MUTRATE_ESTIMATE        1
+#define MUTRATE_FROMFILE        2
+
 /* structures and data types */
 
 typedef unsigned int UINT32;
@@ -1168,6 +1172,7 @@ void delimit_summary(stree_t * stree);
 /* functions in cfile.c */
 
 void load_cfile(void);
+void parsefile_locusrates(double * locusrate);
 
 /* functions in core_partials_sse.c */
 

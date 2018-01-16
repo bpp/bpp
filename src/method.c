@@ -67,7 +67,7 @@ static void reset_finetune(double * pjump)
   int i;
 
   fprintf(stdout, "\nCurrent Pjump:    ");
-  for (i = 0; i < PROP_COUNT + (opt_est_locusrate == 1); ++i)
+  for (i = 0; i < PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE); ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   fprintf(stdout, "\n");
 
@@ -77,7 +77,7 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
-  if (opt_est_locusrate)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
     fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
   else
     fprintf(stdout, "\n");
@@ -88,7 +88,7 @@ static void reset_finetune(double * pjump)
   reset_finetune_onestep(pjump+3,&opt_finetune_tau);
   reset_finetune_onestep(pjump+4,&opt_finetune_mix);
 
-  if (opt_est_locusrate)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
 
   fprintf(stdout, "New finetune:     ");
@@ -97,7 +97,7 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
-  if (opt_est_locusrate)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
     fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
   else
     fprintf(stdout, "\n");
@@ -518,7 +518,10 @@ static FILE * init(stree_t ** ptr_stree,
   stree_show_pptable(stree);
 
   double * lrate = (double *)xmalloc((size_t)opt_locus_count*sizeof(long));
-  if (opt_est_locusrate == 1)
+  for (i = 0; i < opt_locus_count; ++i)
+    lrate[i] = 1;
+
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
   {
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
@@ -534,6 +537,21 @@ static FILE * init(stree_t ** ptr_stree,
 
     for (i = 0; i < opt_locus_count; ++i)
       printf("locusrate %ld: %f\n", i, lrate[i]);
+  }
+  else if (opt_est_locusrate == MUTRATE_FROMFILE)
+  {
+    parsefile_locusrates(lrate);
+
+    double mean = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+      mean += lrate[i];
+
+    mean /= opt_locus_count;
+      
+    for (i = 0; i < opt_locus_count; ++i)
+      lrate[i] /= mean;
+
+    opt_est_locusrate = 0;
   }
 
   /* TODO CALL HERE */
@@ -567,7 +585,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* if species tree inference or locusrate enabled, activate twice as many
        transition probability matrices */
-    if (opt_method == METHOD_01 || opt_est_locusrate == 1)
+    if (opt_method == METHOD_01 || opt_est_locusrate == MUTRATE_ESTIMATE)
       pmatrix_count *= 2;               /* double to account for cloned */
 
     /* TODO: In the future we can allocate double amount of p-matrices
@@ -598,13 +616,13 @@ static FILE * init(stree_t ** ptr_stree,
         }
     }
 
-    if (opt_est_locusrate)
-    {
+    //if (opt_est_locusrate)
+    //{
       /* TODO with more complex mixture models where rate_matrices > 1 we need
          to revisit this */
       assert(rate_matrices == 1);
       pll_set_mut_rates(locus[i],lrate+i);
-    }
+    //}
 
     /* set pattern weights and free the weights array */
     if (locus[i]->diploid)

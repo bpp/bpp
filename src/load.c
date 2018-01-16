@@ -340,7 +340,7 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
-  if (opt_est_locusrate)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
   {
     if (!LOAD(&opt_finetune_locusrate,1,fp))
       fatal("Cannot read species locusrate step finetune parameter");
@@ -383,7 +383,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round,1,fp))
     fatal("Cannot read current finetune round");
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))

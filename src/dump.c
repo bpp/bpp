@@ -124,7 +124,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -252,7 +252,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&curstep,1,fp);
   DUMP(&ft_round,1,fp);
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 

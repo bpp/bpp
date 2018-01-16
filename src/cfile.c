@@ -422,13 +422,13 @@ static long parse_locusrate(const char * line)
   if (is_emptyline(p) && !opt_est_locusrate) ret = 1;
 
   count = 0;
-  if (opt_est_locusrate == 1)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
   {
     count = get_double(p, &opt_locusrate_alpha);
     if (!count) goto l_unwind;
     printf("alpha = %f\n", opt_locusrate_alpha);
   }
-  else if (opt_est_locusrate == 2)
+  else if (opt_est_locusrate == MUTRATE_FROMFILE)
   {
     count = get_string(p,&opt_locusrate_filename);
     if (!count) goto l_unwind;
@@ -1054,5 +1054,40 @@ void load_cfile()
   check_validity();
 
 
+  fclose(fp);
+}
+
+void parsefile_locusrates(double * locusrate)
+{
+  long line_count = 0;
+  long count;
+  FILE * fp = xopen(opt_locusrate_filename,"r");
+
+  long entry = 0;
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    char * p = line;
+
+    while (!is_emptyline(p))
+    {
+      if (entry == opt_locus_count)
+        fatal("File %s contains more rates than number of loci",
+               opt_locusrate_filename);
+      count = get_double(p, locusrate+entry++);
+      if (!count)
+        fatal("Incorrect format of file %s at line %ld",
+              opt_locusrate_filename, line_count);
+
+      p += count;
+      
+    }
+  }
+  if (entry != opt_locus_count)
+    fatal("File %s contains less rates (%ld) than number of loci (%ld)",
+          opt_locusrate_filename, entry, opt_locus_count); 
+  
   fclose(fp);
 }
