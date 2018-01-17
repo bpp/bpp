@@ -433,6 +433,8 @@ static long parse_locusrate(const char * line)
     count = get_string(p,&opt_locusrate_filename);
     if (!count) goto l_unwind;
   }
+  else
+    goto l_unwind;
 
   p += count;
 
@@ -502,6 +504,51 @@ static long parse_tauprior(const char * line)
 
   if (is_emptyline(p)) ret = 1;
   
+l_unwind:
+  free(s);
+  return ret;
+}
+
+static long parse_heredity(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_long(p, &opt_est_heredity);
+  if (!count) goto l_unwind;
+
+  printf("est_heredity = %ld\n", opt_est_heredity);
+
+  p += count;
+
+  if (is_emptyline(p) && !opt_est_heredity) ret = 1;
+
+  count = 0;
+  if (opt_est_heredity == HEREDITY_ESTIMATE)
+  {
+    count = get_double(p, &opt_heredity_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    count = get_double(p, &opt_heredity_beta);
+    if (!count) goto l_unwind;
+  }
+  else if (opt_est_heredity == HEREDITY_FROMFILE)
+  {
+    count = get_string(p,&opt_heredity_filename);
+    if (!count) goto l_unwind;
+  }
+  else
+    goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
 l_unwind:
   free(s);
   return ret;
@@ -932,7 +979,8 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"heredity",8))
       {
-        fatal("Not implemented (%s)", token);
+        if (!parse_heredity(value))
+          fatal("Invalid format of 'heredity' (line %ld) ", line_count);
       }
       else if (!strncasecmp(token,"finetune",8))
       {
@@ -1057,11 +1105,14 @@ void load_cfile()
   fclose(fp);
 }
 
-void parsefile_locusrates(double * locusrate)
+int parsefile_doubles(const char * filename,
+                      long n,
+                      double * outbuffer,
+                      long * errcontext)
 {
   long line_count = 0;
   long count;
-  FILE * fp = xopen(opt_locusrate_filename,"r");
+  FILE * fp = xopen(filename,"r");
 
   long entry = 0;
 
@@ -1073,21 +1124,30 @@ void parsefile_locusrates(double * locusrate)
 
     while (!is_emptyline(p))
     {
-      if (entry == opt_locus_count)
-        fatal("File %s contains more rates than number of loci",
-               opt_locusrate_filename);
-      count = get_double(p, locusrate+entry++);
+      if (entry == n)
+      {
+        fclose(fp);
+        return ERROR_PARSE_MORETHANEXPECTED;
+      }
+      count = get_double(p, outbuffer+entry++);
       if (!count)
-        fatal("Incorrect format of file %s at line %ld",
-              opt_locusrate_filename, line_count);
+      {
+        fclose(fp);
+        *errcontext = line_count;
+        return ERROR_PARSE_INCORRECTFORMAT;
+      }
 
       p += count;
       
     }
   }
-  if (entry != opt_locus_count)
-    fatal("File %s contains less rates (%ld) than number of loci (%ld)",
-          opt_locusrate_filename, entry, opt_locus_count); 
+  if (entry != n)
+  {
+    fclose(fp);
+    *errcontext = entry;
+    return ERROR_PARSE_LESSTHANEXPECTED;
+  }
   
   fclose(fp);
+  return 0;
 }

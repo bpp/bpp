@@ -146,7 +146,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
 
 
-    double logpr = gtree_logprob(stree,i);
+    double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
 
     lnacceptance += logl - gt->logl + logpr - gt->logpr;
 

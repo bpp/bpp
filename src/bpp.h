@@ -181,6 +181,9 @@
 #define ERROR_PHYLIP_NONALIGNED        108
 #define ERROR_PHYLIP_ILLEGALCHAR       109
 #define ERROR_PHYLIP_UNPRINTABLECHAR   110
+#define ERROR_PARSE_MORETHANEXPECTED   111
+#define ERROR_PARSE_LESSTHANEXPECTED   112
+#define ERROR_PARSE_INCORRECTFORMAT    113
 
 /* available methods */
 
@@ -192,6 +195,8 @@
 /* other */
 #define MUTRATE_ESTIMATE        1
 #define MUTRATE_FROMFILE        2
+#define HEREDITY_ESTIMATE       1
+#define HEREDITY_FROMFILE       2
 
 /* structures and data types */
 
@@ -357,6 +362,7 @@ typedef struct locus_s
   unsigned int ** scale_buffer;
   double ** frequencies;
   double * mut_rates;
+  double * heredity;
   unsigned int * pattern_weights;
   unsigned int pattern_weights_sum;
 
@@ -505,6 +511,7 @@ extern long opt_cleandata;
 extern long opt_debug;
 extern long opt_est_theta;
 extern long opt_est_locusrate;
+extern long opt_est_heredity;
 extern long opt_samples;
 extern long opt_samplefreq;
 extern long opt_burnin;
@@ -521,20 +528,22 @@ extern long opt_checkpoint_step;
 extern long opt_checkpoint_current;
 extern long opt_method;
 extern double opt_bfbeta;
-extern double opt_tau_alpha;
-extern double opt_tau_beta;
-extern double opt_theta_alpha;
-extern double opt_theta_beta;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_theta;
 extern double opt_finetune_tau;
 extern double opt_finetune_mix;
 extern double opt_finetune_locusrate;
+extern double opt_heredity_alpha;
+extern double opt_heredity_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
 extern double opt_locusrate_alpha;
+extern double opt_tau_alpha;
+extern double opt_tau_beta;
+extern double opt_theta_alpha;
+extern double opt_theta_beta;
 extern long * opt_diploid;
 extern char * opt_cfile;
 extern char * opt_mapfile;
@@ -546,6 +555,7 @@ extern char * opt_outfile;
 extern char * opt_streenewick;
 extern char * opt_resume;
 extern char * opt_locusrate_filename;
+extern char * opt_heredity_filename;
 extern char * cmdline;
 
 /* common data */
@@ -651,7 +661,7 @@ hashtable_t * species_hash(stree_t * tree);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
-double stree_propose_theta(gtree_t ** gtree, stree_t * stree);
+double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 
@@ -807,8 +817,8 @@ void gtree_reset_leaves(gnode_t * node);
 
 void gtree_fini(int msa_count);
 
-double gtree_logprob(stree_t * stree, long msa_index);
-double gtree_update_logprob_contrib(snode_t * snode, long msa_index);
+double gtree_logprob(stree_t * stree, double heredity, long msa_index);
+double gtree_update_logprob_contrib(snode_t * snode, double heredity, long msa_index);
 double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 double reflect(double t, double minage, double maxage);
 gnode_t ** gtree_return_partials(gnode_t * root,
@@ -816,7 +826,7 @@ gnode_t ** gtree_return_partials(gnode_t * root,
                                  unsigned int * trav_size);
 void unlink_event(gnode_t * node, int msa_index);
 
-double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+double prop_locusrate_and_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
 
 /* functions in prop_mixing.c */
 
@@ -870,7 +880,8 @@ void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies);
 
-int pll_set_mut_rates(locus_t * locus, const double * mut_rates);
+void locus_set_mut_rates(locus_t * locus, const double * mut_rates);
+void locus_set_heredity_scalers(locus_t * locus, const double * heredity);
 
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count);
 
@@ -1172,7 +1183,10 @@ void delimit_summary(stree_t * stree);
 /* functions in cfile.c */
 
 void load_cfile(void);
-void parsefile_locusrates(double * locusrate);
+int parsefile_doubles(const char * filename,
+                      long n,
+                      double * outbuffer,
+                      long * errcontext);
 
 /* functions in core_partials_sse.c */
 

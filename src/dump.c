@@ -124,7 +124,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -137,7 +137,10 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(double);                     /* mean_root_theta */
   size_section += sizeof(long);                       /* opt_est_locusrate */
   size_section += sizeof(double);                     /* opt_locusrate_alpha */
-  if (opt_est_locusrate)
+  size_section += sizeof(long);                       /* opt_est_heredity */
+  size_section += sizeof(double);                     /* opt_heredity_alpha */
+  size_section += sizeof(double);                     /* opt_heredity_beta */
+  if (opt_est_locusrate || opt_est_heredity)
     size_section += sizeof(double);                   /* locusrate finetune */
 
 
@@ -225,6 +228,11 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_est_locusrate,1,fp);
   DUMP(&opt_locusrate_alpha,1,fp);
 
+  /* whether heredity scalers are estimated */
+  DUMP(&opt_est_heredity,1,fp);
+  DUMP(&opt_heredity_alpha,1,fp);
+  DUMP(&opt_heredity_beta,1,fp);
+
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
@@ -232,7 +240,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_theta,1,fp);
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
-  if (opt_est_locusrate)
+  if (opt_est_locusrate || opt_est_heredity)
     DUMP(&opt_finetune_locusrate,1,fp);
 
 
@@ -252,7 +260,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&curstep,1,fp);
   DUMP(&ft_round,1,fp);
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 
@@ -402,6 +410,9 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   /* write mutation rates */
   DUMP(locus->mut_rates,locus->rate_matrices,fp);
+
+  /* write heredity scalars */
+  DUMP(locus->heredity,locus->rate_matrices,fp);
 
   /* write diploid */
   DUMP(&(locus->diploid),1,fp);

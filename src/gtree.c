@@ -1041,11 +1041,12 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-double gtree_update_logprob_contrib(snode_t * snode, long msa_index)
+double gtree_update_logprob_contrib(snode_t * snode,
+                                    double heredity,
+                                    long msa_index)
 {
     unsigned int j,k,n;
     double logpr = 0;
-    double heredity = 1;
     double T2h = 0;
     dlist_item_t * event;
 
@@ -1109,14 +1110,14 @@ double gtree_update_logprob_contrib(snode_t * snode, long msa_index)
     return logpr;
 }
 
-double gtree_logprob(stree_t * stree, long msa_index)
+double gtree_logprob(stree_t * stree, double heredity, long msa_index)
 {
   unsigned int i;
 
   double logpr = 0;
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    logpr += gtree_update_logprob_contrib(stree->nodes[i],msa_index);
+    logpr += gtree_update_logprob_contrib(stree->nodes[i],heredity,msa_index);
 
   return logpr;
 }
@@ -1287,7 +1288,9 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     if (oldpop == node->pop)
     {
       logpr -= node->pop->logpr_contrib[msa_index];
-      logpr += gtree_update_logprob_contrib(node->pop,msa_index);
+      logpr += gtree_update_logprob_contrib(node->pop,
+                                            locus->heredity[0],
+                                            msa_index);
     }
     else
     {
@@ -1307,11 +1310,13 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       for (pop = start; pop != end; pop = pop->parent)
       {
         logpr -= pop->logpr_contrib[msa_index];
-        logpr += gtree_update_logprob_contrib(pop,msa_index);
+        logpr += gtree_update_logprob_contrib(pop,
+                                              locus->heredity[0],
+                                              msa_index);
       }
     }
     #else
-      logpr = gtree_logprob(stree,msa_index);
+      logpr = gtree_logprob(stree,locus->heredity[0],msa_index);
       /* assertion just to remind us that this is not what we should put in
          the official version */
       assert(0);
@@ -1763,7 +1768,9 @@ static long propose_spr(locus_t * locus,
     if (oldpop == father->pop)
     {
       logpr -= father->pop->logpr_contrib[msa_index];
-      logpr += gtree_update_logprob_contrib(father->pop,msa_index);
+      logpr += gtree_update_logprob_contrib(father->pop,
+                                            locus->heredity[0],
+                                            msa_index);
     }
     else
     {
@@ -1783,7 +1790,9 @@ static long propose_spr(locus_t * locus,
       for (pop = start; pop != end; pop = pop->parent)
       {
         logpr -= pop->logpr_contrib[msa_index];
-        logpr += gtree_update_logprob_contrib(pop,msa_index);
+        logpr += gtree_update_logprob_contrib(pop,
+                                              locus->heredity[0],
+                                              msa_index);
       }
     }
 
@@ -1995,7 +2004,7 @@ double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
   return ((double)accepted/proposal_count);
 }
 
-double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
   long i,j;
   long ref;
@@ -2069,6 +2078,9 @@ double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
 
+    if (opt_debug)
+      fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
+
     if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
     {
       /* accept */
@@ -2103,6 +2115,63 @@ double prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
           SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
     }
   }
-  return (accepted / (double)(opt_locus_count-1));
+  return accepted;
+}
+
+static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+{
+  long i,j;
+  long accepted = 0;
+  double hnew,hold;
+  double lnacceptance;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    hold = locus[i]->heredity[0];
+    hnew = hold + opt_finetune_locusrate*legacy_rnd_symmetrical();
+    if (hnew < 0) hnew *= -1;
+    
+    locus[i]->heredity[0] = hnew;
+    lnacceptance = (opt_heredity_alpha-1)*log(hnew/hold) -
+                   opt_heredity_beta*(hnew-hold);
+    double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    lnacceptance += logpr - gtree[i]->logpr;
+
+    if (opt_debug)
+      fprintf(stdout, "[Debug] (heredity) lnacceptance = %f\n", lnacceptance);
+    if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted++;
+      gtree[i]->logpr = logpr;
+    }
+    else
+    {
+      /* rejected */
+      locus[i]->heredity[0] = hold;
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+        stree->nodes[j]->logpr_contrib[i] = stree->nodes[j]->old_logpr_contrib[i];
+    }
+  }
+  return accepted;
+}
+
+double prop_locusrate_and_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+{
+  long accepted = 0;
+  double divisor = 0;
+
+  if (opt_est_locusrate)
+    accepted = prop_locusrate(gtree,stree,locus);
+
+  if (opt_est_heredity)
+    accepted += prop_heredity(gtree,stree,locus);
+
+  if (opt_est_locusrate)
+    divisor = opt_locus_count-1;
+  if (opt_est_heredity)
+    divisor += opt_locus_count;
+
+  return (accepted / divisor);
 }
 

@@ -594,13 +594,13 @@ long prop_split(gtree_t ** gtree,
 #if 1
     /* update log-pr */
     logpr -= node->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node,i);
+    logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
     logpr -= node->left->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node->left,i);
+    logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
     logpr -= node->right->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node->right,i);
+    logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
 #else
-    logpr = gtree_logprob(stree,i);
+    logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
 #endif
     gtree[i]->old_logpr = gtree[i]->logpr;
     gtree[i]->logpr = logpr;
@@ -714,7 +714,7 @@ long prop_split(gtree_t ** gtree,
     double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
 
 
-    double logpr = gtree_logprob(stree,i);
+    double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
     printf("VERIFICATION %d logl: %f logpr: %f\n", i, logl, logpr);
     free(gt_nodes);
   }
@@ -912,13 +912,13 @@ long prop_join(gtree_t ** gtree,
 #if 1
     /* update log-pr */
     logpr -= node->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node,i);
+    logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
     logpr -= node->left->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node->left,i);
+    logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
     logpr -= node->right->logpr_contrib[i];
-    logpr += gtree_update_logprob_contrib(node->right,i);
+    logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
 #else
-    logpr = gtree_logprob(stree,i);
+    logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
 #endif
     gtree[i]->old_logpr = gtree[i]->logpr;
     gtree[i]->logpr = logpr;

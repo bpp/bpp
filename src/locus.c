@@ -94,6 +94,7 @@ static void dealloc_locus_data(locus_t * locus)
   free(locus->frequencies);
 
   free(locus->mut_rates);
+  free(locus->heredity);
 
   if (locus->pattern_weights)
     free(locus->pattern_weights);
@@ -760,6 +761,11 @@ locus_t * locus_create(unsigned int tips,
   for (i = 0; i < locus->rate_matrices; ++i)
     locus->mut_rates[i] = 1;
 
+  /* heredity scalers */
+  locus->heredity = (double *)xcalloc(locus->rate_matrices,sizeof(double));
+  for (i = 0; i < locus->rate_matrices; ++i)
+    locus->heredity[i] = 1;
+
   /* rates */
   locus->rates = (double *)xcalloc(locus->rate_cats,sizeof(double));
 
@@ -806,10 +812,16 @@ void pll_set_frequencies(locus_t * locus,
   locus->eigen_decomp_valid[freqs_index] = 0;
 }
 
-int pll_set_mut_rates(locus_t * locus, const double * mut_rates)
+void locus_set_mut_rates(locus_t * locus, const double * mut_rates)
 {
   /* one mutation rate per substitution matrix available */
   memcpy(locus->mut_rates, mut_rates, locus->rate_matrices*sizeof(double));
+}
+
+void locus_set_heredity_scalers(locus_t * locus, const double * heredity)
+{
+  /* one mutation rate per substitution matrix available */
+  memcpy(locus->heredity, heredity, locus->rate_matrices*sizeof(double));
 }
 
 static void locus_update_all_matrices_jc69_recursive(locus_t * locus,

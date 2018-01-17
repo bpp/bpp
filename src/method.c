@@ -65,9 +65,13 @@ static void reset_finetune_onestep(double * pjump, double * param)
 static void reset_finetune(double * pjump)
 {
   int i;
+  int extra;
+  
+  extra = (opt_est_locusrate || opt_est_heredity);
 
   fprintf(stdout, "\nCurrent Pjump:    ");
-  for (i = 0; i < PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE); ++i)
+
+  for (i = 0; i < PROP_COUNT + extra; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   fprintf(stdout, "\n");
 
@@ -77,7 +81,7 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
-  if (opt_est_locusrate == MUTRATE_ESTIMATE)
+  if (extra)
     fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
   else
     fprintf(stdout, "\n");
@@ -88,7 +92,7 @@ static void reset_finetune(double * pjump)
   reset_finetune_onestep(pjump+3,&opt_finetune_tau);
   reset_finetune_onestep(pjump+4,&opt_finetune_mix);
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE)
+  if (extra)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
 
   fprintf(stdout, "New finetune:     ");
@@ -97,7 +101,7 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_theta);
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
-  if (opt_est_locusrate == MUTRATE_ESTIMATE)
+  if (extra)
     fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
   else
     fprintf(stdout, "\n");
@@ -290,11 +294,9 @@ static FILE * resume(stree_t ** ptr_stree,
 
 
   /* compute MSC density */
+  locus_t ** locus = *ptr_locus;
   for (i = 0; i < opt_locus_count; ++i)
-    gtree[i]->logpr = gtree_logprob(stree,i);
-
-  for (i = 0; i < opt_locus_count; ++i)
-    printf("Gene tree %ld - logl: %f   logp: %f\n", i, gtree[i]->logl, gtree[i]->logpr);
+    gtree[i]->logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
 
   /* set old_pop to NULL */
   for (i = 0; i < opt_locus_count; ++i)
@@ -396,7 +398,7 @@ static FILE * init(stree_t ** ptr_stree,
   /* method 01 specific variables */
   stree_t * sclone = NULL;
   gtree_t ** gclones = NULL;
-  
+
   /* load species tree */
   stree = load_tree();
   printf(" Done\n");
@@ -416,6 +418,10 @@ static FILE * init(stree_t ** ptr_stree,
   /* set global variable with number of loci, if not set */
   if (!opt_locus_count)
     opt_locus_count = msa_count;
+
+  /* check for locusrate and one locus */
+  if (opt_locus_count == 1 && opt_est_locusrate)
+    fatal("Cannot use option 'locusrate' with only one locus");
 
   /* remove ambiguous sites */
   if (opt_cleandata)
@@ -517,44 +523,89 @@ static FILE * init(stree_t ** ptr_stree,
   stree_init(stree,msa_list,map_list,msa_count);
   stree_show_pptable(stree);
 
-  double * lrate = (double *)xmalloc((size_t)opt_locus_count*sizeof(long));
-  for (i = 0; i < opt_locus_count; ++i)
-    lrate[i] = 1;
+  /* allocate arrays for locus mutation rate and heredity scalars */
+  double * locusrate = (double*)xmalloc((size_t)opt_locus_count*sizeof(double));
+  double * heredity = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
 
+  /* initialize both to 1 in case no options regarding them were given */
+  for (i = 0; i < opt_locus_count; ++i)
+    locusrate[i] = heredity[i] = 1;
+
+  /* initialize heredity scalars if estimation was selected */
+  if (opt_est_heredity == HEREDITY_ESTIMATE)
+  {
+    for (i = 0; i < opt_locus_count; ++i)
+      heredity[i] = opt_heredity_alpha /
+                    opt_heredity_beta*(0.8 + 0.4*legacy_rndu());
+  }
+  else if (opt_est_heredity == HEREDITY_FROMFILE)
+  {
+    long errcontext = 0;
+    int rc = parsefile_doubles(opt_heredity_filename,
+                               opt_locus_count,
+                               heredity,
+                               &errcontext);
+    if (rc == ERROR_PARSE_MORETHANEXPECTED)
+      fatal("File %s contains more heredity scalers than number of loci (%ld)",
+            opt_heredity_filename, opt_locus_count);
+    else if (rc == ERROR_PARSE_LESSTHANEXPECTED)
+      fatal("File %s contains less heredity scalers (%ld) than number of loci (%ld)",
+            opt_heredity_filename, errcontext, opt_locus_count);
+    else if (rc == ERROR_PARSE_INCORRECTFORMAT)
+      fatal("Incorrect format of file %s at line %ld",
+            opt_heredity_filename, errcontext);
+
+    /* disable estimation of heredity scalars */
+    opt_est_heredity = 0;
+  }
+
+  /* initialize locus mutation rates if estimation was selected */
   if (opt_est_locusrate == MUTRATE_ESTIMATE)
   {
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
     {
-      lrate[i] = 0.8 + 0.4*legacy_rndu();
-      mean += lrate[i];
+      locusrate[i] = 0.8 + 0.4*legacy_rndu();
+      mean += locusrate[i];
     }
 
     mean /= opt_locus_count;
 
     for (i = 0; i < opt_locus_count; ++i)
-      lrate[i] /= mean;
-
-    for (i = 0; i < opt_locus_count; ++i)
-      printf("locusrate %ld: %f\n", i, lrate[i]);
+      locusrate[i] /= mean;
   }
   else if (opt_est_locusrate == MUTRATE_FROMFILE)
   {
-    parsefile_locusrates(lrate);
+    long errcontext = 0;
+    int rc = parsefile_doubles(opt_locusrate_filename,
+                               opt_locus_count,
+                               heredity,
+                               &errcontext);
+    if (rc == ERROR_PARSE_MORETHANEXPECTED)
+      fatal("File %s contains more rates than number of loci (%ld)",
+            opt_locusrate_filename, opt_locus_count);
+    else if (rc == ERROR_PARSE_LESSTHANEXPECTED)
+      fatal("File %s contains less rates (%ld) than number of loci (%ld)",
+            opt_locusrate_filename, errcontext, opt_locus_count);
+    else if (rc == ERROR_PARSE_INCORRECTFORMAT)
+      fatal("Incorrect format of file %s at line %ld",
+            opt_locusrate_filename, errcontext);
 
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
-      mean += lrate[i];
+      mean += locusrate[i];
 
     mean /= opt_locus_count;
       
     for (i = 0; i < opt_locus_count; ++i)
-      lrate[i] /= mean;
+      locusrate[i] /= mean;
 
+    /* disable estimation of mutation rates */
     opt_est_locusrate = 0;
   }
 
   /* TODO CALL HERE */
+
   /* We must first link tip sequences (gene tips) to populations */
   if (opt_method == METHOD_10)          /* species delimitation */
     stree_rootdist(stree,map_list,msa_list,weights);
@@ -576,6 +627,11 @@ static FILE * init(stree_t ** ptr_stree,
   /* Check that only first 32 bits of opt_arch are used */
   assert(opt_arch < (1l << 32)-1);
 
+  /* ensure that heredity / locusrate estimation is now set to either 0 or 1 */
+  assert(opt_est_locusrate >= 0 && opt_est_locusrate <= 1);
+  assert(opt_est_heredity  >= 0 && opt_est_heredity  <= 1);
+
+
   gtree_update_branch_lengths(gtree, msa_count);
   for (i = 0; i < msa_count; ++i)
   {
@@ -585,7 +641,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* if species tree inference or locusrate enabled, activate twice as many
        transition probability matrices */
-    if (opt_method == METHOD_01 || opt_est_locusrate == MUTRATE_ESTIMATE)
+    if (opt_method == METHOD_01 || opt_est_locusrate || opt_est_heredity)
       pmatrix_count *= 2;               /* double to account for cloned */
 
     /* TODO: In the future we can allocate double amount of p-matrices
@@ -616,13 +672,11 @@ static FILE * init(stree_t ** ptr_stree,
         }
     }
 
-    //if (opt_est_locusrate)
-    //{
-      /* TODO with more complex mixture models where rate_matrices > 1 we need
-         to revisit this */
-      assert(rate_matrices == 1);
-      pll_set_mut_rates(locus[i],lrate+i);
-    //}
+    /* TODO with more complex mixture models where rate_matrices > 1 we need
+       to revisit this */
+    assert(rate_matrices == 1);
+    locus_set_mut_rates(locus[i],locusrate+i);
+    locus_set_heredity_scalers(locus[i],heredity+i);
 
     /* set pattern weights and free the weights array */
     if (locus[i]->diploid)
@@ -675,13 +729,14 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* store current log-likelihood in each gene tree structure */
     gtree[i]->logl = logl;
-    logpr = gtree_logprob(stree,i);
+    logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
     gtree[i]->logpr = logpr;
     logpr_sum += logpr;
   }
 
   /* deallocate unnecessary arrays */
-  free(lrate);
+  free(locusrate);
+  free(heredity);
   if (opt_diploid)
   {
     free(mapping);
@@ -699,7 +754,7 @@ static FILE * init(stree_t ** ptr_stree,
     rj_init(gtree,stree,msa_count);
 
   /* initialize pjump and finetune rounds */
-  if (opt_est_locusrate)
+  if (opt_est_locusrate || opt_est_heredity)
     pjump = (double *)xcalloc(PROP_COUNT+1, sizeof(double));
   else
     pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
@@ -844,7 +899,7 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      int pjump_size = PROP_COUNT + (opt_est_locusrate == 1);
+      int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(pjump);
       for (j = 0; j < pjump_size; ++j)
@@ -921,7 +976,7 @@ void cmd_run()
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* propose population sizes on species tree */
-    ratio = stree_propose_theta(gtree,stree);
+    ratio = stree_propose_theta(gtree,locus,stree);
     pjump[2] = (pjump[2]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* propose species tree taus */
@@ -932,9 +987,9 @@ void cmd_run()
     ratio = proposal_mixing(gtree,stree,locus);
     pjump[4] = (pjump[4]*(ft_round-1) + ratio) / (double)ft_round;
 
-    if (opt_est_locusrate)
+    if (opt_est_locusrate || opt_est_heredity)
     {
-      ratio = prop_locusrate(gtree,stree,locus);
+      ratio = prop_locusrate_and_heredity(gtree,stree,locus);
       pjump[5] = (pjump[5]*(ft_round-1) + ratio) / (double)ft_round;
     }
 
@@ -959,7 +1014,7 @@ void cmd_run()
       if (printk <= 500 || (i+1) % (printk / 200) == 0)
       {
         printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
-        for (j = 0; j < 5 + (opt_est_locusrate == 1); ++j)
+        for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
           printf(" %4.2f", pjump[j]);
         printf(" ");
 

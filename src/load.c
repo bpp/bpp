@@ -327,6 +327,18 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_locusrate_alpha,1,fp))
     fatal("Cannot read locusrate alpha"); 
 
+  /* load heredity scalers estimation flag */
+  if (!LOAD(&opt_est_heredity,1,fp))
+    fatal("Cannot read heredity tag"); 
+
+  /* load heredity scalers alpha */
+  if (!LOAD(&opt_heredity_alpha,1,fp))
+    fatal("Cannot read heredity alpha"); 
+
+  /* load heredity scalers beta */
+  if (!LOAD(&opt_heredity_beta,1,fp))
+    fatal("Cannot read heredity beta"); 
+
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
@@ -340,14 +352,18 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
-  if (opt_est_locusrate == MUTRATE_ESTIMATE)
+  if (opt_est_locusrate || opt_est_heredity)
   {
     if (!LOAD(&opt_finetune_locusrate,1,fp))
-      fatal("Cannot read species locusrate step finetune parameter");
+      fatal("Cannot read species locusrate/heredity finetune parameter");
   }
-  printf(" Current finetune: %ld: %f %f %f %f %f\n",
+  printf(" Current finetune: %ld: %f %f %f %f %f",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
+  if (opt_est_locusrate || opt_est_heredity)
+    printf(" %f\n", opt_finetune_locusrate);
+  else
+    printf("\n");
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
@@ -383,7 +399,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round,1,fp))
     fatal("Cannot read current finetune round");
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate == MUTRATE_ESTIMATE);
+  size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))
@@ -827,6 +843,10 @@ static void load_locus(FILE * fp, long index)
   /* load mutation rates */
   if (!LOAD(locus[index]->mut_rates,locus[index]->rate_matrices,fp))
     fatal("Cannot read locus mutation rates");
+
+  /* load heredity scalars */
+  if (!LOAD(locus[index]->heredity,locus[index]->rate_matrices,fp))
+    fatal("Cannot read heredity scalars");
 
   /* load diploid */
   if (!LOAD(&(locus[index]->diploid),1,fp))

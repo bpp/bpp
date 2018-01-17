@@ -747,9 +747,9 @@ void stree_fini()
   }
 }
 
-static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
+static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
 {
-  int i;
+  long i;
   double thetaold;
   double thetanew;
   double acceptance;
@@ -766,13 +766,13 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
   acceptance = (-opt_theta_alpha-1) * log(thetanew/thetaold) -
                opt_theta_beta*(1/thetanew - 1/thetaold);
 
-  for (i = 0; i < locus_count; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
   {
     /* save a copy of old logpr */
     gtree[i]->old_logpr = gtree[i]->logpr;
 
     gtree[i]->logpr -= snode->logpr_contrib[i];
-    gtree_update_logprob_contrib(snode,i);
+    gtree_update_logprob_contrib(snode,locus[i]->heredity[0],i);
     gtree[i]->logpr += snode->logpr_contrib[i];
     
     acceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
@@ -792,17 +792,17 @@ static int propose_theta(gtree_t ** gtree, int locus_count, snode_t * snode)
      only update it when proposal is accepted */
 
   /* reject */
-  for (i = 0; i < locus_count; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     gtree[i]->logpr = gtree[i]->old_logpr;
 
   snode->theta = thetaold;
-  for (i = 0; i < locus_count; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
     snode->logpr_contrib[i] = snode->old_logpr_contrib[i];
 
   return 0;
 }
 
-double stree_propose_theta(gtree_t ** gtree, stree_t * stree)
+double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
 {
   unsigned int i;
   int theta_count = 0;
@@ -814,7 +814,7 @@ double stree_propose_theta(gtree_t ** gtree, stree_t * stree)
     snode = stree->nodes[i];
     if (snode->theta >= 0)
     {
-      accepted += propose_theta(gtree, stree->locus_count, stree->nodes[i]);
+      accepted += propose_theta(gtree, locus, stree->nodes[i]);
       theta_count++;
     }
   }
@@ -931,7 +931,7 @@ static long propose_tau(locus_t ** loci,
           }
         }
         logpr -= affected[j]->logpr_contrib[i];
-        logpr += gtree_update_logprob_contrib(affected[j],i);
+        logpr += gtree_update_logprob_contrib(affected[j],loci[i]->heredity[0],i);
       }
     }
 
@@ -1068,7 +1068,7 @@ static long propose_tau(locus_t ** loci,
 
       /* restore logpr contributions */
       for (j = 0; j < 3; ++j)
-        gtree_update_logprob_contrib(affected[j],i);
+        gtree_update_logprob_contrib(affected[j],loci[i]->heredity[0],i);
 
 
       /* get the list of nodes for which CLVs must be reverted, i.e. all marked
@@ -2130,7 +2130,7 @@ long stree_propose_spr(stree_t ** streeptr,
        the code below, which only computes the gene tree probability for the changed components,
        is correct. */
     
-      double logpr = gtree_logprob(stree,i);
+      double logpr = gtree_logprob(stree,loci[i]->heredity[0],i);
     #else
 
     /* locate additional populations that need to be updated */
@@ -2153,7 +2153,7 @@ long stree_propose_spr(stree_t ** streeptr,
     for (j = 0; j < snode_contrib_count[i]; ++j)
     {
       gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
-      gtree_update_logprob_contrib(snode_contrib[j],i);
+      gtree_update_logprob_contrib(snode_contrib[j],loci[i]->heredity[0],i);
       gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
     }
 
