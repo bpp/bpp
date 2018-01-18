@@ -298,11 +298,14 @@ static FILE * resume(stree_t ** ptr_stree,
                      double * ptr_mean_root_theta,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones,
-                     FILE *** ptr_fp_gtree)
+                     FILE *** ptr_fp_gtree,
+                     FILE ** ptr_fp_out)
 {
   long i,j;
   FILE * fp_mcmc;
+  FILE * fp_out;
   long mcmc_offset;
+  long out_offset;
   long * gtree_offset;
   char ** gtree_files = NULL;
 
@@ -317,6 +320,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_curstep,
                   ptr_ft_round,
                   &mcmc_offset,
+                  &out_offset,
                   &gtree_offset,
                   ptr_dparam_count,
                   ptr_ft_round_rj,
@@ -330,6 +334,8 @@ static FILE * resume(stree_t ** ptr_stree,
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
 
+  /* truncate output file to specific offset */
+  checkpoint_truncate(opt_outfile, out_offset);
 
   /* truncate gene tree files if available */
   if (opt_print_genetrees)
@@ -382,6 +388,9 @@ static FILE * resume(stree_t ** ptr_stree,
   /* open truncated MCMC file for appending */
   if (!(fp_mcmc = fopen(opt_mcmcfile, "a")))
     fatal("Cannot open file %s for appending...", opt_mcmcfile);
+  if (!(fp_out = fopen(opt_outfile, "a")))
+    fatal("Cannot open file %s for appending...", opt_outfile);
+  *ptr_fp_out = fp_out;
 
   /* open potential truncated gene trees files for appending */
   *ptr_fp_gtree = NULL;
@@ -456,7 +465,8 @@ static FILE * init(stree_t ** ptr_stree,
                    double * ptr_mean_root_theta,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones,
-                   FILE *** ptr_fp_gtree)
+                   FILE *** ptr_fp_gtree,
+                   FILE ** ptr_fp_out)
 {
   long i,j;
   long msa_count;
@@ -465,6 +475,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logpr_sum = 0;
   double * pjump;
   FILE * fp_mcmc;
+  FILE * fp_out;
   stree_t * stree;
   FILE ** fp_gtree;
   msa_t ** msa_list;
@@ -531,12 +542,6 @@ static FILE * init(stree_t ** ptr_stree,
   }
   msa_summary(msa_list,msa_count);
 
-  #if 0
-  /* print the alignments */
-  for (i = 0; i < msa_count; ++i)
-    msa_print(msa_list[i]);
-  #endif
-
   /* parse map file */
   printf("Parsing map file...");
   list_t * map_list = yy_parse_map(opt_mapfile);
@@ -547,6 +552,15 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
     fatal("Cannot open file %s for writing...");
+  if (!(fp_out = fopen(opt_outfile, "w")))
+    fatal("Cannot open file %s for writing...");
+  *ptr_fp_out = fp_out;
+
+  /* print compressed alignmens in output file */
+  fprintf(fp_out, "COMPRESSED ALIGNMENTS\n\n");
+
+  /* print the alignments */
+  msa_print_phylip(fp_out,msa_list,msa_count);
 
   /* if print gtree */
   if (opt_print_genetrees)
@@ -589,9 +603,6 @@ static FILE * init(stree_t ** ptr_stree,
                                        msa_count,
                                        pll_map_nt);
 
-    for (i = 0; i < msa_count; ++i)
-      msa_print(msa_list[i]);
-
     /* TODO: KEEP WEIGHTS */
     //for (i = 0; i < msa_count; ++i) free(weights[i]);
 
@@ -607,6 +618,9 @@ static FILE * init(stree_t ** ptr_stree,
                                                   &(msa_list[i]->length),
                                                   COMPRESS_JC69);
     }
+    fprintf(fp_out, "COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES\n\n");
+    msa_print_phylip(fp_out,msa_list,msa_count);
+
   }
 
   if (opt_method == METHOD_10)          /* species delimitation */
@@ -781,12 +795,19 @@ static FILE * init(stree_t ** ptr_stree,
          the program, perhaps remove.
          2) pattern_weights is allocated in locus_create with a size msa->length
             equal to length of A3, but in reality we only need |A1| storage
-            space. Free and reallocate here  */
+            space. Free and reallocate here. *UPDATE* Actually |A1| may be larger
+            than |A3| !! */
+
+      free(locus[i]->pattern_weights);
+      locus[i]->pattern_weights = (unsigned int *)xmalloc((size_t)
+                                     (unphased_length[i])*sizeof(unsigned int));
 
       locus[i]->diploid_mapping = mapping[i];
       locus[i]->diploid_resolution_count = resolution_count[i];
       /* since PLL does not support diploid sequences we make a small hack */
-      memcpy(locus[i]->pattern_weights, weights[i], unphased_length[i]);
+      memcpy(locus[i]->pattern_weights,
+             weights[i],
+             unphased_length[i]*sizeof(unsigned int));
       free(weights[i]);
       locus[i]->likelihood_vector = (double *)xmalloc((size_t)(msa->length) *
                                                       sizeof(double));
@@ -924,6 +945,7 @@ void cmd_run()
   double logl_sum = 0;
   double * pjump;
   FILE * fp_mcmc;
+  FILE * fp_out;
   stree_t * stree;
   FILE ** fp_gtree = NULL;
   gtree_t ** gtree;
@@ -965,7 +987,8 @@ void cmd_run()
                      &mean_root_theta,
                      &sclone, 
                      &gclones,
-                     &fp_gtree);
+                     &fp_gtree,
+                     &fp_out);
   else
     fp_mcmc = init(&stree,
                    &gtree,
@@ -983,7 +1006,8 @@ void cmd_run()
                    &mean_root_theta,
                    &sclone, 
                    &gclones,
-                   &fp_gtree);
+                   &fp_gtree,
+                   &fp_out);
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
@@ -1160,6 +1184,7 @@ void cmd_run()
                         curstep,
                         ft_round,
                         ftell(fp_mcmc),
+                        ftell(fp_out),
                         gtree_offset,
                         dparam_count,
                         ft_round_rj,
@@ -1179,6 +1204,7 @@ void cmd_run()
 
   free(pjump);
 
+  /* close mcmc file */
   fclose(fp_mcmc);
 
   if (opt_print_genetrees)
@@ -1218,7 +1244,7 @@ void cmd_run()
   gtree_fini(opt_locus_count);
 
   if (opt_method == METHOD_00)
-    allfixed_summary(stree);
+    allfixed_summary(fp_out,stree);
 
   unsigned int species_count = 0;
   char ** species_names = NULL;
@@ -1254,4 +1280,7 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
   }
+
+  /* close output file */
+  fclose(fp_out);
 }

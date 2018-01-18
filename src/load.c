@@ -194,6 +194,7 @@ static void load_chk_section_1(FILE * fp,
                                unsigned long * curstep,
                                long * ft_round,
                                long * mcmc_offset,
+                               long * out_offset,
                                long ** gtree_offset,
                                long * dparam_count,
                                long * ft_round_rj,
@@ -421,7 +422,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read pjump");
 
   if (!LOAD(mcmc_offset,1,fp))
-    fatal("Cannot read MCMC offset");
+    fatal("Cannot read MCMC file offset");
+
+  if (!LOAD(out_offset,1,fp))
+    fatal("Cannot read output file offset");
 
   if (opt_print_genetrees)
   {
@@ -876,6 +880,7 @@ static void load_locus(FILE * fp, long index)
   
   if (locus[index]->diploid)
   {
+    size_t sites_a2 = 0;
     /* TODO: locus->pattern_weights is allocated in locis_create with a size
        equal to length of A3, but in reality we only need |A1| storage space.
        Free and reallocate here with 'unphased_length' */
@@ -884,15 +889,30 @@ static void load_locus(FILE * fp, long index)
     if (!LOAD(&(locus[index]->unphased_length),1,fp))
       fatal("Cannot read locus %ld unphased length", index);
     
-    /* load diploid mapping A1 -> A3 */
-    if (!LOAD(locus[index]->diploid_mapping,locus[index]->unphased_length,fp))
-      fatal("Cannot read locus %ld diploid mapping", index);
+    locus[index]->diploid_resolution_count = (unsigned long *)xmalloc((size_t)
+                                             (locus[index]->unphased_length) *
+                                             sizeof(unsigned long));
+    locus[index]->likelihood_vector = (double *)xmalloc((size_t)
+                                      (locus[index]->sites)*sizeof(double));
 
     /* load diploid resolution count */
     if (!LOAD(locus[index]->diploid_resolution_count,locus[index]->unphased_length,fp))
       fatal("Cannot read locus %ld diploid resolution count", index);
 
+    /* load diploid mapping A1 -> A3 */
+    for (i = 0; i < locus[index]->unphased_length; ++i)
+      sites_a2 += locus[index]->diploid_resolution_count[i];
+    locus[index]->diploid_mapping = (unsigned long *)xmalloc(sites_a2 *
+                                              sizeof(unsigned long));
+    if (!LOAD(locus[index]->diploid_mapping,sites_a2,fp))
+      fatal("Cannot read locus %ld diploid mapping", index);
+
+
     /* load pattern weights for original diploid A1 alignment */
+    free(locus[index]->pattern_weights);
+    locus[index]->pattern_weights = (unsigned int *)xmalloc((size_t)
+                                    (locus[index]->unphased_length) *
+                                    sizeof(unsigned int));
     if (!LOAD(locus[index]->pattern_weights,locus[index]->unphased_length,fp))
       fatal("Cannot read pattern weights");
   }
@@ -932,6 +952,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     unsigned long * curstep,
                     long * ft_round,
                     long * mcmc_offset,
+                    long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
                     long * ft_round_rj,
@@ -964,6 +985,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      curstep,
                      ft_round,
                      mcmc_offset,
+                     out_offset,
                      gtree_offset,
                      dparam_count,
                      ft_round_rj,

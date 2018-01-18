@@ -242,7 +242,7 @@ static void hpd_interval(double * x,
   *rtail = x[left + diffrow];
 }
 
-void allfixed_summary(stree_t * stree)
+void allfixed_summary(FILE * fp_out, stree_t * stree)
 {
   long i,j,count;
   long sample_num;
@@ -256,7 +256,8 @@ void allfixed_summary(stree_t * stree)
   /* skip line containing header */
   getnextline(fp);
   assert(strlen(line) > 4);
-  printf("          %s\n", line+4);
+  fprintf(stdout, "          %s\n", line+4);
+  fprintf(fp_out, "          %s\n", line+4);
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -322,7 +323,8 @@ void allfixed_summary(stree_t * stree)
   }
 
   /* compute means */
-  printf("mean    ");
+  fprintf(stdout, "mean    ");
+  fprintf(fp_out, "mean    ");
   for (i = 0; i < col_count; ++i)
   {
     double sum = 0;
@@ -330,9 +332,11 @@ void allfixed_summary(stree_t * stree)
       sum += matrix[i][j];
 
     mean[i] = sum/opt_samples;
-    printf("  %f", mean[i]);
+    fprintf(stdout, "  %f", mean[i]);
+    fprintf(fp_out, "  %f", mean[i]);
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* compute standard deviation */
   for (i = 0; i < col_count; ++i)
@@ -349,7 +353,8 @@ void allfixed_summary(stree_t * stree)
     tint[i] = eff_ict(matrix[i],opt_samples,mean[i],stdev[i]);
 
   /* compute and print medians */
-  printf("median  ");
+  fprintf(stdout, "median  ");
+  fprintf(fp_out, "median  ");
   long median_line = opt_samples / 2;
 
   for (i = 0; i < col_count; ++i)
@@ -363,69 +368,114 @@ void allfixed_summary(stree_t * stree)
       median /= 2;
     }
 
-    printf("  %f", median);
+    fprintf(stdout, "  %f", median);
+    fprintf(fp_out, "  %f", median);
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print standard deviation */
-  printf("S.D     ");
+  fprintf(stdout, "S.D     ");
+  fprintf(fp_out, "S.D     ");
   for (i = 0; i < col_count; ++i)
   {
-    printf("  %f", stdev[i]);
+    fprintf(stdout, "  %f", stdev[i]);
+    fprintf(fp_out, "  %f", stdev[i]);
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print minimum values */
-  printf("min     ");
+  fprintf(stdout, "min     ");
+  fprintf(fp_out, "min     ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", matrix[i][0]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", matrix[i][0]);
+    fprintf(fp_out, "  %f", matrix[i][0]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print maximum values */
-  printf("max     ");
+  fprintf(stdout, "max     ");
+  fprintf(fp_out, "max     ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", matrix[i][opt_samples-1]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", matrix[i][opt_samples-1]);
+    fprintf(fp_out, "  %f", matrix[i][opt_samples-1]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print line at 2.5% of matrix */
-  printf("2.5%%    ");
+  fprintf(stdout, "2.5%%    ");
+  fprintf(fp_out, "2.5%%    ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", matrix[i][(long)(opt_samples*.025)]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.025)]);
+    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.025)]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print line at 97.5% of matrix */
-  printf("97.5%%   ");
+  fprintf(stdout, "97.5%%   ");
+  fprintf(fp_out, "97.5%%   ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", matrix[i][(long)(opt_samples*.975)]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.975)]);
+    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.975)]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* compute and print HPD 2.5% and 97.5% */
   for (i = 0; i < col_count; ++i)
     hpd_interval(matrix[i],opt_samples,hpd025+i,hpd975+i,0.05);
 
   /* print 2.5% HPD */
-  printf("2.5%%HPD ");
+  fprintf(stdout, "2.5%%HPD ");
+  fprintf(fp_out, "2.5%%HPD ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", hpd025[i]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", hpd025[i]);
+    fprintf(fp_out, "  %f", hpd025[i]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print 97.5% HPD */
-  printf("97.5%%HPD");
+  fprintf(stdout, "97.5%%HPD");
+  fprintf(fp_out, "97.5%%HPD");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", hpd975[i]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", hpd975[i]);
+    fprintf(fp_out, "  %f", hpd975[i]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print ESS */
-  printf("ESS*    ");
+  fprintf(stdout, "ESS*    ");
+  fprintf(fp_out, "ESS*    ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", opt_samples/tint[i]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", opt_samples/tint[i]);
+    fprintf(fp_out, "  %f", opt_samples/tint[i]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
     
   /* print Eff */
-  printf("Eff*    ");
+  fprintf(stdout, "Eff*    ");
+  fprintf(fp_out, "Eff*    ");
   for (i = 0; i < col_count; ++i)
-    printf("  %f", 1/tint[i]);
-  printf("\n");
+  {
+    fprintf(stdout, "  %f", 1/tint[i]);
+    fprintf(fp_out, "  %f", 1/tint[i]);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* success */
   rc = 1;

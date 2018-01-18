@@ -520,8 +520,6 @@ static long parse_heredity(const char * line)
   count = get_long(p, &opt_est_heredity);
   if (!count) goto l_unwind;
 
-  printf("est_heredity = %ld\n", opt_est_heredity);
-
   p += count;
 
   if (is_emptyline(p) && !opt_est_heredity) ret = 1;
@@ -856,6 +854,7 @@ void load_cfile()
 
   while (getnextline(fp))
   {
+    int valid = 0;
     char * token;
     char * value;
     long token_len;
@@ -865,8 +864,8 @@ void load_cfile()
 
     if (!token_len) continue;
     if (token_len < 0)
-      fatal("Line %d of %s does not contain a '=' character",
-            line_count, opt_cfile);
+      fatal("Invalid syntax when parsing file %s on line %ld",
+            opt_cfile, line_count);
     
     if (token_len == 4)
     {
@@ -877,6 +876,8 @@ void load_cfile()
 
         if (opt_seed == -1)
           opt_seed = (long)time(NULL);
+
+        valid = 1;
       }
       else if (!strncasecmp(token,"arch",4))
       {
@@ -896,6 +897,8 @@ void load_cfile()
           fatal("Invalid instruction set (%s) (line %ld)", temp, line_count);
 
         free(temp);
+
+        valid = 1;
       }
     }
     else if (token_len == 5)
@@ -905,6 +908,7 @@ void load_cfile()
         if (!parse_long(value,&opt_locus_count) || opt_locus_count < 0)
           fatal("Option 'nloci' expects a positive integer or zero (line %ld)",
                 line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"print",5))
       {
@@ -913,6 +917,7 @@ void load_cfile()
 
         if (opt_print_samples == 0)
           fatal("First bit of 'print' must be set to 1");
+        valid = 1;
       }
     }
     else if (token_len == 6)
@@ -922,6 +927,7 @@ void load_cfile()
         if (!parse_long(value,&opt_burnin) || opt_burnin < 0)
           fatal("Option 'burnin' expects one positive (or zero) integer (line %ld)",
                  line_count);
+        valid = 1;
       }
     }
     else if (token_len == 7)
@@ -931,16 +937,19 @@ void load_cfile()
         if (!parse_diploid(value))
           fatal("Option %s expects values 0 or 1 for each species (line %ld)",
                 token,line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"seqfile",7))
       {
         if (!get_string(value, &opt_msafile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"outfile",7))
       {
         if (!get_string(value, &opt_outfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"usedata",7))
       {
@@ -948,12 +957,14 @@ void load_cfile()
             (opt_usedata != 0 && opt_usedata != 1))
           fatal("Option 'usedata' expects value 0 or 1 (line %ld)",
                 line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"nsample",7))
       {
         if (!parse_long(value,&opt_samples) || opt_samples <= 0)
           fatal("Option 'nsample' expects a positive integer (line %ld)",
                  line_count);
+        valid = 1;
       }
     }
     else if (token_len == 8)
@@ -962,33 +973,39 @@ void load_cfile()
       {
         if (!get_string(value, &opt_mapfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"mcmcfile",8))
       {
         if (!get_string(value,&opt_mcmcfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"tauprior",8))
       {
         if (!parse_tauprior(value))
           fatal("Option 'tauprior' expects two doubles (line %ld)",
                 line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"heredity",8))
       {
         if (!parse_heredity(value))
           fatal("Invalid format of 'heredity' (line %ld) ", line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"finetune",8))
       {
         if (!parse_finetune(value))
           fatal("Option 'finetune' in wrong format (line %ld)", line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"sampfreq",8))
       {
         if (!parse_long(value,&opt_samplefreq) || opt_samplefreq <= 0)
           fatal("Option 'samplfreq' expects a positive integer (line %ld)",
                 line_count);
+        valid = 1;
       }
     }
     else if (token_len == 9)
@@ -999,11 +1016,13 @@ void load_cfile()
             (opt_cleandata != 0 && opt_cleandata != 1))
           fatal("Option 'cleandata' expects value 0 or 1 (line %ld)",
                 line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"locusrate",9))
       {
         if (!parse_locusrate(value))
           fatal("Erroneous format of 'locusrate' (line %ld)", line_count);
+        valid = 1;
       }
     }
     else if (token_len == 10)
@@ -1013,6 +1032,7 @@ void load_cfile()
         if (!parse_thetaprior(value))
           fatal("Option 'thetaprior' expects two doubles (line %ld)",
                 line_count);
+        valid = 1;
       }
       else if (!strncasecmp(token,"checkpoint",10))
       {
@@ -1021,6 +1041,7 @@ void load_cfile()
         opt_checkpoint = 1;
         if (sizeof(BYTE) != 1)
           fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
+        valid = 1;
       }
     }
     else if (token_len == 11)
@@ -1030,6 +1051,7 @@ void load_cfile()
         if (!parse_speciestree(value))
           fatal("Erroneous format of options speciestree (line %ld)",
                 line_count);
+        valid = 1;
       }
     }
     else if (token_len == 12)
@@ -1050,9 +1072,12 @@ void load_cfile()
         if (!getnextline(fp))
           fatal("Incomplete 'species&tree' record (line %ld)", line_count);
 
+        ++line_count;
+
         if (!get_string (line,&opt_streenewick))
           fatal("Expected newick tree string in 'species&tree' (line %ld)",
                  line_count);
+        valid = 1;
       }
     }
     else if (token_len == 13)
@@ -1060,6 +1085,7 @@ void load_cfile()
       if (!strncasecmp(token,"sequenceerror",13))
       {
         fatal("Not implemented (%s)", token);
+        valid = 1;
       }
     }
     else if (token_len == 17)
@@ -1074,6 +1100,7 @@ void load_cfile()
 
         /* TODO: Check that numbering is in line with BPP_DELIMIT_PRIOR_* */
             
+        valid = 1;
       }
     }
     else if (token_len == 19)
@@ -1082,8 +1109,13 @@ void load_cfile()
       {
         if (!parse_speciesdelimitation(value))
           fatal("Erroneous format of option %s (line %ld)", token, line_count);
+        valid = 1;
       }
     }
+
+    if (!valid)
+      fatal("Invalid syntax when parsing file %s on line %ld",
+            opt_cfile, line_count);
   }
 
   /* set method */

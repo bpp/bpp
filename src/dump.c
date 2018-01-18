@@ -123,6 +123,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* current step */
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
+  size_section += sizeof(unsigned long);              /* output file offset */
   if (opt_print_genetrees)
      size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
 
@@ -157,6 +158,7 @@ static void dump_chk_section_1(FILE * fp,
                                long curstep,
                                long ft_round,
                                long mcmc_offset,
+                               long out_offset,
                                long * gtree_offset,
                                long dparam_count,
                                long ft_round_rj,
@@ -276,6 +278,9 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
+
+  /* write output file offset */
+  DUMP(&out_offset,1,fp);
 
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
@@ -433,14 +438,19 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   if (locus->diploid)
   {
+    size_t sites_a2 = 0;
+
     /* write original diploid number of sites */
     DUMP(&(locus->unphased_length),1,fp);
 
-    /* write diploid mapping A1 -> A3 */
-    DUMP(locus->diploid_mapping,locus->unphased_length,fp);
-
-    /* write diploid resolution count */
+    /* write diploid resolution count (A1 -> A2)*/
     DUMP(locus->diploid_resolution_count,locus->unphased_length,fp);
+
+    for (i = 0; i < locus->unphased_length; ++i)
+      sites_a2 += locus->diploid_resolution_count[i];
+
+    /* write diploid mapping A2 -> A3 */
+    DUMP(locus->diploid_mapping,sites_a2,fp);
 
     /* write pattern weights for original diploid A1 alignment */
     DUMP(locus->pattern_weights,locus->unphased_length,fp);
@@ -491,6 +501,7 @@ int checkpoint_dump(stree_t * stree,
                     unsigned long curstep,
                     long ft_round,
                     long mcmc_offset,
+                    long out_offset,
                     long * gtree_offset,
                     long dparam_count,
                     long ft_round_rj,
@@ -527,6 +538,7 @@ int checkpoint_dump(stree_t * stree,
                      curstep,
                      ft_round,
                      mcmc_offset,
+                     out_offset,
                      gtree_offset,
                      dparam_count,
                      ft_round_rj,

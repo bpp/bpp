@@ -21,15 +21,26 @@
 
 #include "bpp.h"
 
-void msa_print(msa_t * msa)
+static void print_phylip(FILE * fp, msa_t * msa)
 {
   if (!msa) return;
 
   int i;
 
-  printf("%d %d\n", msa->count, msa->length);
+  fprintf(fp, "%d %d\n", msa->count, msa->length);
   for (i = 0; i < msa->count; ++i)
-    printf("%s %s\n", msa->label[i], msa->sequence[i]);
+    fprintf(fp, "%s %s\n", msa->label[i], msa->sequence[i]);
+}
+
+void msa_print_phylip(FILE * fp, msa_t ** msa, long count)
+{
+  long i;
+
+  for (i = 0; i < count; ++i)
+  {
+    print_phylip(fp, msa[i]);
+    fprintf(fp,"\n");
+  }
 }
 
 void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map)

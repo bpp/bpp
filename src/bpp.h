@@ -713,7 +713,7 @@ long arch_get_cores(void);
 
 /* functions in msa.c */
 
-void msa_print(msa_t * msa);
+void msa_print_phylip(FILE * fp, msa_t ** msa, long count);
 
 void msa_destroy(msa_t * msa);
 
@@ -920,7 +920,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                int attrib);
 /* functions in allfixed.c */
 
-void allfixed_summary(stree_t * stree);
+void allfixed_summary(FILE * fp_out, stree_t * stree);
 
 /* functions in summary.c */
 
@@ -968,6 +968,7 @@ int checkpoint_dump(stree_t * stree,
                     unsigned long curstep,
                     long ft_round,
                     long mcmc_offset,
+                    long out_offset,
                     long * gtree_offset,
                     long dparam_count,
                     long ft_round_rj,
@@ -987,6 +988,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     unsigned long * curstep,
                     long * ft_round,
                     long * mcmc_offset,
+                    long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
                     long * ft_round_rj,
