@@ -641,12 +641,6 @@ static long parse_print(const char * line)
   char * s = xstrdup(line);
   char * p = s;
 
-  /* TODO: this options are not yet implemented and are currently ignored */
-  long opt_print_samples;
-  long opt_print_locusrate;
-  long opt_print_hscalars;
-  long opt_print_genetrees;
-
   long count;
 
   /* samples */
@@ -916,6 +910,9 @@ void load_cfile()
       {
         if (!parse_print(value))
           fatal("Option 'print' expects four bits (line %ld)", line_count);
+
+        if (opt_print_samples == 0)
+          fatal("First bit of 'print' must be set to 1");
       }
     }
     else if (token_len == 6)

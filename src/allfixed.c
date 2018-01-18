@@ -271,6 +271,12 @@ void allfixed_summary(stree_t * stree)
     if (stree->nodes[stree->tip_count+i]->tau)
       col_count++;
 
+  if (opt_est_locusrate && opt_print_locusrate)
+    col_count += opt_locus_count;
+
+  if (opt_est_heredity && opt_print_hscalars)
+    col_count += opt_locus_count;
+
   /* add one more for log-L */
   col_count++;
 

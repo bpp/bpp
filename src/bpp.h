@@ -519,6 +519,10 @@ extern long opt_finetune_reset;
 extern long opt_rjmcmc_method;
 extern long opt_usedata;
 extern long opt_locus_count;
+extern long opt_print_genetrees;
+extern long opt_print_hscalars;
+extern long opt_print_locusrate;
+extern long opt_print_samples;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern long opt_diploid_size;
@@ -964,6 +968,7 @@ int checkpoint_dump(stree_t * stree,
                     unsigned long curstep,
                     long ft_round,
                     long mcmc_offset,
+                    long * gtree_offset,
                     long dparam_count,
                     long ft_round_rj,
                     double pjump_rj,
@@ -982,6 +987,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     unsigned long * curstep,
                     long * ft_round,
                     long * mcmc_offset,
+                    long ** gtree_offset,
                     long * dparam_count,
                     long * ft_round_rj,
                     double * pjump_rj,
@@ -991,7 +997,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     double * mean_root_age,
                     double * mean_root_theta);
 
-void checkpoint_truncate(long mcmc_offset);
+void checkpoint_truncate(const char * filename, long mcmc_offset);
 
 /* functions in core_partials.c */
 

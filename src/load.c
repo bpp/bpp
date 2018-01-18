@@ -194,6 +194,7 @@ static void load_chk_section_1(FILE * fp,
                                unsigned long * curstep,
                                long * ft_round,
                                long * mcmc_offset,
+                               long ** gtree_offset,
                                long * dparam_count,
                                long * ft_round_rj,
                                double * pjump_rj,
@@ -204,6 +205,8 @@ static void load_chk_section_1(FILE * fp,
                                double * mean_root_theta)
 {
   long i;
+
+  *gtree_offset = NULL;
 
   if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
@@ -302,6 +305,18 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_locus_count,1,fp))
     fatal("Cannot read 'nloci' tag");
   printf(" nloci: %ld\n", opt_locus_count);
+
+  /* load print flags */
+  if (!LOAD(&opt_print_samples,1,fp))
+    fatal("Cannot read print flags");
+  if (!LOAD(&opt_print_locusrate,1,fp))
+    fatal("Cannot read print flags");
+  if (!LOAD(&opt_print_hscalars,1,fp))
+    fatal("Cannot read print flags");
+  if (!LOAD(&opt_print_genetrees,1,fp))
+    fatal("Cannot read print flags");
+  if (opt_print_samples == 0)
+    fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
   /* read theta prior */
   if (!LOAD(&opt_theta_alpha,1,fp))
@@ -407,6 +422,13 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC offset");
+
+  if (opt_print_genetrees)
+  {
+    *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+    if (!LOAD(*gtree_offset,opt_locus_count,fp))
+      fatal("Cannot read gtree file offsets");
+  }
 
   if (!LOAD(dparam_count,1,fp))
     fatal("Cannot read dparam_count");
@@ -910,6 +932,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     unsigned long * curstep,
                     long * ft_round,
                     long * mcmc_offset,
+                    long ** gtree_offset,
                     long * dparam_count,
                     long * ft_round_rj,
                     double * pjump_rj,
@@ -941,6 +964,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      curstep,
                      ft_round,
                      mcmc_offset,
+                     gtree_offset,
                      dparam_count,
                      ft_round_rj,
                      pjump_rj,
@@ -995,15 +1019,15 @@ int checkpoint_load(gtree_t *** gtreep,
   return 1;
 }
 
-void checkpoint_truncate(long mcmc_offset)
+void checkpoint_truncate(const char * filename, long offset)
 {
-  FILE * fp_mcmc;
+  FILE * fp;
   
-  if (!(fp_mcmc = fopen(opt_mcmcfile, "a")))
-    fatal("Cannot open file %s for reading...", opt_mcmcfile);
+  if (!(fp = fopen(filename, "a")))
+    fatal("Cannot open file %s for reading...", filename);
 
-  if (ftruncate(fileno(fp_mcmc),mcmc_offset))
-    fatal("Cannot truncate file %s to %ld bytes...", opt_mcmcfile, mcmc_offset);
+  if (ftruncate(fileno(fp),offset))
+    fatal("Cannot truncate file %s to %ld bytes...", filename, offset);
   
-  fclose(fp_mcmc);
+  fclose(fp);
 }

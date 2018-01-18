@@ -123,6 +123,8 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* current step */
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
+  if (opt_print_genetrees)
+     size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
 
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
@@ -140,6 +142,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* opt_est_heredity */
   size_section += sizeof(double);                     /* opt_heredity_alpha */
   size_section += sizeof(double);                     /* opt_heredity_beta */
+  size_section += 4*sizeof(long);                     /* opt_print_* */
   if (opt_est_locusrate || opt_est_heredity)
     size_section += sizeof(double);                   /* locusrate finetune */
 
@@ -154,6 +157,7 @@ static void dump_chk_section_1(FILE * fp,
                                long curstep,
                                long ft_round,
                                long mcmc_offset,
+                               long * gtree_offset,
                                long dparam_count,
                                long ft_round_rj,
                                double pjump_rj,
@@ -215,6 +219,12 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_cleandata,1,fp);
   DUMP(&opt_locus_count,1,fp);
 
+  /* write print flags */
+  DUMP(&opt_print_samples,1,fp);
+  DUMP(&opt_print_locusrate,1,fp);
+  DUMP(&opt_print_hscalars,1,fp);
+  DUMP(&opt_print_genetrees,1,fp);
+
   /* write theta prior */
   DUMP(&opt_theta_alpha,1,fp);
   DUMP(&opt_theta_beta,1,fp);
@@ -266,6 +276,10 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
+
+  /* write gtree file offset if available*/
+  if (opt_print_genetrees)
+    DUMP(gtree_offset,opt_locus_count,fp);
 
   DUMP(&dparam_count,1,fp);
   DUMP(&ft_round_rj,1,fp);
@@ -477,6 +491,7 @@ int checkpoint_dump(stree_t * stree,
                     unsigned long curstep,
                     long ft_round,
                     long mcmc_offset,
+                    long * gtree_offset,
                     long dparam_count,
                     long ft_round_rj,
                     double pjump_rj,
@@ -512,6 +527,7 @@ int checkpoint_dump(stree_t * stree,
                      curstep,
                      ft_round,
                      mcmc_offset,
+                     gtree_offset,
                      dparam_count,
                      ft_round_rj,
                      pjump_rj,
