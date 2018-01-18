@@ -50,7 +50,7 @@ static unsigned int * get_diploid_info(msa_t * msa, int msa_id)
   long i;
   unsigned int * diploid;
 
-  diploid = (unsigned int *)xmalloc(sizeof(msa->count)*sizeof(unsigned int));
+  diploid = (unsigned int *)xmalloc((size_t)(msa->count)*sizeof(unsigned int));
 
   for (i = 0; i < msa->count; ++i)
   {
