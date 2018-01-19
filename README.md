@@ -31,6 +31,43 @@ BPP can then be compiled using the provided `Makefile`
 make
 ```
 
+Compiling BPP requires that your system has GCC version 4.7 or newer, as
+[AVX](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions)  and AVX-2
+optimized functions are compiled even if your processor does not support them.
+This is fine, as BPP will automatically select the right instruction set that
+your processor supports at run-time. This means, you can compile on one system,
+and run BPP on any other compatible system.
+
+However, if your compiler is older than 4.7, you will get errors such as:
+
+```bash
+cc1: error: unrecognized command line option "-mavx2"
+```
+or
+
+```bash
+cc1: error: unrecognized command line option "-mavx"
+```
+
+If your compiler is GCC 4.6.x then you can compile BPP using:
+
+```bash
+make clean
+make -e DISABLE_AVX2=1
+```
+
+In case your compiler is older than GCC 4.6 then compile using:
+
+```bash
+make -e DISABLE_AVX2=1 DISABLE_AVX=1
+```
+
+You can check your compiler version with:
+```bash
+gcc --version
+```
+
+
 ## License and third party licenses
 
 The code is currently licensed under the [GNU Affero General Public License version 3](http://www.gnu.org/licenses/agpl-3.0.en.html).
