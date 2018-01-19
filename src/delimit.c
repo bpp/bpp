@@ -107,7 +107,7 @@ static char * cb_serialize_support(const snode_t * node)
   return s;
 }
 
-void delimit_summary(stree_t * stree)
+void delimit_summary(FILE * fp_out, stree_t * stree)
 {
   long i,j,np;
   long line_count = 0;
@@ -147,17 +147,53 @@ void delimit_summary(stree_t * stree)
         stree->nodes[stree->tip_count+j]->support += posterior[i];
   }
 
+  fprintf(stdout, "Summarizing the species-delimitation sample in file %s\n\n",
+          opt_mcmcfile);
+  fprintf(fp_out, "Summarizing the species-delimitation sample in file %s\n\n",
+          opt_mcmcfile);
+
+  fprintf(stdout, "Number of species-delimitation models = %ld\n\n",
+          dmodels_count);
+  fprintf(fp_out, "Number of species-delimitation models = %ld\n\n",
+          dmodels_count);
+
+  fprintf(stdout, "     model    prior    posterior\n");
+  fprintf(fp_out, "     model    prior    posterior\n");
   for (i = 0; i < dmodels_count; ++i)
-    printf("%4ld %s %f   %f\n",
-           i+1,
-           dmodels[i],
-           dprior[i],
-           posterior[i]);
+  {
+    fprintf(stdout,
+            "%4ld %s   %f   %f\n",
+            i+1,
+            dmodels[i],
+            dprior[i],
+            posterior[i]);
+    fprintf(fp_out,
+            "%4ld %s   %f   %f\n",
+            i+1,
+            dmodels[i],
+            dprior[i],
+            posterior[i]);
+  }
+
+  fprintf(stdout, "\nOrder of ancestral nodes:\n");
+  fprintf(fp_out, "\nOrder of ancestral nodes:\n");
+  for (j = 0; j < stree->inner_count; ++j)
+  {
+    fprintf(stdout, "  %s\n", stree->nodes[stree->tip_count+j]->label);
+    fprintf(fp_out, "  %s\n", stree->nodes[stree->tip_count+j]->label);
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
+
   
   /* print guide tree */
   char * newick = stree_export_newick(stree->root, cb_serialize_support);
-  printf("Guide tree with posterior probability for presence of nodes:\n");
-  printf("%s;\n", newick);
+  fprintf(stdout,
+          "Guide tree with posterior probability for presence of nodes:\n");
+  fprintf(fp_out,
+          "Guide tree with posterior probability for presence of nodes:\n");
+  fprintf(stdout, "%s;\n", newick);
+  fprintf(fp_out, "%s;\n", newick);
 
   free(newick);
   free(posterior);
@@ -349,9 +385,10 @@ long delimitations_init(stree_t * stree)
 
   stree->root->mark &= ~FLAG_MISC;  /* unset flag */
 
+  #if 0
   for (i = 0; i < dmodels_count; ++i)
     printf("%s\n", dmodels[i]);
-
+  #endif
 
   /* setup priors */
   for (i = 0; i < dmodels_count; ++i)

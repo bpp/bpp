@@ -1182,7 +1182,7 @@ void delimit_setindex(long index);
 
 void delimit_resetpriors(void);
 
-void delimit_summary(stree_t * stree);
+void delimit_summary(FILE * fp, stree_t * stree);
 
 /* functions in cfile.c */
 

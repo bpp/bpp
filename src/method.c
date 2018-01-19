@@ -1219,7 +1219,7 @@ void cmd_run()
   /* print summary using the MCMC file */
   if (opt_method == METHOD_10)          /* species delimitation */
   {
-    delimit_summary(stree);
+    delimit_summary(fp_out, stree);
     delimitations_fini();
     rj_fini();
   }
