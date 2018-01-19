@@ -204,10 +204,14 @@ void cpu_setarch()
 
   if (sse2_present)
     opt_arch = PLL_ATTRIB_ARCH_SSE;
+#ifdef HAVE_AVX
   if (avx_present)
     opt_arch = PLL_ATTRIB_ARCH_AVX;
+#endif
+#ifdef HAVE_AVX2
   if (avx2_present)
     opt_arch = PLL_ATTRIB_ARCH_AVX2;
+#endif
 
   if (opt_arch == PLL_ATTRIB_ARCH_CPU)
     printf("Auto-selected SIMD ISA: CPU\n\n");
