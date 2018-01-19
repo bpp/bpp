@@ -1273,7 +1273,7 @@ void cmd_run()
   {
     assert(species_count > 0);
 
-    stree_summary(species_names,species_count);
+    stree_summary(fp_out,species_names,species_count);
 
     /* cleanup */
     for (i = 0; i < species_count; ++i)

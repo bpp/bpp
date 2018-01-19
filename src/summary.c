@@ -191,7 +191,7 @@ static void bitmask_update_recursive(snode_t * node)
 }
 
 /* prints a bitmask as a sequence of zeroes and ones */
-static void bitmask_print(unsigned long * bitmask)
+static void bitmask_print(FILE * fp_out, unsigned long * bitmask)
 {
   long i,j;
   long bits_left = bitmask_bits;
@@ -203,12 +203,14 @@ static void bitmask_print(unsigned long * bitmask)
     long bits_avail = MIN(bits_left,bits_per_elm);
     for (j = 0; j < bits_avail; ++j)
     {
-      printf("%c", (char)((bits & 1) + 0x30));
+      fprintf(stdout, "%c", (char)((bits & 1) + 0x30));
+      fprintf(fp_out, "%c", (char)((bits & 1) + 0x30));
       bits >>= 1ul;
     }
     bits_left -= bits_per_elm; 
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 }
 
 /* assign trivial bipartition bitmasks from hashtable to the tips of stree and
@@ -313,7 +315,10 @@ static char * cb_serialize_support(const snode_t * node)
   return s;
 }
 
-void print_stree_with_support(const char * treestr, size_t freq, size_t trees_count)
+static void print_stree_with_support(FILE * fp_out,
+                                     const char * treestr,
+                                     size_t freq,
+                                     size_t trees_count)
 {
   long i;
   struct bipartition_s * bp;
@@ -340,6 +345,7 @@ void print_stree_with_support(const char * treestr, size_t freq, size_t trees_co
 
   char * newick = stree_export_newick(stree->root, cb_serialize_support);
   fprintf(stdout, "%s   [P = %f]\n", newick, freq / (double)trees_count);
+  fprintf(fp_out, "%s   [P = %f]\n", newick, freq / (double)trees_count);
   free(newick);
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
@@ -387,21 +393,24 @@ static int cb_popcntcmp(const void * a, const void * b)
 
 }
 
-void bipartitions_finalize(size_t trees_count, char ** species)
+static void bipartitions_finalize(FILE * fp_out, size_t trees_count, char ** species)
 {
   unsigned long i,j,k,entry;
   unsigned long majority = 0;
 
   struct bipartition_s ** x = hashtable_serialize1p(ht_biparts);
-  printf("\n(B) Best splits in the sample of trees (%ld splits in all)\n",
-         ht_biparts->entries_count);
+  fprintf(stdout, "\n(B) Best splits in the sample of trees (%ld splits in all)\n",
+          ht_biparts->entries_count);
+  fprintf(fp_out, "\n(B) Best splits in the sample of trees (%ld splits in all)\n",
+          ht_biparts->entries_count);
 
   /* find number of bipartitions appearing in at least 50% of the samples */
   qsort(x,ht_biparts->entries_count,sizeof(struct bipartition_s *), cb_countcmp);
   for (i = 0; i < ht_biparts->entries_count; ++i)
   {
-      printf("%6ld %f  ", x[i]->count, x[i]->count / (double)trees_count);
-      bitmask_print(x[i]->bitmask);
+      fprintf(stdout, "%6ld %f  ", x[i]->count, x[i]->count / (double)trees_count);
+      fprintf(fp_out, "%6ld %f  ", x[i]->count, x[i]->count / (double)trees_count);
+      bitmask_print(fp_out,x[i]->bitmask);
       if (x[i]->count / (double)trees_count >= 0.5)
         majority++;
   }
@@ -499,8 +508,10 @@ void bipartitions_finalize(size_t trees_count, char ** species)
       sptr[index_all[j]] = newick+i;
     }
   }
-  printf("\n(C) Majority-rule consensus tree\n");
-  printf("%s\n", newick[majority-1]);
+  fprintf(stdout, "\n(C) Majority-rule consensus tree\n");
+  fprintf(fp_out, "\n(C) Majority-rule consensus tree\n");
+  fprintf(stdout, "%s\n", newick[majority-1]);
+  fprintf(fp_out, "%s\n", newick[majority-1]);
   for (i = 0; i < majority; ++i)
     free(newick[i]);
   free(newick);
@@ -661,11 +672,11 @@ static int cb_dtree_cmp(const void * a, const void * b)
   return 0;
 }
 
-void stree_summary(char ** species_names, long species_count)
+void stree_summary(FILE * fp_out, char ** species_names, long species_count)
 {
   size_t i,distinct;
   size_t line_count = 0;
-  FILE * fp;
+  FILE * fp_mcmc;
   char ** treelist;
   struct distinct_s * dtree;
 
@@ -674,9 +685,9 @@ void stree_summary(char ** species_names, long species_count)
 
   /* open mcmc file */
   #ifndef DEBUG_MAJORITY
-  fp = xopen(opt_mcmcfile,"r");
+  fp_mcmc = xopen(opt_mcmcfile,"r");
   #else
-  fp = xopen("test.txt","r");
+  fp_mcmc = xopen("test.txt","r");
   #endif
 
   bipartitions_init(species_names,species_count);
@@ -684,7 +695,7 @@ void stree_summary(char ** species_names, long species_count)
   /* read each line from the file, and strip all thetas and branch lengths
      such that only the tree topology and tip names remain, and store them
      in treelist */
-  while (getnextline(fp))
+  while (getnextline(fp_mcmc))
   {
     strip_attributes(line);
     stree_t * t = stree_parse_newick_string(line);
@@ -696,12 +707,15 @@ void stree_summary(char ** species_names, long species_count)
   }
 
 
-  printf("Species in order:\n");
+  fprintf(stdout, "Species in order:\n");
+  fprintf(fp_out, "Species in order:\n");
   for (i = 0; i < (size_t)species_count; ++i)
   {
-    printf(" %3ld. %s\n", i+1, species_names[i]);
+    fprintf(stdout, " %3ld. %s\n", i+1, species_names[i]);
+    fprintf(fp_out, " %3ld. %s\n", i+1, species_names[i]);
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   qsort(treelist,(size_t)line_count,sizeof(char *), cb_strcmp);
 
@@ -727,26 +741,34 @@ void stree_summary(char ** species_names, long species_count)
   }
 
   qsort(dtree, distinct, sizeof(struct distinct_s), cb_dtree_cmp);
-  printf("(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
+  fprintf(stdout, "(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
+  fprintf(fp_out, "(A) Best trees in the sample (%ld distinct trees in all)\n", distinct);
   double cdf = 0;
   for (i = 0; i < distinct; ++i)
   {
     double pdf = dtree[i].count / (double)line_count;
     cdf += pdf;
-    printf(" %8ld %8.5f %8.5f %s\n",
-           dtree[i].count, pdf, cdf, treelist[dtree[i].start]);
+    fprintf(stdout, " %8ld %8.5f %8.5f %s\n",
+            dtree[i].count, pdf, cdf, treelist[dtree[i].start]);
+    fprintf(fp_out, " %8ld %8.5f %8.5f %s\n",
+            dtree[i].count, pdf, cdf, treelist[dtree[i].start]);
   }
 
-  bipartitions_finalize(line_count,species_names);
+  bipartitions_finalize(fp_out,line_count,species_names);
 
   fprintf(stdout, "\n(D) Best tree (or trees from the mastertree file) "
+          "with support values\n");
+  fprintf(fp_out, "\n(D) Best tree (or trees from the mastertree file) "
           "with support values\n");
   for (i = 0; i < distinct; ++i)
   {
     if (i && dtree[i].count != dtree[i-1].count)
       break;
 
-    print_stree_with_support(treelist[dtree[i].start],dtree[i].count,line_count);
+    print_stree_with_support(fp_out,
+                             treelist[dtree[i].start],
+                             dtree[i].count,
+                             line_count);
   }
 
   summary_dealloc_hashtables();
@@ -758,5 +780,5 @@ void stree_summary(char ** species_names, long species_count)
     free(treelist[i]);
   free(treelist);
 
-  fclose(fp);
+  fclose(fp_mcmc);
 }

@@ -928,13 +928,9 @@ void bipartitions_init(char ** species, long species_count);
 
 void bipartitions_update(stree_t * stree);
 
-void bipartitions_finalize(size_t trees_count, char ** species);
-
-void print_stree_with_support(const char * treestr, size_t freq, size_t trees_count);
-
 void summary_dealloc_hashtables(void);
 
-void stree_summary(char ** species_names, long species_count);
+void stree_summary(FILE * fp_out, char ** species_names, long species_count);
 
 /* functions in hardware.c */
 
