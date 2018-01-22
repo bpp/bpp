@@ -22,7 +22,7 @@
 #include "bpp.h"
 
 #ifdef _MSC_VER
-#include "getopt.h"
+#include "getopt_win.h"
 #endif
 
 static char * progname;
