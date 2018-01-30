@@ -197,13 +197,16 @@ static void load_chk_section_1(FILE * fp,
                                long * out_offset,
                                long ** gtree_offset,
                                long * dparam_count,
+                               double ** posterior,
                                long * ft_round_rj,
                                double * pjump_rj,
                                long * ft_round_spr,
                                long * pjump_slider,
                                double * mean_logl,
-                               double * mean_root_age,
-                               double * mean_root_theta)
+                               double ** mean_tau,
+                               double ** mean_theta,
+                               long * mean_tau_count,
+                               long * mean_theta_count)
 {
   long i;
 
@@ -437,6 +440,17 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(dparam_count,1,fp))
     fatal("Cannot read dparam_count");
 
+  long dmodels_count;
+  if (!LOAD(&dmodels_count,1,fp))
+    fatal("Cannot read dmodels_count");
+
+  if (dmodels_count)
+  {
+    *posterior = (double *)xmalloc((size_t)dmodels_count*sizeof(double));
+    if (!LOAD(*posterior,dmodels_count,fp))
+      fatal("Cannot read posterior");
+  }
+
   if (!LOAD(ft_round_rj,1,fp))
     fatal("Cannot read RJ finetune round"); 
 
@@ -452,11 +466,20 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(mean_logl,1,fp))
     fatal("Cannot read mean logl"); 
 
-  if (!LOAD(mean_root_age,1,fp))
-    fatal("Cannot read mean root age"); 
+  if (!LOAD(mean_tau_count,1,fp))
+    fatal("Cannot read number of mean taus"); 
 
-  if (!LOAD(mean_root_theta,1,fp))
-    fatal("Cannot read mean root theta"); 
+  if (!LOAD(mean_theta_count,1,fp))
+    fatal("Cannot read number of mean thetas"); 
+
+  *mean_tau   = (double *)xmalloc((size_t)(*mean_tau_count)*sizeof(double));
+  *mean_theta = (double *)xmalloc((size_t)(*mean_theta_count)*sizeof(double));
+
+  if (!LOAD(*mean_tau,*mean_tau_count,fp))
+    fatal("Cannot read mean tau values"); 
+
+  if (!LOAD(*mean_theta,*mean_theta_count,fp))
+    fatal("Cannot read mean theta values"); 
 
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -955,13 +978,16 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
+                    double ** posterior,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
                     long * pjump_slider,
                     double * mean_logl,
-                    double * mean_root_age,
-                    double * mean_root_theta)
+                    double ** mean_tau,
+                    double ** mean_theta,
+                    long * mean_tau_count,
+                    long * mean_theta_count)
 {
   long i;
   FILE * fp;
@@ -988,13 +1014,16 @@ int checkpoint_load(gtree_t *** gtreep,
                      out_offset,
                      gtree_offset,
                      dparam_count,
+                     posterior,
                      ft_round_rj,
                      pjump_rj,
                      ft_round_spr,
                      pjump_slider,
                      mean_logl,
-                     mean_root_age,
-                     mean_root_theta);
+                     mean_tau,
+                     mean_theta,
+                     mean_tau_count,
+                     mean_theta_count);
 
   /* load section 2 */
   load_chk_section_2(fp);

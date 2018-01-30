@@ -24,6 +24,10 @@
 #define PI  3.1415926535897932384626433832795
 #define PROP_COUNT 5
 
+/* maximum number of theta/tau to output on screen during MCMC */
+#define MAX_THETA_OUTPUT        3
+#define MAX_TAU_OUTPUT          3
+
 const static int rate_matrices = 1;
 
 static double pj_optimum = 0.3;
@@ -288,14 +292,17 @@ static FILE * resume(stree_t ** ptr_stree,
                      long * ptr_ft_round,
 
                      long * ptr_dparam_count,
+                     double ** ptr_posterior,
                      long * ptr_ft_round_rj,
                      double * ptr_pjump_rj,
 
                      long * ptr_ft_round_spr,
                      long * ptr_pjump_slider,
                      double * ptr_mean_logl,
-                     double * ptr_mean_root_age,
-                     double * ptr_mean_root_theta,
+                     double ** ptr_mean_tau,
+                     double ** ptr_mean_theta,
+                     long * ptr_mean_tau_count,
+                     long * ptr_mean_theta_count,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
@@ -323,13 +330,16 @@ static FILE * resume(stree_t ** ptr_stree,
                   &out_offset,
                   &gtree_offset,
                   ptr_dparam_count,
+                  ptr_posterior,
                   ptr_ft_round_rj,
                   ptr_pjump_rj,
                   ptr_ft_round_spr,
                   ptr_pjump_slider,
                   ptr_mean_logl,
-                  ptr_mean_root_age,
-                  ptr_mean_root_theta);
+                  ptr_mean_tau,
+                  ptr_mean_theta,
+                  ptr_mean_tau_count,
+                  ptr_mean_theta_count);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
@@ -456,13 +466,12 @@ static FILE * init(stree_t ** ptr_stree,
                    unsigned long * ptr_curstep,
                    long * ptr_ft_round,
                    long * ptr_dparam_count,
+                   double ** ptr_posterior,
                    long * ptr_ft_round_rj,
                    double * ptr_pjump_rj,
                    long * ptr_ft_round_spr,
                    long * ptr_pjump_slider,
                    double * ptr_mean_logl,
-                   double * ptr_mean_root_age,
-                   double * ptr_mean_root_theta,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones,
                    FILE *** ptr_fp_gtree,
@@ -627,6 +636,8 @@ static FILE * init(stree_t ** ptr_stree,
   {
     long dmodels_count = delimitations_init(stree);
     printf("Number of delimitation models: %ld\n", dmodels_count);
+
+    *ptr_posterior = (double *)xcalloc((size_t)dmodels_count,sizeof(double));
   }
 
   /* initialize species tree (tau + theta) */
@@ -689,7 +700,7 @@ static FILE * init(stree_t ** ptr_stree,
     long errcontext = 0;
     int rc = parsefile_doubles(opt_locusrate_filename,
                                opt_locus_count,
-                               heredity,
+                               locusrate,
                                &errcontext);
     if (rc == ERROR_PARSE_MORETHANEXPECTED)
       fatal("File %s contains more rates than number of loci (%ld)",
@@ -918,8 +929,6 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_ft_round_spr = 0;
   *ptr_pjump_slider = 0;
   *ptr_mean_logl = 0;
-  *ptr_mean_root_age = 0;
-  *ptr_mean_root_theta = 0;
 
   *ptr_sclone = sclone;
   *ptr_gclones = gclones;
@@ -940,7 +949,7 @@ static FILE * init(stree_t ** ptr_stree,
 void cmd_run()
 {
   /* common variables for all methods */
-  long i,j;
+  long i,j,k;
   long ft_round;
   double logl_sum = 0;
   double * pjump;
@@ -956,14 +965,22 @@ void cmd_run()
   long dparam_count = 0;
   long ft_round_rj;
   double pjump_rj = 0;
+  double * posterior = NULL;
 
   /* method 01 specific variables */
   long ft_round_spr = 0;
   long pjump_slider;
-  long printk = opt_samplefreq * opt_samples;
+  long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
-  double mean_root_age = 0;
-  double mean_root_theta = 0;
+//  double mean_root_age = 0;
+//  double mean_root_theta = 0;
+
+  double * mean_tau = NULL;
+  double * mean_theta = NULL;
+
+  long mean_theta_count;
+  long mean_tau_count;
+
   stree_t * sclone;
   gtree_t ** gclones;
 
@@ -978,18 +995,22 @@ void cmd_run()
                      &curstep,
                      &ft_round,
                      &dparam_count,
+                     &posterior,
                      &ft_round_rj,
                      &pjump_rj,
                      &ft_round_spr,
                      &pjump_slider,
                      &mean_logl,
-                     &mean_root_age,
-                     &mean_root_theta,
+                     &mean_tau,
+                     &mean_theta,
+                     &mean_tau_count,
+                     &mean_theta_count,
                      &sclone, 
                      &gclones,
                      &fp_gtree,
                      &fp_out);
   else
+  {
     fp_mcmc = init(&stree,
                    &gtree,
                    &locus,
@@ -997,17 +1018,22 @@ void cmd_run()
                    &curstep,
                    &ft_round,
                    &dparam_count,
+                   &posterior,
                    &ft_round_rj,
                    &pjump_rj,
                    &ft_round_spr,
                    &pjump_slider,
                    &mean_logl,
-                   &mean_root_age,
-                   &mean_root_theta,
                    &sclone, 
                    &gclones,
                    &fp_gtree,
                    &fp_out);
+
+    /* allocate mean_tau and mean_theta */
+    if (opt_est_theta)
+      mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT,sizeof(double));
+    mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT,sizeof(double));
+  }
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
@@ -1015,7 +1041,10 @@ void cmd_run()
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
 
-  /* start of MCMC loop */
+
+  printk = opt_samplefreq * opt_samples;
+
+  /* *** start of MCMC loop *** */
   for (i = curstep-opt_burnin; i < opt_samples*opt_samplefreq; ++i)
   {
     /* update progress bar */
@@ -1040,22 +1069,22 @@ void cmd_run()
       {
         pjump_rj = 0;
         ft_round_rj = 0;
+        memset(posterior,0,delimitation_getparam_count()*sizeof(double));
       }
       if (opt_method == METHOD_01)      /* species tree inference */
       {
         ft_round_spr = 0;
         pjump_slider = 0;
 
-        mean_logl = 0;
-        mean_root_theta = 0;
-        mean_root_age = 0;
+        /* TODO: This are not required because ft_round will be one in the next
+           step, and the mean will be calculated as mean*(ft_round-1) */
+        //mean_logl = 0;
+        //mean_root_theta = 0;
+        //mean_root_age = 0;
       }
     }
     
     ++ft_round;
-
-    /* perform proposals sequentially */   
-    double ratio;
 
     /* propose delimitation through merging/splitting of nodes */
     if (opt_method == METHOD_10)        /* species delimitation */
@@ -1094,6 +1123,9 @@ void cmd_run()
       }
     }
 
+    /* perform proposals sequentially */   
+    double ratio;
+
     /* propose gene tree ages */
     ratio = gtree_propose_ages(locus, gtree, stree);
     pjump[0] = (pjump[0]*(ft_round-1) + ratio) / (double)ft_round;
@@ -1128,39 +1160,125 @@ void cmd_run()
         print_gtree(fp_gtree,gtree);
     }
 
+    if (opt_method == METHOD_10)
+       ++posterior[delimitation_getcurindex()];
 
-    if (opt_method == METHOD_01)        /* species tree inference */
-    {
       /* update stats for printing on screen */
-      mean_root_theta = (mean_root_theta*(ft_round-1) + stree->root->theta)/ft_round;
-      mean_root_age = (mean_root_age*(ft_round-1) + stree->root->tau)/ft_round;
-      for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
-        logl_sum += gtree[j]->logl;
-      mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
+      
+      /* if species delimitation or species inference, we only compute mean
+         theta and tau for the root node, otherwise, if method 00 then we
+         compute at most MAX_THETA_OUTPUT mean thetas and at most MAX_TAU_OUTPUT
+         taus */
+    if (opt_method != METHOD_00)        /* species tree inference or delimitation */
+    {
+      mean_theta[0] = (mean_theta[0]*(ft_round-1)+stree->root->theta)/ft_round;
+      mean_tau[0] = (mean_tau[0]*(ft_round-1)+stree->root->tau)/ft_round;
+
+      mean_theta_count = 1;
+      mean_tau_count = 1;
+    }
+    else
+    {
+      /* compute mean thetas */
+
+      /* 1. calculate number of thetas to print */
+      long max_param_count = MIN(stree->tip_count+stree->inner_count,
+                                 MAX_THETA_OUTPUT);
+
+      /* 2. calculate means */
+      k = 0;
+      if (opt_est_theta)
+      {
+        for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+        {
+          if (stree->nodes[j]->theta < 0) continue;
+
+          mean_theta[k] = (mean_theta[k]*(ft_round-1)+stree->nodes[j]->theta) /
+                          ft_round;
+          if (++k == max_param_count) break;
+        }
+      }
+      mean_theta_count = k;
+
+      /* compute mean taus */
+
+      /* 1. calculate number of taus to print */
+      max_param_count = MIN(stree->tip_count+stree->inner_count,
+                            MAX_TAU_OUTPUT);
+
+      /* 2. calculate means */
+      k = 0;
+      for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
+      {
+        if (stree->nodes[j]->tau == 0) continue;
+        
+        mean_tau[k] = (mean_tau[k]*(ft_round-1) + stree->nodes[j]->tau)/ft_round;
+
+        if (++k == max_param_count) break;
+      }
+      mean_tau_count = k;
+
     }
 
-    /* TODO: print on screen */
+    /* compute mean log-L */
+    for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
+      logl_sum += gtree[j]->logl;
+    mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
 
-    if (opt_method == METHOD_01)        /* species tree inference */
+    /* print MCMC status on screen */
+    if (printk <= 500 || (i+1) % (printk / 200) == 0)
     {
-      if (printk <= 500 || (i+1) % (printk / 200) == 0)
+      printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
+      for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
+        printf(" %4.2f", pjump[j]);
+      printf(" ");
+
+      if (opt_method == METHOD_01)
+        printf(" %5.4f ", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+
+      /* species delimitation specific output */
+      if (opt_method == METHOD_10)
       {
-        printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
-        for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
-          printf(" %4.2f", pjump[j]);
-        printf(" ");
+        long bmodel = 0;
+        for (j = 1; j < delimitation_getparam_count(); ++j)
+          if (posterior[j] > posterior[bmodel]) bmodel = j;
 
-        printf(" %5.3f  %6.4f  %6.4f", ft_round_spr ? 
-                                         (double)pjump_slider / ft_round_spr : 0.,
-                                       mean_root_theta,
-                                       mean_root_age);
+        
+        /* Number of parameters, pjump/finetune round ratio, current
+           delimitation binary string, and support value of 'most-supported
+           delimitation delimitation' */
+         printf(" %2ld %6.4f %s", dparam_count,
+                                  (ft_round_rj ? pjump_rj / ft_round_rj : 0),
+                                  delimitation_getparam_string());
+         printf(" P[%ld] =%6.4f",
+                delimitation_getcurindex()+1,
+                posterior[bmodel] / ft_round);
 
-        if (opt_usedata)
-          printf(" %8.4f", mean_logl);
-
-        if (printk >= 50 && (i+1) % (printk / 20) == 0)
-          printf("\n");
       }
+
+      if (opt_est_theta)
+      {
+        for (j = 0; j < mean_theta_count; ++j)
+          printf(" %6.4f", mean_theta[j]);
+        printf(" ");
+      }
+
+      for (j = 0; j < mean_tau_count; ++j)
+        printf(" %6.4f", mean_tau[j]);
+      printf(" ");
+      
+      double logpr_sum = 0;
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        logpr_sum += gtree[j]->logpr;
+      }
+      printf(" %7.2f", logpr_sum);
+
+      if (opt_usedata)
+        printf(" %8.4f", mean_logl);
+
+      if (printk >= 50 && (i+1) % (printk / 20) == 0)
+        printf("\n");
     }
 
     curstep++;
@@ -1187,13 +1305,18 @@ void cmd_run()
                         ftell(fp_out),
                         gtree_offset,
                         dparam_count,
+                        posterior,
+                        opt_delimit ?
+                          delimitation_getparam_count() : 0,
                         ft_round_rj,
                         pjump_rj,
                         ft_round_spr,
                         pjump_slider,
                         mean_logl,
-                        mean_root_age,
-                        mean_root_theta);
+                        mean_tau,
+                        mean_theta,
+                        mean_tau_count,
+                        mean_theta_count);
 
       }
     }
@@ -1222,6 +1345,7 @@ void cmd_run()
     delimit_summary(fp_out, stree);
     delimitations_fini();
     rj_fini();
+    free(posterior);
   }
 
   for (i = 0; i < opt_locus_count; ++i)
@@ -1265,9 +1389,6 @@ void cmd_run()
     
   stree_fini();
 
-  if (opt_diploid)
-    free(opt_diploid);
-
   /* summary for method 01 */
   if (opt_method == METHOD_01)          /* species tree inference */
   {
@@ -1280,6 +1401,13 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
   }
+
+  if (opt_est_theta)
+    free(mean_theta);
+  free(mean_tau);
+
+  if (opt_diploid)
+    free(opt_diploid);
 
   /* close output file */
   fclose(fp_out);

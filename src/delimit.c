@@ -21,7 +21,7 @@
 
 #include "bpp.h"
 
-static long dmodels_count = 0;
+static long dmodels_count = 0;       /* number of species delimitation models */
 static long dmodel_curindex = 0;
 static long * hist = NULL;
 static double * dprior = NULL;
@@ -208,6 +208,11 @@ long delimitation_getparam_count()
 char * delimitation_getparam_string()
 {
   return dmodels[dmodel_curindex];
+}
+
+long delimitation_getcurindex()
+{
+  return dmodel_curindex;
 }
 
 

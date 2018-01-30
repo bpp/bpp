@@ -531,7 +531,10 @@ static void stree_init_tau(stree_t * stree)
 
   /* set the speciation time for root */
   if (stree->root->tau)
+  {
     stree->root->tau = opt_tau_beta/(opt_tau_alpha-1) * (0.9 + 0.2*legacy_rndu());
+    printf("Root age tau %f\n", stree->root->tau);
+  }
 
   /* recursively set the speciation time for the remaining inner nodes */
   stree_init_tau_recursive(stree->root->left,prop);
@@ -543,7 +546,7 @@ static void stree_init_theta(stree_t * stree,
                              list_t * maplist,
                              int msa_count)
 {
-  unsigned int i,j,k = 0;
+  unsigned int i,j;
 
   /* initialize population sizes for extinct populations and populations
      with more than one lineage at some locus */
@@ -573,7 +576,6 @@ static void stree_init_theta(stree_t * stree,
     /* otherwise set theta around the mean of the inverse gamma prior */
     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                         (0.9 + 0.2 * legacy_rndu());
-    ++k;
   }
 
   /* go through inner nodes and setup thetas */
@@ -583,7 +585,6 @@ static void stree_init_theta(stree_t * stree,
 
     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                   (0.9 + 0.2 * legacy_rndu());
-    ++k;
   }
 
   /* deallocate seqcount */

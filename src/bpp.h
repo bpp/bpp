@@ -967,13 +967,17 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long dparam_count,
+                    double * posterior,
+                    long dmodels_count,
                     long ft_round_rj,
                     double pjump_rj,
                     long ft_round_spr,
                     long pjump_slider,
                     double mean_logl,
-                    double mean_root_age,
-                    double mean_root_theta);
+                    double * mean_tau,
+                    double * mean_theta,
+                    long mean_tau_count,
+                    long mean_theta_count);
 
 /* functions in load.c */
 
@@ -987,13 +991,16 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
+                    double ** posterior,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
                     long * pjump_slider,
                     double * mean_logl,
-                    double * mean_root_age,
-                    double * mean_root_theta);
+                    double ** mean_tau,
+                    double ** mean_theta,
+                    long * mean_tau_count,
+                    long * mean_theta_count);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
 
@@ -1174,6 +1181,7 @@ void delimitation_set(stree_t * stree, long index);
 long delimitation_getparam_count(void);
 
 char * delimitation_getparam_string();
+long delimitation_getcurindex();
 
 long delimit_getindex(stree_t * stree);
 long delimit_getindexfromstring(char * model);

@@ -964,6 +964,7 @@ void reset_gene_leaves_count(stree_t * stree)
 void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
 {
   long i;
+  size_t minsize;
 
   /* allocate sort buffer */
   int max_count = 0;
@@ -978,8 +979,23 @@ void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
   /* allocate traversal buffers */
   travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
   for (i = 0; i < msa_count; ++i)
-    travbuffer[i] = (gnode_t **)xmalloc(gtree[i]->inner_count *
-                                        sizeof(gnode_t *));
+  {
+    /* in the gene tree SPR it is possible that this scenario happens:
+
+                 *
+                / \
+       father  *   *
+              / \ / \
+             1  2 3  4
+
+       father moving to 3 or 4, in whih case we need to update 4 CLVs
+    */
+
+    minsize = MAX(gtree[i]->inner_count,4);
+    
+    travbuffer[i] = (gnode_t **)xmalloc(minsize*sizeof(gnode_t *));
+  }
+
 }
 
 gtree_t ** gtree_init(stree_t * stree,

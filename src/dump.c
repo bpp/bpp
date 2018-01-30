@@ -161,13 +161,17 @@ static void dump_chk_section_1(FILE * fp,
                                long out_offset,
                                long * gtree_offset,
                                long dparam_count,
+                               double * posterior,
+                               long dmodels_count,
                                long ft_round_rj,
                                double pjump_rj,
                                long ft_round_spr,
                                long pjump_slider,
                                double mean_logl,
-                               double mean_root_age,
-                               double mean_root_theta)
+                               double * mean_tau,
+                               double * mean_theta,
+                               long mean_tau_count,
+                               long mean_theta_count)
 {
   size_t i;
 
@@ -287,13 +291,20 @@ static void dump_chk_section_1(FILE * fp,
     DUMP(gtree_offset,opt_locus_count,fp);
 
   DUMP(&dparam_count,1,fp);
+
+  DUMP(&dmodels_count,1,fp);
+  if (dmodels_count)
+    DUMP(posterior,dmodels_count,fp);
+
   DUMP(&ft_round_rj,1,fp);
   DUMP(&pjump_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
   DUMP(&pjump_slider,1,fp);
   DUMP(&mean_logl,1,fp);
-  DUMP(&mean_root_age,1,fp);
-  DUMP(&mean_root_theta,1,fp);
+  DUMP(&mean_tau_count,1,fp);
+  DUMP(&mean_theta_count,1,fp);
+  DUMP(mean_tau,mean_tau_count,fp);
+  DUMP(mean_theta,mean_theta_count,fp);
 }
 
 
@@ -504,13 +515,17 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long dparam_count,
+                    double * posterior,
+                    long dmodels_count,
                     long ft_round_rj,
                     double pjump_rj,
                     long ft_round_spr,
                     long pjump_slider,
                     double mean_logl,
-                    double mean_root_age,
-                    double mean_root_theta)
+                    double * mean_tau,
+                    double * mean_theta,
+                    long mean_tau_count,
+                    long mean_theta_count)
 {
   FILE * fp;
   char * s = NULL;
@@ -541,13 +556,17 @@ int checkpoint_dump(stree_t * stree,
                      out_offset,
                      gtree_offset,
                      dparam_count,
+                     posterior,
+                     dmodels_count,
                      ft_round_rj,
                      pjump_rj,
                      ft_round_spr,
                      pjump_slider,
                      mean_logl,
-                     mean_root_age,
-                     mean_root_theta);
+                     mean_tau,
+                     mean_theta,
+                     mean_tau_count,
+                     mean_theta_count);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);
