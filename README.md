@@ -118,10 +118,14 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **bpp.c**                  | Main file handling command-line parameters and executing selected methods         |
 | **cfile.c**                | Functions for parsing the control file                                            |
 | **compress.c**             | Functions for compressing multiple sequence alignments into site patterns         |
-| **core_likelihood.c**      | Core functions for evaluating the likelihood of a tree (non-vectorized).          |
+| **core_likelihood.c**      | Core functions for evaluating the likelihood of a tree (non-vectorized)           |
 | **core_likelihood_avx.c**  | Core functions for evaluating the likelihood of a tree (AVX version)              |
 | **core_likelihood_avx2.c** | Core functions for evaluating the likelihood of a tree (AVX-2 version)            |
 | **core_likelihood_sse.c**  | Core functions for evaluating the likelihood of a tree (SSE-3 version)            |
+| **core_partials.c**        | Core functions for computing partial likelihoods (non-vectorized)                 |
+| **core_partials_avx.c**    | Core functions for computing partial likelihoods (AVX version)                    |
+| **core_partials_avx2.c**   | Core functions for computing partial likelihoods (AVX-2 version)                  |
+| **core_partials_sse.c**    | Core functions for computing partial likelihoods (SSE-3 version)                  |
 | **core_pmatrix.c**         | Core functions for constructing the transition probability matrix                 |
 | **delimit.c**              | Species delimitation auxiliary functions and summary statistics                   |
 | **diploid.c**              | Functions for resolving/phasing diploid sequences                                 |
@@ -131,25 +135,25 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **gtree.c**                | Functions for setting and processing gene trees                                   |
 | **hardware.c**             | Functions for hardware detection                                                  |
 | **hash.c**                 | Hash table implementation and related functions                                   |
-| **lex_map.l**              | Lexical analyzer for parsing map files.                                           |
+| **lex_map.l**              | Lexical analyzer for parsing map files                                            |
 | **lex_rtree.l**            | Lexical analyzer for parsing newick rooted trees                                  |
 | **list.c**                 | Linked list implementation and related functions                                  |
 | **load.c**                 | Functions for loading a checkpoint file                                           |
-| **locus.c**                | Locus specific functions.                                                         |
+| **locus.c**                | Locus specific functions                                                          |
 | **Makefile**               | Makefile                                                                          |
-| **mapping.c**              | Functions for handling map files.                                                 |
+| **mapping.c**              | Functions for handling map files                                                  |
 | **maps.c**                 | Character mapping arrays for converting sequences to the internal representation  |
 | **method.c**               | Function containing the MCMC loop and calls to proposals                          |
 | **msa.c**                  | Code for processing multiple sequence alignments                                  |
 | **output.c**               | Auxiliary functions for printing pmatrices (to-be-renamed)                        |
-| **parse_map.y**            | Functions for parsing map files.                                                  |
-| **parse_rtree.y**          | Functions for parsing rooted trees in newick format.                              |
-| **phylip.c**               | Functions for parsing phylip files.                                               |
+| **parse_map.y**            | Functions for parsing map files                                                   |
+| **parse_rtree.y**          | Functions for parsing rooted trees in newick format                               |
+| **phylip.c**               | Functions for parsing phylip files                                                |
 | **random.c**               | Pseudo-random number generator functions                                          |
 | **rtree.c**                | Species tree export functions (to-be-renamed).                                    |
 | **stree.c**                | Functions for setting and processing the species tree                             |
 | **summary.c**              | Species tree inference summary related functions                                  | 
-| **util.c**                 | Various common utility functions.                                                 |
+| **util.c**                 | Various common utility functions                                                  |
 
 # Acknowledgements
 

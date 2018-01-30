@@ -491,6 +491,9 @@ static FILE * init(stree_t ** ptr_stree,
   gtree_t ** gtree;
   locus_t ** locus;
 
+  if (!opt_est_theta)
+    fatal("Theta cannot be integrated-out in this version of BPP.");
+
   /* method 10 specific variables */
   long dparam_count = 0;
 
@@ -1031,8 +1034,8 @@ void cmd_run()
 
     /* allocate mean_tau and mean_theta */
     if (opt_est_theta)
-      mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT,sizeof(double));
-    mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT,sizeof(double));
+      mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT,sizeof(double));
+    mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT,sizeof(double));
   }
 
   if (opt_checkpoint && opt_print_genetrees)
@@ -1171,7 +1174,9 @@ void cmd_run()
          taus */
     if (opt_method != METHOD_00)        /* species tree inference or delimitation */
     {
-      mean_theta[0] = (mean_theta[0]*(ft_round-1)+stree->root->theta)/ft_round;
+      if (opt_est_theta)
+        mean_theta[0] = (mean_theta[0]*(ft_round-1)+stree->root->theta)/ft_round;
+
       mean_tau[0] = (mean_tau[0]*(ft_round-1)+stree->root->tau)/ft_round;
 
       mean_theta_count = 1;
