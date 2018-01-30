@@ -14,6 +14,28 @@ of the BPP software. It should have the following properties:
 * SIMD implementations of time-consuming parts.
 * Linux, Mac and Microsoft Windows compatibility.
 
+BPP currently implements three methods:
+
+* Estimation of the parameters of species divergence times and population sizes
+  under the multi-species coalescent (MSC) model when the species phylogeny is
+  given (Rannala and Yang, 2003)
+
+* Inference of the species tree when the assignments are given by the user
+  (Rannala and Yang, 2017)
+
+* Species delimitation using a user-specified guide tree (Yang and Rannala,
+  2010; Rannala and Yang, 2013)
+
+BPP can also accommodate variable mutation rates among loci (Burgess and Yang,
+2008) and heredity multipliers (Hey and Nielsen, 2004).  Finally, BPP supports
+diploid data. Phasing is done analytically as described by Gronau et al, 2011.
+
+The fourth method (A11) which conducts joint species delimitation and species
+tree inference of unguided species delimitation (Yang and Rannala, 2014) is
+still not implemented in this version of BPP.  If you need to run A11 please
+use the older version available [here](http://abacus.gene.ucl.ac.uk/software.html).
+
+
 ## Compilation instructions
 
 Currently, BPP requires that [GNU Bison](http://www.gnu.org/software/bison/)
@@ -67,6 +89,21 @@ You can check your compiler version with:
 gcc --version
 ```
 
+## Running BPP
+
+After creating the control file, one can run BPP as follows:
+
+```bash
+bpp --cfile [CONTROL-FILE]
+```
+
+If you would like to resume a checkpoint file, please run:
+
+```bash
+bpp --resume [CHECKPOINT-FILE]
+```
+
+More documentation regarding control files, will be available soon on the [wiki](https://github.com/xflouris/bpp/wiki).
 
 ## License and third party licenses
 
@@ -74,31 +111,45 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 ## Code
 
-| File                  | Description                                                                       |
-| --------------------- | --------------------------------------------------------------------------------- |
-| **arch.c**            | Architecture specific code (Mac/Linux).                                           |
-| **bpp.c**             | Main file handling command-line parameters and executing selected methods.        |
-| **compress.c**        | Functions for compressing multiple sequence alignments into site patterns         |
-| **gtree.c**           | Functions for setting and processing gene trees                                   |
-| **hash.c**            | Hash table implementation and related functions                                   |
-| **lex_map.l**         | Lexical analyzer for parsing map files.                                           |
-| **lex_rtree.l**       | Lexical analyzer for parsing newick rooted trees.                                 |
-| **likelihood_avx.c**  | AVX likelihood functions.                                                         |
-| **likelihood_sse.c**  | SSE likelihood functions.                                                         |
-| **likelihood.c**      | Likelihood related functions.                                                     |
-| **list.c**            | Linked list implementation and related functions                                  |
-| **locus.c**           | Locus specific functions.                                                         |
-| **Makefile**          | Makefile                                                                          |
-| **mapping.c**         | Functions for handling map files.                                                 |
-| **maps.c**            | Character mapping arrays for converting sequences to the internal representation. |
-| **msa.c**             | Code for processing multiple sequence alignments                                  |
-| **parse_map.y**       | Functions for parsing map files.                                                  |
-| **parse_rtree.y**     | Functions for parsing rooted trees in newick format.                              |
-| **phylip.c**          | Functions for parsing phylip files.                                               |
-| **random.c**          | Pseudo-random number generator functions                                          |
-| **rtree.c**           | Rooted tree manipulation functions.                                               |
-| **stree.c**           | Functions for setting and processing the species tree                             |
-| **util.c**            | Various common utility functions.                                                 |
+| File                       | Description                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| **arch.c**                 | Architecture specific code (Linux/Mac/Windows)                                    |
+| **allfixed.c**             | Summary statistics for method A00 (fixed species tree)                            |
+| **bpp.c**                  | Main file handling command-line parameters and executing selected methods         |
+| **cfile.c**                | Functions for parsing the control file                                            |
+| **compress.c**             | Functions for compressing multiple sequence alignments into site patterns         |
+| **core_likelihood.c**      | Core functions for evaluating the likelihood of a tree (non-vectorized).          |
+| **core_likelihood_avx.c**  | Core functions for evaluating the likelihood of a tree (AVX version)              |
+| **core_likelihood_avx2.c** | Core functions for evaluating the likelihood of a tree (AVX-2 version)            |
+| **core_likelihood_sse.c**  | Core functions for evaluating the likelihood of a tree (SSE-3 version)            |
+| **core_pmatrix.c**         | Core functions for constructing the transition probability matrix                 |
+| **delimit.c**              | Species delimitation auxiliary functions and summary statistics                   |
+| **diploid.c**              | Functions for resolving/phasing diploid sequences                                 |
+| **dlist.c**                | Functions for handling doubly linked-lists                                        |
+| **dump.c**                 | Functions for dumping the MCMC state into a checkpoint file                       |
+| **experimental.c**         | Experimental functions that are not yet production-ready                          |
+| **gtree.c**                | Functions for setting and processing gene trees                                   |
+| **hardware.c**             | Functions for hardware detection                                                  |
+| **hash.c**                 | Hash table implementation and related functions                                   |
+| **lex_map.l**              | Lexical analyzer for parsing map files.                                           |
+| **lex_rtree.l**            | Lexical analyzer for parsing newick rooted trees                                  |
+| **list.c**                 | Linked list implementation and related functions                                  |
+| **load.c**                 | Functions for loading a checkpoint file                                           |
+| **locus.c**                | Locus specific functions.                                                         |
+| **Makefile**               | Makefile                                                                          |
+| **mapping.c**              | Functions for handling map files.                                                 |
+| **maps.c**                 | Character mapping arrays for converting sequences to the internal representation  |
+| **method.c**               | Function containing the MCMC loop and calls to proposals                          |
+| **msa.c**                  | Code for processing multiple sequence alignments                                  |
+| **output.c**               | Auxiliary functions for printing pmatrices (to-be-renamed)                        |
+| **parse_map.y**            | Functions for parsing map files.                                                  |
+| **parse_rtree.y**          | Functions for parsing rooted trees in newick format.                              |
+| **phylip.c**               | Functions for parsing phylip files.                                               |
+| **random.c**               | Pseudo-random number generator functions                                          |
+| **rtree.c**                | Species tree export functions (to-be-renamed).                                    |
+| **stree.c**                | Functions for setting and processing the species tree                             |
+| **summary.c**              | Species tree inference summary related functions                                  | 
+| **util.c**                 | Various common utility functions.                                                 |
 
 # Acknowledgements
 
@@ -116,12 +167,37 @@ doi:[10.1093/sysbio/syu084](10.1093/sysbio/syu084)
 *Genetics*, 164:1645-1656.
 Available at: [http://www.genetics.org/content/164/4/1645.long](http://www.genetics.org/content/164/4/1645.long)
 
+* Hey J., Nielsen R. (2004)
+**Multilocus methods for estimating population sizes, migration rates and divergence time, with applications to the divergence of Drosophila pseudoobscura and D. persimilis.**
+*Genetics*, 167(2):747-760.
+doi:[10.1534/genetics.103.024182](http://dx.doi.org/10.1534/genetics.103.024182)
+
+* Burgess R., Yang Z. (2008)
+**Estimation of hominoid ancestral population sizes under Bayesian coalescent models incorporating mutation rate variation and sequencing errors.**
+*Molecular Biology and Evolution*, 25(9):1979-1994.
+doi:[10.1093/molbev/msn148](http://dx.doi.org/10.1093/molbev/msn148)
+
 * Yang Z., Rannala B. (2010)
 **Bayesian species delimitation using multilocus sequence data.**
 *Proceedings of the National Academy of Sciences*, 107(20):9264-9269.
 doi:[10.1073/pnas.0913022107](http://dx.doi.org/10.1073/pnas.0913022107)
 
+* Gronau I., Hubisz MJ, Gulko B., Danko CG, Siepel A. (2011)
+**Bayesian inference of ancient human demography from individual genome sequences.**
+*Nature Genetics*, 43(10):1031-1035.
+doi:[10.1038/ng.937](http://dx.doi.org/10.1038/ng.937)
+
+* Rannala B., Yang Z. (2013)
+**Improved reversible jump algorithms for Bayesian species delimitation.**
+*Genetics*, 194:245-253.
+doi:[10.1534/genetics.112.149039](http://dx.doi.org/10.1534/genetics.112.149039)
+
 * Yang Z., Rannala B. (2014)
 **Unguided species delimitation using DNA sequence data from multiple loci.**
 *Molecular Biology and Evolution*, 31(12):3125-3135.
 doi:[10.1093/molbev/msu279](10.1093/molbev/msu279)
+
+* Rannala B., Yang Z. (2017)
+**Efficient Bayesian Species Tree Inference under the Multispecies Coalescent.**
+*Systematic Biology*, 66(5):823-842.
+doi:[0.1093/sysbio/syw119](http://dx.doi.org/0.1093/sysbio/syw119)
