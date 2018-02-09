@@ -257,6 +257,14 @@ typedef struct snode_s
 
   unsigned int node_index;
   unsigned int diploid;
+
+  /* no theta related variables */
+  double * t2h;                     /* per-locus precomputed t2h */
+  double * old_t2h;                 /* storage space for rollback */
+  double t2h_sum;                   /* t2h sum for all loci */
+  long event_count_sum;             /* sum of coalencent events count */
+  double notheta_logpr_contrib;     /* MSC density contribution from pop */
+  double notheta_old_logpr_contrib; /* storage space for rollback */
 } snode_t;
 
 typedef struct stree_s
@@ -274,6 +282,12 @@ typedef struct stree_s
   snode_t * root;
 
   double root_age;
+
+  /* no theta related variables */
+  double notheta_logpr;      /* precomputed MSC density over all loci */
+  double notheta_old_logpr;  /* storage space for rollback */
+  double notheta_hfactor;    /* precomputed heredity term over all loci */
+  double notheta_sfactor;    /* sum of per-locus (sequences-1)*sqrt(2) */
 
 //  int mark;
 } stree_t;
@@ -822,7 +836,10 @@ void gtree_reset_leaves(gnode_t * node);
 void gtree_fini(int msa_count);
 
 double gtree_logprob(stree_t * stree, double heredity, long msa_index);
+//double gtree_logprob_notheta(stree_t * stree);
 double gtree_update_logprob_contrib(snode_t * snode, double heredity, long msa_index);
+//double gtree_update_logprob_contrib_notheta(snode_t * snode, double heredity, long msa_index);
+void logprob_revert_notheta(snode_t * snode, long msa_index);
 double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
 double reflect(double t, double minage, double maxage);
 gnode_t ** gtree_return_partials(gnode_t * root,

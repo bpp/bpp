@@ -49,19 +49,38 @@ static void gtree_all_partials(gnode_t * root,
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
+//  unsigned int dbg_random;
   unsigned i,j,k;
   unsigned int theta_count=0;
   unsigned int tau_count=0;
   double lnc,c;
+  double logpr = 0;
 //  double finetune = 0.3;
   double lnacceptance;
   long accepted = 0;
 
+  double * notheta_old_logpr = NULL;
 
-  /* TODO: Account for integrated out theta, and also for rj-MCMC */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->theta > 0)
-      theta_count++;
+  size_t nodes_count = stree->tip_count+stree->inner_count; 
+
+
+  if (!opt_est_theta)
+  {
+    notheta_old_logpr = (double *)xmalloc(nodes_count * sizeof(double));
+    for (i = 0; i < nodes_count; ++i)
+      notheta_old_logpr[i] = stree->nodes[i]->notheta_logpr_contrib;
+  }
+  
+  /* TODO: Account for method 11 / rj-MCMC */
+  if (opt_est_theta)
+  {
+    /* TODO: Precompute how many theta parameters we have for A00 */
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      if (stree->nodes[i]->theta > 0)
+        theta_count++;
+  }
+  else
+    theta_count = 0;
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau > 0)
@@ -78,20 +97,25 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
   /* TODO: skip this for integrated-out theta */
   /* TODO: This loop separation is for having the same traversal as old bpp */
+
+  /* TODO: Why is this allocation here? Perhaps no longer needed? */
   snode_t ** snodes = (snode_t **)xmalloc((stree->tip_count+stree->inner_count)*
                                           sizeof(snode_t *));
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     snodes[i] = stree->nodes[i];
 
   /* change the thetas */
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  if (opt_est_theta)
   {
-    if (snodes[i]->theta <= 0) continue;
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    {
+      if (snodes[i]->theta <= 0) continue;
 
-    snodes[i]->old_theta = snodes[i]->theta;
-    snodes[i]->theta *= c;
-    lnacceptance += (-opt_theta_alpha-1)*lnc -
-                   opt_theta_beta*(1/snodes[i]->theta - 1/snodes[i]->old_theta);
+      snodes[i]->old_theta = snodes[i]->theta;
+      snodes[i]->theta *= c;
+      lnacceptance += (-opt_theta_alpha-1)*lnc -
+                     opt_theta_beta*(1/snodes[i]->theta-1/snodes[i]->old_theta);
+    }
   }
 
   /* change the taus */
@@ -107,6 +131,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
   }
   
+  if (!opt_est_theta)
+    logpr = stree->notheta_logpr;
+
   for (i = 0; i < stree->locus_count; ++i)
   {
     gtree_t * gt = gtree[i];
@@ -146,18 +173,38 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
 
 
-    double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    if (opt_est_theta)
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    else
+    {
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      {
+        logpr -= stree->nodes[j]->notheta_logpr_contrib;
+        logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+      }
+    }
+        
 
-    lnacceptance += logl - gt->logl + logpr - gt->logpr;
+    if (opt_est_theta)
+      lnacceptance += logl - gt->logl + logpr - gt->logpr;
+    else
+      lnacceptance += logl - gt->logl;
 
-    gt->old_logpr = gt->logpr;
+    if (opt_est_theta)
+    {
+      gt->old_logpr = gt->logpr;
+      gt->logpr = logpr;
+    }
+
     gt->old_logl = gt->logl;
-    gt->logpr = logpr;
     gt->logl = logl;
 
     free(gt_nodes);
     
   }
+
+  if (!opt_est_theta)
+    lnacceptance += logpr - stree->notheta_logpr;
 
   if (opt_debug)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
@@ -167,26 +214,40 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   {
     /* accept */
     accepted = 1;
+
+    if (!opt_est_theta)
+      stree->notheta_logpr = logpr;
   }
   else
   {
-
     /* revert thetas and logpr contributions */
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    if (opt_est_theta)
     {
-      for (j = 0; j < stree->locus_count; ++j)
-        snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
+      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      {
+        for (j = 0; j < stree->locus_count; ++j)
+          snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
 
-      if (snodes[i]->theta <= 0) continue;
+        if (snodes[i]->theta <= 0) continue;
 
-      /* TODO: Note that, it is both faster and more precise to restore the old
-         value from memory, than re-computing it with a division. For now, we
-         use the division here to be compatible with the old bpp */
+        /* TODO: Note that, it is both faster and more precise to restore the old
+           value from memory, than re-computing it with a division. For now, we
+           use the division here to be compatible with the old bpp */
 #if 0
-      snodes[i]->theta = snodes[i]->old_theta;
+        snodes[i]->theta = snodes[i]->old_theta;
 #else
-      snodes[i]->theta /= c;
+        snodes[i]->theta /= c;
 #endif
+      }
+    }
+    else
+    {
+      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      {
+        for (j = 0; j < opt_locus_count; ++j)
+          logprob_revert_notheta(stree->nodes[i],j);
+        stree->nodes[i]->notheta_logpr_contrib = notheta_old_logpr[i];
+      }
     }
 
     /* revert taus */
@@ -207,7 +268,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     {
       /* restore logl and logpr */
       gtree[i]->logl  = gtree[i]->old_logl;
-      gtree[i]->logpr = gtree[i]->old_logpr;
+      if (opt_est_theta)
+        gtree[i]->logpr = gtree[i]->old_logpr;
 
       gnode_t ** gnodeptr = gtree[i]->nodes;
       /* revert CLV indices and coalescent event ages */
@@ -235,6 +297,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
   }
   free(snodes);
+
+  if (!opt_est_theta)
+    free(notheta_old_logpr);
 
   return accepted;
 

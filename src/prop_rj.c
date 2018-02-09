@@ -46,8 +46,6 @@ static int * feasible;
 static gnode_t *** partials;
 static unsigned int * partials_count;
 
-static int dbg_rj_join = 0;
-
 #if 0
 static void all_partials_recursive(gnode_t * node,
                                    unsigned int * trav_size,
@@ -107,23 +105,6 @@ void rj_fini()
   free(partials_count);
 }
 
-#if 0
-/* TODO : this is the same as gtree.c */
-static void unlink_event(gnode_t * node, int msa_index)
-{
-  /* first re-link the event before the current node with the one after */
-  if (node->event->prev)
-    node->event->prev->next = node->event->next;
-  else
-    node->pop->event[msa_index]->head = node->event->next;
-
-  /* now re-link the event after the current node with the one before */
-  if (node->event->next)
-    node->event->next->prev = node->event->prev;
-  else
-    node->pop->event[msa_index]->tail = node->event->prev;
-}
-#endif
 static double pdf_gamma(double x, double alpha, double beta)
 {
 /* gamma density: mean=alpha/beta; var=alpha/beta^2
@@ -350,6 +331,8 @@ static int rubber_proportional(stree_t * stree,
         unlink_event(gnode, msa_index);
 
         gnode->pop->event_count[msa_index]--;
+        if (!opt_est_theta)
+          gnode->pop->event_count_sum--;
 
         gnode->mark |= MARK_POP_CHANGE;
 
@@ -358,6 +341,8 @@ static int rubber_proportional(stree_t * stree,
         dlist_item_append(gnode->pop->event[msa_index], gnode->event);
 
         gnode->pop->event_count[msa_index]++;
+        if (!opt_est_theta)
+          gnode->pop->event_count_sum++;
         
         snode->seqin_count[msa_index]--;
       }
@@ -375,6 +360,8 @@ static int rubber_proportional(stree_t * stree,
         unlink_event(gnode, msa_index);
 
         gnode->pop->event_count[msa_index]--;
+        if (!opt_est_theta)
+          gnode->pop->event_count_sum--;
 
         gnode->mark |= MARK_POP_CHANGE;
 
@@ -384,6 +371,8 @@ static int rubber_proportional(stree_t * stree,
         dlist_item_append(gnode->pop->event[msa_index], gnode->event);
 
         gnode->pop->event_count[msa_index]++;
+        if (!opt_est_theta)
+          gnode->pop->event_count_sum++;
 
         snode->seqin_count[msa_index]++;
       }
@@ -474,52 +463,57 @@ long prop_split(gtree_t ** gtree,
   node->tau = tau_new = tau_upper * legacy_rndbeta(pbetatau,qbetatau);
   lnacceptance -= log_pdfbeta(tau_new,pbetatau,qbetatau,tau_upper);
 
-  /* TODO: No theta */
-
+  /* save old logpr contributions for rollback if proposal is rejected */
+  double tmpth = node->notheta_logpr_contrib;
+  double tmpthl = node->left->notheta_logpr_contrib;
+  double tmpthr = node->right->notheta_logpr_contrib;
   /* 5. Now update population sizes for the two children, and then update
      lnacceptance */
 
   /* Store the left child theta, and update it according to RJ algorithm */
-  node->left->old_theta = node->left->theta;
-
-  if (!opt_rjmcmc_method)
+  if (opt_est_theta)
   {
-    node->left->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
-    thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
-  }
-  else
-  {
-    node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
-                        (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    thetafactor /= pdf_gamma(node->left->theta,
-                             opt_rjmcmc_alpha,
-                             opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-  }
+    node->left->old_theta = node->left->theta;
 
-  lnacceptance += log_pdfinvgamma(node->left->theta,
-                                  opt_theta_alpha,
-                                  opt_theta_beta);
+    if (!opt_rjmcmc_method)
+    {
+      node->left->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+      thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
+    }
+    else
+    {
+      node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                          (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      thetafactor /= pdf_gamma(node->left->theta,
+                               opt_rjmcmc_alpha,
+                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+    }
 
-  /* Store the right child theta, and update it according to RJ algorithm */
-  node->right->old_theta = node->right->theta;
+    lnacceptance += log_pdfinvgamma(node->left->theta,
+                                    opt_theta_alpha,
+                                    opt_theta_beta);
 
-  if (!opt_rjmcmc_method)
-  {
-    node->right->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
-    thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
+    /* Store the right child theta, and update it according to RJ algorithm */
+    node->right->old_theta = node->right->theta;
+
+    if (!opt_rjmcmc_method)
+    {
+      node->right->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+      thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
+    }
+    else
+    {
+      node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                           (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      thetafactor /= pdf_gamma(node->right->theta,
+                               opt_rjmcmc_alpha,
+                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+    }
+
+    lnacceptance += log_pdfinvgamma(node->right->theta,
+                                    opt_theta_alpha,
+                                    opt_theta_beta);
   }
-  else
-  {
-    node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
-                         (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    thetafactor /= pdf_gamma(node->right->theta,
-                             opt_rjmcmc_alpha,
-                             opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-  }
-
-  lnacceptance += log_pdfinvgamma(node->right->theta,
-                                  opt_theta_alpha,
-                                  opt_theta_beta);
 
   /* Update lnacceptance with new species tree prior */
   lnacceptance += lnprior_species_model(stree) - oldprior;
@@ -545,6 +539,9 @@ long prop_split(gtree_t ** gtree,
   /* allocate storage for partials */
 
   /* 7. Call rubber-band to update all children */
+  double logpr = 0;
+  if (!opt_est_theta)
+    logpr = stree->notheta_logpr;
   for (i = 0; i < stree->locus_count; ++i)
   {
     int j = rubber_proportional(stree,
@@ -589,25 +586,49 @@ long prop_split(gtree_t ** gtree,
     //  assert(0);
     }
 
-    double logpr = gtree[i]->logpr;
+    if (opt_est_theta)
+      logpr = gtree[i]->logpr;
 
 #if 1
     /* update log-pr */
-    logpr -= node->logpr_contrib[i];
+    if (opt_est_theta)
+      logpr -= node->logpr_contrib[i];
+    else
+      logpr -= node->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
-    logpr -= node->left->logpr_contrib[i];
+
+    if (opt_est_theta)
+      logpr -= node->left->logpr_contrib[i];
+    else
+      logpr -= node->left->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
-    logpr -= node->right->logpr_contrib[i];
+
+    if (opt_est_theta)
+      logpr -= node->right->logpr_contrib[i];
+    else
+      logpr -= node->right->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
 #else
     logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    assert(0);
 #endif
-    gtree[i]->old_logpr = gtree[i]->logpr;
-    gtree[i]->logpr = logpr;
+    if (opt_est_theta)
+    {
+      gtree[i]->old_logpr = gtree[i]->logpr;
+      gtree[i]->logpr = logpr;
+    }
 
     lnacceptance += gtree[i]->logl  - gtree[i]->old_logl;
-    lnacceptance += gtree[i]->logpr - gtree[i]->old_logpr;
+
+    if (opt_est_theta)
+      lnacceptance += gtree[i]->logpr - gtree[i]->old_logpr;
   }
+
+  if (!opt_est_theta)
+    lnacceptance += logpr - stree->notheta_logpr;
 
   if (opt_debug)
     printf("[Debug] (split) lnacceptance = %f\n", lnacceptance);
@@ -620,8 +641,9 @@ long prop_split(gtree_t ** gtree,
 
     delimit_setindex(dmodel_index);
 
-    /* TODO: NoTheta option */
-    *param_count += 1 + (node->left->theta > 0) + (node->right->theta > 0);
+    *param_count += 1;
+    if (opt_est_theta)
+      *param_count += (node->left->theta > 0) + (node->right->theta > 0);
 
 
     accepted = 1;
@@ -631,6 +653,9 @@ long prop_split(gtree_t ** gtree,
         gnode_t * tmp = gtree[i]->nodes[k];
         tmp->mark = 0;
       }
+
+    if (!opt_est_theta)
+      stree->notheta_logpr = logpr;
   }
   else
   {
@@ -654,12 +679,16 @@ long prop_split(gtree_t ** gtree,
         {
           unlink_event(tmp,i);
           tmp->pop->event_count[i]--;
+          if (!opt_est_theta)
+            tmp->pop->event_count_sum--;
 
           tmp->pop = node;
 
           dlist_item_append(tmp->pop->event[i], tmp->event); /* equiv to snode->event[i] */
 
           tmp->pop->event_count[i]++;
+          if (!opt_est_theta)
+            tmp->pop->event_count_sum++;
 
           tmp->pop->seqin_count[i]++;
         }
@@ -678,12 +707,28 @@ long prop_split(gtree_t ** gtree,
                                                      partials[i][k]->clv_index);
         gtree[i]->logl  = gtree[i]->old_logl;
       }
-      gtree[i]->logpr = gtree[i]->old_logpr;
+      if (opt_est_theta)
+        gtree[i]->logpr = gtree[i]->old_logpr;
 
 
-      node->logpr_contrib[i] = node->old_logpr_contrib[i];
-      node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
-      node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+      if (opt_est_theta)
+      {
+        node->logpr_contrib[i] = node->old_logpr_contrib[i];
+        node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
+        node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+      }
+      else
+      {
+        logprob_revert_notheta(node,i);
+        logprob_revert_notheta(node->left,i);
+        logprob_revert_notheta(node->right,i);
+      }
+    }
+    if (!opt_est_theta)
+    {
+        node->notheta_logpr_contrib = tmpth;
+        node->left->notheta_logpr_contrib = tmpthl;
+        node->right->notheta_logpr_contrib = tmpthr;
     }
   }
 
@@ -742,7 +787,6 @@ long prop_join(gtree_t ** gtree,
   unsigned int i,k;
   double thetafactor = 1;
 
-  dbg_rj_join++;
   /* 1. Initialize lnacceptance */
   double lnacceptance = log((1-pr_split)/pr_split);
 
@@ -780,54 +824,60 @@ long prop_join(gtree_t ** gtree,
   /* 4. Change the age of the node, and update lnacceptance */
   lnacceptance += log_pdfbeta(node->tau,pbetatau,qbetatau,tau_upper);
 
-  /* TODO: No theta */
+  /* save old logpr contributions for rollback if proposal is rejected */
+  double tmpth = node->notheta_logpr_contrib;
+  double tmpthl = node->left->notheta_logpr_contrib;
+  double tmpthr = node->right->notheta_logpr_contrib;
 
   /* Store the left child theta, and update it according to RJ algorithm */
-  node->left->old_theta = node->left->theta;
-
-  if (node->left->theta > 0)
+  if (opt_est_theta)
   {
-    if (!opt_rjmcmc_method)
-    {
-      double y = exp(opt_rjmcmc_epsilon*0.5);
-      if (node->left->theta < node->theta/y ||
-          node->left->theta > node->theta*y)
-        return 2;  /* move disallowed */
-      thetafactor /= opt_rjmcmc_epsilon * node->left->theta;
-    }
-    else
-    {
-      thetafactor *= pdf_gamma(node->left->theta,
-                               opt_rjmcmc_alpha,
-                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    }
-    lnacceptance -= log_pdfinvgamma(node->left->theta,
-                                    opt_theta_alpha,
-                                    opt_theta_beta);
-  }
+    node->left->old_theta = node->left->theta;
 
-  /* Now store the right child theta, and update it according to RJ algorithm */
-  node->right->old_theta = node->right->theta;
+    if (node->left->theta > 0)
+    {
+      if (!opt_rjmcmc_method)
+      {
+        double y = exp(opt_rjmcmc_epsilon*0.5);
+        if (node->left->theta < node->theta/y ||
+            node->left->theta > node->theta*y)
+          return 2;  /* move disallowed */
+        thetafactor /= opt_rjmcmc_epsilon * node->left->theta;
+      }
+      else
+      {
+        thetafactor *= pdf_gamma(node->left->theta,
+                                 opt_rjmcmc_alpha,
+                                 opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      }
+      lnacceptance -= log_pdfinvgamma(node->left->theta,
+                                      opt_theta_alpha,
+                                      opt_theta_beta);
+    }
 
-  if (node->right->theta > 0)
-  {
-    if (!opt_rjmcmc_method)
+    /* Now store the right child theta, and update it according to RJ algorithm */
+    node->right->old_theta = node->right->theta;
+
+    if (node->right->theta > 0)
     {
-      double y = exp(opt_rjmcmc_epsilon*0.5);
-      if (node->right->theta < node->theta/y ||
-          node->right->theta > node->theta*y)
-        return 2;  /* move disallowed */
-      thetafactor /= opt_rjmcmc_epsilon * node->right->theta;
+      if (!opt_rjmcmc_method)
+      {
+        double y = exp(opt_rjmcmc_epsilon*0.5);
+        if (node->right->theta < node->theta/y ||
+            node->right->theta > node->theta*y)
+          return 2;  /* move disallowed */
+        thetafactor /= opt_rjmcmc_epsilon * node->right->theta;
+      }
+      else
+      {
+        thetafactor *= pdf_gamma(node->right->theta,
+                                 opt_rjmcmc_alpha,
+                                 opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      }
+      lnacceptance -= log_pdfinvgamma(node->right->theta,
+                                      opt_theta_alpha,
+                                      opt_theta_beta);
     }
-    else
-    {
-      thetafactor *= pdf_gamma(node->right->theta,
-                               opt_rjmcmc_alpha,
-                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    }
-    lnacceptance -= log_pdfinvgamma(node->right->theta,
-                                    opt_theta_alpha,
-                                    opt_theta_beta);
   }
 
   /* save old taus in case of rejection */
@@ -861,6 +911,9 @@ long prop_join(gtree_t ** gtree,
   /* allocate storage for partials */
 
   /* 7. Call rubber-band to update all children */
+  double logpr = 0;
+  if (!opt_est_theta)
+    logpr = stree->notheta_logpr;
   for (i = 0; i < stree->locus_count; ++i)
   {
     int j = rubber_proportional(stree,
@@ -907,25 +960,49 @@ long prop_join(gtree_t ** gtree,
       //assert(0);
     }
 
-    double logpr = gtree[i]->logpr;
+    if (opt_est_theta)
+      logpr = gtree[i]->logpr;
 
 #if 1
     /* update log-pr */
-    logpr -= node->logpr_contrib[i];
+    if (opt_est_theta)
+      logpr -= node->logpr_contrib[i];
+    else
+      logpr -= node->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
-    logpr -= node->left->logpr_contrib[i];
+
+    if (opt_est_theta)
+      logpr -= node->left->logpr_contrib[i];
+    else
+      logpr -= node->left->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
-    logpr -= node->right->logpr_contrib[i];
+
+    if (opt_est_theta)
+      logpr -= node->right->logpr_contrib[i];
+    else
+      logpr -= node->right->notheta_logpr_contrib;
+
     logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
 #else
     logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    assert(0);
 #endif
-    gtree[i]->old_logpr = gtree[i]->logpr;
-    gtree[i]->logpr = logpr;
+    if (opt_est_theta)
+    {
+      gtree[i]->old_logpr = gtree[i]->logpr;
+      gtree[i]->logpr = logpr;
+    }
 
     lnacceptance += gtree[i]->logl  - gtree[i]->old_logl;
-    lnacceptance += gtree[i]->logpr - gtree[i]->old_logpr;
+
+    if (opt_est_theta)
+      lnacceptance += gtree[i]->logpr - gtree[i]->old_logpr;
   }
+
+  if (!opt_est_theta)
+    lnacceptance += logpr - stree->notheta_logpr;
 
   if (opt_debug)
     printf("[Debug] (join) lnacceptance = %f\n", lnacceptance);
@@ -940,13 +1017,17 @@ long prop_join(gtree_t ** gtree,
 
     accepted = 1;
 
-    /* TODO: No theta option */
-    *param_count -= 1 + (node->left->old_theta>0) + (node->right->old_theta>0);
+    *param_count -= 1;
+    if (opt_est_theta)
+      *param_count -= (node->left->old_theta>0) + (node->right->old_theta>0);
 
     /* reset mark */
     for (i = 0; i < stree->locus_count; ++i)
       for (k = 0; k < gtree[i]->tip_count + gtree[i]->inner_count; ++k)
         gtree[i]->nodes[k]->mark = 0;
+
+    if (!opt_est_theta)
+      stree->notheta_logpr = logpr;
 
   }
   else
@@ -974,12 +1055,16 @@ long prop_join(gtree_t ** gtree,
           unlink_event(tmp,i);
           tmp->pop->event_count[i]--;
           tmp->pop->seqin_count[i]--;
+          if (!opt_est_theta)
+            tmp->pop->event_count_sum--;
 
           tmp->pop = tmp->old_pop;
 
           dlist_item_append(tmp->pop->event[i], tmp->event); /* equiv to snode->event[i] */
 
           tmp->pop->event_count[i]++;
+          if (!opt_est_theta)
+            tmp->pop->event_count_sum++;
         }
 
         /* reset marks */
@@ -999,11 +1084,27 @@ long prop_join(gtree_t ** gtree,
 
         gtree[i]->logl = gtree[i]->old_logl;
       }
-      gtree[i]->logpr = gtree[i]->old_logpr;
+      if (opt_est_theta)
+        gtree[i]->logpr = gtree[i]->old_logpr;
 
-      node->logpr_contrib[i] = node->old_logpr_contrib[i];
-      node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
-      node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+      if (opt_est_theta)
+      {
+        node->logpr_contrib[i] = node->old_logpr_contrib[i];
+        node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
+        node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+      }
+      else
+      {
+        logprob_revert_notheta(node,i);
+        logprob_revert_notheta(node->left,i);
+        logprob_revert_notheta(node->right,i);
+      }
+    }
+    if (!opt_est_theta)
+    {
+        node->notheta_logpr_contrib = tmpth;
+        node->left->notheta_logpr_contrib = tmpthl;
+        node->right->notheta_logpr_contrib = tmpthr;
     }
   }
   for (i = 0; i < stree->locus_count; ++i)

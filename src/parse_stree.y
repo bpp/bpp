@@ -99,6 +99,12 @@ void stree_destroy(stree_t * tree,
     if (node->gene_leaves)
       free(node->gene_leaves);
 
+    if (node->t2h)
+      free(node->t2h);
+
+    if (node->old_t2h)
+      free(node->old_t2h);
+
     free(node);
   }
 

@@ -263,9 +263,10 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   long col_count = 0;
 
   /* compute number of theta parameters */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->theta >= 0)
-      col_count++;
+  if (opt_est_theta)
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      if (stree->nodes[i]->theta >= 0)
+        col_count++;
 
   /* compute number of tau parameters */
   for (i = 0; i < stree->inner_count; ++i)

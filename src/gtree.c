@@ -693,6 +693,26 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   for (i = 0; i < stree->tip_count; ++i)
     stree->nodes[i]->seqin_count[msa_index] = pop[i].seq_count;
+
+  if (!opt_est_theta)
+  {
+    stree->notheta_logpr = 0;
+    if (opt_est_heredity)
+      stree->notheta_logpr += stree->notheta_hfactor;
+
+    stree->notheta_old_logpr = 0;
+
+    stree->notheta_sfactor = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      long seqs = 0;
+      for (j = 0; j < stree->tip_count; ++j)
+        seqs += stree->nodes[j]->seqin_count[i];
+
+      stree->notheta_logpr   += (seqs-1)*0.6931471805599453;
+      stree->notheta_sfactor += (seqs-1)*0.6931471805599453;
+    }
+  }
   /* start at present time */
   t = 0;
 
@@ -847,6 +867,8 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       pop[j].snode->event_count[msa_index]++;
       dlist_item_t * dlitem = dlist_append(pop[j].snode->event[msa_index],inner);
       inner->event = dlitem;
+      if (!opt_est_theta)
+        pop[j].snode->event_count_sum++;
 
       /* in pop j, replace k1 by the new node, and remove k2 (replace it with
          last node in list) */
@@ -1057,6 +1079,14 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
+void logprob_revert_notheta(snode_t * snode, long msa_index)
+{
+  snode->t2h_sum -= snode->t2h[msa_index];
+  snode->t2h[msa_index] = snode->old_t2h[msa_index];
+  snode->t2h_sum += snode->t2h[msa_index];
+  snode->notheta_logpr_contrib = snode->notheta_old_logpr_contrib;
+}
+
 double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index)
@@ -1112,16 +1142,50 @@ double gtree_update_logprob_contrib(snode_t * snode,
       T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
     }
 
-    if (snode->event_count[msa_index])
-      logpr += snode->event_count[msa_index] * log(2.0/snode->theta);
+    /* now distinguish between estimating theta and analytical computation */
+    if (opt_est_theta)
+    {
+      if (snode->event_count[msa_index])
+        logpr += snode->event_count[msa_index] * log(2.0/snode->theta);
 
-    if (T2h)
-      logpr -= T2h/snode->theta;
+      if (T2h)
+        logpr -= T2h/snode->theta;
 
-    /* TODO: Be careful about which functions update the logpr contribution 
-       and which do not */
-    snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
-    snode->logpr_contrib[msa_index] = logpr;
+      /* TODO: Be careful about which functions update the logpr contribution 
+         and which do not */
+      snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
+      snode->logpr_contrib[msa_index] = logpr;
+    }
+    else
+    {
+      snode->old_t2h[msa_index] = snode->t2h[msa_index];
+
+      snode->t2h[msa_index] = T2h;
+
+      snode->t2h_sum -= snode->old_t2h[msa_index];
+      snode->t2h_sum += snode->t2h[msa_index];
+      
+
+      if (snode->event_count_sum)
+        logpr += opt_theta_alpha*log(opt_theta_beta) - lgamma(opt_theta_alpha) -
+                 (opt_theta_alpha + snode->event_count_sum) *
+                 log(opt_theta_beta + snode->t2h_sum) +
+                 lgamma(opt_theta_alpha + snode->event_count_sum);
+      else
+        logpr -= opt_theta_alpha * log(1 + snode->t2h_sum / opt_theta_beta);
+
+      /* TODO: this always updates the 'notheta_old_logpr_contrib'. Sometimes we
+         do not want to this update because there could be multiple changes on
+         the 'notheta_logpr_contrib' before deciding whether to accept or reject
+         the proposal, e.g. by proposing new values on multiple loci. This leads
+         to the problem that the 'notheta_old_logpr_contrib' is no longer the
+         old value before any of the proposals started.  Currently this is fixed
+         in the caller functions by storing the 'notheta_old_logpr_contrib' in
+         some array allocated at the caller, but I should change this to only
+         update the value through a flag passed to this function */
+      snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
+      snode->notheta_logpr_contrib = logpr;
+    }
 
     return logpr;
 }
@@ -1195,6 +1259,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 {
   unsigned int i,k,j;
   long accepted = 0;
+  double acceptance;
   double tnew,minage,maxage,oldage;
   double logpr;
   double logl;
@@ -1264,6 +1329,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
       /* decrease the number of coalescent events for the current population */
       node->pop->event_count[msa_index]--;
+      if (!opt_est_theta)
+        node->pop->event_count_sum--;
         
       /* change population for the current gene tree node */
       node->pop = pop;
@@ -1272,6 +1339,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       dlist_item_append(node->pop->event[msa_index],node->event);
 
       node->pop->event_count[msa_index]++;
+      if (!opt_est_theta)
+        node->pop->event_count_sum++;
 
       /* increase or decrease the number of incoming lineages to all populations in the path
       from old population to the new population, depending on the case  */
@@ -1300,10 +1369,18 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
        probability is recomputed. This is useful for debugging and checking that
        the partial computation is functioning properly */
     #ifndef DEBUG_LOGPROB
-    logpr = gtree->logpr;
+    if (opt_est_theta)
+      logpr = gtree->logpr;
+    else
+      logpr = stree->notheta_logpr;
+
     if (oldpop == node->pop)
     {
-      logpr -= node->pop->logpr_contrib[msa_index];
+      if (opt_est_theta)
+        logpr -= node->pop->logpr_contrib[msa_index];
+      else
+        logpr -= node->pop->notheta_logpr_contrib;
+
       logpr += gtree_update_logprob_contrib(node->pop,
                                             locus->heredity[0],
                                             msa_index);
@@ -1325,14 +1402,20 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       }
       for (pop = start; pop != end; pop = pop->parent)
       {
-        logpr -= pop->logpr_contrib[msa_index];
-        logpr += gtree_update_logprob_contrib(pop,
-                                              locus->heredity[0],
-                                              msa_index);
+        if (opt_est_theta)
+          logpr -= pop->logpr_contrib[msa_index];
+        else
+          logpr -= pop->notheta_logpr_contrib;
+
+        logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
       }
     }
     #else
-      logpr = gtree_logprob(stree,locus->heredity[0],msa_index);
+      if (opt_est_theta)
+        logpr = gtree_logprob(stree,locus->heredity[0],msa_index);
+      else
+        assert(0);
+
       /* assertion just to remind us that this is not what we should put in
          the official version */
       assert(0);
@@ -1366,10 +1449,15 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
     /* acceptance ratio */
-    double acceptance = logpr - gtree->logpr + logl - gtree->logl;
+    if (opt_est_theta)
+      acceptance = logpr - gtree->logpr + logl - gtree->logl;
+    else
+      acceptance = logpr - stree->notheta_logpr + logl - gtree->logl;
 
     if (opt_debug)
+    {
       fprintf(stdout, "[Debug] (age) lnacceptance = %f\n", acceptance);
+    }
 
     if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
     {
@@ -1377,7 +1465,11 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       accepted++;
 
       /* update new log-likelihood and gene tree log probability */
-      gtree->logpr = logpr;
+      if (opt_est_theta)
+        gtree->logpr = logpr;
+      else
+        stree->notheta_logpr = logpr;
+
       gtree->logl = logl;
     }
     else
@@ -1404,7 +1496,10 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
          contributes for each modified species tree node */
       if (node->pop == oldpop)
       {
-        node->pop->logpr_contrib[msa_index] = node->pop->old_logpr_contrib[msa_index];
+        if (opt_est_theta)
+          node->pop->logpr_contrib[msa_index] = node->pop->old_logpr_contrib[msa_index];
+        else
+          logprob_revert_notheta(node->pop,msa_index);
       }
       else
       {
@@ -1415,6 +1510,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
         /* decrease the number of coalescent events for the current population */
         node->pop->event_count[msa_index]--;
+        if (!opt_est_theta)
+          node->pop->event_count_sum--;
           
         /* change population for the current gene tree node */
         SWAP(node->pop,oldpop);
@@ -1423,6 +1520,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         dlist_item_append(node->pop->event[msa_index],node->event);
 
         node->pop->event_count[msa_index]++;
+        if (!opt_est_theta)
+          node->pop->event_count_sum++;
 
         /* increase or decrease the number of incoming lineages to all
            populations in the path from old population to the new population,
@@ -1449,7 +1548,12 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         snode_t * end   = (tnew > oldage) ? oldpop->parent : node->pop->parent;
 
         for (pop = start; pop != end; pop = pop->parent)
-          pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+        {
+          if (opt_est_theta)
+            pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+          else
+            logprob_revert_notheta(pop,msa_index);
+        }
       }
     }
   }
@@ -1636,6 +1740,8 @@ static long propose_spr(locus_t * locus,
   gnode_t * father;
   gnode_t * p;
   double minage,maxage,tnew;
+  double acceptance;
+  double logpr;
   snode_t * pop;
 
 
@@ -1741,6 +1847,8 @@ static long propose_spr(locus_t * locus,
 
       /* decrease the number of coalescent events for the current population */
       father->pop->event_count[msa_index]--;
+      if (!opt_est_theta)
+        father->pop->event_count_sum--;
         
       /* change population for the current gene tree node */
       father->pop = pop_target;
@@ -1749,6 +1857,8 @@ static long propose_spr(locus_t * locus,
       dlist_item_append(father->pop->event[msa_index],father->event);
 
       father->pop->event_count[msa_index]++;
+      if (!opt_est_theta)
+        father->pop->event_count_sum++;
 
       /* increase or decrease the number of incoming lineages to all populations
          in the path from old population to the new population, depending on the
@@ -1780,10 +1890,18 @@ static long propose_spr(locus_t * locus,
       father = curnode->parent;
 
     /* recompute logpr */
-    double logpr = gtree->logpr;
+    if (opt_est_theta)
+      logpr = gtree->logpr;
+    else
+      logpr = stree->notheta_logpr;
+
     if (oldpop == father->pop)
     {
-      logpr -= father->pop->logpr_contrib[msa_index];
+      if (opt_est_theta)
+        logpr -= father->pop->logpr_contrib[msa_index];
+      else
+        logpr -= father->pop->notheta_logpr_contrib;
+
       logpr += gtree_update_logprob_contrib(father->pop,
                                             locus->heredity[0],
                                             msa_index);
@@ -1805,10 +1923,12 @@ static long propose_spr(locus_t * locus,
       }
       for (pop = start; pop != end; pop = pop->parent)
       {
-        logpr -= pop->logpr_contrib[msa_index];
-        logpr += gtree_update_logprob_contrib(pop,
-                                              locus->heredity[0],
-                                              msa_index);
+        if (opt_est_theta)
+          logpr -= pop->logpr_contrib[msa_index];
+        else
+          logpr -= pop->notheta_logpr_contrib;
+
+        logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
       }
     }
 
@@ -1881,17 +2001,28 @@ static long propose_spr(locus_t * locus,
     double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
     /* acceptance ratio */
-    double acceptance = log((double)target_count / source_count) + logpr - gtree->logpr + logl - gtree->logl;
+    if (opt_est_theta)
+      acceptance = log((double)target_count / source_count) + logpr - gtree->logpr + logl - gtree->logl;
+    else
+    {
+      acceptance = log((double)target_count / source_count) + logpr - stree->notheta_logpr + logl - gtree->logl;
+    }
 
     if (opt_debug)
       printf("[Debug] (spr) lnacceptance = %f\n", acceptance);
 
     if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
     {
-      gtree->logpr = logpr;
+      /* accepted */
+      accepted++;
+
+      if (opt_est_theta)
+        gtree->logpr = logpr;
+      else
+        stree->notheta_logpr = logpr;
+
       gtree->logl = logl;
 
-      accepted++;
     }
     else
     {
@@ -1948,7 +2079,15 @@ static long propose_spr(locus_t * locus,
 
       if (father->pop == oldpop)
       {
-        father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
+        if (opt_est_theta)
+          father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
+        else
+        {
+          father->pop->t2h_sum -= father->pop->t2h[msa_index];
+          father->pop->t2h[msa_index] = father->pop->old_t2h[msa_index];
+          father->pop->t2h_sum += father->pop->t2h[msa_index];
+          father->pop->notheta_logpr_contrib= father->pop->notheta_old_logpr_contrib;
+        }
       }
       else
       {
@@ -1959,6 +2098,8 @@ static long propose_spr(locus_t * locus,
 
         /* decrease the number of coalescent events for the current population */
         father->pop->event_count[msa_index]--;
+        if (!opt_est_theta)
+          father->pop->event_count_sum--;
           
         /* change population for the current gene tree node */
         SWAP(father->pop,oldpop);
@@ -1967,6 +2108,8 @@ static long propose_spr(locus_t * locus,
         dlist_item_append(father->pop->event[msa_index],father->event);
 
         father->pop->event_count[msa_index]++;
+        if (!opt_est_theta)
+          father->pop->event_count_sum++;
 
         /* increase or decrease the number of incoming lineages to all populations in the path
         from old population to the new population, depending on the case  */
@@ -1994,7 +2137,12 @@ static long propose_spr(locus_t * locus,
         snode_t * end   = (tnew > oldage) ? oldpop->parent : father->pop->parent;
 
         for (pop = start; pop != end; pop = pop->parent)
-          pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+        {
+          if (opt_est_theta)
+            pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+          else
+            logprob_revert_notheta(pop,msa_index);
+        }
       }
     }
   }
@@ -2140,9 +2288,16 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   long accepted = 0;
   double hnew,hold;
   double lnacceptance;
+  double logpr = 0;
+
+  double hfactor = 0;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    if (!opt_est_theta)
+      logpr = stree->notheta_logpr;
+
+
     hold = locus[i]->heredity[0];
     hnew = hold + opt_finetune_locusrate*legacy_rnd_symmetrical();
     if (hnew < 0) hnew *= -1;
@@ -2150,8 +2305,48 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     locus[i]->heredity[0] = hnew;
     lnacceptance = (opt_heredity_alpha-1)*log(hnew/hold) -
                    opt_heredity_beta*(hnew-hold);
-    double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
-    lnacceptance += logpr - gtree[i]->logpr;
+
+    if (opt_est_theta)
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+    else
+    {
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      {
+        logpr -= stree->nodes[j]->notheta_logpr_contrib;
+        logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+      }
+    }
+
+    /* TODO: Perhaps we can avoid the check every 100-th term by using the log
+       of heredity scaler from the beginning. E.g. if this loop is replaced by
+       
+       for (j = 0; j < opt_locus_count; ++j)
+         logpr -= log(locus[j]->heredity[0]);
+
+       then we only need to add and subtract the two corresponding heredity
+       multipliers (the old and new)
+    */
+    if (!opt_est_theta)
+    {
+      hfactor = 0;
+      double y = 1;
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        y *= locus[j]->heredity[0];
+        if ((j+1) % 100 == 0)
+        {
+          hfactor -= log(y);
+          y = 1;
+        }
+      }
+      hfactor -= log(y);
+      logpr += hfactor - stree->notheta_hfactor;
+    }
+
+    if (opt_est_theta)
+      lnacceptance += logpr - gtree[i]->logpr;
+    else
+      lnacceptance += logpr - stree->notheta_logpr;
 
     if (opt_debug)
       fprintf(stdout, "[Debug] (heredity) lnacceptance = %f\n", lnacceptance);
@@ -2159,14 +2354,26 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     {
       /* accepted */
       accepted++;
-      gtree[i]->logpr = logpr;
+
+      if (opt_est_theta)
+        gtree[i]->logpr = logpr;
+      else
+      {
+        stree->notheta_logpr = logpr;
+        stree->notheta_hfactor = hfactor;
+      }
     }
     else
     {
       /* rejected */
       locus[i]->heredity[0] = hold;
       for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-        stree->nodes[j]->logpr_contrib[i] = stree->nodes[j]->old_logpr_contrib[i];
+      {
+        if (opt_est_theta)
+          stree->nodes[j]->logpr_contrib[i] = stree->nodes[j]->old_logpr_contrib[i];
+        else
+          logprob_revert_notheta(stree->nodes[j],i);
+      }
     }
   }
   return accepted;

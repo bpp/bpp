@@ -147,6 +147,8 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   if (opt_est_locusrate || opt_est_heredity)
     size_section += sizeof(double);                   /* locusrate finetune */
 
+  /* TODO: Check which parameters are written for notheta option */
+
 
   /* write section 1 size */
   DUMP(&size_section,1,fp);
@@ -302,9 +304,11 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&pjump_slider,1,fp);
   DUMP(&mean_logl,1,fp);
   DUMP(&mean_tau_count,1,fp);
-  DUMP(&mean_theta_count,1,fp);
+  if (opt_est_theta)
+    DUMP(&mean_theta_count,1,fp);
   DUMP(mean_tau,mean_tau_count,fp);
-  DUMP(mean_theta,mean_theta_count,fp);
+  if (opt_est_theta)
+    DUMP(mean_theta,mean_theta_count,fp);
 }
 
 
@@ -320,6 +324,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   for (i = 0; i < stree->inner_count; ++i)
     DUMP(&(stree->nodes[stree->tip_count+i]->right->node_index),1,fp);
 
+  /* TODO: We do not need to write theta when !opt_est_theta */
   /* write theta */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     DUMP(&(stree->nodes[i]->theta),1,fp);
@@ -340,6 +345,21 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 //  /* write MSC density contribution - TODO: Candidate for removal */
 //  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
 //    fwrite((void *)&(stree->nodes[i]->logpr_contrib),sizeof(double),1,fp);
+  
+  /* TODO: Perhaps we can remove this and compute from scratch when resuming */
+  if (!opt_est_theta)
+  {
+    DUMP(&(stree->notheta_logpr),1,fp);
+    DUMP(&(stree->notheta_hfactor),1,fp);
+    DUMP(&(stree->notheta_sfactor),1,fp);
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      DUMP(stree->nodes[i]->t2h,opt_locus_count,fp);
+      DUMP(&(stree->nodes[i]->t2h_sum),1,fp);
+      DUMP(&(stree->nodes[i]->event_count_sum),1,fp);
+      DUMP(&(stree->nodes[i]->notheta_logpr_contrib),1,fp);
+    }
+  }
 
   DUMP(&(stree->root_age),1,fp);
 

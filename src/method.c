@@ -120,21 +120,23 @@ static char * cb_serialize_branch(const snode_t * node)
   {
     if (node->parent)
     {
-      if (node->theta > 0)
+      if (opt_est_theta && node->theta > 0)
         xasprintf(&s, " #%f: %f", node->theta, node->parent->tau - node->tau);
       else
         xasprintf(&s, ": %f", node->parent->tau - node->tau);
     }
     else
     {
-      if (node->theta > 0)
+      if (opt_est_theta && node->theta > 0)
         xasprintf(&s, " #%f", node->theta);
+      else
+        xasprintf(&s, "");
     }
       
   }
   else
   {
-    if (node->theta > 0)
+    if (opt_est_theta && node->theta > 0)
       xasprintf(&s, "%s #%f: %f",
                node->label, node->theta, node->parent->tau - node->tau);
     else
@@ -155,21 +157,25 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   else
     fprintf(fp, "Gen");
 
-  /* TODO: Account for integrated out theta */
   /* TODO: If number of species > 10 do not print labels */
 
   if (stree->tip_count > 10)
     print_labels = 0;
 
   /* 1. Print thetas */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->theta >= 0)
+  if (opt_est_theta)
+  {
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     {
-      if (print_labels)
-        fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
-      else
-        fprintf(fp, "\ttheta_%d", i+1);
+      if (stree->nodes[i]->theta >= 0)
+      {
+        if (print_labels)
+          fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
+        else
+          fprintf(fp, "\ttheta_%d", i+1);
+      }
     }
+  }
 
   /* 2. Print taus for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
@@ -237,14 +243,20 @@ static void mcmc_logsample(FILE * fp,
   /* 1. Print thetas */
 
   /* first print thetas for tips */
-  for (i = 0; i < stree->tip_count; ++i)
-    if (stree->nodes[i]->theta >= 0)
-      fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
+  if (opt_est_theta)
+  {
+    for (i = 0; i < stree->tip_count; ++i)
+      if (stree->nodes[i]->theta >= 0)
+        fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
+  }
 
   /* then for inner nodes */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
-    if (stree->nodes[i]->theta >= 0)
-      fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
+  if (opt_est_theta)
+  {
+    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+      if (stree->nodes[i]->theta >= 0)
+        fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
+  }
 
   /* 2. Print taus for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
@@ -373,8 +385,15 @@ static FILE * resume(stree_t ** ptr_stree,
 
   /* compute MSC density */
   locus_t ** locus = *ptr_locus;
-  for (i = 0; i < opt_locus_count; ++i)
-    gtree[i]->logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+  if (opt_est_theta)
+  {
+    for (i = 0; i < opt_locus_count; ++i)
+      gtree[i]->logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+  }
+  else
+  {
+    //assert(0);
+  }
 
   /* set old_pop to NULL */
   for (i = 0; i < opt_locus_count; ++i)
@@ -490,9 +509,6 @@ static FILE * init(stree_t ** ptr_stree,
   msa_t ** msa_list;
   gtree_t ** gtree;
   locus_t ** locus;
-
-  if (!opt_est_theta)
-    fatal("Theta cannot be integrated-out in this version of BPP.");
 
   /* method 10 specific variables */
   long dparam_count = 0;
@@ -661,6 +677,32 @@ static FILE * init(stree_t ** ptr_stree,
     for (i = 0; i < opt_locus_count; ++i)
       heredity[i] = opt_heredity_alpha /
                     opt_heredity_beta*(0.8 + 0.4*legacy_rndu());
+
+    /* TODO: Perhaps we can avoid the check every 100-th term by using the log
+       of heredity scaler from the beginning. E.g. if this loop is replaced by
+       
+       for (j = 0; j < opt_locus_count; ++j)
+         logpr -= log(locus[j]->heredity[0]);
+
+       then we only need to add and subtract the two corresponding heredity
+       multipliers (the old and new)
+    */
+    if (!opt_est_theta)
+    {
+      double hfactor = 0;
+      double y = 1;
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        y *= heredity[i];
+        if ((i+1) % 100 == 0)
+        {
+          hfactor -= log(y);
+          y = 1;
+        }
+      }
+      hfactor -= log(y);
+      stree->notheta_hfactor = hfactor;
+    }
   }
   else if (opt_est_heredity == HEREDITY_FROMFILE)
   {
@@ -860,9 +902,29 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* store current log-likelihood in each gene tree structure */
     gtree[i]->logl = logl;
-    logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
-    gtree[i]->logpr = logpr;
-    logpr_sum += logpr;
+    if (opt_est_theta)
+    {
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+      gtree[i]->logpr = logpr;
+      logpr_sum += logpr;
+    }
+    else
+    {
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+        logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+    }
+  }
+  if (!opt_est_theta)
+  {
+    logpr_sum = 0;
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      logpr_sum += stree->nodes[j]->notheta_logpr_contrib;
+    printf("Sum: %f\n", logpr_sum);
+    stree->notheta_logpr += logpr_sum;
+    printf("log-P0 = %f\n", stree->notheta_logpr); //+stree->notheta_factor);
+    stree->notheta_old_logpr = 0;
+
+    logpr_sum = stree->notheta_logpr;
   }
 
   /* deallocate unnecessary arrays */
@@ -908,7 +970,7 @@ static FILE * init(stree_t ** ptr_stree,
     dparam_count = 0;
     for (i = 0; i < (int)(stree->tip_count + stree->inner_count); ++i)
     {
-      if (stree->nodes[i]->theta > 0)
+      if (opt_est_theta && stree->nodes[i]->theta > 0)
         dparam_count++;
       if (stree->nodes[i]->tau > 0)
         dparam_count++;
@@ -1138,8 +1200,11 @@ void cmd_run()
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* propose population sizes on species tree */
-    ratio = stree_propose_theta(gtree,locus,stree);
-    pjump[2] = (pjump[2]*(ft_round-1) + ratio) / (double)ft_round;
+    if (opt_est_theta)
+    {
+      ratio = stree_propose_theta(gtree,locus,stree);
+      pjump[2] = (pjump[2]*(ft_round-1) + ratio) / (double)ft_round;
+    }
 
     /* propose species tree taus */
     ratio = stree_propose_tau(gtree,stree,locus);
@@ -1148,6 +1213,7 @@ void cmd_run()
     /* mixing step */
     ratio = proposal_mixing(gtree,stree,locus);
     pjump[4] = (pjump[4]*(ft_round-1) + ratio) / (double)ft_round;
+    //assert(0);
 
     if (opt_est_locusrate || opt_est_heredity)
     {
@@ -1255,8 +1321,10 @@ void cmd_run()
          printf(" %2ld %6.4f %s", dparam_count,
                                   (ft_round_rj ? pjump_rj / ft_round_rj : 0),
                                   delimitation_getparam_string());
-         printf(" P[%ld] =%6.4f",
-                delimitation_getcurindex()+1,
+         printf(" %f P[%ld]=%6.4f",
+                posterior[bmodel],
+                bmodel+1,
+                //delimitation_getcurindex()+1,
                 posterior[bmodel] / ft_round);
 
       }
@@ -1273,10 +1341,11 @@ void cmd_run()
       printf(" ");
       
       double logpr_sum = 0;
-      for (j = 0; j < opt_locus_count; ++j)
-      {
-        logpr_sum += gtree[j]->logpr;
-      }
+      if (opt_est_theta)
+        for (j = 0; j < opt_locus_count; ++j)
+          logpr_sum += gtree[j]->logpr;
+      else
+        logpr_sum = stree->notheta_logpr;
       printf(" %7.2f", logpr_sum);
 
       if (opt_usedata)

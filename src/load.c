@@ -469,17 +469,27 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(mean_tau_count,1,fp))
     fatal("Cannot read number of mean taus"); 
 
-  if (!LOAD(mean_theta_count,1,fp))
-    fatal("Cannot read number of mean thetas"); 
+  if (opt_est_theta)
+  {
+    if (!LOAD(mean_theta_count,1,fp))
+      fatal("Cannot read number of mean thetas"); 
+  }
 
   *mean_tau   = (double *)xmalloc((size_t)(*mean_tau_count)*sizeof(double));
-  *mean_theta = (double *)xmalloc((size_t)(*mean_theta_count)*sizeof(double));
+
+  if (opt_est_theta)
+  {
+    *mean_theta = (double *)xmalloc((size_t)(*mean_theta_count)*sizeof(double));
+  }
 
   if (!LOAD(*mean_tau,*mean_tau_count,fp))
     fatal("Cannot read mean tau values"); 
 
-  if (!LOAD(*mean_theta,*mean_theta_count,fp))
-    fatal("Cannot read mean theta values"); 
+  if (opt_est_theta)
+  {
+    if (!LOAD(*mean_theta,*mean_theta_count,fp))
+      fatal("Cannot read mean theta values"); 
+  }
 
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -529,6 +539,16 @@ static void load_chk_section_1(FILE * fp,
                                                 sizeof(double));
     node->event = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                       sizeof(dlist_t *));
+
+    node->t2h = NULL;
+    node->old_t2h = NULL;
+    if (!opt_est_theta)
+    {
+      node->t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
+      node->old_t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
+      node->t2h_sum = 0;
+      node->event_count_sum = 0;
+    }
   }
 
   stree->pptable = (int**)xcalloc(alloc,sizeof(int *));
@@ -633,6 +653,37 @@ void load_chk_section_2(FILE * fp)
 //  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
 //    if (fread((void *)&(stree->nodes[i]->logpr_contrib),sizeof(double),1,fp) != 1)
 //      fatal("Cannot read species MSC density contribution");
+  
+  if (!opt_est_theta)
+  {
+    if (!LOAD(&(stree->notheta_logpr),1,fp))
+      fatal("Cannot read MSC density");
+
+    if (!LOAD(&(stree->notheta_hfactor),1,fp))
+      fatal("Cannot read heredity multiplier precomputed density contribution");
+
+    if (!LOAD(&(stree->notheta_sfactor),1,fp))
+      fatal("Cannot read sequence count precomputed density contribution");
+
+    stree->notheta_old_logpr = 0;
+
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      if (!LOAD(stree->nodes[i]->t2h,opt_locus_count,fp))
+        fatal("Cannot read per-locus t2h contributions");
+
+      if (!LOAD(&(stree->nodes[i]->t2h_sum),1,fp))
+        fatal("Cannot read t2h sum");
+
+      if (!LOAD(&(stree->nodes[i]->event_count_sum),1,fp))
+        fatal("Cannot read coalescent events sum");
+
+      if (!LOAD(&(stree->nodes[i]->notheta_logpr_contrib),1,fp))
+        fatal("Cannot read MSC density contribution for node");
+
+      stree->nodes[i]->notheta_old_logpr_contrib = 0;
+    }
+  }
 
   /* read root_tau */
   if (!LOAD(&(stree->root_age),1,fp))
