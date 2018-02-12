@@ -1128,7 +1128,7 @@ void checkpoint_truncate(const char * filename, long offset)
   if (!(fp = fopen(filename, "a")))
     fatal("Cannot open file %s for reading...", filename);
 
-  if (ftruncate(fileno(fp),offset))
+  if (xtruncate(fileno(fp),offset))
     fatal("Cannot truncate file %s to %ld bytes...", filename, offset);
   
   fclose(fp);

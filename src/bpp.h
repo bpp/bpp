@@ -496,10 +496,12 @@ typedef struct pair_s
 #define PLL_POPCOUNT pll_popcount
 #define PLL_POPCOUNTL pll_popcount64
 #define PLL_CTZ pll_ctz
+#define xtruncate _chsize
 #else
 #define PLL_POPCOUNT __builtin_popcount
 #define PLL_POPCOUNTL __builtin_popcountl
 #define PLL_CTZ __builtin_ctz
+#define xtruncate ftruncate
 #endif
 
 #define legacy_rndexp(mean) (-(mean)*log(legacy_rndu()))
