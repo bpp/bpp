@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2017 Tomas Flouri
+    Copyright (C) 2016-2018 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -14,9 +14,9 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-    Contact: Tomas Flouri <Tomas.Flouri@h-its.org>,
-    Heidelberg Institute for Theoretical Studies,
-    Schloss-Wolfsbrunnenweg 35, D-69118 Heidelberg, Germany
+    Contact: Tomas Flouri <t.flouris@ucl.ac.uk>,
+    Department of Genetics, Evolution and Environment,
+    University College London, Gower Street, London WC1E 6BT, England
 */
 
 #include "bpp.h"
