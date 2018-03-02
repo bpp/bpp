@@ -144,6 +144,7 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->support     = snode->support;
   clone->weight      = snode->weight;
   clone->node_index  = snode->node_index;
+  clone->has_theta   = snode->has_theta;
 
   /* points to relatives */
   if (snode->parent)
@@ -540,7 +541,7 @@ static void stree_init_tau(stree_t * stree)
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     stree->nodes[i]->tau = 1;
   
-  if (opt_delimit && !opt_stree)    /* method A10 */
+  if (opt_method == METHOD_10)    /* method A10 */
   {
     double r = legacy_rndu();
     int index = (int)(r * delimitation_getparam_count());
@@ -549,16 +550,20 @@ static void stree_init_tau(stree_t * stree)
     char * s = delimitation_getparam_string();
     printf("Starting delimitation: %s\n", s);
   }
+  else if (opt_method == METHOD_11)
+  {
+    double r = (long)(stree->tip_count*legacy_rndu());
+    if (r < stree->tip_count-1)
+      for (i = stree->tip_count; i < stree->tip_count * 2 - 1; ++i)
+        stree->nodes[i]->tau = !stree->pptable[i][stree->tip_count+(long)r];
+  }
   /* Initialize speciation times for each extinct species */ 
 
   double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
 
   /* set the speciation time for root */
   if (stree->root->tau)
-  {
-    stree->root->tau = opt_tau_beta/(opt_tau_alpha-1) * (0.9 + 0.2*legacy_rndu());
-    printf("Root age tau %f\n", stree->root->tau);
-  }
+    stree->root->tau = opt_tau_beta/(opt_tau_alpha-1)*(0.9 + 0.2*legacy_rndu());
 
   /* recursively set the speciation time for the remaining inner nodes */
   stree_init_tau_recursive(stree->root->left,prop);
@@ -579,6 +584,13 @@ static void stree_init_theta(stree_t * stree,
      species tree) */
   int ** seqcount = populations_seqcount(stree,msalist,maplist,msa_count);
 
+  /* initialize 'has_theta' attribute */
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    if (opt_est_theta)
+      stree->nodes[i]->has_theta = 1;
+    else
+      stree->nodes[i]->has_theta = 0;
+
   /* go through tip nodes and setup thetas only for those that have
      two sequences in some loci */
   for (i = 0; i < stree->tip_count; ++i)
@@ -594,6 +606,7 @@ static void stree_init_theta(stree_t * stree,
     if (j == (unsigned int)msa_count)
     {
       node->theta = -1;
+      node->has_theta = 0;
       continue;
     }
 
@@ -639,7 +652,7 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
 {
   /* allocate traversal buffer to be the size of all nodes for all loci */
 //  unsigned int sum_count = 0;
-  unsigned int sum_nodes = 2*gtree_inner_sum + msa_count;
+  unsigned long sum_nodes = 2*gtree_inner_sum + msa_count;
 //  for (i = 0; i < (unsigned int)msa_count; ++i)
 //    sum_count += (unsigned int)(msa[i]->count);
 
@@ -647,7 +660,8 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
 //  __gt_nodes = (gnode_t **)xmalloc(sum_count * sizeof(gnode_t *));
 //  __aux = (double *)xmalloc((sum_count - msa_count)*sizeof(double *));
   __gt_nodes = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
-  __aux = (double *)xmalloc((sum_nodes - msa_count)*sizeof(double *));
+  //__aux = (double *)xmalloc((sum_nodes - msa_count)*sizeof(double));
+  __aux = (double *)xmalloc((sum_nodes)*sizeof(double));
 
   /* The following two arrays are used purely for the tau proposal.
      Entry i of marked_count indicates how many nodes from locus i are marked.
@@ -659,7 +673,7 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
   __extra_count = (int *)xmalloc(msa_count*sizeof(int));
 
   /* species tree inference */
-  if (opt_stree)
+  if (opt_est_stree)
   {
     target_weight = (double *)xmalloc((stree->tip_count + stree->inner_count) *
                                     sizeof(double));
@@ -697,6 +711,26 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
   #endif
 
   assert(msa_count > 0);
+
+  /* initialize pptable, where pptable[i][j] indicates whether population j
+     (that is, node with index j) is ancestral to population i */
+  stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count),
+                                   sizeof(int *));
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count),
+                                       sizeof(int));
+
+  
+  stree_reset_pptable(stree);
+  #if 0
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
+      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
+        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
+  }
+  #endif
+
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
@@ -738,25 +772,6 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
       stree->nodes[i]->event[j] = dlist_create();
   }
 
-  /* initialize pptable, where pptable[i][j] indicates whether population j
-     (that is, node with index j) is ancestral to population i */
-  stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count),
-                                   sizeof(int *));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count),
-                                       sizeof(int));
-
-  
-  stree_reset_pptable(stree);
-  #if 0
-  for (i = 0; i < stree->tip_count; ++i)
-  {
-    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
-      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
-        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
-  }
-  #endif
-
   unsigned int sum_inner = 0;
   for (i = 0; i < (unsigned int)msa_count; ++i)
     sum_inner += msa[i]->count-1;
@@ -770,7 +785,7 @@ void stree_fini()
   free(__mark_count);
   free(__extra_count);
 
-  if (opt_stree)
+  if (opt_est_stree)
   {
     free(target_weight);
     free(target);
@@ -789,7 +804,7 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
   long i;
   double thetaold;
   double thetanew;
-  double acceptance;
+  double lnacceptance;
 
   thetaold = snode->theta;
   
@@ -800,8 +815,8 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
 
   snode->theta = thetanew;
 
-  acceptance = (-opt_theta_alpha-1) * log(thetanew/thetaold) -
-               opt_theta_beta*(1/thetanew - 1/thetaold);
+  lnacceptance = (-opt_theta_alpha-1) * log(thetanew/thetaold) -
+                 opt_theta_beta*(1/thetanew - 1/thetaold);
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -812,14 +827,14 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
     gtree_update_logprob_contrib(snode,locus[i]->heredity[0],i);
     gtree[i]->logpr += snode->logpr_contrib[i];
     
-    acceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
+    lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
 
   }
 
   if (opt_debug)
-    printf("[Debug] (theta) lnacceptance = %f\n", acceptance);
+    printf("[Debug] (theta) lnacceptance = %f\n", lnacceptance);
 
-  if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
   {
     return 1;
   }
@@ -849,7 +864,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    if (snode->theta >= 0)
+    if (snode->theta >= 0 && snode->has_theta)
     {
       accepted += propose_theta(gtree, locus, stree->nodes[i]);
       theta_count++;
@@ -871,7 +886,7 @@ static long propose_tau(locus_t ** loci,
   long accepted = 0;
   double oldage, newage;
   double minage = 0, maxage = 999;
-  double acceptance = 0;
+  double lnacceptance = 0;
   double minfactor,maxfactor,thetafactor;
   double oldtheta = 0;
   double logpr = 0;
@@ -904,8 +919,8 @@ static long propose_tau(locus_t ** loci,
   /* if we are dealing with the root population, add the following factor to
      the acceptance ratio */
   if (snode == stree->root)
-    acceptance = (-opt_tau_alpha-1 - candidate_count+1)*log(newage/oldage) -
-                 opt_tau_beta*(1/newage - 1/oldage);
+    lnacceptance = (-opt_tau_alpha-1 - candidate_count+1)*log(newage/oldage) -
+                   opt_tau_beta*(1/newage - 1/oldage);
 
   /* change theta as well */
   if (opt_est_theta)
@@ -920,9 +935,9 @@ static long propose_tau(locus_t ** loci,
 
     snode->theta = oldtheta / thetafactor;
 
-    acceptance += -log(thetafactor) + (-opt_theta_alpha-1) * 
-                  log(snode->theta/oldtheta) -
-                  opt_theta_beta*(1/snode->theta - 1/oldtheta);
+    lnacceptance += -log(thetafactor) + (-opt_theta_alpha-1) * 
+                    log(snode->theta/oldtheta) -
+                    opt_theta_beta*(1/snode->theta - 1/oldtheta);
   }
 
   snode_t * affected[3] = {snode, snode->left, snode->right};
@@ -1081,7 +1096,13 @@ static long propose_tau(locus_t ** loci,
       logl_diff += logl - gtree[i]->logl;
       gtree[i]->logl = logl;
     }
+
+    /* Test for checking whether all gene tree nodes can be marked. It seems to
+       hold */
+    //if (__mark_count[i] + __extra_count[i] >= 2*loci[i]->tips-1)
+    //  assert(0);
   }
+
 
   if (!opt_est_theta) 
   {
@@ -1093,14 +1114,13 @@ static long propose_tau(locus_t ** loci,
     stree->notheta_logpr = logpr;
   }
 
-
-  acceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
-                count_above*log(maxfactor);
+  lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
+                  count_above*log(maxfactor);
 
   if (opt_debug)
-    printf("[Debug] (tau) lnacceptance = %f\n", acceptance);
+    printf("[Debug] (tau) lnacceptance = %f\n", lnacceptance);
 
-  if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
   {
     /* accepted */
     accepted++;
@@ -2290,7 +2310,6 @@ long stree_propose_spr(stree_t ** streeptr,
 
   if (!opt_est_theta)
   {
-//    printf("old logpr: %f new : %f\n", stree->notheta_logpr, logpr_notheta);
     lnacceptance += logpr_notheta - stree->notheta_logpr;
     stree->notheta_logpr = logpr_notheta;
   }
@@ -2301,5 +2320,6 @@ long stree_propose_spr(stree_t ** streeptr,
   /* in case of acceptance, cloned trees are substituted with the original ones,
      and species tree nodes are re-labeled, but all this is done in method_01.c
   */
-  return (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance));
+  //return (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance));
+  return (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance));
 }

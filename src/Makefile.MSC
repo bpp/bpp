@@ -54,7 +54,8 @@ OBJ_BPP = \
   summary.obj \
   util.obj \
   experimental.obj \
-  diploid.obj
+  diploid.obj \
+  summary11.obj
 
 all: $(PROG)
 

@@ -34,10 +34,6 @@
         log(b))
 #define log_pdfinvgamma(x, a, b)  ( (a)*log(b) - lgamma(a) - (a+1)*log(x) - (b)/(x) )
 
-//static int opt_rjalgorithm = 1;
-//static double opt_finetune_rja = 2;
-//static double opt_finetune_rjm = 1;
-
 static gnode_t ** nodevec;
 static unsigned int * nodevec_offset;
 static unsigned int * nodevec_count;
@@ -382,34 +378,12 @@ static int rubber_proportional(stree_t * stree,
   return changed_count > 0;
 }
 
-double lnprior_species_model(stree_t * stree)
-{
-  double p;
-
-  switch (opt_delimit_prior)
-  {
-    case BPP_SPECIES_PRIOR_LH:
-      p = 1.0;
-      break;
-
-    case BPP_SPECIES_PRIOR_UNIFORM:
-      p = 1.0 / histories(stree);
-      break;
-
-    default:
-      fatal("Unknown species delimitation prior");
-  }
-
-  p = (p < 1e-300) ? -500 : log(p);
-  
-  return p;
-}
-
 long prop_split(gtree_t ** gtree,
                 stree_t * stree,
                 locus_t ** locus,
                 double pr_split,
-                long * param_count)
+                long * param_count,
+                long * ndspecies)
 {
   int fsplit_count = 0;
   int fjoin_count = 0;
@@ -470,49 +444,55 @@ long prop_split(gtree_t ** gtree,
   /* 5. Now update population sizes for the two children, and then update
      lnacceptance */
 
-  /* Store the left child theta, and update it according to RJ algorithm */
   if (opt_est_theta)
   {
+    /* Store the left child theta, and update it according to RJ algorithm */
     node->left->old_theta = node->left->theta;
-
-    if (!opt_rjmcmc_method)
+    if (node->left->has_theta)
     {
-      node->left->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
-      thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
-    }
-    else
-    {
-      node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
-                          (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-      thetafactor /= pdf_gamma(node->left->theta,
-                               opt_rjmcmc_alpha,
-                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    }
+      if (!opt_rjmcmc_method)
+      {
+        node->left->theta = node->theta *
+                            exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+        thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
+      }
+      else
+      {
+        node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                            (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+        thetafactor /= pdf_gamma(node->left->theta,
+                                 opt_rjmcmc_alpha,
+                                 opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      }
 
-    lnacceptance += log_pdfinvgamma(node->left->theta,
-                                    opt_theta_alpha,
-                                    opt_theta_beta);
+      lnacceptance += log_pdfinvgamma(node->left->theta,
+                                      opt_theta_alpha,
+                                      opt_theta_beta);
+    }
 
     /* Store the right child theta, and update it according to RJ algorithm */
     node->right->old_theta = node->right->theta;
-
-    if (!opt_rjmcmc_method)
+    if (node->right->has_theta)
     {
-      node->right->theta = node->theta*exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
-      thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
-    }
-    else
-    {
-      node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
-                           (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-      thetafactor /= pdf_gamma(node->right->theta,
-                               opt_rjmcmc_alpha,
-                               opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
-    }
+      if (!opt_rjmcmc_method)
+      {
+        node->right->theta = node->theta *
+                             exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+        thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
+      }
+      else
+      {
+        node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+                             (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+        thetafactor /= pdf_gamma(node->right->theta,
+                                 opt_rjmcmc_alpha,
+                                 opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
+      }
 
-    lnacceptance += log_pdfinvgamma(node->right->theta,
-                                    opt_theta_alpha,
-                                    opt_theta_beta);
+      lnacceptance += log_pdfinvgamma(node->right->theta,
+                                      opt_theta_alpha,
+                                      opt_theta_beta);
+    }
   }
 
   /* Update lnacceptance with new species tree prior */
@@ -633,7 +613,7 @@ long prop_split(gtree_t ** gtree,
   if (opt_debug)
     printf("[Debug] (split) lnacceptance = %f\n", lnacceptance);
 
-  if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
   {
     /* accept */
 
@@ -645,8 +625,9 @@ long prop_split(gtree_t ** gtree,
     if (opt_est_theta)
       *param_count += (node->left->theta > 0) + (node->right->theta > 0);
 
-
     accepted = 1;
+    *ndspecies += 1;
+
     for (i = 0; i < stree->locus_count; ++i)
       for (k = 0; k < gtree[i]->tip_count + gtree[i]->inner_count; ++k)
       {
@@ -775,7 +756,8 @@ long prop_join(gtree_t ** gtree,
                stree_t * stree,
                locus_t ** locus,
                double pr_split,
-               long * param_count)
+               long * param_count,
+               long * ndspecies)
 {
   int fsplit_count = 0;
   int fjoin_count = 0;
@@ -1007,7 +989,7 @@ long prop_join(gtree_t ** gtree,
   if (opt_debug)
     printf("[Debug] (join) lnacceptance = %f\n", lnacceptance);
 
-  if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
   {
     /* accepted */
 
@@ -1016,6 +998,7 @@ long prop_join(gtree_t ** gtree,
     delimit_setindex(dmodel_index);
 
     accepted = 1;
+    *ndspecies -= 1;
 
     *param_count -= 1;
     if (opt_est_theta)

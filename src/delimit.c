@@ -27,6 +27,8 @@ static long * hist = NULL;
 static double * dprior = NULL;
 static char ** dmodels = NULL;
 
+static double * prior_A11 = NULL;
+
 static snode_t ** trav = NULL;
 static int trav_size = 0;
 
@@ -36,6 +38,179 @@ static char buffer[LINEALLOC];
 static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
+
+static double facn;
+
+static int longint_len(long x)
+{
+  return x ? (int)floor(log10(abs(x)))+1 : 1;
+}
+
+double * getpriorA11()
+{
+  return prior_A11;
+}
+
+static double tree_counter(long tip_count, long rooted)
+{
+  long i;
+  double trees = 1;
+  rooted = !!rooted;
+
+  for (i = 4; i <= tip_count+rooted; ++i)
+    trees *= 2*i-5;
+
+  return trees;
+}
+
+static double lh_counter(long tip_count)
+{
+  long i;
+  double lh = 1;
+
+  for (i = 3; i <= tip_count; ++i)
+    lh *= i*(i-1) / 2;
+
+  return lh;
+}
+
+static double factorial(long n)
+{
+  long i;
+  double f = 1;
+
+  for (i = 2; i <= n; ++i)
+    f *= i;
+    
+  return f;
+}
+
+static void print_pinfo(double * prior, long * a, long n, long k)
+{
+  long i;
+  double nd;
+
+  /* count number of delimitations */
+  for (i = 0, nd = facn; i < k; ++i)
+    if (a[i] > 1) nd /= factorial(a[i]);
+
+  long start = 0;
+  long nsame = 1;
+
+  for (i = 1; i < k; ++i)
+  {
+    if (a[i] != a[start])
+    {
+      if (nsame > 1) nd /= factorial(nsame);
+      start = i; nsame = 1;
+    }
+    else ++nsame;
+  }
+  if (nsame > 1) nd /= factorial(nsame);
+
+  /* calculate number of rooted tress with k tips */
+  double tree_count = tree_counter(k,BPP_TRUE);
+
+  /* calculate guide trees */
+  double guide_count = 1;
+  for (i = 0; i < k; ++i)
+    if (a[i] > 2) guide_count *= tree_counter(a[i],BPP_TRUE);
+
+  /* calculate weight for labeled histories if prior defined */
+  double wlh = 1;
+  if (k > 3 && (opt_delimit_prior == BPP_SPECIES_PRIOR_LH ||
+                opt_delimit_prior == BPP_SPECIES_PRIOR_SLH))
+    wlh = lh_counter(k) / tree_count;
+
+
+  printf("%*s  nD = %3.0f  Trees = %4.0f  Guide = %4.0f  pro=%4.0f\n",
+         (int)(2*n+5-k*2),
+         "",
+         nd,
+         tree_count,
+         guide_count,
+         nd*tree_count*guide_count*wlh);
+
+  prior[k-1] += nd*tree_count*guide_count*wlh;
+}
+
+static void print_partition(long * a, long k, int spc, double * prior, long n)
+{
+  long i;
+
+  printf("[%*ld ] ", spc+1,k);
+  for (i = 0; i < k; ++i)
+    printf(" %ld", a[i]);
+
+  print_pinfo(prior,a,n,k);
+
+}
+
+/* Jerome Kelleher's optimal algorithm for generating ascending partitions.
+   See also Table 1 column "Number of Delimitations" in Yang & Rannala (2014
+   MBE 12: 3125-3135)
+   Number of delimitations should be equal to n!/\prod_k #permutations
+
+   Tomas: Check also the "Permutation of multisets" as described here:
+   https://en.wikipedia.org/wiki/Permutation
+*/
+void partition_fast(long n)
+{
+  int spc = longint_len(n);
+  long i,l;
+  long k = 1;
+  long x;
+  long y = n-1;
+  long count = 0;
+  long * a;
+
+  printf("Counting delimitations...\n");
+  if (!prior_A11)
+    prior_A11 = (double *)xcalloc((size_t)(n+1),sizeof(double));
+  
+  /* initialize facn to factorial of n */
+  facn = factorial(n);
+  
+  a = (long *)xmalloc((size_t)(n+1) * sizeof(long));
+
+  for (i = 0; i <= n; ++i)
+    a[i] = i;
+
+  while (k)
+  {
+    x = a[k-1] + 1;
+    k -= 1;
+
+    while (2*x <= y)
+    {
+      a[k] = x;
+      y -= x;
+      k += 1;
+    }
+    l = k+1;
+    while (x <= y)
+    {
+      a[k] = x;
+      a[l] = y;
+      count++;
+      print_partition(a,k+2,spc,prior_A11,n);
+      x += 1;
+      y -= 1;
+    }
+    a[k] = x+y;
+    y = x + y - 1;
+    count++;
+    print_partition(a,k+1,spc,prior_A11,n);
+  }
+
+  double sum = 0;
+  for (i = 0; i < n; ++i)
+    sum += prior_A11[i];
+  for (i = 0; i < n; ++i)
+    prior_A11[i] /= sum;
+
+  free(a);
+}
 
 static void reallocline(size_t newmaxsize)
 {
@@ -448,12 +623,20 @@ void delimitations_fini()
 {
   long i;
 
-  free(trav);
-  for (i = 0; i < dmodels_count; ++i)
-    free(dmodels[i]);
-  free(dmodels);
-  free(hist);
-  free(dprior);
+  if (opt_method == METHOD_10)
+  {
+    free(trav);
+    for (i = 0; i < dmodels_count; ++i)
+      free(dmodels[i]);
+    free(dmodels);
+    free(hist);
+    free(dprior);
+  }
+
+  if (opt_method == METHOD_11)
+  {
+    free(prior_A11);
+  }
 }
 
 static double binomial(double n, int k, double * scale)
@@ -518,9 +701,50 @@ static int histories_recursive(snode_t * snode, int * lr)
   return rc;
 }
 
+double lnprior_species_model(stree_t * stree)
+{
+  double p;
+
+  switch (opt_delimit_prior)
+  {
+    case BPP_SPECIES_PRIOR_SLH:
+    case BPP_SPECIES_PRIOR_LH:
+      p = 1.0;
+      break;
+
+    case BPP_SPECIES_PRIOR_SUNIFORM:
+    case BPP_SPECIES_PRIOR_UNIFORM:
+      p = 1.0 / histories(stree);
+      break;
+
+    default:
+      fatal("Unknown species delimitation prior");
+  }
+
+  /* TODO: A11 */
+  if (opt_method == METHOD_11 && opt_delimit_prior >= 2)
+  {
+    long i;
+    long tau_count = 0;
+
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      if (stree->nodes[i]->tau > 0)
+        ++tau_count;
+
+    p /= prior_A11[tau_count];
+  }
+
+  p = (p < 1e-300) ? -500 : log(p);
+  
+  return p;
+}
+
+
 long histories(stree_t * stree)
 {
-  unsigned int i;
+  unsigned int i,j,k;
+  double n = 1;
+  double y;
 
   int * lr = (int *)xmalloc((size_t)(stree->tip_count + stree->inner_count) * 
                             sizeof(int));
@@ -534,13 +758,8 @@ long histories(stree_t * stree)
       break;
   }
 
-  double n = 1;
-  double y;
-//  printf("\n");
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
-    unsigned int j,k;
-
     if (stree->nodes[i]->tau == 0) continue;
 
     j = stree->nodes[i]->left->node_index;

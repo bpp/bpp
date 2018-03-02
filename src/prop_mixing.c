@@ -49,13 +49,11 @@ static void gtree_all_partials(gnode_t * root,
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
-//  unsigned int dbg_random;
   unsigned i,j,k;
   unsigned int theta_count=0;
   unsigned int tau_count=0;
   double lnc,c;
   double logpr = 0;
-//  double finetune = 0.3;
   double lnacceptance;
   long accepted = 0;
 
@@ -210,7 +208,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
 
 
-  if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
   {
     /* accept */
     accepted = 1;

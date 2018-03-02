@@ -193,11 +193,13 @@ static void load_chk_section_1(FILE * fp,
                                double ** pjump,
                                unsigned long * curstep,
                                long * ft_round,
+                               long * ndspecies,
                                long * mcmc_offset,
                                long * out_offset,
                                long ** gtree_offset,
                                long * dparam_count,
                                double ** posterior,
+                               double ** pspecies,
                                long * ft_round_rj,
                                double * pjump_rj,
                                long * ft_round_spr,
@@ -237,13 +239,13 @@ static void load_chk_section_1(FILE * fp,
   printf(" MCMC file: %s\n", opt_mcmcfile);
 
   /* read speciesdelimitation */
-  if (!LOAD(&opt_delimit,1,fp))
+  if (!LOAD(&opt_est_delimit,1,fp))
     fatal("Cannot read 'speciesdelimitation' tag");
 
   if (!LOAD(&opt_rjmcmc_method,1,fp))
     fatal("Cannot read 'speciesdelimitation' tag");
 
-  if (opt_delimit && opt_rjmcmc_method != 0 && opt_rjmcmc_method != 1)
+  if (opt_est_delimit && opt_rjmcmc_method != 0 && opt_rjmcmc_method != 1)
     fatal("rj-MCMC method can be either 0 or 1, but found %ld", opt_rjmcmc_method);
 
   if (opt_rjmcmc_method == 0)
@@ -252,8 +254,8 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read 'speciesdelimitation' tag");
     if (!LOAD(dummy,sizeof(double),fp))
       fatal("Cannot read 'speciesdelimitation' tag");
-    if (opt_delimit)
-      printf(" Speciesdelimitation: %ld %ld %f\n", opt_delimit, opt_rjmcmc_method, opt_rjmcmc_epsilon);
+    if (opt_est_delimit)
+      printf(" Speciesdelimitation: %ld %ld %f\n", opt_est_delimit, opt_rjmcmc_method, opt_rjmcmc_epsilon);
     else
       printf(" Speciesdelimitation: Disabled\n");
   }
@@ -263,17 +265,17 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read 'speciesdelimitation' tag");
     if (!LOAD(&opt_rjmcmc_mean,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
-    if (opt_delimit)
-      printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_delimit,
+    if (opt_est_delimit)
+      printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_est_delimit,
              opt_rjmcmc_method, opt_rjmcmc_alpha, opt_rjmcmc_mean);
     else
       printf(" Speciesdelimitation: Disabled\n");
   }
 
   /* read speciestree */
-  if (!LOAD(&opt_stree,1,fp))
+  if (!LOAD(&opt_est_stree,1,fp))
     fatal("Cannot read 'speciestree' tag");
-  printf(" Speciestree: %ld\n", opt_stree);
+  printf(" Speciestree: %ld\n", opt_est_stree);
 
   if (!LOAD(dummy,3*sizeof(double),fp))
     fatal("Cannot read 'speciestree' tag");
@@ -376,6 +378,9 @@ static void load_chk_section_1(FILE * fp,
     if (!LOAD(&opt_finetune_locusrate,1,fp))
       fatal("Cannot read species locusrate/heredity finetune parameter");
   }
+  if (!LOAD(&opt_max_species_count,1,fp))
+    fatal("Cannot read max number of species");
+
   printf(" Current finetune: %ld: %f %f %f %f %f",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
@@ -417,6 +422,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read current MCMC step");
   if (!LOAD(ft_round,1,fp))
     fatal("Cannot read current finetune round");
+  if (!LOAD(ndspecies,1,fp))
+    fatal("Cannot read number of delimited species");
 
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
@@ -444,11 +451,21 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&dmodels_count,1,fp))
     fatal("Cannot read dmodels_count");
 
+  *posterior = NULL;
   if (dmodels_count)
   {
     *posterior = (double *)xmalloc((size_t)dmodels_count*sizeof(double));
     if (!LOAD(*posterior,dmodels_count,fp))
       fatal("Cannot read posterior");
+  }
+
+  *pspecies = NULL;
+  if (opt_est_stree && opt_est_delimit)
+  {
+    *pspecies = (double *)xmalloc((size_t)opt_max_species_count *
+                                  sizeof(double));
+    if (!LOAD(*pspecies,opt_max_species_count,fp))
+      fatal("Cannot read pspecies");
   }
 
   if (!LOAD(ft_round_rj,1,fp))
@@ -491,10 +508,12 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read mean theta values"); 
   }
 
+  #if 0
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
   fprintf(stdout, " Nsample: %ld\n", opt_samples);
   fprintf(stdout, " Next step: %ld\n\n", *curstep);
+  #endif
 
   /* populate species tree */
   stree = (stree_t *)xmalloc(sizeof(stree_t));
@@ -625,14 +644,19 @@ void load_chk_section_2(FILE * fp)
 
   stree_label(stree);
 
+  #if 0
   char * newick = stree_export_newick(stree->root,NULL);
   printf("Current specices tree: %s\n", newick);
   free(newick);
+  #endif
 
   /* read thetas */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     if (!LOAD(&(stree->nodes[i]->theta),1,fp))
       fatal("Cannot read species nodes theta");
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    if (!LOAD(&(stree->nodes[i]->has_theta),1,fp))
+      fatal("Cannot read species nodes has_theta");
 
   /* read taus */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -756,13 +780,19 @@ static void load_gene_tree(FILE * fp, long index)
     if (!load_string(fp,labels+i))
       fatal("Cannot read gene tree %ld labels", index);
   }
+  #if 0
   printf(" Gene tree %ld: %u sequences (", index, gtree_tip_count);
+  #endif
   for (i = 0; i < gtree_tip_count; ++i)
   {
+    #if 0
     printf(" %s", labels[i]);
+    #endif
     gt->nodes[i]->label = labels[i];
   }
+  #if 0
   printf(")\n");
+  #endif
 
   free(labels);
 
@@ -1025,11 +1055,13 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** pjump,
                     unsigned long * curstep,
                     long * ft_round,
+                    long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
                     double ** posterior,
+                    double ** pspecies,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
@@ -1061,11 +1093,13 @@ int checkpoint_load(gtree_t *** gtreep,
                      pjump,
                      curstep,
                      ft_round,
+                     ndspecies,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
                      dparam_count,
                      posterior,
+                     pspecies,
                      ft_round_rj,
                      pjump_rj,
                      ft_round_spr,

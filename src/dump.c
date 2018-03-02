@@ -159,11 +159,13 @@ static void dump_chk_section_1(FILE * fp,
                                double * pjump,
                                long curstep,
                                long ft_round,
+                               long ndspecies,
                                long mcmc_offset,
                                long out_offset,
                                long * gtree_offset,
                                long dparam_count,
                                double * posterior,
+                               double * pspecies,
                                long dmodels_count,
                                long ft_round_rj,
                                double pjump_rj,
@@ -193,7 +195,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
 
   /* write speciesdelimitation */
-  DUMP(&opt_delimit,1,fp);
+  DUMP(&opt_est_delimit,1,fp);
   DUMP(&opt_rjmcmc_method,1,fp);
 
   /* always write two more elements, even if speciesdelimitation = 0 */
@@ -211,7 +213,7 @@ static void dump_chk_section_1(FILE * fp,
   }
 
   /* write speciestree */
-  DUMP(&opt_stree,1,fp);
+  DUMP(&opt_est_stree,1,fp);
   DUMP(dummy,3*sizeof(double),fp);                   /* typecast */
   
   /* write speciesmodelprior */
@@ -261,6 +263,7 @@ static void dump_chk_section_1(FILE * fp,
   if (opt_est_locusrate || opt_est_heredity)
     DUMP(&opt_finetune_locusrate,1,fp);
 
+  DUMP(&opt_max_species_count,1,fp);
 
   /* write diploid */
   if (opt_diploid)
@@ -277,6 +280,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_samples,1,fp);
   DUMP(&curstep,1,fp);
   DUMP(&ft_round,1,fp);
+  DUMP(&ndspecies,1,fp);
 
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   /* write pjump */
@@ -297,6 +301,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&dmodels_count,1,fp);
   if (dmodels_count)
     DUMP(posterior,dmodels_count,fp);
+
+  if (opt_method == METHOD_11)
+    DUMP(pspecies,opt_max_species_count,fp);
 
   DUMP(&ft_round_rj,1,fp);
   DUMP(&pjump_rj,1,fp);
@@ -328,6 +335,8 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   /* write theta */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     DUMP(&(stree->nodes[i]->theta),1,fp);
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    DUMP(&(stree->nodes[i]->has_theta),1,fp);
 
   /* write tau */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -531,11 +540,13 @@ int checkpoint_dump(stree_t * stree,
                     double * pjump,
                     unsigned long curstep,
                     long ft_round,
+                    long ndspecies,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
                     long dparam_count,
                     double * posterior,
+                    double * pspecies,
                     long dmodels_count,
                     long ft_round_rj,
                     double pjump_rj,
@@ -572,11 +583,13 @@ int checkpoint_dump(stree_t * stree,
                      pjump,
                      curstep,
                      ft_round,
+                     ndspecies,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
                      dparam_count,
                      posterior,
+                     pspecies,
                      dmodels_count,
                      ft_round_rj,
                      pjump_rj,

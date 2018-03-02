@@ -42,16 +42,18 @@ long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_cleandata;
 long opt_debug;
-long opt_delimit;
 long opt_delimit_prior;
 long opt_diploid_size;
-long opt_est_theta;
+long opt_est_delimit;
 long opt_est_heredity;
 long opt_est_locusrate;
+long opt_est_stree;
+long opt_est_theta;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_finetune_reset;
 long opt_help;
+long opt_max_species_count;
 long opt_method;
 long opt_locus_count;
 long opt_print_genetrees;
@@ -63,7 +65,6 @@ long opt_rjmcmc_method;
 long opt_samplefreq;
 long opt_samples;
 long opt_seed;
-long opt_stree;
 long opt_usedata;
 long opt_version;
 double opt_bfbeta;
@@ -162,7 +163,7 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_step = 0;
   opt_cleandata = 0;
   opt_debug = 0;
-  opt_delimit = 0;
+  opt_est_delimit = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
   opt_diploid_size = 0;
@@ -203,7 +204,7 @@ void args_init(int argc, char ** argv)
   opt_samplefreq = 10;
   opt_samples = 0;
   opt_seed = (long)time(NULL);
-  opt_stree = 0;
+  opt_est_stree = 0;
   opt_streenewick = NULL;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
@@ -211,6 +212,7 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_usedata = 1;
   opt_version = 0;
+  opt_max_species_count = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {

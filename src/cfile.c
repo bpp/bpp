@@ -247,13 +247,12 @@ static int parse_speciestree(const char * line)
 
   long count;
 
-  count = get_long(p, &opt_stree);
+  count = get_long(p, &opt_est_stree);
   if (!count) goto l_unwind;
 
   p += count;
 
-  /* if species tree is fixed (opt_stree = 0) finish parsing */
-  if (opt_stree == 0 || opt_stree == 1) ret = 1;
+  if (opt_est_stree == 0 || opt_est_stree == 1) ret = 1;
 
   /* TODO: At the momemt we ignore the pslider/expandratio/shrinkratio */
 
@@ -360,16 +359,16 @@ static long parse_speciesdelimitation(const char * line)
 
   long count;
 
-  count = get_long(p, &opt_delimit);
+  count = get_long(p, &opt_est_delimit);
   if (!count) goto l_unwind;
 
   p += count;
 
-  /* if species tree is fixed (opt_delimit = 0) finish parsing */
-  if (opt_delimit == 0) goto l_finish;
+  /* if species tree is fixed (opt_est_delimit = 0) finish parsing */
+  if (opt_est_delimit == 0) goto l_finish;
 
   /* if first value other than 0 or 1, error */
-  if (opt_delimit != 1) goto l_unwind;
+  if (opt_est_delimit != 1) goto l_unwind;
 
   /* now read second token */
   count = get_long(p, &opt_rjmcmc_method);
@@ -451,8 +450,6 @@ static long parse_thetaprior(const char * line)
   long ret = 0;
   char * s = xstrdup(line);
   char * p = s;
-
-  /* TODO: Add third 'E' option for integrating out thetas analytically */
 
   long count;
 
@@ -830,18 +827,22 @@ static void check_validity()
     if (opt_rjmcmc_method == 0)
     {
       if (opt_rjmcmc_epsilon <= 0)
-        fatal("--rjmcmc_epsilon must be a positive real greater than zero");
+        fatal("rj-MCMC epsilon must be a positive real greater than zero");
     }
     else if (opt_rjmcmc_method == 1)
     {
       if (opt_rjmcmc_alpha <= 0)
-        fatal("--rjmcmc_alpha must be a positive real greater than zero");
+        fatal("rj-MCMC alpha must be a positive real greater than zero");
 
       if (opt_rjmcmc_mean <= 0)
-        fatal("--rjmcmc_mean must be a positive real greater than zero");
+        fatal("rj-MCMC mean must be a positive real greater than zero");
     }
     else
       fatal("Internal error in deciding rjMCMC algorithm");
+
+    if ((opt_delimit_prior == BPP_SPECIES_PRIOR_SLH) ||
+        (opt_delimit_prior == BPP_SPECIES_PRIOR_SUNIFORM))
+      fatal("Invalid 'speciesmodelprior' value");
   }
 }
 
@@ -925,7 +926,7 @@ void load_cfile()
       if (!strncasecmp(token,"burnin",6))
       {
         if (!parse_long(value,&opt_burnin) || opt_burnin < 0)
-          fatal("Option 'burnin' expects one positive (or zero) integer (line %ld)",
+          fatal("Option 'burnin' expects positive (or zero) integer (line %ld)",
                  line_count);
         valid = 1;
       }
@@ -1040,7 +1041,7 @@ void load_cfile()
           fatal("Erroneous format of 'checkpoint' (line %ld)", line_count);
         opt_checkpoint = 1;
         if (sizeof(BYTE) != 1)
-          fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
+          fatal("Checkpoint does not work on systems with sizeof(char) != 1");
         valid = 1;
       }
     }
@@ -1094,12 +1095,12 @@ void load_cfile()
       {
         /* TODO: Currently we allow only priors 0 and 1 */
         if (!parse_long(value,&opt_delimit_prior) ||
-            (opt_delimit_prior < 0 || opt_delimit_prior > 1))
-          fatal("Option 'speciesmodelprior' expects an integer (line %ld)",
-                line_count);
+            (opt_delimit_prior < BPP_SPECIES_PRIOR_MIN ||
+             opt_delimit_prior > BPP_SPECIES_PRIOR_MAX))
+          fatal("Option 'speciesmodelprior' expects integer between %d and %d "
+                "(line %ld)",
+                BPP_SPECIES_PRIOR_MIN, BPP_SPECIES_PRIOR_MAX, line_count);
 
-        /* TODO: Check that numbering is in line with BPP_DELIMIT_PRIOR_* */
-            
         valid = 1;
       }
     }
@@ -1119,14 +1120,14 @@ void load_cfile()
   }
 
   /* set method */
-  if (!opt_stree && !opt_delimit)
+  if (!opt_est_stree && !opt_est_delimit)
     opt_method = METHOD_00;
-  else if (!opt_stree)
+  else if (!opt_est_stree)
     opt_method = METHOD_10;
-  else if (!opt_delimit)
+  else if (!opt_est_delimit)
     opt_method = METHOD_01;
   else
-    fatal("Method 11 not yet implemented");
+    opt_method = METHOD_11;
 
   check_validity();
 

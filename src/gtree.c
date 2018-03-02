@@ -1259,7 +1259,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 {
   unsigned int i,k,j;
   long accepted = 0;
-  double acceptance;
+  double lnacceptance;
   double tnew,minage,maxage,oldage;
   double logpr;
   double logl;
@@ -1448,18 +1448,18 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     unsigned int param_indices[1] = {0};
     logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
-    /* acceptance ratio */
+    /* lnacceptance ratio */
     if (opt_est_theta)
-      acceptance = logpr - gtree->logpr + logl - gtree->logl;
+      lnacceptance = logpr - gtree->logpr + logl - gtree->logl;
     else
-      acceptance = logpr - stree->notheta_logpr + logl - gtree->logl;
+      lnacceptance = logpr - stree->notheta_logpr + logl - gtree->logl;
 
     if (opt_debug)
     {
-      fprintf(stdout, "[Debug] (age) lnacceptance = %f\n", acceptance);
+      fprintf(stdout, "[Debug] (age) lnacceptance = %f\n", lnacceptance);
     }
 
-    if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
@@ -1740,7 +1740,7 @@ static long propose_spr(locus_t * locus,
   gnode_t * father;
   gnode_t * p;
   double minage,maxage,tnew;
-  double acceptance;
+  double lnacceptance;
   double logpr;
   snode_t * pop;
 
@@ -2002,16 +2002,18 @@ static long propose_spr(locus_t * locus,
 
     /* acceptance ratio */
     if (opt_est_theta)
-      acceptance = log((double)target_count / source_count) + logpr - gtree->logpr + logl - gtree->logl;
+      lnacceptance = log((double)target_count / source_count) +
+                     logpr - gtree->logpr + logl - gtree->logl;
     else
     {
-      acceptance = log((double)target_count / source_count) + logpr - stree->notheta_logpr + logl - gtree->logl;
+      lnacceptance = log((double)target_count / source_count) +
+                     logpr - stree->notheta_logpr + logl - gtree->logl;
     }
 
     if (opt_debug)
-      printf("[Debug] (spr) lnacceptance = %f\n", acceptance);
+      printf("[Debug] (spr) lnacceptance = %f\n", lnacceptance);
 
-    if (acceptance >= 0 || legacy_rndu() < exp(acceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
@@ -2245,7 +2247,7 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     if (opt_debug)
       fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
 
-    if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
     {
       /* accept */
       accepted++;
@@ -2350,7 +2352,7 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     if (opt_debug)
       fprintf(stdout, "[Debug] (heredity) lnacceptance = %f\n", lnacceptance);
-    if (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
     {
       /* accepted */
       accepted++;

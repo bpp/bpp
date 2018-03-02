@@ -32,6 +32,7 @@
 #include <math.h>
 #include <sys/stat.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #ifdef _MSC_VER
 #include <pmmintrin.h>
@@ -95,6 +96,9 @@
 #define BPP_MAGIC_BYTES 4
 #define BPP_MAGIC "BPPX"
 
+#define BPP_FALSE 0
+#define BPP_TRUE  1
+
 #ifdef __PPC__
 
 #ifdef __LITTLE_ENDIAN__
@@ -144,8 +148,12 @@
 #define COMPRESS_GENERAL                1
 #define COMPRESS_JC69                   2
 
+#define BPP_SPECIES_PRIOR_MIN           0
 #define BPP_SPECIES_PRIOR_LH            0
 #define BPP_SPECIES_PRIOR_UNIFORM       1
+#define BPP_SPECIES_PRIOR_SLH           2
+#define BPP_SPECIES_PRIOR_SUNIFORM      3
+#define BPP_SPECIES_PRIOR_MAX           3
 
 /* libpll related definitions */
 
@@ -257,6 +265,13 @@ typedef struct snode_s
 
   unsigned int node_index;
   unsigned int diploid;
+
+  /* TODO: This is a temporary fix for the Split (rj-MCMC) function
+     to indicate the tip nodes that do not have a theta assigned to them,
+     because the max number of lineages at every locus ending at the particular
+     tip is 1. This should be implemented for inner nodes as well, but for
+     keeping the compatibility with bpp4, all inner nodes have thetas. */
+  long has_theta;
 
   /* no theta related variables */
   double * t2h;                     /* per-locus precomputed t2h */
@@ -515,68 +530,68 @@ typedef struct pair_s
 
 /* options */
 
-extern long opt_help;
-extern long opt_version;
-extern long opt_quiet;
-extern long opt_seed;
-extern long opt_stree;
 extern long opt_arch;
-extern long opt_delimit;
-extern long opt_delimit_prior;
+extern long opt_burnin;
+extern long opt_checkpoint;
+extern long opt_checkpoint_current;
+extern long opt_checkpoint_initial;
+extern long opt_checkpoint_step;
 extern long opt_cleandata;
 extern long opt_debug;
-extern long opt_est_theta;
-extern long opt_est_locusrate;
+extern long opt_delimit_prior;
+extern long opt_diploid_size;
 extern long opt_est_heredity;
-extern long opt_samples;
-extern long opt_samplefreq;
-extern long opt_burnin;
+extern long opt_est_delimit;
+extern long opt_est_locusrate;
+extern long opt_est_stree;
+extern long opt_est_theta;
+extern long opt_experimental_method;
+extern long opt_experimental_debug;
 extern long opt_finetune_reset;
-extern long opt_rjmcmc_method;
-extern long opt_usedata;
+extern long opt_help;
 extern long opt_locus_count;
+extern long opt_max_species_count;
+extern long opt_method;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;
 extern long opt_print_locusrate;
 extern long opt_print_samples;
-extern long opt_experimental_method;
-extern long opt_experimental_debug;
-extern long opt_diploid_size;
-extern long opt_checkpoint;
-extern long opt_checkpoint_initial;
-extern long opt_checkpoint_step;
-extern long opt_checkpoint_current;
-extern long opt_method;
+extern long opt_quiet;
+extern long opt_rjmcmc_method;
+extern long opt_samplefreq;
+extern long opt_samples;
+extern long opt_seed;
+extern long opt_usedata;
+extern long opt_version;
 extern double opt_bfbeta;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
-extern double opt_finetune_theta;
-extern double opt_finetune_tau;
 extern double opt_finetune_mix;
+extern double opt_finetune_tau;
+extern double opt_finetune_theta;
 extern double opt_finetune_locusrate;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
+extern double opt_locusrate_alpha;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
-extern double opt_locusrate_alpha;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
 extern double opt_theta_alpha;
 extern double opt_theta_beta;
 extern long * opt_diploid;
+extern char * cmdline;
 extern char * opt_cfile;
-extern char * opt_mapfile;
-extern char * opt_msafile;
+extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
-extern char * opt_reorder;
-extern char * opt_outfile;
-extern char * opt_streenewick;
-extern char * opt_resume;
+extern char * opt_msafile;
 extern char * opt_locusrate_filename;
-extern char * opt_heredity_filename;
-extern char * cmdline;
+extern char * opt_outfile;
+extern char * opt_reorder;
+extern char * opt_resume;
+extern char * opt_streenewick;
 
 /* common data */
 
@@ -861,19 +876,19 @@ long prop_split(gtree_t ** gtree,
                 stree_t * stree,
                 locus_t ** locus,
                 double pr_split,
-                long * param_count);
+                long * param_count,
+                long * ndspecies);
 
 long prop_join(gtree_t ** gtree,
                stree_t * stree,
                locus_t ** locus,
                double pr_split,
-               long * param_count);
+               long * param_count,
+               long * ndspecies);
 
 void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count);
 
 void rj_fini();
-
-double lnprior_species_model(stree_t * stree); /* TODO: Move function */
 
 /* functions in locus.c */
 
@@ -951,6 +966,10 @@ void summary_dealloc_hashtables(void);
 
 void stree_summary(FILE * fp_out, char ** species_names, long species_count);
 
+/* functions in summary11.c */
+
+void mixed_summary(FILE * fp_out);
+
 /* functions in hardware.c */
 
 void cpu_features_show(void);
@@ -982,11 +1001,13 @@ int checkpoint_dump(stree_t * stree,
                     double * pjump,
                     unsigned long curstep,
                     long ft_round,
+                    long ndspecies,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
                     long dparam_count,
                     double * posterior,
+                    double * pspecies,
                     long dmodels_count,
                     long ft_round_rj,
                     double pjump_rj,
@@ -1006,11 +1027,13 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** pjump,
                     unsigned long * curstep,
                     long * ft_round,
+                    long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
                     long * dparam_count,
                     double ** posterior,
+                    double ** pspecies,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
@@ -1210,6 +1233,12 @@ void delimit_setindex(long index);
 void delimit_resetpriors(void);
 
 void delimit_summary(FILE * fp, stree_t * stree);
+
+double lnprior_species_model(stree_t * stree); /* TODO: Move function */
+
+void partition_fast(long n);
+
+double * getpriorA11(void);
 
 /* functions in cfile.c */
 
