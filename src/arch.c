@@ -21,7 +21,7 @@
 
 #include "bpp.h"
 
-unsigned long arch_get_memused()
+uint64_t arch_get_memused()
 {
 #ifdef _WIN32
 
@@ -47,7 +47,7 @@ unsigned long arch_get_memused()
 #endif
 }
 
-unsigned long arch_get_memtotal()
+uint64_t arch_get_memtotal()
 {
 #ifdef _WIN32
 
@@ -59,7 +59,7 @@ unsigned long arch_get_memtotal()
 #elif defined(__APPLE__)
 
   int mib [] = { CTL_HW, HW_MEMSIZE };
-  long ram = 0;
+  int64_t ram = 0;
   size_t length = sizeof(ram);
   if(sysctl(mib, 2, &ram, &length, NULL, 0) == -1)
     fatal("Cannot determine amount of RAM");
@@ -67,8 +67,8 @@ unsigned long arch_get_memtotal()
 
 #elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
 
-  long phys_pages = sysconf(_SC_PHYS_PAGES);
-  long pagesize = sysconf(_SC_PAGESIZE);
+  int64_t phys_pages = sysconf(_SC_PHYS_PAGES);
+  int64_t pagesize = sysconf(_SC_PAGESIZE);
   if ((phys_pages == -1) || (pagesize == -1))
     fatal("Cannot determine amount of RAM");
   return pagesize * phys_pages;

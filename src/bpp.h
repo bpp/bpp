@@ -736,9 +736,9 @@ void stree_alloc_internals(stree_t * stree,
 
 /* functions in arch.c */
 
-unsigned long arch_get_memused(void);
+uint64_t arch_get_memused(void);
 
-unsigned long arch_get_memtotal(void);
+uint64_t arch_get_memtotal(void);
 
 long arch_get_cores(void);
 
