@@ -1222,7 +1222,9 @@ void cmd_run()
     {
       if (legacy_rndu() > 0)   /* bpp4 compatible results (RNG to next state) */
       {
-        if (stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus))
+        long ret;
+        ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
+        if (ret == 1)
         {
           /* accepted */
 
@@ -1235,7 +1237,8 @@ void cmd_run()
           pjump_slider++;
         }
 
-        ft_round_spr++;
+        if (ret != 2)
+          ft_round_spr++;
       }
     }
 

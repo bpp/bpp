@@ -1648,7 +1648,8 @@ long stree_propose_spr(stree_t ** streeptr,
       pruned_nodes[moved_count[i]++] = pruned;
 
       node->mark |= FLAG_PARTIAL_UPDATE;
-      node->parent->mark |= FLAG_PARTIAL_UPDATE; /* required as the parent will change */
+      if (node->parent)
+        node->parent->mark |= FLAG_PARTIAL_UPDATE; /* required as the parent will change */
 
       snode_t * pop_cz = c;
       while (pop_cz->parent != z)
