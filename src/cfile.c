@@ -669,8 +669,41 @@ l_unwind:
   return ret;
 }
 
+static long readandvalidatecount(const char * line, long spcount)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  
+  long i = 0;
+  long count;
 
-static long parse_speciesandtree(const char * line)
+  opt_sp_seqcount = (long*)xmalloc((size_t)spcount*sizeof(long));
+
+  while (spcount)
+  {
+    count = get_long(p, opt_sp_seqcount+i);
+    if (!count) break;
+
+    p += count;
+
+    --spcount;
+    ++i;
+  }
+
+  /* line contains less entries than number of species */
+  if (spcount) goto l_unwind;
+
+  /* otherwise check if nothing else is there */
+  if (is_emptyline(p)) ret = 1;
+
+  l_unwind:
+    free(s);
+
+  return ret;
+}
+
+static long parse_speciesandtree(const char * line, long * spcount)
 {
   long ret = 0;
   char * s = xstrdup(line);
@@ -682,6 +715,7 @@ static long parse_speciesandtree(const char * line)
 
   long seq_count;
   count = get_long(p, &seq_count);
+  *spcount = seq_count;
   if (!count) goto l_unwind;
 
   p += count;
@@ -1062,13 +1096,18 @@ void load_cfile()
         /* TODO: Currently only the old BPP format is allowed. Make it also
            accept only the tree in newick format, i.e. one line instead of 3 */
 
-        if (!parse_speciesandtree(value))
+        long spcount = 0;
+        if (!parse_speciesandtree(value,&spcount))
           fatal("Erroneous format of 'species&tree' (line %ld)", line_count);
 
         if (!getnextline(fp))
           fatal("Incomplete 'species&tree' record (line %ld)", line_count);
 
         ++line_count;
+        if (!readandvalidatecount(line,spcount))
+          fatal("Erroneous enumeration of species sequences in 'species&tree' "
+                "tag (line %ld).\nExpected number of species is %ld.\n",
+                line_count, spcount);
 
         if (!getnextline(fp))
           fatal("Incomplete 'species&tree' record (line %ld)", line_count);

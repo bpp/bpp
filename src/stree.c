@@ -575,6 +575,7 @@ static void stree_init_theta(stree_t * stree,
                              list_t * maplist,
                              int msa_count)
 {
+  long abort = 0;
   unsigned int i,j;
 
   /* initialize population sizes for extinct populations and populations
@@ -584,6 +585,44 @@ static void stree_init_theta(stree_t * stree,
      species tree) */
   int ** seqcount = populations_seqcount(stree,msalist,maplist,msa_count);
 
+  /* Do the check!!! */
+  abort = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    int maxseqcount = 0;
+    for (j = 0; j < opt_locus_count; ++j)
+      if (seqcount[i][j] > maxseqcount)
+        maxseqcount = seqcount[i][j];
+
+    /* print label */
+    if (!abort && maxseqcount != opt_sp_seqcount[i])
+    {
+      fprintf(stderr,"\nWARNING: Some parameters are not identifiable because "
+              "there are 0 or 1 sequences from some species, but the control "
+              "file lists different numbers.\nWe indicate those entries "
+              "below:\n");
+      fprintf(stderr,"Species, Number of sequences listed in control file, "
+                     "Max number of sequences at a loci detected from data\n");
+      abort = 1;
+    }
+
+    if (maxseqcount != opt_sp_seqcount[i])
+    {
+      fprintf(stderr, "%s, %ld, %d\n",
+              stree->nodes[i]->label, opt_sp_seqcount[i], maxseqcount);
+    }
+  }
+  if (abort)
+  {
+    if (!opt_force)
+      fatal("Please either fix those entries, or use --force switch to continue "
+            "with current settings.");
+    else
+      fprintf(stderr,
+              "Posterior for theta parameters for those species will be given "
+              "by the prior\n");
+  }
+
   /* initialize 'has_theta' attribute */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     if (opt_est_theta)
@@ -591,6 +630,7 @@ static void stree_init_theta(stree_t * stree,
     else
       stree->nodes[i]->has_theta = 0;
 
+  #if 0
   /* go through tip nodes and setup thetas only for those that have
      two sequences in some loci */
   for (i = 0; i < stree->tip_count; ++i)
@@ -614,6 +654,32 @@ static void stree_init_theta(stree_t * stree,
     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                         (0.9 + 0.2 * legacy_rndu());
   }
+  #else
+  /* From Ziheng's email from 3.3.2018 (see also issue #62) this is changed
+     to set estimation of thetas according to the 'species&tree' tag in the
+     control file. */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    snode_t * node = stree->nodes[i];
+
+    for (j = 0; j < (unsigned int)msa_count; ++j)
+      if (seqcount[i][j] >= 2)
+        break;
+
+    /* if no loci exists with two or more sequences of such species then move
+       to the next tip node */
+    if (opt_sp_seqcount[i] < 2)
+    {
+      node->theta = -1;
+      node->has_theta = 0;
+      continue;
+    }
+
+    /* otherwise set theta around the mean of the inverse gamma prior */
+    node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                        (0.9 + 0.2 * legacy_rndu());
+  }
+  #endif
 
   /* go through inner nodes and setup thetas */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)

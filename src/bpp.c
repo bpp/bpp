@@ -52,6 +52,7 @@ long opt_est_theta;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_finetune_reset;
+long opt_force;
 long opt_help;
 long opt_max_species_count;
 long opt_method;
@@ -84,6 +85,8 @@ double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
 double opt_theta_beta;
+long * opt_diploid;
+long * opt_sp_seqcount;
 char * opt_cfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
@@ -94,7 +97,6 @@ char * opt_outfile;
 char * opt_reorder;
 char * opt_resume;
 char * opt_streenewick;
-long * opt_diploid;
 
 long mmx_present;
 long sse_present;
@@ -115,9 +117,10 @@ static struct option long_options[] =
   {"quiet",      no_argument,       0, 0 },  /* 2 */
   {"cfile",      required_argument, 0, 0 },  /* 3 */
   {"arch",       required_argument, 0, 0 },  /* 4 */
-  {"exp_method", required_argument, 0, 0 },  /* 6 */
-  {"exp_debug",  no_argument,       0, 0 },  /* 7 */
-  {"resume",     required_argument, 0, 0 },  /* 8 */
+  {"exp_method", required_argument, 0, 0 },  /* 5 */
+  {"exp_debug",  no_argument,       0, 0 },  /* 6 */
+  {"resume",     required_argument, 0, 0 },  /* 7 */
+  {"force",      no_argument,       0, 0 },  /* 8 */
   { 0, 0, 0, 0 }
 };
 
@@ -179,6 +182,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_reset = 0;
   opt_finetune_tau   = 0.001;
   opt_finetune_theta = 0.001;
+  opt_force = 0;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -213,6 +217,7 @@ void args_init(int argc, char ** argv)
   opt_usedata = 1;
   opt_version = 0;
   opt_max_species_count = 0;
+  opt_sp_seqcount = NULL;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -257,6 +262,10 @@ void args_init(int argc, char ** argv)
 
       case 7:
         opt_resume = optarg;
+        break;
+
+      case 8:
+        opt_force = 1;
         break;
         
       default:
