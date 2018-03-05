@@ -1089,6 +1089,16 @@ void load_cfile()
         valid = 1;
       }
     }
+    else if (token_len == 15)
+    {
+      if (!strncasecmp(token,"bayesfactorbeta",15))
+      {
+        if (!get_double(value,&opt_bfbeta) || opt_bfbeta <= 0)
+          fatal("Option 'bayesfactorbeta' expects a positive real (line %ld)",
+                line_count);
+        valid = 1;
+      }
+    }
     else if (token_len == 17)
     {
       if (!strncasecmp(token,"speciesmodelprior",17))

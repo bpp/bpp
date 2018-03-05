@@ -302,7 +302,7 @@ static void mcmc_logsample(FILE * fp,
   for (i = 0; i < stree->locus_count; ++i)
     logl += gtree[i]->logl;
 
-  fprintf(fp, "\t%.3f\n", logl);
+  fprintf(fp, "\t%.3f\n", logl/opt_bfbeta);
 }
 
 static void print_gtree(FILE ** fp, gtree_t ** gtree)
@@ -1481,6 +1481,11 @@ void cmd_run()
   progress_done();
 
   free(pjump);
+
+  if (opt_bfbeta != 1)
+  {
+    fprintf(stdout, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
+  }
 
   /* close mcmc file */
   fclose(fp_mcmc);

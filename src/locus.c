@@ -1071,6 +1071,7 @@ double locus_root_loglikelihood(locus_t * locus,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl)
 {
+  double logl;
   unsigned int * scaler;
 
   if (!opt_usedata) return 0;
@@ -1095,7 +1096,7 @@ double locus_root_loglikelihood(locus_t * locus,
                                     locus->attributes);
     
     long i,j,k=0;
-    double logl = 0;
+    logl = 0;
 
     for (i = 0; i < locus->unphased_length; ++i)
     {
@@ -1108,18 +1109,20 @@ double locus_root_loglikelihood(locus_t * locus,
 
       logl += log(meanl) * locus->pattern_weights[i];
     }
-    return logl;
   }
-
-  return pll_core_root_loglikelihood(locus->states,
-                                     locus->sites,
-                                     locus->rate_cats,
-                                     locus->clv[root->clv_index],
-                                     scaler,
-                                     locus->frequencies,
-                                     locus->rate_weights,
-                                     locus->pattern_weights,
-                                     freqs_indices,
-                                     persite_lnl,
-                                     locus->attributes);
+  else
+  {
+    logl = pll_core_root_loglikelihood(locus->states,
+                                       locus->sites,
+                                       locus->rate_cats,
+                                       locus->clv[root->clv_index],
+                                       scaler,
+                                       locus->frequencies,
+                                       locus->rate_weights,
+                                       locus->pattern_weights,
+                                       freqs_indices,
+                                       persite_lnl,
+                                       locus->attributes);
+  }
+  return opt_bfbeta * logl;
 }
