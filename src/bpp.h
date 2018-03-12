@@ -548,7 +548,6 @@ extern long opt_est_theta;
 extern long opt_experimental_method;
 extern long opt_experimental_debug;
 extern long opt_finetune_reset;
-extern long opt_force;
 extern long opt_help;
 extern long opt_locus_count;
 extern long opt_max_species_count;
@@ -729,7 +728,11 @@ void stree_label(stree_t * stree);
 
 void stree_show_pptable(stree_t * stree);
 
-void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count);
+void stree_init(stree_t * stree,
+                msa_t ** msa,
+                list_t * maplist,
+                int msa_count,
+                FILE * fp_out);
 
 void stree_alloc_internals(stree_t * stree,
                            unsigned int gtree_inner_sum,

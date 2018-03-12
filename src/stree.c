@@ -573,9 +573,11 @@ static void stree_init_tau(stree_t * stree)
 static void stree_init_theta(stree_t * stree,
                              msa_t ** msalist,
                              list_t * maplist,
-                             int msa_count)
+                             int msa_count,
+                             FILE * fp_out)
 {
   long abort = 0;
+  long warn = 0;
   unsigned int i,j;
 
   /* initialize population sizes for extinct populations and populations
@@ -585,8 +587,32 @@ static void stree_init_theta(stree_t * stree,
      species tree) */
   int ** seqcount = populations_seqcount(stree,msalist,maplist,msa_count);
 
-  /* Do the check!!! */
-  abort = 0;
+  /* Check number of sequences per locus with stated numbers from 'species&tree'
+     tag in control file. Assume the following:
+     
+     X = specified max number of species in control file
+     Y = maximum number in sequence file
+     
+     The behavious is the following:
+     if (X == 1 && Y > 1) abort with error message
+     if (X > 1 && Y <= 1) print warning on screen and in output file.Dont abort
+     if (X > 1 && Y > 1) no error or warning as the numbers do not affect run
+
+     See also issue #62 on GitHub
+  */
+
+  /* print table header on screen and in output file */
+  fprintf(stdout, "\nPer-locus sequences in data and 'species&tree' tag:\n");
+  fprintf(stdout,
+          "C.File | Data |                Status                | Population\n");
+  fprintf(stdout,
+          "-------+------+--------------------------------------+-----------\n");
+  fprintf(fp_out, "\nPer-locus sequences in data and 'species&tree' tag:\n");
+  fprintf(fp_out,
+          "C.File | Data |                Status                | Population\n");
+  fprintf(fp_out,
+          "-------+------+--------------------------------------+-----------\n");
+
   for (i = 0; i < stree->tip_count; ++i)
   {
     int maxseqcount = 0;
@@ -594,33 +620,76 @@ static void stree_init_theta(stree_t * stree,
       if (seqcount[i][j] > maxseqcount)
         maxseqcount = seqcount[i][j];
 
-    /* print label */
-    if (!abort && maxseqcount != opt_sp_seqcount[i])
-    {
-      fprintf(stderr,"\nWARNING: Some parameters are not identifiable because "
-              "there are 0 or 1 sequences from some species, but the control "
-              "file lists different numbers.\nWe indicate those entries "
-              "below:\n");
-      fprintf(stderr,"Species, Number of sequences listed in control file, "
-                     "Max number of sequences at a loci detected from data\n");
-      abort = 1;
-    }
 
-    if (maxseqcount != opt_sp_seqcount[i])
+    /* distinguish between cases and print corresponding status message */
+    if (opt_sp_seqcount[i] == 1 && maxseqcount > 1)
     {
-      fprintf(stderr, "%s, %ld, %d\n",
-              stree->nodes[i]->label, opt_sp_seqcount[i], maxseqcount);
+      abort = 1;
+      fprintf(stdout,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[ERROR] Increase number in C.File",
+              stree->nodes[i]->label);
+      fprintf(fp_out,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[ERROR] Increase number in C.File",
+              stree->nodes[i]->label);
     }
+    else if (opt_sp_seqcount[i] > 1 && maxseqcount <= 1)
+    {
+      warn = 1;
+      fprintf(stdout,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[WARNING] Parameter not identifiable",
+              stree->nodes[i]->label);
+      fprintf(fp_out,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[WARNING] Parameter not identifiable",
+              stree->nodes[i]->label);
+    }
+    else
+    {
+      fprintf(stdout,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[OK]",
+              stree->nodes[i]->label);
+      fprintf(fp_out,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[OK]",
+              stree->nodes[i]->label);
+    }
+  }
+  fprintf(stdout,"\n");
+  fprintf(fp_out,"\n");
+  if (warn)
+  {
+    fprintf(stdout,
+            "[Warning] Some parameters are not identifiable because there are "
+            "0 or 1 sequences from some species, but the control file lists "
+            "different numbers.\nThose entries are indicated in the table "
+            "above. Posterior for theta parameters for those species will be "
+            "given by the prior.\n\n");
+    fprintf(fp_out,
+            "[Warning] Some parameters are not identifiable because there are "
+            "0 or 1 sequences from some species, but the control file lists "
+            "different numbers.\nThose entries are indicated in the table "
+            "above. Posterior for theta parameters for those species will be "
+            "given by the prior.\n\n");
   }
   if (abort)
   {
-    if (!opt_force)
-      fatal("Please either fix those entries, or use --force switch to continue "
-            "with current settings.");
-    else
-      fprintf(stderr,
-              "Posterior for theta parameters for those species will be given "
-              "by the prior\n");
+    fprintf(fp_out,
+            "[Error] Some populations consist of more than one sequence but "
+            "control file states only one.\nPlease amend control file according"
+            " to the table above.");
+    fatal("[Error] Some populations consist of more than one sequence but "
+          "control file states only one.\nPlease amend control file according "
+          "to the table above.");
   }
 
   /* initialize 'has_theta' attribute */
@@ -768,7 +837,11 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
   }
 }
 
-void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
+void stree_init(stree_t * stree,
+                msa_t ** msa,
+                list_t * maplist,
+                int msa_count,
+                FILE * fp_out)
 {
   unsigned int i,j;
   #if 0
@@ -803,7 +876,7 @@ void stree_init(stree_t * stree, msa_t ** msa, list_t * maplist, int msa_count)
   stree_label(stree);
 
   /* Initialize population sizes */
-  stree_init_theta(stree, msa, maplist, msa_count);
+  stree_init_theta(stree, msa, maplist, msa_count, fp_out);
 
   /* Initialize speciation times and create extinct species groups */
   stree_init_tau(stree);

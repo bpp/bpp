@@ -693,7 +693,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* initialize species tree (tau + theta) */
-  stree_init(stree,msa_list,map_list,msa_count);
+  stree_init(stree,msa_list,map_list,msa_count,fp_out);
   stree_show_pptable(stree);
 
   if (opt_method == METHOD_11)

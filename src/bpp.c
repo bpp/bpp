@@ -52,7 +52,6 @@ long opt_est_theta;
 long opt_experimental_method;
 long opt_experimental_debug;
 long opt_finetune_reset;
-long opt_force;
 long opt_help;
 long opt_max_species_count;
 long opt_method;
@@ -120,7 +119,6 @@ static struct option long_options[] =
   {"exp_method", required_argument, 0, 0 },  /* 5 */
   {"exp_debug",  no_argument,       0, 0 },  /* 6 */
   {"resume",     required_argument, 0, 0 },  /* 7 */
-  {"force",      no_argument,       0, 0 },  /* 8 */
   { 0, 0, 0, 0 }
 };
 
@@ -182,7 +180,6 @@ void args_init(int argc, char ** argv)
   opt_finetune_reset = 0;
   opt_finetune_tau   = 0.001;
   opt_finetune_theta = 0.001;
-  opt_force = 0;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -264,10 +261,6 @@ void args_init(int argc, char ** argv)
         opt_resume = optarg;
         break;
 
-      case 8:
-        opt_force = 1;
-        break;
-        
       default:
         fatal("Internal error in option parsing");
     }
