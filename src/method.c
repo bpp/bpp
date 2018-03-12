@@ -1397,8 +1397,8 @@ void cmd_run()
          printf(" %2ld %6.4f %s", dparam_count,
                                   (ft_round_rj ? pjump_rj / ft_round_rj : 0),
                                   delimitation_getparam_string());
-         printf(" %f P[%ld]=%6.4f",
-                posterior[bmodel],
+         printf(" P[%ld]=%6.4f",
+                //posterior[bmodel],
                 bmodel+1,
                 //delimitation_getcurindex()+1,
                 posterior[bmodel] / ft_round);
