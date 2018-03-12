@@ -490,9 +490,12 @@ typedef struct pair_s
 
 /* macros */
 
+#ifndef MIN
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef MAX
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
-
+#endif
 #ifdef _MSC_VER
 #define SWAP(x,y) do                                                  \
   {                                                                   \
