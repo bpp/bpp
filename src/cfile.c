@@ -26,6 +26,8 @@ static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
 
+static long species_count = 0;
+
 static void reallocline(size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
@@ -679,6 +681,7 @@ static long readandvalidatecount(const char * line, long spcount)
   long count;
 
   opt_sp_seqcount = (long*)xmalloc((size_t)spcount*sizeof(long));
+  species_count = spcount;
 
   while (spcount)
   {
@@ -832,6 +835,18 @@ static long get_token(char * line, char ** token, char ** value)
   return p - *token + 1;
 }
 
+static void update_sp_seqcount()
+{
+  long i;
+
+  if (opt_diploid_size != species_count)
+    fatal("Number of digits in 'diploid' does not match number of species");
+
+  for (i = 0; i < species_count; ++i)
+    if (opt_diploid[i])
+      opt_sp_seqcount[i] *= 2;
+ 
+}
 static void check_validity()
 {
   if (!opt_streenewick)
@@ -1195,6 +1210,8 @@ void load_cfile()
 
   check_validity();
 
+  if (opt_diploid)
+    update_sp_seqcount();
 
   fclose(fp);
 }
