@@ -849,6 +849,18 @@ static void check_validity()
   if (!opt_usedata && opt_bfbeta != 1)
     fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
 
+  if (opt_theta_alpha <= 1)
+    fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
+
+  if (opt_theta_beta <= 0)
+    fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
+
+  if (opt_tau_alpha <= 1)
+    fatal("Alpha value of Inv-Gamma(a,b) of tauprior must be > 1");
+
+  if (opt_tau_beta <= 0)
+    fatal("Beta value of Inv-Gamma(a,b) of tauprior must be > 0");
+
   if (opt_samples < 1)
     fatal("Option 'nsample' must be a positive integer greater than zero");
   
