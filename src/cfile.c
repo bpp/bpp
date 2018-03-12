@@ -846,6 +846,9 @@ static void check_validity()
   if (opt_method < 0 || opt_method > 3)
     fatal("Invalid method");
 
+  if (!opt_usedata && opt_bfbeta != 1)
+    fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
+
   if (opt_samples < 1)
     fatal("Option 'nsample' must be a positive integer greater than zero");
   

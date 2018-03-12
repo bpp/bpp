@@ -279,8 +279,9 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_est_heredity && opt_print_hscalars)
     col_count += opt_locus_count;
 
-  /* add one more for log-L */
-  col_count++;
+  /* add one more for log-L if usedata is on */
+  if (opt_usedata)
+    col_count++;
 
   /* allocate storage matrix */
   double ** matrix = (double **)xmalloc((size_t)col_count * sizeof(double *));

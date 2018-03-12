@@ -214,7 +214,10 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   }
 
   /* 5. Print log likelihood */
-  fprintf(fp, "\tlnL\n"); 
+  if (opt_usedata)
+    fprintf(fp, "\tlnL\n"); 
+  else
+    fprintf(fp, "\n");
 }
 
 static void mcmc_printinitial(FILE * fp, stree_t * stree)
@@ -233,7 +236,6 @@ static void mcmc_logsample(FILE * fp,
                            long ndspecies)
 {
   unsigned int i;
-  double logl = 0;
 
   if (opt_method == METHOD_01)          /* species tree inference */
   {
@@ -298,11 +300,18 @@ static void mcmc_logsample(FILE * fp,
       fprintf(fp, "\t%.5g", locus[i]->heredity[0]);
   }
 
-  /* 5. print log-likelihood */
-  for (i = 0; i < stree->locus_count; ++i)
-    logl += gtree[i]->logl;
+  /* 5. print log-likelihood if usedata=1 */
+  if (opt_usedata)
+  {
+    double logl = 0;
 
-  fprintf(fp, "\t%.3f\n", logl/opt_bfbeta);
+    for (i = 0; i < stree->locus_count; ++i)
+      logl += gtree[i]->logl;
+
+    fprintf(fp, "\t%.3f\n", logl/opt_bfbeta);
+  }
+  else
+    fprintf(fp, "\n");
 }
 
 static void print_gtree(FILE ** fp, gtree_t ** gtree)
@@ -1356,9 +1365,12 @@ void cmd_run()
     }
 
     /* compute mean log-L */
-    for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
-      logl_sum += gtree[j]->logl;
-    mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
+    if (opt_usedata)
+    {
+      for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
+        logl_sum += gtree[j]->logl;
+      mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
+    }
 
     /* print MCMC status on screen */
     if (printk <= 500 || (i+1) % (printk / 200) == 0)
