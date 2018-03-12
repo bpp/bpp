@@ -520,15 +520,24 @@ static void stree_init_tau_recursive(snode_t * node,
                                      double prop)
 {
   /* end recursion if node is a tip */
-  if (!node->left) return;
+  if (!node->left)
+  {
+    if (!node->parent->tau)
+      node->theta = -1;
+
+    return;
+  }
 
   /* get species record associate with species tree node */
   double tau_parent = node->parent->tau;
 
-  if (node->tau)
+  if (!node->parent->tau)
+    node->theta = -1;
+
+  if (node->parent->tau && node->tau > 0)
     node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
   else
-    node->left->theta = node->right->theta = -1;
+    node->tau = 0;
 
   stree_init_tau_recursive(node->left,prop);
   stree_init_tau_recursive(node->right,prop);
