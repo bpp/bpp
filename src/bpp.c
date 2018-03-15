@@ -298,12 +298,13 @@ void args_init(int argc, char ** argv)
 
 static void dealloc_switches()
 {
-  if (opt_mapfile) free(opt_mapfile);
-  if (opt_outfile) free(opt_outfile);
-  if (opt_msafile) free(opt_msafile);
-  if (opt_mcmcfile) free(opt_mcmcfile);
-  if (opt_reorder) free(opt_reorder);
   if (opt_cfile) free(opt_cfile);
+  if (opt_mapfile) free(opt_mapfile);
+  if (opt_mcmcfile) free(opt_mcmcfile);
+  if (opt_msafile) free(opt_msafile);
+  if (opt_outfile) free(opt_outfile);
+  if (opt_reorder) free(opt_reorder);
+  if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
 }
 

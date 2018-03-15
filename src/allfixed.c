@@ -26,6 +26,20 @@ static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
 
+/* used for creating FigTree.tre */
+typedef struct nodepinfo_s 
+{
+  /* 95% HPD CI */
+  double lo;
+  double hi;
+
+  /* mean age */
+  double age;
+
+  /* mean theta */
+  double theta;
+} nodepinfo_t; 
+
 static void reallocline(size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
@@ -242,6 +256,108 @@ static void hpd_interval(double * x,
   *rtail = x[left + diffrow];
 }
 
+static char * cb_attributes(const snode_t * node)
+{
+  char * s = NULL;
+
+  /* inner node */
+  if (node->left)
+  {
+    nodepinfo_t * info = (nodepinfo_t *)(node->data);
+    if (node->parent)
+    {
+      nodepinfo_t * pinfo = (nodepinfo_t *)(node->parent->data);
+
+      if (opt_est_theta)
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f",
+                  info->lo, info->hi, info->theta, pinfo->age - info->age);
+      else
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]: %f",
+                  info->lo, info->hi, pinfo->age - info->age);
+    }
+    else
+    {
+      if (opt_est_theta)
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]",
+                  info->lo, info->hi, info->theta);
+      else
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]", info->lo, info->hi);
+    }
+  }
+  else
+  {
+    nodepinfo_t * info = (nodepinfo_t *)(node->data);
+    nodepinfo_t * pinfo = (nodepinfo_t *)(node->parent->data);
+    xasprintf(&s,"%s: %f", node->label, pinfo->age - info->age);
+  }
+
+  return s;
+}
+
+static void write_figtree(stree_t * stree,
+                          double * mean,
+                          double * hpd025,
+                          double * hpd975)
+{
+  long i;
+  FILE * fp_tree = NULL;
+  
+  fp_tree = xopen("FigTree.tre","w");
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->nodes[i]->data = (void *)xmalloc(sizeof(nodepinfo_t));
+
+  long theta_count = 0;
+  if (opt_est_theta)
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
+      if (stree->nodes[i]->theta >= 0)
+        info->theta = mean[theta_count++];
+      else
+        info->theta = -1;
+    }
+
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
+    info->lo = info->hi = info->age = 0;
+  }
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->tau > 0)
+    {
+      nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
+      info->lo  = hpd025[theta_count + i - stree->tip_count];
+      info->hi  = hpd975[theta_count + i - stree->tip_count];
+      info->age = mean[theta_count + i - stree->tip_count];
+    }
+    else
+      assert(0);
+
+  char * newick = stree_export_newick(stree->root,cb_attributes);
+
+  fprintf(fp_tree,
+          "#NEXUS\n"
+          "BEGIN TREES;\n"
+          "\tUTREE 1 = %s\n"
+          "END;\n\n"
+          "[Species tree with tau as branch lengths and theta as labels, for FigTree.\n"
+          "In FigTree, choose 95%%HPD for Node Bars and label for Node Labels]\n",
+          newick);
+
+
+  free(newick);
+
+  fclose(fp_tree);
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    free(stree->nodes[i]->data);
+
+  return;
+}
+
 void allfixed_summary(FILE * fp_out, stree_t * stree)
 {
   long i,j,count;
@@ -282,6 +398,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   /* add one more for log-L if usedata is on */
   if (opt_usedata)
     col_count++;
+
 
   /* allocate storage matrix */
   double ** matrix = (double **)xmalloc((size_t)col_count * sizeof(double *));
@@ -487,6 +604,13 @@ l_unwind:
     free(matrix[i]);
   free(matrix);
 
+  if (rc)
+  {
+    /* write figtree file */
+    write_figtree(stree,mean,hpd025,hpd975);
+    fprintf(stdout, "FigTree tree is in FigTree.tre\n");
+  }
+
   free(mean);
   free(hpd025);
   free(hpd975);
@@ -498,6 +622,5 @@ l_unwind:
   if (!rc)
     fatal("Error while reading/summarizing %s", opt_mcmcfile);
 
-  return;
 }
 
