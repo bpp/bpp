@@ -477,6 +477,49 @@ static void strip_theta_attributes(char * s)
   *p = 0;
 }
 
+static stree_t * parse_tree(const char * s)
+{
+  stree_t * t;
+
+  if (!s)
+    fatal("Error parsing tree");
+
+  /* we distinguish two cases here. The 'stree_parse_newick_string' function
+     cannot parse single nodes, and therefore, we check whether s starts with
+     an opening parenthesis. If not, it means it is a single node, and we
+     create a tree manually, otherwise we call the stree_parse_newick_string
+     routine */
+
+  /* TODO: This is an ugly hack to disable checking that the tip labels of
+     the loaded tree are equal to the ones given in the control file */
+  char * debug_opt_reorder = opt_reorder;
+  opt_reorder = NULL;
+
+  if (s[0] != '(')
+  {
+    t = (stree_t *)xcalloc(1,sizeof(stree_t));
+    t->nodes = (snode_t **)xmalloc(sizeof(snode_t *));
+    t->nodes[0] = (snode_t *)xcalloc(1,sizeof(snode_t));
+
+    t->root = t->nodes[0];
+    t->nodes[0]->label = xstrdup(s);
+
+    /* remove semicolon from end */
+    size_t len = strlen(t->nodes[0]->label);
+    if (len && t->nodes[0]->label[len-1] == ';')
+      t->nodes[0]->label[len-1] = 0;
+
+    t->tip_count = 1;
+  }
+  else
+    t = stree_parse_newick_string(s);
+
+  /* restore opt_reorder */
+  opt_reorder = debug_opt_reorder;
+
+  return t;
+}
+
 static void replace(db_stree_t * treelist,
                     int64_t index,
                     int64_t start,
@@ -501,6 +544,14 @@ void mixed_summary(FILE * fp_out)
   FILE * fp_mcmc;
   db_stree_t * treelist;
   snode_t ** inner;
+
+  /* TODO: Ugly hack to make stree_parse_newick_string. The issue is that if
+     opt_diploid is set, the program checks whether opt_diploid_size matches
+     stree->tip_count. If the first MCMC sample has a different number of
+     species than the initial tree in the guide tree, the check will fail.
+     To 'fix' this issue I disable 'opt_diploid' before calling 
+     stree_parse_newick_string, but we should come up with a better solution */
+  long * debug_opt_diploid = opt_diploid; opt_diploid = NULL;
 
   /* open MCMC file for reading */
   fp_mcmc = xopen(opt_mcmcfile,"r");
@@ -617,12 +668,7 @@ void mixed_summary(FILE * fp_out)
           "\n(A) List of best models (count postP #species SpeciesTree)\n");
   for (i = 0; i < index; ++i)
   {
-    /* TODO: This is an ugly hack to disable checking that the tip labels of
-       the loaded tree are equal to the ones given in the control file */
-    char * dbgtmp = opt_reorder;
-    opt_reorder = NULL;
-    stree_t * t = stree_parse_newick_string(treelist[i].newick);
-    opt_reorder = dbgtmp;
+    stree_t * t = parse_tree(treelist[i].newick);
 
     /* create delimitation string */
     char * delim = create_delim_string(t);
@@ -812,4 +858,6 @@ void mixed_summary(FILE * fp_out)
                  
   free(inner);   
   fclose(fp_mcmc);
+
+  opt_diploid = debug_opt_diploid;
 }                
