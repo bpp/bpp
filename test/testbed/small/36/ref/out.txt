@@ -1,0 +1,192 @@
+COMPRESSED ALIGNMENTS
+
+21 7
+^6 uaaauca
+^c66 uaaaucu
+^rd1 uaaauca
+^hn24 uaaauaa
+^gs250 uaaauca
+^kiz1375 uaaauaa
+^kiz2305 uaaaaca
+^kiz2321 uaaaaca
+^kiz2405 uaaaaca
+^bj64 uaaauca
+^dl4 uaacuca
+^wlht2 uaaauca
+^ypx2767 uaaauca
+^ypx2732 uauauca
+^ypx3876 uauauca
+^ypx4225 uaaauaa
+^gs49 uaaauca
+^gs132 uaaauaa
+^nx4 uaaauaa
+^ypx3462 uaaauaa
+^ypx3893 ucaauaa
+
+28 4
+^6 aagc
+^c66 aagc
+^rd1 aagc
+^hn24 aagc
+^gs250 aagc
+^kiz1375 aagu
+^kiz2305 aagc
+^kiz2321 aagc
+^kiz2405 aagc
+^bj64 aagc
+^dl4 aaau
+^wlht2 aagc
+^ypx2767 aagc
+^ypx2734 aagc
+^ypx3195 aagc
+^ypx4186 aagc
+^ypx4184 aagc
+^ypx3748 aagc
+^ypx4225 aagu
+^ypx3032 aagu
+^gs49 aagc
+^gs132 aagc
+^nx4 aagc
+^ypx3462 acgc
+^c14 aagc
+^ypx3893 aagc
+^ypx3460 aagc
+^gs75 aagc
+
+28 5
+^6 ccacu
+^c66 ccacu
+^rd1 ccacu
+^hn24 ccacu
+^gs250 ccacu
+^kiz1375 ccaca
+^kiz2305 ccacu
+^kiz2321 ccacu
+^kiz2405 ccacu
+^bj64 ccacu
+^dl4 ccauu
+^ypx2767 ccacu
+^ypx2734 ccacu
+^ypx3195 ccacu
+^ypx4186 ccacu
+^ypx4184 ccacu
+^ypx3748 ccacu
+^ypx4225 ccgcu
+^ypx3032 ccacu
+^gs49 ccacu
+^gs132 ccacu
+^nx4 cuacu
+^ypx3462 ccacu
+^c14 ccacu
+^ypx3893 ccacu
+^ypx3460 ccacu
+^gs01 ccacu
+^gs75 ccacu
+
+24 7
+^6 guccgcu
+^c66 guccgcu
+^rd1 guccgcg
+^hn24 guccgau
+^gs250 guccgcu
+^kiz1375 guccgcu
+^kiz2305 guccgcu
+^kiz2321 guccgcu
+^kiz2405 guccgcu
+^dl4 gucaucu
+^ypx2767 guucucu
+^ypx3195 guccucu
+^ypx4186 guccucu
+^ypx3748 guccucu
+^ypx4225 guccgcu
+^ypx3032 guccgcu
+^gs49 guccgcu
+^gs132 guccgcu
+^ypx3462 guccgcu
+^c14 gcccgcu
+^ypx3893 guccgcu
+^ypx3460 guccgcu
+^gs01 guccgcu
+^gs75 guccgcu
+
+30 8
+^6 agaaggau
+^c66 agaaggau
+^rd1 agaaggcg
+^hn24 agaaggcg
+^gs250 agaaggcg
+^kiz1375 agaaggcg
+^kiz2305 agaagacg
+^kiz2321 agaaggcg
+^kiz2405 agaaggcg
+^bj64 agaaagag
+^dl10 agauggau
+^wlht2 agaaggau
+^ypx2767 agaaagag
+^ypx3876 aguaagag
+^ypx2734 agaaagag
+^ypx3195 agaaagag
+^ypx4186 agaaagag
+^ypx4184 agaaagag
+^ypx3748 agaaagag
+^ypx4225 agaaagag
+^ypx3032 auaaagag
+^gs49 agaaggag
+^gs132 agaaggag
+^nx4 agaaggag
+^ypx3462 agaaggcg
+^c14 agaaggag
+^ypx3893 agaaggag
+^ypx3460 agaaggcg
+^gs01 agaaggag
+^gs75 aguaggcg
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     9 |    6 | [OK]                                 | K         
+     7 |   10 | [OK]                                 | C         
+    14 |   12 | [OK]                                 | L         
+     2 |    2 | [OK]                                 | H         
+
+Species in order:
+   1. K
+   2. C
+   3. L
+   4. H
+
+(A) Best trees in the sample (15 distinct trees in all)
+      249  0.16589  0.16589 ((C, (H, L)), K);
+      243  0.16189  0.32778 (((C, H), L), K);
+      221  0.14724  0.47502 (((C, K), L), H);
+      221  0.14724  0.62225 ((C, K), (H, L));
+      176  0.11726  0.73951 (C, ((H, L), K));
+      118  0.07861  0.81812 (((C, L), H), K);
+      113  0.07528  0.89340 (((C, K), H), L);
+       55  0.03664  0.93005 (((C, H), K), L);
+       31  0.02065  0.95070 ((C, (H, K)), L);
+       24  0.01599  0.96669 (C, ((H, K), L));
+       21  0.01399  0.98068 ((C, H), (K, L));
+       11  0.00733  0.98801 (((C, L), K), H);
+        6  0.00400  0.99201 ((C, (K, L)), H);
+        6  0.00400  0.99600 ((C, L), (H, K));
+        6  0.00400  1.00000 (C, (H, (K, L)));
+
+(B) Best splits in the sample of trees (10 splits in all)
+   646 0.430380  0011
+   610 0.406396  0111
+   555 0.369753  1100
+   319 0.212525  0101
+   238 0.158561  1110
+   206 0.137242  1011
+   199 0.132578  1101
+   135 0.089940  0110
+    61 0.040640  1001
+    33 0.021985  1010
+
+(C) Majority-rule consensus tree
+(K, C, L, H);
+
+(D) Best tree (or trees from the mastertree file) with support values
+((C, (H, L) #0.430380) #0.406396, K);   [P = 0.165889]

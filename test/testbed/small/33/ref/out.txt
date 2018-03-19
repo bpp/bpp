@@ -1,0 +1,192 @@
+COMPRESSED ALIGNMENTS
+
+21 26
+^6 caagaaaucaacccccgggggguuuu
+^c66 caagaaaucaucccccggggggguuu
+^rd1 caagaaaucuacccccggggggguuu
+^hn24 caagaaauaaaccccyggggrrguuw
+^gs250 caagaaaucwacccccggggggguuu
+^kiz1375 caagaaauaaacccsyggskgrguuw
+^kiz2305 caagaaaacaacccccgggggaguuu
+^kiz2321 caagaaracaaccsccgggggaguuu
+^kiz2405 caagaraacaacycccgggggaguyu
+^bj64 caagaaaucaacccccggggggguuu
+^dl4 caagcaaucaacccucggggggguuu
+^wlht2 caagaaaucaasccucggggggguuu
+^ypx2767 caagaaaucaacccccggggggguuu
+^ypx2732 caauaaaucaacccccggggggguuu
+^ypx3876 caauaaaucaacccccggggggguuu
+^ypx4225 cawgaaauaaacccccgggggrguuw
+^gs49 caagaaaucaacccccggggggguuu
+^gs132 caagaaauaaacccccgggggaaauu
+^nx4 caagaaauaaacccccgggggaaauu
+^ypx3462 cawgaaauaaaccccyrkgggrguuw
+^ypx3893 ccagaaauaaacccccgggggarwuw
+
+28 25
+^6 gagcaaaccccccmgggggggggru
+^c66 gagcaarcccccymggggggrrkru
+^rd1 gagcmmrcccyyccgggggrggggu
+^hn24 gagcamaccccycagggggggrggu
+^gs250 gagcaaaccccucaggggggggggu
+^kiz1375 gaguaarccccycmggggggggggu
+^kiz2305 gagcacacccccccggggggggggu
+^kiz2321 gagcacaccycccmggggrgggggk
+^kiz2405 gagcacaccycccmggggrgggggk
+^bj64 gagcaaaccccccaaggggggaggu
+^dl4 gaauaaaccccccaggggggggggu
+^wlht2 gagcaaaccccccaaggggggaggu
+^ypx2767 gagcaaaccccccagggggggaggu
+^ypx2734 gagcaaaccccccaaggggggaggu
+^ypx3195 gagcaaaccccccaaggggggaggu
+^ypx4186 gagcaaaccccccagggkgggaggu
+^ypx4184 gagcaaaccccccaaggggggaggu
+^ypx3748 gagcaaaccccccargsggggaggu
+^ypx4225 gaguaraccccccaggggggggggu
+^ypx3032 gaguaaaccccccagggggggrggu
+^gs49 gagcaaayyccycagggggggrggu
+^gs132 gagcaaacyccycagggggggrggu
+^nx4 gagcaagccccccagagggggaggu
+^ypx3462 gcgcaarccccucmggggggggggu
+^c14 gagcaaacyccycagggggggrggu
+^ypx3893 gagcaaaccccccagrggggggggu
+^ypx3460 gagcaaaccccycaggggggggggu
+^gs75 gagcaaaccccycaggggggggggu
+
+28 26
+^6 ccacaaaucccccgggruuuuuuwwy
+^c66 ccacaaaucccccgggguuuuuuuwy
+^rd1 ccacaaaucccccgggauuuuyyuuy
+^hn24 ccacaaaucccccgggguuuuuuuuy
+^gs250 ccacaaaucccccgggauuuuccuuc
+^kiz1375 ccacaaaacccccgggguuuucuuuy
+^kiz2305 ccacaarucccccgggguuuuuuuuu
+^kiz2321 ccacamaucccyygggguuuuuuuuu
+^kiz2405 ccacaaauccccygggguuuuuuuuu
+^bj64 ccacaaaucccccgggauuuucuauu
+^dl4 ccauraaucccccgggacuuuccauu
+^ypx2767 ccacaaaucccccgggayuuuyuauy
+^ypx2734 ccacaaaucccccgggauuuucuauy
+^ypx3195 ccacaaaucccccggrayuyyyyauy
+^ypx4186 ccacaaaucccccgggayuuyuyauu
+^ypx4184 ccacaaaucccccgggauyuucuauy
+^ypx3748 ccacaaaucccccgggayuuyuyauy
+^ypx4225 ccgcaaaucccccgrrruuuuyywuc
+^ypx3032 ccacaaaucccccggrauumucyauy
+^gs49 ccacaaauccuccuggguuuuccuuu
+^gs132 ccacaaauccuccuggguuuuccuuu
+^nx4 cuacaaaucccccgggguuuuucuuu
+^ypx3462 ccacaaauccccygggguuuucyuuy
+^c14 ccacaaauccuccuggguuuuccuuu
+^ypx3893 ccacaaaucmycckggguuuuycuuu
+^ypx3460 ccacaaauccccygggguuuucyuuc
+^gs01 ccacaaauyccccgggguuuuccuuu
+^gs75 ccacaaaucccccgggayuuucuuuy
+
+24 18
+^6 guccgcaauacgggguuy
+^c66 guccgcaauaccggguuu
+^rd1 guccgcaagrcgggruuc
+^hn24 guccgarwuacgggguyc
+^gs250 guccgcauuacggggucc
+^kiz1375 guccgcruuacggrgucc
+^kiz2305 guccgcrauacgggguuc
+^kiz2321 guccgcgauackggguuc
+^kiz2405 guccgcrauaykggguuc
+^dl4 gucaucauuacgsgguuc
+^ypx2767 guucucauuacgcgguuc
+^ypx3195 guccucauuacgcgguuc
+^ypx4186 guccucruuacgcgguuc
+^ypx3748 guccucruuacgcgguuc
+^ypx4225 guccgcguuacggggucc
+^ypx3032 guccgcawuacggggyyc
+^gs49 guccgcruuacggggucc
+^gs132 guccgcauuacggggucc
+^ypx3462 guccgcrwuacgggguyc
+^c14 gcccgcguuacggggucc
+^ypx3893 guccgcruuacggrgucc
+^ypx3460 guccgcguuacggrgucc
+^gs01 guccgcauuacggagucc
+^gs75 guccgcruuacggggucc
+
+30 19
+^6 uagagaggaauacccgggx
+^c66 uagagaggaauacccgggx
+^rd1 uagagaggacggcccggra
+^hn24 uagagaggacggcccggga
+^gs250 uagagaggrcggcccggga
+^kiz1375 uagagaggacggcccggga
+^kiz2305 uagagagaacgucccgggx
+^kiz2321 uagagaggacggcccggga
+^kiz2405 uagagaggacggcccggga
+^bj64 uagagaagaaggccyggga
+^dl10 uagaguggaauacccggga
+^wlht2 uagaxaggaauxcccgggx
+^ypx2767 uagagaagaaggccyggga
+^ypx3876 uagugaagaaggccyggga
+^ypx2734 uagagaagaaggccyggga
+^ypx3195 uagagaagaaggcccgrga
+^ypx4186 uagagaagaaggccygggx
+^ypx4184 uagagaagaaggcccgaga
+^ypx3748 uagagaagaaggcyuggga
+^ypx4225 uagagaagaaggcccggga
+^ypx3032 uauauaagaagucccggga
+^gs49 urgagaggaaggycurgga
+^gs132 uagagaggaaggucuagga
+^nx4 uagauaggaaguucuagga
+^ypx3462 uagagaggacggcccggga
+^c14 uagagaggaaggucuagga
+^ypx3893 uagagaggaaggucuagga
+^ypx3460 uagagaggacggcccggga
+^gs01 urgagaggaaggycurgga
+^gs75 uagugaggacggcccgggu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     9 |    6 | [OK]                                 | K         
+     7 |   10 | [OK]                                 | C         
+    14 |   12 | [OK]                                 | L         
+     2 |    2 | [OK]                                 | H         
+
+Species in order:
+   1. K
+   2. C
+   3. L
+   4. H
+
+(A) Best trees in the sample (15 distinct trees in all)
+      276  0.18388  0.18388 ((C, (H, L)), K);
+      198  0.13191  0.31579 (((C, H), L), K);
+      135  0.08994  0.40573 (((C, L), H), K);
+      135  0.08994  0.49567 ((C, L), (H, K));
+      128  0.08528  0.58095 ((C, (K, L)), H);
+      122  0.08128  0.66223 ((C, H), (K, L));
+      115  0.07662  0.73884 (C, ((H, L), K));
+      107  0.07129  0.81013 ((C, K), (H, L));
+       64  0.04264  0.85276 (((C, H), K), L);
+       56  0.03731  0.89007 (C, ((H, K), L));
+       50  0.03331  0.92338 ((C, (H, K)), L);
+       41  0.02732  0.95070 (((C, K), H), L);
+       31  0.02065  0.97135 (((C, K), L), H);
+       31  0.02065  0.99201 (C, (H, (K, L)));
+       12  0.00799  1.00000 (((C, L), K), H);
+
+(B) Best splits in the sample of trees (10 splits in all)
+   609 0.405730  0111
+   498 0.331779  0011
+   384 0.255829  0101
+   282 0.187875  0110
+   281 0.187209  1010
+   241 0.160560  1001
+   202 0.134577  1011
+   179 0.119254  1100
+   171 0.113924  1110
+   155 0.103264  1101
+
+(C) Majority-rule consensus tree
+(K, C, L, H);
+
+(D) Best tree (or trees from the mastertree file) with support values
+((C, (H, L) #0.331779) #0.405730, K);   [P = 0.183877]

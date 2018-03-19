@@ -1,0 +1,164 @@
+COMPRESSED ALIGNMENTS
+
+21 26
+^6 caagaaaucaacccccgggggguuuu
+^c66 caagaaaucaucccccggggggguuu
+^rd1 caagaaaucuacccccggggggguuu
+^hn24 caagaaauaaaccccyggggrrguuw
+^gs250 caagaaaucwacccccggggggguuu
+^kiz1375 caagaaauaaacccsyggskgrguuw
+^kiz2305 caagaaaacaacccccgggggaguuu
+^kiz2321 caagaaracaaccsccgggggaguuu
+^kiz2405 caagaraacaacycccgggggaguyu
+^bj64 caagaaaucaacccccggggggguuu
+^dl4 caagcaaucaacccucggggggguuu
+^wlht2 caagaaaucaasccucggggggguuu
+^ypx2767 caagaaaucaacccccggggggguuu
+^ypx2732 caauaaaucaacccccggggggguuu
+^ypx3876 caauaaaucaacccccggggggguuu
+^ypx4225 cawgaaauaaacccccgggggrguuw
+^gs49 caagaaaucaacccccggggggguuu
+^gs132 caagaaauaaacccccgggggaaauu
+^nx4 caagaaauaaacccccgggggaaauu
+^ypx3462 cawgaaauaaaccccyrkgggrguuw
+^ypx3893 ccagaaauaaacccccgggggarwuw
+
+28 25
+^6 gagcaaaccccccmgggggggggru
+^c66 gagcaarcccccymggggggrrkru
+^rd1 gagcmmrcccyyccgggggrggggu
+^hn24 gagcamaccccycagggggggrggu
+^gs250 gagcaaaccccucaggggggggggu
+^kiz1375 gaguaarccccycmggggggggggu
+^kiz2305 gagcacacccccccggggggggggu
+^kiz2321 gagcacaccycccmggggrgggggk
+^kiz2405 gagcacaccycccmggggrgggggk
+^bj64 gagcaaaccccccaaggggggaggu
+^dl4 gaauaaaccccccaggggggggggu
+^wlht2 gagcaaaccccccaaggggggaggu
+^ypx2767 gagcaaaccccccagggggggaggu
+^ypx2734 gagcaaaccccccaaggggggaggu
+^ypx3195 gagcaaaccccccaaggggggaggu
+^ypx4186 gagcaaaccccccagggkgggaggu
+^ypx4184 gagcaaaccccccaaggggggaggu
+^ypx3748 gagcaaaccccccargsggggaggu
+^ypx4225 gaguaraccccccaggggggggggu
+^ypx3032 gaguaaaccccccagggggggrggu
+^gs49 gagcaaayyccycagggggggrggu
+^gs132 gagcaaacyccycagggggggrggu
+^nx4 gagcaagccccccagagggggaggu
+^ypx3462 gcgcaarccccucmggggggggggu
+^c14 gagcaaacyccycagggggggrggu
+^ypx3893 gagcaaaccccccagrggggggggu
+^ypx3460 gagcaaaccccycaggggggggggu
+^gs75 gagcaaaccccycaggggggggggu
+
+28 26
+^6 ccacaaaucccccgggruuuuuuwwy
+^c66 ccacaaaucccccgggguuuuuuuwy
+^rd1 ccacaaaucccccgggauuuuyyuuy
+^hn24 ccacaaaucccccgggguuuuuuuuy
+^gs250 ccacaaaucccccgggauuuuccuuc
+^kiz1375 ccacaaaacccccgggguuuucuuuy
+^kiz2305 ccacaarucccccgggguuuuuuuuu
+^kiz2321 ccacamaucccyygggguuuuuuuuu
+^kiz2405 ccacaaauccccygggguuuuuuuuu
+^bj64 ccacaaaucccccgggauuuucuauu
+^dl4 ccauraaucccccgggacuuuccauu
+^ypx2767 ccacaaaucccccgggayuuuyuauy
+^ypx2734 ccacaaaucccccgggauuuucuauy
+^ypx3195 ccacaaaucccccggrayuyyyyauy
+^ypx4186 ccacaaaucccccgggayuuyuyauu
+^ypx4184 ccacaaaucccccgggauyuucuauy
+^ypx3748 ccacaaaucccccgggayuuyuyauy
+^ypx4225 ccgcaaaucccccgrrruuuuyywuc
+^ypx3032 ccacaaaucccccggrauumucyauy
+^gs49 ccacaaauccuccuggguuuuccuuu
+^gs132 ccacaaauccuccuggguuuuccuuu
+^nx4 cuacaaaucccccgggguuuuucuuu
+^ypx3462 ccacaaauccccygggguuuucyuuy
+^c14 ccacaaauccuccuggguuuuccuuu
+^ypx3893 ccacaaaucmycckggguuuuycuuu
+^ypx3460 ccacaaauccccygggguuuucyuuc
+^gs01 ccacaaauyccccgggguuuuccuuu
+^gs75 ccacaaaucccccgggayuuucuuuy
+
+24 18
+^6 guccgcaauacgggguuy
+^c66 guccgcaauaccggguuu
+^rd1 guccgcaagrcgggruuc
+^hn24 guccgarwuacgggguyc
+^gs250 guccgcauuacggggucc
+^kiz1375 guccgcruuacggrgucc
+^kiz2305 guccgcrauacgggguuc
+^kiz2321 guccgcgauackggguuc
+^kiz2405 guccgcrauaykggguuc
+^dl4 gucaucauuacgsgguuc
+^ypx2767 guucucauuacgcgguuc
+^ypx3195 guccucauuacgcgguuc
+^ypx4186 guccucruuacgcgguuc
+^ypx3748 guccucruuacgcgguuc
+^ypx4225 guccgcguuacggggucc
+^ypx3032 guccgcawuacggggyyc
+^gs49 guccgcruuacggggucc
+^gs132 guccgcauuacggggucc
+^ypx3462 guccgcrwuacgggguyc
+^c14 gcccgcguuacggggucc
+^ypx3893 guccgcruuacggrgucc
+^ypx3460 guccgcguuacggrgucc
+^gs01 guccgcauuacggagucc
+^gs75 guccgcruuacggggucc
+
+30 19
+^6 uagagaggaauacccgggx
+^c66 uagagaggaauacccgggx
+^rd1 uagagaggacggcccggra
+^hn24 uagagaggacggcccggga
+^gs250 uagagaggrcggcccggga
+^kiz1375 uagagaggacggcccggga
+^kiz2305 uagagagaacgucccgggx
+^kiz2321 uagagaggacggcccggga
+^kiz2405 uagagaggacggcccggga
+^bj64 uagagaagaaggccyggga
+^dl10 uagaguggaauacccggga
+^wlht2 uagaxaggaauxcccgggx
+^ypx2767 uagagaagaaggccyggga
+^ypx3876 uagugaagaaggccyggga
+^ypx2734 uagagaagaaggccyggga
+^ypx3195 uagagaagaaggcccgrga
+^ypx4186 uagagaagaaggccygggx
+^ypx4184 uagagaagaaggcccgaga
+^ypx3748 uagagaagaaggcyuggga
+^ypx4225 uagagaagaaggcccggga
+^ypx3032 uauauaagaagucccggga
+^gs49 urgagaggaaggycurgga
+^gs132 uagagaggaaggucuagga
+^nx4 uagauaggaaguucuagga
+^ypx3462 uagagaggacggcccggga
+^c14 uagagaggaaggucuagga
+^ypx3893 uagagaggaaggucuagga
+^ypx3460 uagagaggacggcccggga
+^gs01 urgagaggaaggycurgga
+^gs75 uagugaggacggcccgggu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     9 |    6 | [OK]                                 | K         
+     7 |   10 | [OK]                                 | C         
+    14 |   12 | [OK]                                 | L         
+     2 |    2 | [OK]                                 | H         
+
+          theta_1K	theta_2C	theta_3L	theta_4H	theta_5KCLH	theta_6KC	theta_7LH	tau_5KCLH	tau_6KC	tau_7LH	lnL
+mean      0.000858  0.001114  0.001224  0.001320  0.000901  0.002561  0.001515  0.001578  0.001338  0.001286  -3623.788519
+median    0.000788  0.001063  0.001128  0.001057  0.000859  0.001796  0.001225  0.001569  0.001329  0.001279  -3623.249000
+S.D       0.000319  0.000359  0.000404  0.000970  0.000249  0.002137  0.001089  0.000281  0.000286  0.000323  6.891344
+min       0.000297  0.000465  0.000482  0.000283  0.000374  0.000296  0.000327  0.000801  0.000406  0.000374  -3649.329000
+max       0.002566  0.003154  0.003570  0.009484  0.002460  0.015053  0.010085  0.002555  0.002337  0.002341  -3606.466000
+2.5%      0.000443  0.000635  0.000619  0.000449  0.000527  0.000638  0.000458  0.001042  0.000788  0.000667  -3638.412000
+97.5%     0.001607  0.002037  0.002157  0.004307  0.001437  0.008741  0.004429  0.002171  0.001942  0.001897  -3611.198000
+2.5%HPD   0.000404  0.000614  0.000560  0.000283  0.000504  0.000408  0.000327  0.001048  0.000778  0.000623  -3637.973000
+97.5%HPD  0.001496  0.001902  0.002021  0.003174  0.001375  0.007400  0.003652  0.002171  0.001899  0.001843  -3610.986000
+ESS*      241.404584  132.205682  128.116912  101.258112  41.456829  52.737574  107.736679  27.671042  34.800512  39.710676  36.478661
+Eff*      0.160936  0.088137  0.085411  0.067505  0.027638  0.035158  0.071824  0.018447  0.023200  0.026474  0.024319
