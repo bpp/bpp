@@ -237,7 +237,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 4:
-        if (!strcmp(optarg,"cpu"))
+        if (!strcasecmp(optarg,"cpu"))
           opt_arch = PLL_ATTRIB_ARCH_CPU;
         else if (!strcasecmp(optarg,"sse"))
           opt_arch = PLL_ATTRIB_ARCH_SSE;
