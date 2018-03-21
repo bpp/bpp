@@ -1,0 +1,187 @@
+COMPRESSED ALIGNMENTS
+
+21 26
+^6 caagaaaucaacccccgggggguuuu
+^c66 caagaaaucaucccccggggggguuu
+^rd1 caagaaaucuacccccggggggguuu
+^hn24 caagaaauaaaccccyggggrrguuw
+^gs250 caagaaaucwacccccggggggguuu
+^kiz1375 caagaaauaaacccsyggskgrguuw
+^kiz2305 caagaaaacaacccccgggggaguuu
+^kiz2321 caagaaracaaccsccgggggaguuu
+^kiz2405 caagaraacaacycccgggggaguyu
+^bj64 caagaaaucaacccccggggggguuu
+^dl4 caagcaaucaacccucggggggguuu
+^wlht2 caagaaaucaasccucggggggguuu
+^ypx2767 caagaaaucaacccccggggggguuu
+^ypx2732 caauaaaucaacccccggggggguuu
+^ypx3876 caauaaaucaacccccggggggguuu
+^ypx4225 cawgaaauaaacccccgggggrguuw
+^gs49 caagaaaucaacccccggggggguuu
+^gs132 caagaaauaaacccccgggggaaauu
+^nx4 caagaaauaaacccccgggggaaauu
+^ypx3462 cawgaaauaaaccccyrkgggrguuw
+^ypx3893 ccagaaauaaacccccgggggarwuw
+
+28 25
+^6 gagcaaaccccccmgggggggggru
+^c66 gagcaarcccccymggggggrrkru
+^rd1 gagcmmrcccyyccgggggrggggu
+^hn24 gagcamaccccycagggggggrggu
+^gs250 gagcaaaccccucaggggggggggu
+^kiz1375 gaguaarccccycmggggggggggu
+^kiz2305 gagcacacccccccggggggggggu
+^kiz2321 gagcacaccycccmggggrgggggk
+^kiz2405 gagcacaccycccmggggrgggggk
+^bj64 gagcaaaccccccaaggggggaggu
+^dl4 gaauaaaccccccaggggggggggu
+^wlht2 gagcaaaccccccaaggggggaggu
+^ypx2767 gagcaaaccccccagggggggaggu
+^ypx2734 gagcaaaccccccaaggggggaggu
+^ypx3195 gagcaaaccccccaaggggggaggu
+^ypx4186 gagcaaaccccccagggkgggaggu
+^ypx4184 gagcaaaccccccaaggggggaggu
+^ypx3748 gagcaaaccccccargsggggaggu
+^ypx4225 gaguaraccccccaggggggggggu
+^ypx3032 gaguaaaccccccagggggggrggu
+^gs49 gagcaaayyccycagggggggrggu
+^gs132 gagcaaacyccycagggggggrggu
+^nx4 gagcaagccccccagagggggaggu
+^ypx3462 gcgcaarccccucmggggggggggu
+^c14 gagcaaacyccycagggggggrggu
+^ypx3893 gagcaaaccccccagrggggggggu
+^ypx3460 gagcaaaccccycaggggggggggu
+^gs75 gagcaaaccccycaggggggggggu
+
+28 26
+^6 ccacaaaucccccgggruuuuuuwwy
+^c66 ccacaaaucccccgggguuuuuuuwy
+^rd1 ccacaaaucccccgggauuuuyyuuy
+^hn24 ccacaaaucccccgggguuuuuuuuy
+^gs250 ccacaaaucccccgggauuuuccuuc
+^kiz1375 ccacaaaacccccgggguuuucuuuy
+^kiz2305 ccacaarucccccgggguuuuuuuuu
+^kiz2321 ccacamaucccyygggguuuuuuuuu
+^kiz2405 ccacaaauccccygggguuuuuuuuu
+^bj64 ccacaaaucccccgggauuuucuauu
+^dl4 ccauraaucccccgggacuuuccauu
+^ypx2767 ccacaaaucccccgggayuuuyuauy
+^ypx2734 ccacaaaucccccgggauuuucuauy
+^ypx3195 ccacaaaucccccggrayuyyyyauy
+^ypx4186 ccacaaaucccccgggayuuyuyauu
+^ypx4184 ccacaaaucccccgggauyuucuauy
+^ypx3748 ccacaaaucccccgggayuuyuyauy
+^ypx4225 ccgcaaaucccccgrrruuuuyywuc
+^ypx3032 ccacaaaucccccggrauumucyauy
+^gs49 ccacaaauccuccuggguuuuccuuu
+^gs132 ccacaaauccuccuggguuuuccuuu
+^nx4 cuacaaaucccccgggguuuuucuuu
+^ypx3462 ccacaaauccccygggguuuucyuuy
+^c14 ccacaaauccuccuggguuuuccuuu
+^ypx3893 ccacaaaucmycckggguuuuycuuu
+^ypx3460 ccacaaauccccygggguuuucyuuc
+^gs01 ccacaaauyccccgggguuuuccuuu
+^gs75 ccacaaaucccccgggayuuucuuuy
+
+24 18
+^6 guccgcaauacgggguuy
+^c66 guccgcaauaccggguuu
+^rd1 guccgcaagrcgggruuc
+^hn24 guccgarwuacgggguyc
+^gs250 guccgcauuacggggucc
+^kiz1375 guccgcruuacggrgucc
+^kiz2305 guccgcrauacgggguuc
+^kiz2321 guccgcgauackggguuc
+^kiz2405 guccgcrauaykggguuc
+^dl4 gucaucauuacgsgguuc
+^ypx2767 guucucauuacgcgguuc
+^ypx3195 guccucauuacgcgguuc
+^ypx4186 guccucruuacgcgguuc
+^ypx3748 guccucruuacgcgguuc
+^ypx4225 guccgcguuacggggucc
+^ypx3032 guccgcawuacggggyyc
+^gs49 guccgcruuacggggucc
+^gs132 guccgcauuacggggucc
+^ypx3462 guccgcrwuacgggguyc
+^c14 gcccgcguuacggggucc
+^ypx3893 guccgcruuacggrgucc
+^ypx3460 guccgcguuacggrgucc
+^gs01 guccgcauuacggagucc
+^gs75 guccgcruuacggggucc
+
+30 19
+^6 uagagaggaauacccgggx
+^c66 uagagaggaauacccgggx
+^rd1 uagagaggacggcccggra
+^hn24 uagagaggacggcccggga
+^gs250 uagagaggrcggcccggga
+^kiz1375 uagagaggacggcccggga
+^kiz2305 uagagagaacgucccgggx
+^kiz2321 uagagaggacggcccggga
+^kiz2405 uagagaggacggcccggga
+^bj64 uagagaagaaggccyggga
+^dl10 uagaguggaauacccggga
+^wlht2 uagaxaggaauxcccgggx
+^ypx2767 uagagaagaaggccyggga
+^ypx3876 uagugaagaaggccyggga
+^ypx2734 uagagaagaaggccyggga
+^ypx3195 uagagaagaaggcccgrga
+^ypx4186 uagagaagaaggccygggx
+^ypx4184 uagagaagaaggcccgaga
+^ypx3748 uagagaagaaggcyuggga
+^ypx4225 uagagaagaaggcccggga
+^ypx3032 uauauaagaagucccggga
+^gs49 urgagaggaaggycurgga
+^gs132 uagagaggaaggucuagga
+^nx4 uagauaggaaguucuagga
+^ypx3462 uagagaggacggcccggga
+^c14 uagagaggaaggucuagga
+^ypx3893 uagagaggaaggucuagga
+^ypx3460 uagagaggacggcccggga
+^gs01 urgagaggaaggycurgga
+^gs75 uagugaggacggcccgggu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     9 |    6 | [OK]                                 | K         
+     7 |   10 | [OK]                                 | C         
+    14 |   12 | [OK]                                 | L         
+     2 |    2 | [OK]                                 | H         
+
+
+(A) List of best models (count postP #species SpeciesTree)
+320 0.213333 0.213333 4  (C H K L)  ((C, (H, L)), K);
+313 0.208667 0.422000 4  (C H K L)  (((C, H), L), K);
+154 0.102667 0.524667 4  (C H K L)  ((C, H), (K, L));
+152 0.101333 0.626000 4  (C H K L)  ((C, (K, L)), H);
+139 0.092667 0.718667 4  (C H K L)  (((C, L), H), K);
+ 96 0.064000 0.782667 4  (C H K L)  (((C, H), K), L);
+ 64 0.042667 0.825333 4  (C H K L)  (C, (H, (K, L)));
+ 49 0.032667 0.858000 4  (C H K L)  ((C, (H, K)), L);
+ 47 0.031333 0.889333 4  (C H K L)  (C, ((H, L), K));
+ 37 0.024667 0.914000 4  (C H K L)  (((C, L), K), H);
+ 34 0.022667 0.936667 4  (C H K L)  (((C, K), L), H);
+ 30 0.020000 0.956667 4  (C H K L)  (C, ((H, K), L));
+ 22 0.014667 0.971333 3  (CH K L)  ((CH, K), L);
+ 21 0.014000 0.985333 4  (C H K L)  ((C, K), (H, L));
+ 20 0.013333 0.998667 4  (C H K L)  ((C, L), (H, K));
+  2 0.001333 1.000000 4  (C H K L)  (((C, K), H), L);
+
+(B) 2 species delimitations & their posterior probabilities
+1478 0.985333   4 (C H K L)
+  22 0.014667   3 (CH K L)
+
+(C) 5 delimited species & their posterior probabilities
+1500 1.000000 L
+1500 1.000000 K
+1478 0.985333 H
+1478 0.985333 C
+  22 0.014667 CH
+
+(D) Posterior probability for # of species
+P[1] = 0.000000  prior[1] = 0.238095
+P[2] = 0.000000  prior[2] = 0.238095
+P[3] = 0.014667  prior[3] = 0.285714
+P[4] = 0.985333  prior[4] = 0.238095

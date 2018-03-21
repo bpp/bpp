@@ -1,0 +1,199 @@
+COMPRESSED ALIGNMENTS
+
+21 7
+^6 uaaauca
+^c66 uaaaucu
+^rd1 uaaauca
+^hn24 uaaauaa
+^gs250 uaaauca
+^kiz1375 uaaauaa
+^kiz2305 uaaaaca
+^kiz2321 uaaaaca
+^kiz2405 uaaaaca
+^bj64 uaaauca
+^dl4 uaacuca
+^wlht2 uaaauca
+^ypx2767 uaaauca
+^ypx2732 uauauca
+^ypx3876 uauauca
+^ypx4225 uaaauaa
+^gs49 uaaauca
+^gs132 uaaauaa
+^nx4 uaaauaa
+^ypx3462 uaaauaa
+^ypx3893 ucaauaa
+
+28 4
+^6 aagc
+^c66 aagc
+^rd1 aagc
+^hn24 aagc
+^gs250 aagc
+^kiz1375 aagu
+^kiz2305 aagc
+^kiz2321 aagc
+^kiz2405 aagc
+^bj64 aagc
+^dl4 aaau
+^wlht2 aagc
+^ypx2767 aagc
+^ypx2734 aagc
+^ypx3195 aagc
+^ypx4186 aagc
+^ypx4184 aagc
+^ypx3748 aagc
+^ypx4225 aagu
+^ypx3032 aagu
+^gs49 aagc
+^gs132 aagc
+^nx4 aagc
+^ypx3462 acgc
+^c14 aagc
+^ypx3893 aagc
+^ypx3460 aagc
+^gs75 aagc
+
+28 5
+^6 ccacu
+^c66 ccacu
+^rd1 ccacu
+^hn24 ccacu
+^gs250 ccacu
+^kiz1375 ccaca
+^kiz2305 ccacu
+^kiz2321 ccacu
+^kiz2405 ccacu
+^bj64 ccacu
+^dl4 ccauu
+^ypx2767 ccacu
+^ypx2734 ccacu
+^ypx3195 ccacu
+^ypx4186 ccacu
+^ypx4184 ccacu
+^ypx3748 ccacu
+^ypx4225 ccgcu
+^ypx3032 ccacu
+^gs49 ccacu
+^gs132 ccacu
+^nx4 cuacu
+^ypx3462 ccacu
+^c14 ccacu
+^ypx3893 ccacu
+^ypx3460 ccacu
+^gs01 ccacu
+^gs75 ccacu
+
+24 7
+^6 guccgcu
+^c66 guccgcu
+^rd1 guccgcg
+^hn24 guccgau
+^gs250 guccgcu
+^kiz1375 guccgcu
+^kiz2305 guccgcu
+^kiz2321 guccgcu
+^kiz2405 guccgcu
+^dl4 gucaucu
+^ypx2767 guucucu
+^ypx3195 guccucu
+^ypx4186 guccucu
+^ypx3748 guccucu
+^ypx4225 guccgcu
+^ypx3032 guccgcu
+^gs49 guccgcu
+^gs132 guccgcu
+^ypx3462 guccgcu
+^c14 gcccgcu
+^ypx3893 guccgcu
+^ypx3460 guccgcu
+^gs01 guccgcu
+^gs75 guccgcu
+
+30 8
+^6 agaaggau
+^c66 agaaggau
+^rd1 agaaggcg
+^hn24 agaaggcg
+^gs250 agaaggcg
+^kiz1375 agaaggcg
+^kiz2305 agaagacg
+^kiz2321 agaaggcg
+^kiz2405 agaaggcg
+^bj64 agaaagag
+^dl10 agauggau
+^wlht2 agaaggau
+^ypx2767 agaaagag
+^ypx3876 aguaagag
+^ypx2734 agaaagag
+^ypx3195 agaaagag
+^ypx4186 agaaagag
+^ypx4184 agaaagag
+^ypx3748 agaaagag
+^ypx4225 agaaagag
+^ypx3032 auaaagag
+^gs49 agaaggag
+^gs132 agaaggag
+^nx4 agaaggag
+^ypx3462 agaaggcg
+^c14 agaaggag
+^ypx3893 agaaggag
+^ypx3460 agaaggcg
+^gs01 agaaggag
+^gs75 aguaggcg
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     9 |    6 | [OK]                                 | K         
+     7 |   10 | [OK]                                 | C         
+    14 |   12 | [OK]                                 | L         
+     2 |    2 | [OK]                                 | H         
+
+
+(A) List of best models (count postP #species SpeciesTree)
+355 0.236667 0.236667 4  (C H K L)  ((C, K), (H, L));
+153 0.102000 0.338667 4  (C H K L)  (C, ((H, L), K));
+138 0.092000 0.430667 4  (C H K L)  ((C, (H, L)), K);
+ 92 0.061333 0.492000 4  (C H K L)  (C, ((H, K), L));
+ 88 0.058667 0.550667 4  (C H K L)  ((C, (H, K)), L);
+ 79 0.052667 0.603333 4  (C H K L)  ((C, L), (H, K));
+ 66 0.044000 0.647333 4  (C H K L)  (((C, H), K), L);
+ 60 0.040000 0.687333 4  (C H K L)  (((C, K), H), L);
+ 60 0.040000 0.727333 4  (C H K L)  (((C, K), L), H);
+ 56 0.037333 0.764667 4  (C H K L)  ((C, H), (K, L));
+ 53 0.035333 0.800000 3  (C HL K)  ((C, K), HL);
+ 43 0.028667 0.828667 4  (C H K L)  (((C, H), L), K);
+ 41 0.027333 0.856000 3  (C HL K)  (C, (HL, K));
+ 40 0.026667 0.882667 3  (C HL K)  ((C, HL), K);
+ 31 0.020667 0.903333 4  (C H K L)  (((C, L), K), H);
+ 28 0.018667 0.922000 3  (C HK L)  (C, (HK, L));
+ 26 0.017333 0.939333 4  (C H K L)  ((C, (K, L)), H);
+ 25 0.016667 0.956000 4  (C H K L)  (((C, L), H), K);
+ 25 0.016667 0.972667 4  (C H K L)  (C, (H, (K, L)));
+ 23 0.015333 0.988000 3  (C HK L)  ((C, HK), L);
+  7 0.004667 0.992667 3  (C HK L)  ((C, L), HK);
+  5 0.003333 0.996000 3  (CH K L)  ((CH, L), K);
+  4 0.002667 0.998667 3  (CH K L)  (CH, (K, L));
+  2 0.001333 1.000000 3  (CH K L)  ((CH, K), L);
+
+(B) 4 species delimitations & their posterior probabilities
+1297 0.864667   4 (C H K L)
+ 134 0.089333   3 (C HL K)
+  58 0.038667   3 (C HK L)
+  11 0.007333   3 (CH K L)
+
+(C) 7 delimited species & their posterior probabilities
+1489 0.992667 C
+1442 0.961333 K
+1366 0.910667 L
+1297 0.864667 H
+ 134 0.089333 HL
+  58 0.038667 HK
+  11 0.007333 CH
+
+(D) Posterior probability for # of species
+P[1] = 0.000000  prior[1] = 0.227273
+P[2] = 0.000000  prior[2] = 0.227273
+P[3] = 0.135333  prior[3] = 0.272727
+P[4] = 0.864667  prior[4] = 0.272727
