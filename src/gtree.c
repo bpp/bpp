@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2018 Tomas Flouri and Ziheng Yang
+    Copyright (C) 2016-2018 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -665,6 +665,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   snode_t ** sortptr = epoch;
 
+  /* move zeroes to beginning and store their number in j */
   for (j = 0, i = 0; i < stree->inner_count; ++i)
   {
     if (epoch[i]->tau == 0)
@@ -675,6 +676,8 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       ++j;
     }
   }
+
+  /* sort nonzero entries */
   sortptr += j;
   qsort(&(sortptr[0]), stree->inner_count-j, sizeof(snode_t *), cb_cmp_spectime);
 
