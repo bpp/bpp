@@ -344,4 +344,7 @@ if __name__ == "__main__":
   
   header()
 
+  if not os.path.isfile(os.path.expandvars(opt_bpp_bin)):
+    print "BPP binary not found. Please update variable 'opt_bpp_bin' (line 29)"
+
   runtests()
