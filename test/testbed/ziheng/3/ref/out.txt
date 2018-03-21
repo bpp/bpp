@@ -1,0 +1,102 @@
+COMPRESSED ALIGNMENTS
+
+2 2
+d1^D ry
+d2^D au
+
+3 2
+a1^A ag
+a2^A ag
+b1^B au
+
+8 13
+a1^A caaagaagcccgu
+a2^A caaagaagcccgu
+b1^B caaagaaucccgu
+b2^B caaagaaucccgu
+c1_2^C caaauurucccgu
+c3_4^C caaauurucccgu
+d1_2^D caruguruccucu
+d3_4^D cwmwgurumyysk
+
+COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES
+
+4 2
+d1^D.1 ac
+d1^D.2 gu
+d2^D.1 au
+d2^D.2 au
+
+6 2
+a1^A.1 ag
+a1^A.2 ag
+a2^A.1 ag
+a2^A.2 ag
+b1^B.1 au
+b1^B.2 au
+
+16 12
+a1^A.1 ccaaaacaagag
+a1^A.2 ccaaaacaagag
+a2^A.1 ccaaaacaagag
+a2^A.2 ccaaaacaagag
+b1^B.1 ccaaaacaagau
+b1^B.2 ccaaaacaagau
+b2^B.1 ccaaaacaagau
+b2^B.2 ccaaaacaagau
+c1_2^C.1 ccaaaacaauuu
+c1_2^C.2 ccaaaacgguuu
+c3_4^C.1 ccaaaacaauuu
+c3_4^C.2 ccaaaacgguuu
+d1_2^D.1 ccaaguuaaguu
+d1_2^D.2 ccagauuggguu
+d3_4^D.1 ccuaaauagguu
+d3_4^D.2 cuaccucgaguu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     4 |    4 | [OK]                                 | A         
+     4 |    4 | [OK]                                 | B         
+     4 |    4 | [OK]                                 | C         
+     4 |    4 | [OK]                                 | D         
+
+Species in order:
+   1. A
+   2. B
+   3. C
+   4. D
+
+(A) Best trees in the sample (13 distinct trees in all)
+     6645  0.66443  0.66443 (((A, B), C), D);
+     2081  0.20808  0.87251 (((A, B), D), C);
+     1189  0.11889  0.99140 ((A, B), (C, D));
+       29  0.00290  0.99430 (A, (B, (C, D)));
+       17  0.00170  0.99600 ((A, (B, C)), D);
+       16  0.00160  0.99760 ((A, (C, D)), B);
+       10  0.00100  0.99860 (((A, C), B), D);
+        4  0.00040  0.99900 (((A, C), D), B);
+        3  0.00030  0.99930 (((A, D), B), C);
+        2  0.00020  0.99950 (((A, D), C), B);
+        2  0.00020  0.99970 ((A, D), (B, C));
+        2  0.00020  0.99990 (A, ((B, C), D));
+        1  0.00010  1.00000 ((A, (B, D)), C);
+
+(B) Best splits in the sample of trees (10 splits in all)
+  9915 0.991401  1100
+  6672 0.667133  1110
+  2085 0.208479  1101
+  1234 0.123388  0011
+    31 0.003100  0111
+    22 0.002200  1011
+    21 0.002100  0110
+    14 0.001400  1010
+     7 0.000700  1001
+     1 0.000100  0101
+
+(C) Majority-rule consensus tree
+(((A, B) #0.991401, C) #0.667133, D);
+
+(D) Best tree (or trees from the mastertree file) with support values
+(((A, B) #0.991401, C) #0.667133, D);   [P = 0.664434]

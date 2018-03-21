@@ -1,0 +1,56 @@
+COMPRESSED ALIGNMENTS
+
+4 2
+a1^A uu
+b1^B uy
+a2^A uy
+c1^C cu
+
+COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES
+
+6 2
+a1^A.1 uu
+a1^A.2 uu
+b1^B uy
+a2^A.1 uc
+a2^A.2 uu
+c1^C cu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     4 |    4 | [OK]                                 | A         
+     1 |    1 | [OK]                                 | B         
+     1 |    1 | [OK]                                 | C         
+
+
+(A) List of best models (count postP #species SpeciesTree)
+34206 0.342060 0.342060 2  (AB C)  (AB, C);
+27907 0.279070 0.621130 3  (A B C)  ((A, B), C);
+12283 0.122830 0.743960 3  (A B C)  (A, (B, C));
+11088 0.110880 0.854840 3  (A B C)  ((A, C), B);
+ 8332 0.083320 0.938160 1  (ABC)  ABC;
+ 3896 0.038960 0.977120 2  (A BC)  (A, BC);
+ 2288 0.022880 1.000000 2  (AC B)  (AC, B);
+
+(B) 5 species delimitations & their posterior probabilities
+51278 0.512780   3 (A B C)
+34206 0.342060   2 (AB C)
+ 8332 0.083320   1 (ABC)
+ 3896 0.038960   2 (A BC)
+ 2288 0.022880   2 (AC B)
+
+(C) 7 delimited species & their posterior probabilities
+85484 0.854840 C
+55174 0.551740 A
+53566 0.535660 B
+34206 0.342060 AB
+ 8332 0.083320 ABC
+ 3896 0.038960 BC
+ 2288 0.022880 AC
+
+(D) Posterior probability for # of species
+P[1] = 0.083320  prior[1] = 0.333333
+P[2] = 0.403900  prior[2] = 0.333333
+P[3] = 0.512780  prior[3] = 0.333333

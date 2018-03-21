@@ -1,0 +1,57 @@
+COMPRESSED ALIGNMENTS
+
+3 2
+c1^C au
+d1^D ry
+d2^D au
+
+4 3
+a1^A acg
+a2^A acg
+b1^B acu
+c1^C auu
+
+COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES
+
+4 2
+c1^C.1 au
+c1^C.2 au
+d1^D ry
+d2^D au
+
+8 3
+a1^A.1 acg
+a1^A.2 acg
+a2^A.1 acg
+a2^A.2 acg
+b1^B.1 acu
+b1^B.2 acu
+c1^C.1 auu
+c1^C.2 auu
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     4 |    4 | [OK]                                 | A         
+     2 |    2 | [OK]                                 | B         
+     4 |    2 | [OK]                                 | C         
+     2 |    2 | [OK]                                 | D         
+
+Summarizing the species-delimitation sample in file testbed/ziheng/2/out/mcmc.txt
+
+Number of species-delimitation models = 4
+
+     model    prior    posterior
+   1 000   0.250000   0.000000
+   2 100   0.250000   0.000100
+   3 110   0.250000   0.009970
+   4 111   0.250000   0.989930
+
+Order of ancestral nodes:
+  ABCD
+  ABC
+  AB
+
+Guide tree with posterior probability for presence of nodes:
+(((A, B)#0.989930, C)#0.999900, D)#1.000000;;

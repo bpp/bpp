@@ -1,0 +1,63 @@
+COMPRESSED ALIGNMENTS
+
+2 2
+d1^D ry
+d2^D au
+
+3 2
+a1^A ag
+a2^A ag
+b1^B au
+
+
+Per-locus sequences in data and 'species&tree' tag:
+C.File | Data |                Status                | Population
+-------+------+--------------------------------------+-----------
+     2 |    2 | [OK]                                 | A         
+     2 |    1 | [WARNING] Parameter not identifiable | B         
+     2 |    0 | [WARNING] Parameter not identifiable | C         
+     2 |    2 | [OK]                                 | D         
+
+[Warning] Some parameters are not identifiable because there are 0 or 1 sequences from some species, but the control file lists different numbers.
+Those entries are indicated in the table above. Posterior for theta parameters for those species will be given by the prior.
+
+Species in order:
+   1. A
+   2. B
+   3. C
+   4. D
+
+(A) Best trees in the sample (15 distinct trees in all)
+      827  0.08269  0.08269 (A, ((B, D), C));
+      792  0.07919  0.16188 (((A, D), C), B);
+      791  0.07909  0.24098 ((A, D), (B, C));
+      776  0.07759  0.31857 ((A, (C, D)), B);
+      773  0.07729  0.39586 (A, (B, (C, D)));
+      723  0.07229  0.46815 ((A, C), (B, D));
+      719  0.07189  0.54005 (A, ((B, C), D));
+      715  0.07149  0.61154 (((A, C), D), B);
+      633  0.06329  0.67483 ((A, (B, C)), D);
+      621  0.06209  0.73693 (((A, D), B), C);
+      609  0.06089  0.79782 (((A, C), B), D);
+      587  0.05869  0.85651 ((A, (B, D)), C);
+      554  0.05539  0.91191 ((A, B), (C, D));
+      488  0.04880  0.96070 (((A, B), C), D);
+      393  0.03930  1.00000 (((A, B), D), C);
+
+(B) Best splits in the sample of trees (10 splits in all)
+  2319 0.231877  0111
+  2283 0.228277  1011
+  2204 0.220378  1001
+  2143 0.214279  0110
+  2137 0.213679  0101
+  2103 0.210279  0011
+  2047 0.204680  1010
+  1730 0.172983  1110
+  1601 0.160084  1101
+  1435 0.143486  1100
+
+(C) Majority-rule consensus tree
+(A, B, C, D);
+
+(D) Best tree (or trees from the mastertree file) with support values
+(A, ((B, D) #0.213679, C) #0.231877);   [P = 0.082692]

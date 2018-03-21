@@ -210,10 +210,18 @@ opt_testsuite_small = [                 # [path-to-test,description]
    ["testbed/small/176","small-A11-176"]
 ]
 
+opt_testsuite_ziheng_desc = "Edge cases reported by Ziheng Yang"
+opt_testsuite_ziheng = [                 # [path-to-test,description]
+   ["testbed/ziheng/1",  "ziheng-1"],
+   ["testbed/ziheng/2",  "ziheng-2"],
+   ["testbed/ziheng/3",  "ziheng-3"],
+   ["testbed/ziheng/4",  "ziheng-4"]
+]
 # define test collections
 
 opt_testbeds = [
-   [opt_testsuite_small,opt_testsuite_small_desc]
+   [opt_testsuite_small,opt_testsuite_small_desc],
+   [opt_testsuite_ziheng,opt_testsuite_ziheng_desc]
 ]
 
 ## define architectures to test
