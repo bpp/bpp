@@ -298,6 +298,12 @@ def difftest(test):
   return output
 
 def testf(curtest,numtest,t,desc,arch):
+  
+  # create output directory
+  outdir = t + "/out";
+  if not os.path.exists(outdir):
+    os.makedirs(outdir)
+
   ctl = t + "/data/bpp.ctl"
   cmd = opt_bpp_bin + " --cfile " + ctl + " --arch "  + arch + " 2>tmperr >tmp"
 
@@ -322,6 +328,11 @@ def testf(curtest,numtest,t,desc,arch):
   else:
     test_fail()
   print
+
+  # delete output directory and files
+  os.remove(outdir + "/mcmc.txt")
+  os.remove(outdir + "/out.txt")
+  os.rmdir(outdir)
    
 def runtests():
   total = 0;
