@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2018 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2018 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -564,7 +564,6 @@ static FILE * init(stree_t ** ptr_stree,
   printf(" Done\n");
 
   /* parse the phylip file */
-
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
   assert(fd);
 
@@ -836,7 +835,12 @@ static FILE * init(stree_t ** ptr_stree,
   locus = (locus_t **)xcalloc((size_t)msa_count, sizeof(locus_t *));
 
   /* Check that only first 32 bits of opt_arch are used */
-  assert(opt_arch < (1l << 32)-1);
+
+#ifdef _WIN32
+  assert(opt_arch < ((long long)1 << 32) - 1);
+#endif
+  assert(opt_arch < (1L << 32) - 1);
+#endif
 
   /* ensure that heredity / locusrate estimation is now set to either 0 or 1 */
   assert(opt_est_locusrate >= 0 && opt_est_locusrate <= 1);
@@ -1236,16 +1240,12 @@ void cmd_run()
         if (ret == 1)
         {
           /* accepted */
-
           /* swap the pointers of species tree and gene tree list with cloned */
           SWAP(stree,sclone);
           SWAP(gtree,gclones);
-
           stree_label(stree);
-
           pjump_slider++;
         }
-
         if (ret != 2)
           ft_round_spr++;
       }
