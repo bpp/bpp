@@ -838,7 +838,7 @@ static FILE * init(stree_t ** ptr_stree,
 
 #ifdef _WIN32
   assert(opt_arch < ((long long)1 << 32) - 1);
-#endif
+#else
   assert(opt_arch < (1L << 32) - 1);
 #endif
 
