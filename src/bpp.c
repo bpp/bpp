@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2018 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2018 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -49,8 +49,8 @@ long opt_est_heredity;
 long opt_est_locusrate;
 long opt_est_stree;
 long opt_est_theta;
-long opt_experimental_method;
-long opt_experimental_debug;
+long opt_revolutionary_spr_method;
+long opt_revolutionary_spr_debug;
 long opt_finetune_reset;
 long opt_help;
 long opt_max_species_count;
@@ -149,7 +149,7 @@ void args_init(int argc, char ** argv)
 {
   int option_index = 0;
   int c;
-
+  
   /* set defaults */
 
   progname = argv[0];
@@ -157,7 +157,9 @@ void args_init(int argc, char ** argv)
   opt_arch = -1;
   opt_bfbeta = 1;
   opt_burnin = 100;
-  opt_cfile = NULL;
+  /* opt_cfile = NULL; */
+  opt_cfile = "bpp.ctl";
+
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;
   opt_checkpoint_current = 0;
@@ -171,8 +173,13 @@ void args_init(int argc, char ** argv)
   opt_est_heredity = 0;
   opt_est_locusrate = 0;
   opt_est_theta = 1;
-  opt_experimental_debug = 0;
-  opt_experimental_method = 0;
+#if(0)
+  opt_revolutionary_spr_method = 1;
+  opt_revolutionary_spr_debug = 2;
+#else
+  opt_revolutionary_spr_method = 0;
+  opt_revolutionary_spr_debug = 0;
+#endif
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_mix   = 0.3;
@@ -237,7 +244,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 4:
-        if (!strcasecmp(optarg,"cpu"))
+        if (!strcmp(optarg,"cpu"))
           opt_arch = PLL_ATTRIB_ARCH_CPU;
         else if (!strcasecmp(optarg,"sse"))
           opt_arch = PLL_ATTRIB_ARCH_SSE;
@@ -250,11 +257,11 @@ void args_init(int argc, char ** argv)
         break;
 
       case 5:
-        opt_experimental_method = args_getlong(optarg);
+        opt_revolutionary_spr_method = args_getlong(optarg);
         break;
 
       case 6:
-        opt_experimental_debug = 1;
+        opt_revolutionary_spr_debug = 1;
         break;
 
       case 7:
@@ -361,7 +368,7 @@ void fillheader()
 void show_header()
 {
   fprintf(stdout, "%s\n", progheader);
-  fprintf(stdout, "https://github.com/xflouris/bpp\n");
+  fprintf(stdout, "https://github.com/bpp\n");
   fprintf(stdout,"\n");
 }
 

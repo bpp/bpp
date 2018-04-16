@@ -1176,7 +1176,7 @@ void cmd_run()
   printk = opt_samplefreq * opt_samples;
 
   /* *** start of MCMC loop *** */
-  for (i = curstep-opt_burnin; i < opt_samples*opt_samplefreq; ++i)
+  for (i = curstep - opt_burnin; i < opt_samples*opt_samplefreq; ++i)
   {
     /* update progress bar */
     if (!opt_quiet)
@@ -1187,6 +1187,13 @@ void cmd_run()
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
+
+/*** Ziheng debugging, to delete ***/
+#if(0)
+if(i>=0 && opt_revolutionary_spr_method)
+  opt_revolutionary_spr_debug = 1;
+#endif
+
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(pjump);
       for (j = 0; j < pjump_size; ++j)
@@ -1194,7 +1201,7 @@ void cmd_run()
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
-      memset(pjump,0,pjump_size*sizeof(double));
+      memset(pjump, 0, pjump_size * sizeof(double));
 
       if (opt_est_delimit)
       {

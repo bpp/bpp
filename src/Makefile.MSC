@@ -1,4 +1,5 @@
-DIR_FLEXBISON = C:\GIT\winflexbison\bin\Release
+#DIR_FLEXBISON = C:\GIT\winflexbison\bin\Release
+DIR_FLEXBISON = C:\Programs\winflexbison\bin\Release
 OBJ_AVX=core_likelihood_avx.obj core_partials_avx.obj
 SRC_AVX=core_likelihood_avx.c core_partials_avx.c
 

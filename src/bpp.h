@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2018 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2018 Tomas Flouri and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -548,8 +548,8 @@ extern long opt_est_delimit;
 extern long opt_est_locusrate;
 extern long opt_est_stree;
 extern long opt_est_theta;
-extern long opt_experimental_method;
-extern long opt_experimental_debug;
+extern long opt_revolutionary_spr_method;
+extern long opt_revolutionary_spr_debug;
 extern long opt_finetune_reset;
 extern long opt_help;
 extern long opt_locus_count;
@@ -1192,7 +1192,7 @@ void pll_show_clv(const locus_t * locus,
 
 /* functions in experimental.c */
 
-void experimental_tselect_logl(gnode_t * mnode,
+void revolutionary_spr_tselect_logl(gnode_t * mnode,
                                gnode_t ** target_list,
                                long target_count,
                                locus_t * locus,
