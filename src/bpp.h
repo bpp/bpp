@@ -555,6 +555,7 @@ extern long opt_help;
 extern long opt_locus_count;
 extern long opt_max_species_count;
 extern long opt_method;
+extern long opt_onlysummary;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;
 extern long opt_print_locusrate;
@@ -973,6 +974,8 @@ void bipartitions_update(stree_t * stree);
 void summary_dealloc_hashtables(void);
 
 void stree_summary(FILE * fp_out, char ** species_names, long species_count);
+
+long getlinecount(const char * filename);
 
 /* functions in summary11.c */
 

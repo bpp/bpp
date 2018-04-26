@@ -544,7 +544,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logl_sum = 0;
   double logpr_sum = 0;
   double * pjump;
-  FILE * fp_mcmc;
+  FILE * fp_mcmc = NULL;
   FILE * fp_out;
   stree_t * stree;
   FILE ** fp_gtree;
@@ -619,8 +619,12 @@ static FILE * init(stree_t ** ptr_stree,
   maplist_print(map_list);
   #endif
 
-  if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
-    fatal("Cannot open file %s for writing...");
+  if (!opt_onlysummary)
+  {
+    if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
+      fatal("Cannot open file %s for writing...");
+  }
+
   if (!(fp_out = fopen(opt_outfile, "w")))
     fatal("Cannot open file %s for writing...");
   *ptr_fp_out = fp_out;
@@ -630,6 +634,8 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* print the alignments */
   msa_print_phylip(fp_out,msa_list,msa_count);
+
+  *ptr_fp_gtree = NULL;
 
   /* if print gtree */
   if (opt_print_genetrees)
@@ -1003,12 +1009,15 @@ static FILE * init(stree_t ** ptr_stree,
   //delimit_resetpriors();
 
   /* if method 00 or 01 print corresponding header line in MCMC file */
-  if (opt_method == METHOD_01)
-    mcmc_printinitial(fp_mcmc,stree);
-  else
+  if (!opt_onlysummary)
   {
-    if (opt_method != METHOD_11)
-      mcmc_printheader(fp_mcmc,stree);
+    if (opt_method == METHOD_01)
+      mcmc_printinitial(fp_mcmc,stree);
+    else
+    {
+      if (opt_method != METHOD_11)
+        mcmc_printheader(fp_mcmc,stree);
+    }
   }
 
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
@@ -1175,8 +1184,15 @@ void cmd_run()
 
   printk = opt_samplefreq * opt_samples;
 
+  /* check if summary only was requested (no MCMC) and initialize counter
+     for MCMC loop appropriately */
+  if (opt_onlysummary)
+    i = opt_samples*opt_samplefreq;
+  else
+    i = curstep - opt_burnin;
+
   /* *** start of MCMC loop *** */
-  for (i = curstep - opt_burnin; i < opt_samples*opt_samplefreq; ++i)
+  for (; i < opt_samples*opt_samplefreq; ++i)
   {
     /* update progress bar */
     if (!opt_quiet)
@@ -1501,13 +1517,24 @@ if(i>=0 && opt_revolutionary_spr_method)
 
   free(pjump);
 
-  if (opt_bfbeta != 1)
+  if (opt_bfbeta != 1 && !opt_onlysummary)
   {
     fprintf(stdout, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
   }
 
   /* close mcmc file */
-  fclose(fp_mcmc);
+  if (!opt_onlysummary)
+    fclose(fp_mcmc);
+
+  if (opt_onlysummary)
+  {
+    /* read file and correctly set opt_samples */
+    opt_samples = getlinecount(opt_mcmcfile);
+    if (opt_method == METHOD_00)
+      --opt_samples;
+
+    fprintf(stdout,"Read %ld samples from file %s\n",opt_samples,opt_mcmcfile);
+  }
 
   if (opt_print_genetrees)
   {

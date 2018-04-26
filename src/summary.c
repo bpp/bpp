@@ -782,3 +782,19 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
 
   fclose(fp_mcmc);
 }
+
+long getlinecount(const char * filename)
+{
+  long i;
+  long linecount = 0;
+  FILE * fp;
+
+  fp = xopen(filename,"r");
+
+  /* read number of lines */
+  while (getnextline(fp)) linecount++;
+
+  fclose(fp);
+
+  return linecount;
+}

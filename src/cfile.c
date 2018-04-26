@@ -646,6 +646,13 @@ static long parse_print(const char * line)
 
   p += count;
 
+  /* check whether value is -1 in which case nothing else must follow */
+  if (opt_print_samples == -1)
+  {
+    if (is_emptyline(p)) ret = 1;
+    goto l_unwind;
+  }
+
   /* locusrate */
   count = get_long(p, &opt_print_locusrate);
   if (!count) goto l_unwind;
@@ -978,10 +985,15 @@ void load_cfile()
       else if (!strncasecmp(token,"print",5))
       {
         if (!parse_print(value))
-          fatal("Option 'print' expects four bits (line %ld)", line_count);
+          fatal("Option 'print' expects either four bits or '-1' (line %ld)",
+                line_count);
 
         if (opt_print_samples == 0)
           fatal("First bit of 'print' must be set to 1");
+
+        if (opt_print_samples == -1)
+          opt_onlysummary = 1;
+
         valid = 1;
       }
     }

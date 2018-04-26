@@ -49,18 +49,19 @@ long opt_est_heredity;
 long opt_est_locusrate;
 long opt_est_stree;
 long opt_est_theta;
-long opt_revolutionary_spr_method;
-long opt_revolutionary_spr_debug;
 long opt_finetune_reset;
 long opt_help;
+long opt_locus_count;
 long opt_max_species_count;
 long opt_method;
-long opt_locus_count;
+long opt_onlysummary;
 long opt_print_genetrees;
 long opt_print_hscalars;
 long opt_print_locusrate;
 long opt_print_samples;
 long opt_quiet;
+long opt_revolutionary_spr_method;
+long opt_revolutionary_spr_debug;
 long opt_rjmcmc_method;
 long opt_samplefreq;
 long opt_samples;
@@ -165,12 +166,13 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_step = 0;
   opt_cleandata = 0;
   opt_debug = 0;
-  opt_est_delimit = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
   opt_diploid_size = 0;
+  opt_est_delimit = 0;
   opt_est_heredity = 0;
   opt_est_locusrate = 0;
+  opt_est_stree = 0;
   opt_est_theta = 1;
 #if(0)
   opt_revolutionary_spr_method = 1;
@@ -194,9 +196,11 @@ void args_init(int argc, char ** argv)
   opt_locusrate_filename = NULL;
   opt_locus_count = 0;
   opt_mapfile = NULL;
+  opt_max_species_count = 0;
   opt_mcmcfile = NULL;
   opt_method = -1;
   opt_msafile = NULL;
+  opt_onlysummary = 0;
   opt_outfile = NULL;
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
@@ -211,7 +215,7 @@ void args_init(int argc, char ** argv)
   opt_samplefreq = 10;
   opt_samples = 0;
   opt_seed = (long)time(NULL);
-  opt_est_stree = 0;
+  opt_sp_seqcount = NULL;
   opt_streenewick = NULL;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
@@ -219,8 +223,6 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_usedata = 1;
   opt_version = 0;
-  opt_max_species_count = 0;
-  opt_sp_seqcount = NULL;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -243,7 +245,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 4:
-        if (!strcmp(optarg,"cpu"))
+        if (!strcasecmp(optarg,"cpu"))
           opt_arch = PLL_ATTRIB_ARCH_CPU;
         else if (!strcasecmp(optarg,"sse"))
           opt_arch = PLL_ATTRIB_ARCH_SSE;
