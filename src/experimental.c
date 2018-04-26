@@ -49,7 +49,8 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
    /* allocate storage space for CLV subtree root, which is to be computed: */
   double * clv = pll_aligned_alloc(locus->sites * locus->states_padded * locus->rate_cats * sizeof(double), locus->alignment);
   /* temp space for normalized CLV of moved node:  */
-  double * nmclv = pll_aligned_alloc(locus->sites * locus->states_padded * locus->rate_cats * sizeof(double), locus->alignment);
+  //double * nmclv = pll_aligned_alloc(locus->sites * locus->states_padded * locus->rate_cats * sizeof(double), locus->alignment);
+
   /* space for normalized CLV of target node.  Ziheng: nclv is temp space, for scaled tclv for target. */
   double * ntclv = pll_aligned_alloc(locus->sites * locus->states_padded * locus->rate_cats * sizeof(double), locus->alignment);
   double tlength[1] = { mnode->parent->time * 0.314 }; /* if(opt_revolutionary_spr_method == 2) */
@@ -59,18 +60,7 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
   /* go through the list of target nodes (edge from target node to its parent is the target branch) */
   /* Ziheng: get CLV of moved node.  This is scaled outside the loop for target branches.  */
   mclv = locus->clv[mnode->clv_index];
-  nptr = nmclv;
-  for (i = 0; i < locus->sites; ++i)
-  {
-     for (tsum = 0, j = 0; j < locus->states; ++j)
-        tsum += mclv[j];
-     for (j = 0; j < locus->states; ++j)
-        nptr[j] = mclv[j] / tsum;
-
-     mclv += locus->states;
-     nptr += locus->states;
-  }
-
+  
   for (n = 0; n < target_count; ++n)
   {
     if (opt_revolutionary_spr_debug > 2)
@@ -110,8 +100,8 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
     pll_core_update_pmatrix_4x4_jc69(matrices, locus->states, locus->rate_cats, NULL, tlength, matrix_indices, param_indices, 1, locus->attributes);
                                      
     /* TODO: Account for scalers - currently disabled */
-    /* update conditional probabilities vector clv using vectors nmclv and ntclv and matrices mmat and (new) tmat */
-    pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats, clv, NULL, nmclv, ntclv, mmat, tmat, NULL, NULL, locus->attributes);
+    /* update conditional probabilities vector clv using vectors mclv and ntclv and matrices mmat and (new) tmat */
+    pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats, clv, NULL, mclv, ntclv, mmat, tmat, NULL, NULL, locus->attributes);
 
     /* compute log-likelihood of tree having root with conditional probabilities vector clv */
     logl = pll_core_root_loglikelihood(locus->states, locus->sites, locus->rate_cats, clv, NULL, locus->frequencies, locus->rate_weights, locus->pattern_weights, param_indices, NULL, locus->attributes);
@@ -126,7 +116,7 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
         long k;
         printf("      m: ");
         for (k = 0; k < locus->states; ++k)
-          printf(" %lf", nmclv[j*4+k]);
+          printf(" %lf", mclv[j*4+k]);
         printf("\n");
         printf("%3d   t: ", locus->pattern_weights[j]);
         for (k = 0; k < locus->states; ++k)
@@ -143,7 +133,6 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
 
   /* deallocate */
   pll_aligned_free(clv);
-  pll_aligned_free(nmclv);
   pll_aligned_free(ntclv);
   pll_aligned_free(tmat);
 }
