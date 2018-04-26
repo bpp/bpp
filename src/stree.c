@@ -1924,7 +1924,7 @@ long stree_propose_spr(stree_t ** streeptr,
             }
 
             if (opt_revolutionary_spr_debug) {
-               printf("ntarget = %2d weight = %9.6f  nsource = %2d weight = %9.6f\n", target_count, twgt, source_count, swgt);
+               printf("ntarget = %2ld weight = %9.6f  nsource = %2ld weight = %9.6f\n", target_count, twgt, source_count, swgt);
             }
             
             assert(swgt > 0 && twgt > 0);

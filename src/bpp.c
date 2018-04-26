@@ -157,8 +157,7 @@ void args_init(int argc, char ** argv)
   opt_arch = -1;
   opt_bfbeta = 1;
   opt_burnin = 100;
-  /* opt_cfile = NULL; */
-  opt_cfile = "bpp.ctl";
+  opt_cfile = NULL;
 
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;
