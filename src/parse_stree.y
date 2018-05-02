@@ -34,6 +34,44 @@ extern struct stree_buffer_state * stree__scan_string(const char * str);
 extern void stree__delete_buffer(struct stree_buffer_state * buffer);
 
 static unsigned int tip_cnt = 0;
+static unsigned int hybrid_cnt = 0;
+static unsigned int inner_cnt = 0;
+
+static long get_double(const char * line, double * value)
+{
+  int ret,len=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  ret = sscanf(start, "%lf%n", value, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
+  {
+    free(s);
+    return 0;
+  }
+
+  free(s);
+  return ws + end - start;
+}
 
 static void dealloc_data(snode_t * node,
                          void (*cb_destroy)(void *))
@@ -55,7 +93,8 @@ static void stree_graph_destroy(snode_t * root,
 
   dealloc_data(root, cb_destroy);
 
-  free(root->label);
+  if (root->label)
+    free(root->label);
   free(root);
 }
 
@@ -66,7 +105,7 @@ void stree_destroy(stree_t * tree,
   snode_t * node;
 
   /* deallocate all nodes */
-  for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
+  for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
     node = tree->nodes[i];
     dealloc_data(node,cb_destroy);
@@ -127,6 +166,576 @@ static void stree_error(snode_t * node, const char * s)
   fatal("%s. (line %d column %d)", s, stree_lineno, stree_colstart);
 }
 
+static void parse_annotation(snode_t * snode, const char * annotation)
+{
+  double val;
+
+  char * p = xstrdup(annotation);
+  char * s = p;
+
+  /* s now (possibly) has the format "token1,token2,...,tokenN"  where
+     tokenX has the format option=value or &option=value */
+
+  while (*s)
+  {
+    size_t comma = 0;
+    /* find next comma and replace it with a 0 to create a string of the
+       current token*/
+    size_t tokenlen = strcspn(s,",");
+    if (tokenlen)
+    {
+      if (s[tokenlen] == ',')
+        comma = 1;
+      s[tokenlen] = 0;
+    }
+    else
+    {
+      if (s == p)
+        fatal("Error - annotation (%s) starts with a comma", annotation);
+      else
+        fatal("Consecutive comma symbols found in annotation (%s)", annotation);
+    }
+    
+    /* find equal sign in current string */
+    size_t optlen = strcspn(s,"=");
+    if (!optlen)
+      fatal("Erroneous format in annotation (%s) - token (%s) is missing a '=' "
+            "sign and a value", annotation, s);
+
+    if (strlen(s+optlen) == 0)
+      fatal("Missing value for option (%s) in annotation (%s)", s, annotation);
+
+    if (s[0] == '&')
+    {
+      ++s;
+      --tokenlen;
+      --optlen;
+    }
+    s[optlen] = 0;
+
+    if (!strcasecmp(s,"gamma"))
+    {
+      if (!get_double(s+optlen+1,&val))
+        fatal("Cannot parse value (%s) for token (%s) in annotation (%s) - "
+              "value must be of type float", s+optlen, s, annotation);
+      
+      if (val <= 0 || val >= 1)
+        fatal("Parameter gamma in annotations must be greater than 0 and "
+              "smaller than 1");
+      
+      snode->hgamma = val;
+    }
+    else if (!strcasecmp(s,"tau-parent"))
+    {
+      if (!strcasecmp(s+optlen+1,"yes"))
+        snode->htau = 1;
+      else if (!strcasecmp(s+optlen+1, "no"))
+        snode->htau = 0;
+      else
+        fatal("Invalid value (%s) for option (%s) in annotation (%s)",
+              s+optlen+1, s, annotation);
+    }
+    else
+      fatal("Invalid token (%s) in annotation (%s)", s, annotation);
+    
+    s += tokenlen+comma;
+  }
+
+  free(p);
+  
+}
+
+static void annotate_bd_introgression(snode_t * xtip,
+                                      snode_t * xinner,
+                                      snode_t * y,
+                                      snode_t * ylink)
+{
+  /* y is the parent of xtip, and ylink is the child of xinner
+
+     W.l.o.g. the idea for annotations is the following:
+       Annotation of xtip relates to the edge Y->X
+       Annotation of xinner relates to R->X (R is parent of X)
+       Annotation of y relates to P->Y (P is parent of Y)
+       Annotation of ylink relates to X->Y
+
+     Also, nodes xtip and ylink are to be deleted later on, therefore
+     we do not annotate them
+
+  */
+
+  /* better safe than sorry */
+  assert(!xtip->left && !xtip->right);          /* xtip is tip */
+  assert(xinner->left || xinner->right);        /* xinner is inner */
+  assert(y->left || y->right);                  /* y is inner */
+  assert(ylink->left || ylink->right);          /* ylink is inner */
+  
+  if (xtip->data)
+  {
+    parse_annotation(xtip, (char *)(xtip->data));
+    free(xtip->data);
+    xtip->data = NULL;
+  }
+  if (xinner->data)
+  {
+    parse_annotation(xinner, (char *)(xinner->data));
+    free(xinner->data);
+    xinner->data = NULL;
+  }
+  if (y->data)
+  {
+    parse_annotation(y, (char *)(y->data));
+    free(y->data);
+    y->data = NULL;
+  }
+  if (ylink->data)
+  {
+    parse_annotation(ylink, (char *)(ylink->data));
+    free(ylink->data);
+    ylink->data = NULL;
+  }
+
+  if (xtip->htau == 1 || xinner->htau || y->htau || ylink->htau)
+    fatal("Bidirectional introgression between (%s) and (%s) requires only one "
+          "tau parameter for the two nodes. Please remove 'tau' annotation",
+          xtip->label, y->label);
+
+  if (xtip->hgamma && xinner->hgamma)
+  {
+    if (xtip->hgamma + xinner->hgamma != 1)
+      fatal("Gamma parameter annotations for bidirectional introgression event "
+            "on node (%s) do not sum to 1",  xtip->label);
+  }
+  else if (xtip->hgamma)
+  {
+    /* gamma on edge Y->X */
+
+    xinner->hybrid->hgamma = xtip->hgamma;
+    xinner->hgamma = 1 - xtip->hgamma;
+
+  }
+  else if (xinner->hgamma)
+    xinner->hybrid->hgamma = 1 - xinner->hgamma;
+  else
+    fatal("Missing gamma parameter annotation for bidirectional introgression "
+          "event on node (%s)", xtip->label);
+
+  if (y->hgamma && ylink->hgamma)
+  {
+    if (y->hgamma + ylink->hgamma != 1)
+      fatal("Gamma parameter annotations for bidirectional introgression event "
+            "on node (%s) do not sum to 1",  y->label);
+  }
+  else if (y->hgamma)
+  {
+    y->hybrid->hgamma = 1 - y->hgamma;
+  }
+  else if (ylink->hgamma)
+  {
+    y->hgamma = 1 - ylink->hgamma;
+    y->hybrid->hgamma = ylink->hgamma;
+  }
+  else
+    fatal("Missing gamma parameter annotation for bidirectional introgression "
+          "event on node (%s)", y->label);
+}
+static void annotate_hybridization(snode_t * hinner, snode_t * htip)
+{
+  /* better safe than sorry */
+  assert(hinner->parent);
+  assert(hinner->hybrid->parent);
+
+  if (hinner->data)
+  {
+    parse_annotation(hinner, (char *)(hinner->data));
+    free(hinner->data);
+    hinner->data = NULL;
+  }
+
+  if (htip->data)
+  {
+    parse_annotation(hinner->hybrid, (char *)(htip->data));
+    free(htip->data);
+    htip->data = NULL;
+  }
+
+  if (hinner->hgamma && hinner->hybrid->hgamma)
+  {
+    if (hinner->hgamma + hinner->hybrid->hgamma != 1)
+      fatal("Gamma parameter annotations for hybridization event (%s) do not "
+            "sum to 1", hinner->label);
+  }
+  else if (hinner->hgamma)
+  {
+    hinner->hybrid->hgamma = 1 - hinner->hgamma;
+    hinner->parent->hgamma = hinner->hgamma;
+    hinner->hybrid->parent->hgamma = hinner->hybrid->hgamma;
+  }
+  else if (hinner->hybrid->hgamma)
+  {
+    hinner->hgamma = 1 - hinner->hybrid->hgamma;
+    hinner->parent->hgamma = hinner->hgamma;
+    hinner->hybrid->parent->hgamma = hinner->hybrid->hgamma;
+  }
+  else
+  {
+    fatal("Missing gamma parameter annotation for hybridization event (%s)",
+          hinner->label);
+  }
+
+  hinner->parent->htau = hinner->htau;
+  hinner->hybrid->parent->htau = hinner->hybrid->htau;
+}
+
+static void resolve_hybridization(stree_t * stree, long * dups)
+{
+  long i,j;
+  long hybridization = 0;
+
+  /* check for hybridization events 
+
+          * R          ((A,(C)H)S,(H,B)T)R;
+         / \
+      S /   \          Method:
+       *     \           1. Find a tip (htip) for which an inner node H with
+      / \  H  \  T          identical label exists (and name it hinner) 
+     /   *     *         2. Create hybrid nodes for hinner
+    /    |     |\        3. Link the corresponding nodes to obtain the diagram
+   /     |     | \          below        
+   A     C     H  B
+
+   Results in:
+  
+         R *
+          / \
+         /   \
+     S  *     *  T
+       / \   / \
+      /   \ /   \
+     /     * H   \
+    /      |      \
+   A       C       B  
+  
+  */
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (!stree->nodes[i] || dups[i] == i) continue;
+
+    /* if the duplicate of tip is a tip, ignore */
+    if (dups[i] < stree->tip_count) continue;
+    
+    /* root cannot be duplicated */
+    assert(stree->nodes[i]->parent);
+
+    /* pointer to tip H node */
+    snode_t * htip = stree->nodes[i];
+
+    /* pointer to inner H node */
+    snode_t * hinner = stree->nodes[dups[i]];
+
+    /* ensure hinner is indeed an inner node and has a parent */ 
+    if (!hinner->parent) continue;
+    if (!hinner->left && !hinner->right) continue;
+
+    hybrid_cnt++;
+    hybridization = 1;
+
+    hinner->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
+    hinner->hybrid->hybrid = hinner;
+
+    if (htip->parent->left == htip)
+      htip->parent->left = hinner->hybrid;
+    else
+      htip->parent->right = hinner->hybrid;
+    hinner->hybrid->parent = htip->parent;
+    
+    /* check annotations */
+    annotate_hybridization(hinner, htip);
+
+    htip->parent = NULL;
+    stree->nodes[htip->node_index] = NULL;
+    stree_graph_destroy(htip,NULL);
+    tip_cnt--;
+  }
+
+  /* rebuild stree->nodes array */
+  if (hybridization)
+  {
+    snode_t ** tmp = (snode_t **)xcalloc((size_t)(tip_cnt+inner_cnt+hybrid_cnt),
+                                         sizeof(snode_t *));
+    for (i=0,j=0; i < stree->tip_count+stree->inner_count; ++i)
+      if (stree->nodes[i])
+        tmp[j++] = stree->nodes[i];
+    
+    assert(j == tip_cnt+inner_cnt);
+
+    for (i=tip_cnt; i < tip_cnt+inner_cnt; ++i)
+      if (tmp[i]->hybrid)
+        tmp[j++] = tmp[i]->hybrid;
+
+    assert (j == tip_cnt + inner_cnt + hybrid_cnt);
+
+    free(stree->nodes);
+    stree->nodes = tmp;
+    for (i = 0; i < tip_cnt + inner_cnt + hybrid_cnt; ++i)
+      stree->nodes[i]->node_index = i;
+
+    stree->tip_count = tip_cnt;
+    stree->inner_count = inner_cnt;
+    stree->hybrid_count = hybrid_cnt;
+    stree->edge_count = tip_cnt + inner_cnt + hybrid_cnt - 1;
+  }
+}
+
+static void resolve_bd_introgression(stree_t * stree, long * dups)
+{
+  long i,j;
+  snode_t * link1 = NULL;
+  snode_t * link2 = NULL;
+
+  /* check for bidirectional introgression 
+
+          *           ((A,(B)Y)X,(X,B)Y)R;
+         / \
+      X /   \          Method:
+       *     \           1. Find a tip (link1) for which an inner node with
+      / \  Y  \  Y          identical label exists (in this case X) 
+     /   *     *         2. Get the parent of tip node X (in this case node Y)
+    /    |     |\        3. Check that inner node X has an unary child with the
+   /     |     | \          same label as Y (name it link2)                           
+   A     B     B  X      4. Create hybrid nodes for both X and Y                 
+                         5. Link the corresponding nodes to obtain the diagram   
+                            below
+   
+   Results in:
+
+         R
+        /\
+       /  \
+   X  *<-->*  Y
+     /      \
+    /        \
+   A          B
+              
+  */
+
+  /* check for bidirectional introgression */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    /* if no duplicate label for current tip node, move to next tip */
+    if (!stree->nodes[i] || dups[i] == i) continue;
+
+    /* if the duplicate of tip is a tip, ignore */
+    if (dups[i] < stree->tip_count) continue;
+
+    /* root cannot be duplicated */
+    assert(stree->nodes[i]->parent);
+
+    /* get pointers to the two inner nodes which are candidates for a
+       bidirectional introgression */
+    snode_t * x = stree->nodes[dups[i]];
+    snode_t * y = stree->nodes[i]->parent;
+    if (!y->label) continue;
+    link1 = stree->nodes[i];
+
+    assert(x->left || x->right);      /* confirm x is an inner node */
+    assert(x->label);
+
+
+    if (x->left && x->left->label && !strcmp(x->left->label,y->label))
+      link2 = x->left;
+    else if (x->right && x->right->label && !strcmp(x->right->label,y->label))
+      link2 = x->right;
+
+    if (link2)
+    {
+      /* link2 must be an unary node */
+      assert((link2->left && !link2->right) || (!link2->left && link2->right));
+
+      hybrid_cnt += 2;
+      tip_cnt -= 2;
+      inner_cnt--;
+
+      /* we create an additional node for each introgression event */
+      x->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
+      y->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
+
+      /* link hybridization nodes with their corresponding nodes */
+      x->hybrid->hybrid = x;
+      y->hybrid->hybrid = y;
+
+      /* define parents of hybridization nodes */
+      x->hybrid->parent = y->hybrid;
+      y->hybrid->parent = x->hybrid;
+
+      /* define one child (as left child node) for hybridization nodes */
+      x->hybrid->left = y->hybrid;
+      y->hybrid->left = x->hybrid;
+
+      x->hybrid->leaves = y->leaves;
+      y->hybrid->leaves = x->leaves;
+
+      /* annotate */
+      annotate_bd_introgression(link1, x, y, link2);
+
+      /* now destroy redundant nodes/subtrees (i.e. link1 and link2) */
+      if (link1->parent->left == link1)
+      {
+        link1->parent->left = link1->parent->right;
+        link1->parent->right = NULL;
+      }
+      else
+      {
+        assert(link1 == link1->parent->right);
+        link1->parent->right = NULL;
+      }
+      link1->parent = NULL;
+      stree->nodes[link1->node_index] = NULL;
+      stree_graph_destroy(link1,NULL);
+
+      /* now the same for link2 */
+      if (link2->parent->left == link2)
+      {
+        link2->parent->left = link2->parent->right;
+        link2->parent->right = NULL;
+      }
+      else
+      {
+        assert(link2 == link2->parent->right);
+        link2->parent->right = NULL;
+      }
+      link2->parent = NULL;
+      stree->nodes[link2->node_index] = NULL;
+      if (link2->left)
+        stree->nodes[link2->left->node_index] = NULL;
+      else
+        stree->nodes[link2->right->node_index] = NULL;
+      stree_graph_destroy(link2,NULL);
+    }
+  }
+
+  /* rebuild stree->nodes array */
+  if (hybrid_cnt)
+  {
+    snode_t ** tmp = (snode_t **)xcalloc((size_t)(tip_cnt+inner_cnt+hybrid_cnt),
+                                         sizeof(snode_t *));
+    for (i=0,j=0; i < stree->tip_count+stree->inner_count; ++i)
+      if (stree->nodes[i])
+        tmp[j++] = stree->nodes[i];
+    
+    assert(j == tip_cnt+inner_cnt);
+
+    for (i=tip_cnt; i < tip_cnt+inner_cnt; ++i)
+      if (tmp[i]->hybrid)
+        tmp[j++] = tmp[i]->hybrid;
+
+    assert (j == tip_cnt + inner_cnt + hybrid_cnt);
+
+    free(stree->nodes);
+    stree->nodes = tmp;
+    for (i = 0; i < tip_cnt + inner_cnt + hybrid_cnt; ++i)
+      stree->nodes[i]->node_index = i;
+
+    stree->tip_count = tip_cnt;
+    stree->inner_count = inner_cnt;
+    stree->hybrid_count = hybrid_cnt;
+    stree->edge_count = tip_cnt + inner_cnt + hybrid_cnt - 1;
+  }
+}
+
+static void validate_stree(stree_t * stree)
+{
+  long i,j;
+
+  /* this routine is called after hybridizations are resolved. It ensures that
+     the speecies tree (now network):
+     1. does not contain nodes with the same label
+     2. No two unary nodes in relation parent-child (i.e. string of unaries)
+  */
+
+  long nodes_count = stree->tip_count + stree->inner_count; // + stree->hybrid_count;
+
+  for (i = 0; i < nodes_count; ++i)
+  {
+    
+    /* check if node is unary *and* has a parent */
+    if (stree->nodes[i]->parent &&
+        ((stree->nodes[i]->left && !stree->nodes[i]->right) ||
+        (!stree->nodes[i]->left && stree->nodes[i]->right)))
+    {
+      /* if it's parent is also unary then we have two unary nodes in a row */
+      if ((stree->nodes[i]->parent->left && !stree->nodes[i]->parent->right) ||
+          (!stree->nodes[i]->parent->left && stree->nodes[i]->parent->right))
+        fatal("Tree contains consecutive unary nodes");
+    }
+
+    if (!stree->nodes[i]->label) continue;
+    /* 1. check for duplicate labels */
+    for (j = i+1; j < nodes_count; ++j)
+    {
+      if (!stree->nodes[j]->label) continue;
+      
+      if (!strcmp(stree->nodes[i]->label,stree->nodes[j]->label))
+        fatal("Tree has nodes with same label (%s)", stree->nodes[i]->label);
+    }
+  }
+}
+
+/* creates array dups, such that dups[i] is the index of a node with identical
+   label to node stree->nodes[i]. If more than one duplicate exists for a given
+   node, the procedure ends with an error. If no duplicate exists for a node,
+   then dup[i] = i */
+static long * create_duplicate_indices(stree_t * stree)
+{
+  long i,j;
+  long freq = 0;
+
+  long * dups = (long *)xmalloc((size_t)(stree->tip_count+stree->inner_count) *
+                                sizeof(long));
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    dups[i] = i;
+
+  /* check that a node does not appear more than twice */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    if (!stree->nodes[i]->label) continue;
+
+    freq = 1;
+
+    for (j = i+1; j < stree->tip_count + stree->inner_count; ++j)
+    {
+      if (!stree->nodes[j]->label) continue;
+      if (!strcmp(stree->nodes[i]->label,stree->nodes[j]->label))
+      {
+        ++freq;
+        dups[i] = j;
+        dups[j] = i;
+      }
+    }
+
+    if (freq > 2)
+      fatal("Node with label %s appears more %ld times (allowed twice)",
+            stree->nodes[i]->label, freq);
+  }
+  return dups;
+}
+
+static void resolve_network(stree_t * stree)
+{
+  long * dups;
+
+  dups = create_duplicate_indices(stree);
+  resolve_bd_introgression(stree,dups);
+  free(dups);
+
+  dups = create_duplicate_indices(stree);
+  resolve_hybridization(stree,dups);
+  free(dups);
+
+  validate_stree(stree);
+}
+
 %}
 
 %union
@@ -145,11 +754,13 @@ static void stree_error(snode_t * node, const char * s)
 
 %token OPAR
 %token CPAR
+%token OBRA
+%token CBRA
 %token COMMA
 %token COLON SEMICOLON
 %token<s> STRING
 %token<d> NUMBER
-%type<s> label optional_label
+%type<s> label optional_label optional_annotation string_list
 %type<d> number optional_length
 %type<tree> subtree
 %start input
@@ -168,6 +779,7 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tree->left->parent  = tree;
   tree->right->parent = tree;
 
+  inner_cnt++;
 };
 
 subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
@@ -183,20 +795,53 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$->left->parent  = $$;
   $$->right->parent = $$;
 
+  inner_cnt++;
 }
-       | label optional_length
+       | OPAR subtree CPAR label optional_annotation optional_length
+{
+  $$ = (snode_t *)calloc(1, sizeof(snode_t));
+  $$->left   = $2;
+  $$->right  = NULL;
+  $$->label  = $4;
+  $$->length = $6 ? atof($6) : 0;
+  $$->leaves = $2->leaves;
+  free($6);
+
+  if ($5) 
+    $$->data = (void *)($5);
+
+  $$->left->parent = $$;
+  inner_cnt++;
+}
+       | label optional_annotation optional_length
 {
   $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->label  = $1;
-  $$->length = $2 ? atof($2) : 0;
+  $$->length = $3 ? atof($3) : 0;
   $$->leaves = 1;
   $$->left   = NULL;
   $$->right  = NULL;
   tip_cnt++;
-  free($2);
+  free($3);
+
+  if ($2)
+    $$->data = (void *)($2);
 };
 
-
+optional_annotation: {$$ = NULL;} | OBRA string_list CBRA {$$ = $2;};
+string_list: STRING 
+{
+        $$ = $1;
+}
+       | STRING COMMA string_list
+{
+        $$ = (char *)xcalloc((strlen($1)+strlen($3)+2),sizeof(char));
+        strcpy($$,$1);
+        $$[strlen($1)] = ',';
+        strcpy($$+strlen($1)+1,$3);
+        free($1);
+        free($3);
+};
 optional_label:  {$$ = NULL;} | label  {$$ = $1;};
 optional_length: {$$ = NULL;} | COLON number {$$ = $2;};
 label: STRING    {$$=$1;} | NUMBER {$$=$1;};
@@ -210,7 +855,7 @@ static void fill_nodes_recursive(snode_t * node,
                                  unsigned int * tip_index,
                                  unsigned int * inner_index)
 {
-  if (!node->left)
+  if (!node->left && !node->right)
   {
     array[*tip_index] = node;
     *tip_index = *tip_index + 1;
@@ -220,9 +865,10 @@ static void fill_nodes_recursive(snode_t * node,
   array[*inner_index] = node;
   *inner_index = *inner_index + 1;
 
-  fill_nodes_recursive(node->left,  array, tip_index, inner_index);
-  fill_nodes_recursive(node->right, array, tip_index, inner_index);
-
+  if (node->left)
+    fill_nodes_recursive(node->left,  array, tip_index, inner_index);
+  if (node->right)
+    fill_nodes_recursive(node->right, array, tip_index, inner_index);
 }
 
 static unsigned int stree_count_tips(snode_t * root)
@@ -251,7 +897,7 @@ static void reorder(stree_t * stree)
     if (opt_reorder[i] == ',')
       commas_count++;
 
-  if (!commas_count || commas_count+1 != stree->tip_count)
+  if (commas_count+1 != stree->tip_count)
     fatal("Labels (%d) specified in --reorder do not match species tree", commas_count);
 
   hashtable_t * ht = hashtable_create(stree->tip_count);
@@ -320,12 +966,17 @@ static void reorder(stree_t * stree)
   free(pairlist);
 }
 
-stree_t * stree_wraptree(snode_t * root,
-                         unsigned int tip_count)
+stree_t * stree_wraptree(snode_t * root)
 {
   unsigned int i;
 
+  if (!root)
+    fatal("No node found in tree");
+
   stree_t * tree = (stree_t *)xcalloc(1,sizeof(stree_t));
+  
+  unsigned int tip_count = stree_count_tips(root);
+  assert(tip_count == tip_cnt);
 
   if (tip_count < 2 && tip_count != 0)
     fatal("Invalid number of tips in input tree (%u).", tip_count);
@@ -333,32 +984,40 @@ stree_t * stree_wraptree(snode_t * root,
   if (tip_count == 0)
   {
     /* if tip counts is set to 0 then recursively count the number of tips */
-    tip_count = stree_count_tips(root);
     if (tip_count < 2)
     {
       fatal("Input tree contains no inner nodes.");
     }
   }
 
-  tree->nodes = (snode_t **)xmalloc((2*tip_count-1)*sizeof(snode_t *));
+  tree->nodes = (snode_t **)xmalloc((tip_cnt+inner_cnt)*sizeof(snode_t *));
   
   unsigned int tip_index = 0;
   unsigned int inner_index = tip_count;
+//  unsigned int hybrid_index = inner_index + inner_cnt;
 
   /* fill tree->nodes in pre-order */
   fill_nodes_recursive(root, tree->nodes, &tip_index, &inner_index);
 
   tree->tip_count = tip_count;
-  tree->edge_count = 2*tip_count-2;
-  tree->inner_count = tip_count-1;
+  tree->edge_count = tip_count + inner_cnt + hybrid_cnt - 1;
+  tree->inner_count = inner_cnt;
+  tree->hybrid_count = hybrid_cnt;
   tree->root = root;
   tree->pptable = NULL;
+
+  for (i = 0; i < tip_count + inner_cnt; ++i)
+    tree->nodes[i]->node_index = i;
+
+  resolve_network(tree);
+  if (tree->hybrid_count)
+    opt_network = 1;
 
   /* reorder tip nodes if specified */
   if (opt_reorder)
     reorder(tree);
 
-  for (i = 0; i < 2*tip_count-1; ++i)
+  for (i = 0; i < tip_cnt + inner_cnt + hybrid_cnt; ++i)
     tree->nodes[i]->node_index = i;
 
   /* apply diploid information */
@@ -367,7 +1026,7 @@ stree_t * stree_wraptree(snode_t * root,
     if (opt_diploid_size != tree->tip_count)
       fatal("Number of 'diploid' assignments mismatch number of species");
 
-    for (i = 0; i < tip_count; ++i)
+    for (i = 0; i < tree->tip_count; ++i)
       tree->nodes[i]->diploid = opt_diploid[i];
   }
 
@@ -405,7 +1064,7 @@ stree_t * stree_parse_newick(const char * filename)
   stree_lex_destroy();
 
   /* wrap tree */
-  tree = stree_wraptree(root,tip_cnt);
+  tree = stree_wraptree(root);
 
   return tree;
 }
@@ -416,8 +1075,10 @@ stree_t * stree_parse_newick_string(const char * s)
   struct snode_s * root;
   stree_t * tree = NULL;
 
-  /* reset tip count */
+  /* reset counts */
   tip_cnt = 0;
+  hybrid_cnt = 0;
+  inner_cnt = 0;
 
   root = (snode_t *)xcalloc(1, sizeof(snode_t));
 
@@ -429,7 +1090,7 @@ stree_t * stree_parse_newick_string(const char * s)
 
   if (!rc)
   {
-    tree = stree_wraptree(root,tip_cnt);
+    tree = stree_wraptree(root);
   }
   else
     free(root);

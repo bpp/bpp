@@ -83,6 +83,8 @@ static char * append(size_t * dstlen, const char * src, size_t srclen)
 \;                { return SEMICOLON;                                          }
 \)                { return CPAR;                                               }
 \(                { return OPAR;                                               }
+"]"               { return CBRA;                                               }
+"["               { return OBRA;                                               }
 \,                { return COMMA;                                              }
 \"                { string_length = 0; BEGIN(quot);                            }
 \'                { string_length = 0; BEGIN(apos);                            }

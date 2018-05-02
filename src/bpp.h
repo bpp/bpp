@@ -280,6 +280,11 @@ typedef struct snode_s
   long event_count_sum;             /* sum of coalencent events count */
   double notheta_logpr_contrib;     /* MSC density contribution from pop */
   double notheta_old_logpr_contrib; /* storage space for rollback */
+
+  /* introgression */
+  double hgamma;                    /* genetic contribution */
+  long htau;                        /* tau parameter (1: yes, 0: no) */
+  struct snode_s * hybrid;         /* linked hybridization node */
 } snode_t;
 
 typedef struct stree_s
@@ -287,6 +292,7 @@ typedef struct stree_s
   unsigned int tip_count;
   unsigned int inner_count;
   unsigned int edge_count;
+  unsigned int hybrid_count;
 
   unsigned int locus_count;
 
@@ -555,6 +561,7 @@ extern long opt_help;
 extern long opt_locus_count;
 extern long opt_max_species_count;
 extern long opt_method;
+extern long opt_network;
 extern long opt_onlysummary;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;

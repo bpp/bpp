@@ -32,7 +32,7 @@ const static int rate_matrices = 1;
 
 static double pj_optimum = 0.3;
 
-static stree_t * load_tree(void)
+static stree_t * load_tree_or_network(void)
 {
   stree_t * stree;
 
@@ -46,6 +46,9 @@ static stree_t * load_tree(void)
 
   if (!stree)
     fatal("Error while reading species tree");
+
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not implemented yet");
 
   return stree;
 }
@@ -560,7 +563,7 @@ static FILE * init(stree_t ** ptr_stree,
   gtree_t ** gclones = NULL;
 
   /* load species tree */
-  stree = load_tree();
+  stree = load_tree_or_network();
   printf(" Done\n");
 
   /* parse the phylip file */
