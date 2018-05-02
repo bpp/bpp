@@ -54,6 +54,7 @@ long opt_help;
 long opt_locus_count;
 long opt_max_species_count;
 long opt_method;
+long opt_network;
 long opt_onlysummary;
 long opt_print_genetrees;
 long opt_print_hscalars;
@@ -200,6 +201,7 @@ void args_init(int argc, char ** argv)
   opt_mcmcfile = NULL;
   opt_method = -1;
   opt_msafile = NULL;
+  opt_network = 0;
   opt_onlysummary = 0;
   opt_outfile = NULL;
   opt_print_genetrees = 0;
