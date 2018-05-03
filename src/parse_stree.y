@@ -148,9 +148,12 @@ void stree_destroy(stree_t * tree,
     free(node);
   }
 
+  /* safety check */
+  assert(opt_network == !!tree->hybrid_count);
+
   if (tree->pptable)
   {
-    for (i = 0; i < tree->tip_count + tree->inner_count; ++i)
+    for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
       if (tree->pptable[i])
         free(tree->pptable[i]);
     free(tree->pptable);
