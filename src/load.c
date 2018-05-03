@@ -520,7 +520,7 @@ static void load_chk_section_1(FILE * fp,
   
   stree->tip_count = stree_tip_count;
   stree->inner_count = stree_tip_count-1;
-  stree->edge_count = stree->tip_count + stree->inner_count - 1;
+  stree->edge_count = stree->tip_count + stree->inner_count + stree->hybrid_count - 1;
   stree->locus_count = opt_locus_count;
 
   size_t alloc = stree->tip_count + stree->inner_count;

@@ -86,6 +86,65 @@ static int longint_len(long x)
    return x ? (int)floor(log10(abs(x))) + 1 : 1;
 }
 
+void print_network_table(stree_t * stree)
+{
+  long i;
+
+  printf("Species tree contains hybridization/introgression events.\n\n");
+  printf("Label        Node-index  Child1-index  Child2-index  Parent-index\n");
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  {
+    char * label;
+    if (stree->nodes[i]->label)
+      label = xstrdup(stree->nodes[i]->label);
+    else
+      label = xstrdup("N/A");
+
+    /* shorten label if over 12 characters */
+    if (strlen(label) > 12)
+    {
+      label[9] = '.'; label[10] = '.'; label[11] = '.'; label[12] = 0;
+    }
+
+    printf("%-12s", label);
+    free(label);
+    printf("  %9d", stree->nodes[i]->node_index);
+
+    if (stree->nodes[i]->left)
+      printf("  %12d", stree->nodes[i]->left->node_index);
+    else
+      printf("  %12s", "N/A");
+
+    if (stree->nodes[i]->right)
+      printf("  %12d", stree->nodes[i]->right->node_index);
+    else
+      printf("  %12s", "N/A");
+
+
+    if (stree->nodes[i]->parent)
+      printf("  %12d", stree->nodes[i]->parent->node_index);
+    else
+      printf("  %12s", "N/A");
+
+    if (i >= stree->tip_count + stree->inner_count)
+    {
+      printf("   Mirrored hybridization node");
+      assert(stree->nodes[i]->hybrid);
+
+      if (stree->nodes[i]->hybrid->label)
+        printf(" [Hybrid = %s (%d)]",
+               stree->nodes[i]->hybrid->label,
+               stree->nodes[i]->hybrid->node_index);
+    }
+
+    if (stree->nodes[i]->hybrid)
+      printf("   [tau = %ld, gamma = %f]", stree->nodes[i]->htau, stree->nodes[i]->hgamma);
+
+    printf("\n");
+  }
+  printf("\n");
+}
+
 void stree_show_pptable(stree_t * stree)
 {
    long i, j;
@@ -515,52 +574,52 @@ static int ** populations_seqcount(stree_t * stree,
 
 static void stree_init_tau_recursive(snode_t * node, double prop)
 {
-   /* end recursion if node is a tip */
-   if (!node->left)
-   {
-      if (!node->parent->tau)
-         node->theta = -1;
-
-      return;
-   }
-
-   /* get species record associate with species tree node */
-   double tau_parent = node->parent->tau;
-
-   if (!node->parent->tau)
+  /* end recursion if node is a tip */
+  if (!node->left)
+  {
+    if (!node->parent->tau)
       node->theta = -1;
 
-   if (node->parent->tau && node->tau > 0)
-      node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-   else
-      node->tau = 0;
+    return;
+  }
 
-   stree_init_tau_recursive(node->left, prop);
-   stree_init_tau_recursive(node->right, prop);
+  /* get species record associate with species tree node */
+  double tau_parent = node->parent->tau;
+
+  if (!node->parent->tau)
+    node->theta = -1;
+
+  if (node->parent->tau && node->tau > 0)
+    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+  else
+    node->tau = 0;
+
+  stree_init_tau_recursive(node->left, prop);
+  stree_init_tau_recursive(node->right, prop);
 }
 
 static void stree_init_tau(stree_t * stree)
 {
-   unsigned int i;
+  unsigned int i;
 
-   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
-      stree->nodes[i]->tau = 1;
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    stree->nodes[i]->tau = 1;
 
    if (opt_method == METHOD_10)    /* method A10 */
    {
-      double r = legacy_rndu();
-      int index = (int)(r * delimitation_getparam_count());
-      delimitation_set(stree, index);
+     double r = legacy_rndu();
+     int index = (int)(r * delimitation_getparam_count());
+     delimitation_set(stree, index);
 
-      char * s = delimitation_getparam_string();
-      printf("Starting delimitation: %s\n", s);
+     char * s = delimitation_getparam_string();
+     printf("Starting delimitation: %s\n", s);
    }
    else if (opt_method == METHOD_11)
    {
-      double r = (long)(stree->tip_count*legacy_rndu());
-      if (r < stree->tip_count - 1)
-         for (i = stree->tip_count; i < stree->tip_count * 2 - 1; ++i)
-            stree->nodes[i]->tau = !stree->pptable[i][stree->tip_count + (long)r];
+     double r = (long)(stree->tip_count*legacy_rndu());
+     if (r < stree->tip_count - 1)
+       for (i = stree->tip_count; i < stree->tip_count * 2 - 1; ++i)
+         stree->nodes[i]->tau = !stree->pptable[i][stree->tip_count + (long)r];
    }
    /* Initialize speciation times for each extinct species */
 
@@ -568,7 +627,7 @@ static void stree_init_tau(stree_t * stree)
 
    /* set the speciation time for root */
    if (stree->root->tau)
-      stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1)*(0.9 + 0.2*legacy_rndu());
+     stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1)*(0.9 + 0.2*legacy_rndu());
 
    /* recursively set the speciation time for the remaining inner nodes */
    stree_init_tau_recursive(stree->root->left, prop);
@@ -576,133 +635,133 @@ static void stree_init_tau(stree_t * stree)
 }
 
 static void stree_init_theta(stree_t * stree,
-   msa_t ** msalist,
-   list_t * maplist,
-   int msa_count,
-   FILE * fp_out)
+                             msa_t ** msalist,
+                             list_t * maplist,
+                             int msa_count,
+                             FILE * fp_out)
 {
-   long abort = 0;
-   long warn = 0;
-   unsigned int i, j;
+  long abort = 0;
+  long warn = 0;
+  unsigned int i, j;
 
-   /* initialize population sizes for extinct populations and populations
-      with more than one lineage at some locus */
+  /* initialize population sizes for extinct populations and populations
+     with more than one lineage at some locus */
 
-      /* get an array of per-locus number of sequences for each species (tip in
-         species tree) */
-   int ** seqcount = populations_seqcount(stree, msalist, maplist, msa_count);
+     /* get an array of per-locus number of sequences for each species (tip in
+        species tree) */
+  int ** seqcount = populations_seqcount(stree, msalist, maplist, msa_count);
 
-   /* Check number of sequences per locus with stated numbers from 'species&tree'
-      tag in control file. Assume the following:
+  /* Check number of sequences per locus with stated numbers from 'species&tree'
+     tag in control file. Assume the following:
 
-      X = specified max number of species in control file
-      Y = maximum number in sequence file
+     X = specified max number of species in control file
+     Y = maximum number in sequence file
 
-      The behavious is the following:
-      if (X == 1 && Y > 1) abort with error message
-      if (X > 1 && Y <= 1) print warning on screen and in output file.Dont abort
-      if (X > 1 && Y > 1) no error or warning as the numbers do not affect run
+     The behavious is the following:
+     if (X == 1 && Y > 1) abort with error message
+     if (X > 1 && Y <= 1) print warning on screen and in output file.Dont abort
+     if (X > 1 && Y > 1) no error or warning as the numbers do not affect run
 
-      See also issue #62 on GitHub
-   */
+     See also issue #62 on GitHub
+  */
 
-   /* print table header on screen and in output file */
-   fprintf(stdout, "\nPer-locus sequences in data and 'species&tree' tag:\n");
-   fprintf(stdout,
-      "C.File | Data |                Status                | Population\n");
-   fprintf(stdout,
-      "-------+------+--------------------------------------+-----------\n");
-   fprintf(fp_out, "\nPer-locus sequences in data and 'species&tree' tag:\n");
-   fprintf(fp_out,
-      "C.File | Data |                Status                | Population\n");
-   fprintf(fp_out,
-      "-------+------+--------------------------------------+-----------\n");
+  /* print table header on screen and in output file */
+  fprintf(stdout, "\nPer-locus sequences in data and 'species&tree' tag:\n");
+  fprintf(stdout, 
+          "C.File | Data |                Status                | Population\n");
+  fprintf(stdout,
+          "-------+------+--------------------------------------+-----------\n");
+  fprintf(fp_out, "\nPer-locus sequences in data and 'species&tree' tag:\n");
+  fprintf(fp_out,
+          "C.File | Data |                Status                | Population\n");
+  fprintf(fp_out,
+          "-------+------+--------------------------------------+-----------\n");
 
-   for (i = 0; i < stree->tip_count; ++i)
-   {
-      int maxseqcount = 0;
-      for (j = 0; j < opt_locus_count; ++j)
-         if (seqcount[i][j] > maxseqcount)
-            maxseqcount = seqcount[i][j];
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    int maxseqcount = 0;
+    for (j = 0; j < opt_locus_count; ++j)
+      if (seqcount[i][j] > maxseqcount)
+        maxseqcount = seqcount[i][j];
 
 
-      /* distinguish between cases and print corresponding status message */
-      if (opt_sp_seqcount[i] == 1 && maxseqcount > 1)
-      {
-         abort = 1;
-         fprintf(stdout,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[ERROR] Increase number in C.File",
-            stree->nodes[i]->label);
-         fprintf(fp_out,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[ERROR] Increase number in C.File",
-            stree->nodes[i]->label);
-      }
-      else if (opt_sp_seqcount[i] > 1 && maxseqcount <= 1)
-      {
-         warn = 1;
-         fprintf(stdout,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[WARNING] Parameter not identifiable",
-            stree->nodes[i]->label);
-         fprintf(fp_out,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[WARNING] Parameter not identifiable",
-            stree->nodes[i]->label);
-      }
-      else
-      {
-         fprintf(stdout,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[OK]",
-            stree->nodes[i]->label);
-         fprintf(fp_out,
-            "%6ld | %4d | %-36s | %-10s\n",
-            opt_sp_seqcount[i], maxseqcount,
-            "[OK]",
-            stree->nodes[i]->label);
-      }
-   }
-   fprintf(stdout, "\n");
-   fprintf(fp_out, "\n");
-   if (warn)
-   {
+    /* distinguish between cases and print corresponding status message */
+    if (opt_sp_seqcount[i] == 1 && maxseqcount > 1)
+    {
+      abort = 1;
       fprintf(stdout,
-         "[Warning] Some parameters are not identifiable because there are "
-         "0 or 1 sequences from some species, but the control file lists "
-         "different numbers.\nThose entries are indicated in the table "
-         "above. Posterior for theta parameters for those species will be "
-         "given by the prior.\n\n");
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[ERROR] Increase number in C.File",
+              stree->nodes[i]->label);
       fprintf(fp_out,
-         "[Warning] Some parameters are not identifiable because there are "
-         "0 or 1 sequences from some species, but the control file lists "
-         "different numbers.\nThose entries are indicated in the table "
-         "above. Posterior for theta parameters for those species will be "
-         "given by the prior.\n\n");
-   }
-   if (abort)
-   {
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[ERROR] Increase number in C.File",
+              stree->nodes[i]->label);
+    }
+    else if (opt_sp_seqcount[i] > 1 && maxseqcount <= 1)
+    {
+      warn = 1;
+      fprintf(stdout,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[WARNING] Parameter not identifiable",
+              stree->nodes[i]->label);
       fprintf(fp_out,
-         "[Error] Some populations consist of more than one sequence but "
-         "control file states only one.\nPlease amend control file according"
-         " to the table above.");
-      fatal("[Error] Some populations consist of more than one sequence but "
-         "control file states only one.\nPlease amend control file according "
-         "to the table above.");
-   }
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[WARNING] Parameter not identifiable",
+              stree->nodes[i]->label);
+    }
+    else
+    {
+      fprintf(stdout,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[OK]",
+              stree->nodes[i]->label);
+      fprintf(fp_out,
+              "%6ld | %4d | %-36s | %-10s\n",
+              opt_sp_seqcount[i], maxseqcount,
+              "[OK]",
+              stree->nodes[i]->label);
+    }
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
+  if (warn)
+  {
+    fprintf(stdout,
+            "[Warning] Some parameters are not identifiable because there are "
+            "0 or 1 sequences from some species, but the control file lists "
+            "different numbers.\nThose entries are indicated in the table "
+            "above. Posterior for theta parameters for those species will be "
+            "given by the prior.\n\n");
+    fprintf(fp_out,
+            "[Warning] Some parameters are not identifiable because there are "
+            "0 or 1 sequences from some species, but the control file lists "
+            "different numbers.\nThose entries are indicated in the table "
+            "above. Posterior for theta parameters for those species will be "
+            "given by the prior.\n\n");
+  }
+  if (abort)
+  {
+    fprintf(fp_out,
+            "[Error] Some populations consist of more than one sequence but "
+            "control file states only one.\nPlease amend control file according"
+            " to the table above.");
+    fatal("[Error] Some populations consist of more than one sequence but "
+          "control file states only one.\nPlease amend control file according "
+          "to the table above.");
+  }
 
-   /* initialize 'has_theta' attribute */
-   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      if (opt_est_theta)
-         stree->nodes[i]->has_theta = 1;
-      else
-         stree->nodes[i]->has_theta = 0;
+  /* initialize 'has_theta' attribute */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    if (opt_est_theta)
+      stree->nodes[i]->has_theta = 1;
+    else
+      stree->nodes[i]->has_theta = 0;
 
 #if 0
    /* go through tip nodes and setup thetas only for those that have
@@ -734,59 +793,147 @@ static void stree_init_theta(stree_t * stree,
       control file. */
    for (i = 0; i < stree->tip_count; ++i)
    {
-      snode_t * node = stree->nodes[i];
+     snode_t * node = stree->nodes[i];
 
-      for (j = 0; j < (unsigned int)msa_count; ++j)
-         if (seqcount[i][j] >= 2)
-            break;
+     for (j = 0; j < (unsigned int)msa_count; ++j)
+       if (seqcount[i][j] >= 2)
+         break;
 
-      /* if no loci exists with two or more sequences of such species then move
-         to the next tip node */
-      if (opt_sp_seqcount[i] < 2)
-      {
-         node->theta = -1;
-         node->has_theta = 0;
-         continue;
-      }
+     /* if no loci exists with two or more sequences of such species then move
+        to the next tip node */
+     if (opt_sp_seqcount[i] < 2)
+     {
+       node->theta = -1;
+       node->has_theta = 0;
+       continue;
+     }
 
-      /* otherwise set theta around the mean of the inverse gamma prior */
-      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-         (0.9 + 0.2 * legacy_rndu());
+     /* otherwise set theta around the mean of the inverse gamma prior */
+     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                   (0.9 + 0.2 * legacy_rndu());
    }
 #endif
 
-   /* go through inner nodes and setup thetas */
-   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
-   {
-      snode_t * node = stree->nodes[i];
+  /* go through inner nodes and setup thetas */
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode_t * node = stree->nodes[i];
 
-      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-         (0.9 + 0.2 * legacy_rndu());
-   }
+    node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                  (0.9 + 0.2 * legacy_rndu());
+  }
 
-   /* deallocate seqcount */
-   for (i = 0; i < stree->tip_count; ++i)
-      free(seqcount[i]);
-   free(seqcount);
+  /* deallocate seqcount */
+  for (i = 0; i < stree->tip_count; ++i)
+    free(seqcount[i]);
+  free(seqcount);
+}
+
+/* bottom up filling of pptable */
+static void stree_reset_pptable_tree(stree_t * stree)
+{
+  unsigned int i;
+  snode_t * ancnode;
+  snode_t * curnode;
+
+  /* zero-out pptable */
+  for (i=0; i < stree->tip_count + stree->inner_count; ++i)
+    memset(stree->pptable[i],
+           0,
+           (stree->tip_count + stree->inner_count) * sizeof(int));
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
+      for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
+        stree->pptable[curnode->node_index][ancnode->node_index] = 1;
+  }
+}
+
+int node_is_bidirection(snode_t * node)
+{
+  assert(node->hybrid);
+
+  /* check whether it's a hybridization (i.e. one of the two linked nodes has
+     no children */
+  if ((!node->left && !node->right) ||
+      (!node->hybrid->left && !node->hybrid->right))
+    return 0;
+
+  return 1;
+}
+
+static void stree_reset_pptable_network_recursive(stree_t * stree,
+                                                  snode_t * node,
+                                                  snode_t * ancestor)
+{
+  stree->pptable[node->node_index][ancestor->node_index] = 1;
+
+  if (node->left)
+    stree_reset_pptable_network_recursive(stree,
+                                          node->left,
+                                          ancestor);
+  if (node->right)
+    stree_reset_pptable_network_recursive(stree,
+                                          node->right,
+                                          ancestor);
+
+  if (node->hybrid)
+  {
+    /* check whether hybridization or bidirectional introgression */
+    if (node_is_bidirection(node))
+    {
+      /* get one of the opposite (mirror) node */
+      snode_t * mnode = NULL;
+
+      if (node->left->left == node)
+        mnode = node->left;
+      else if (node->hybrid->left->left == node->hybrid)
+        mnode = node->hybrid->left;
+      else
+        fatal("Internal error [bidir] (stree_reset_pptable_network_recursive)");
+
+      stree->pptable[mnode->node_index][ancestor->node_index] = 1;
+      stree->pptable[mnode->hybrid->node_index][ancestor->node_index] = 1;
+
+      assert(mnode->hybrid->left && !mnode->hybrid->right);
+
+      stree_reset_pptable_network_recursive(stree,mnode->hybrid->left,ancestor);
+    }
+    else
+    {
+      assert(!!node->left + !!node->right + !!node->hybrid->left + !!node->hybrid->right == 1);
+      if (node->left)
+        stree_reset_pptable_network_recursive(stree, node->left, ancestor);
+      else if (node->hybrid->left)
+        stree_reset_pptable_network_recursive(stree,node->hybrid->left,ancestor);
+      else
+        fatal("Internal error [hybrid] (stree_reset_pptable_network_recursive)");
+    }
+  }
+}
+
+/* top down filling of pptable */
+static void stree_reset_pptable_network(stree_t * stree)
+{
+  unsigned int i;
+
+  /* zero-out pptable */
+  for (i=0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+    memset(stree->pptable[i],
+           0,
+           (stree->tip_count + stree->inner_count) * sizeof(int));
+
+  for (i=0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+    stree_reset_pptable_network_recursive(stree,stree->nodes[i],stree->nodes[i]);
 }
 
 void stree_reset_pptable(stree_t * stree)
 {
-   unsigned int i;
-   snode_t * ancnode;
-   snode_t * curnode;
-
-   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      memset(stree->pptable[i],
-         0,
-         (stree->tip_count + stree->inner_count) * sizeof(int));
-
-   for (i = 0; i < stree->tip_count; ++i)
-   {
-      for (curnode = stree->nodes[i]; curnode; curnode = curnode->parent)
-         for (ancnode = curnode; ancnode; ancnode = ancnode->parent)
-            stree->pptable[curnode->node_index][ancnode->node_index] = 1;
-   }
+  if (opt_network)
+    stree_reset_pptable_network(stree);
+  else
+    stree_reset_pptable_tree(stree);
 }
 
 void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long msa_count)
@@ -844,26 +991,31 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
 }
 
 void stree_init(stree_t * stree,
-   msa_t ** msa,
-   list_t * maplist,
-   int msa_count,
-   FILE * fp_out)
+                msa_t ** msa,
+                list_t * maplist,
+                int msa_count,
+                FILE * fp_out)
 {
-   unsigned int i, j;
+  unsigned int i, j;
+  size_t pptable_size;
 #if 0
    snode_t * curnode;
    snode_t * ancnode;
 #endif
 
-   assert(msa_count > 0);
+  /* safety check */
+  assert(msa_count > 0);
+  assert(opt_network == !!stree->hybrid_count);
 
-   /* initialize pptable, where pptable[i][j] indicates whether population j
-      (that is, node with index j) is ancestral to population i */
-   stree->pptable = (int **)xcalloc((stree->tip_count + stree->inner_count), sizeof(int *));
-   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      stree->pptable[i] = (int *)xcalloc((stree->tip_count + stree->inner_count), sizeof(int));
+  pptable_size = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
-   stree_reset_pptable(stree);
+  /* initialize pptable, where pptable[i][j] indicates whether population j
+     (that is, node with index j) is ancestral to population i */
+  stree->pptable = (int **)xcalloc(pptable_size, sizeof(int *));
+  for (i = 0; i < pptable_size; ++i)
+    stree->pptable[i] = (int *)xcalloc(pptable_size, sizeof(int));
+
+  stree_reset_pptable(stree);
 #if 0
    for (i = 0; i < stree->tip_count; ++i)
    {
@@ -874,71 +1026,71 @@ void stree_init(stree_t * stree,
 #endif
 
 
-   /* label each inner node of the species tree with the concatenated labels of
-      its two children */
-   stree_label(stree);
+  /* label each inner node of the species tree with the concatenated labels of
+     its two children */
+  stree_label(stree);
 
-   /* Initialize population sizes */
-   stree_init_theta(stree, msa, maplist, msa_count, fp_out);
+  /* Initialize population sizes */
+  stree_init_theta(stree, msa, maplist, msa_count, fp_out);
 
-   /* Initialize speciation times and create extinct species groups */
-   stree_init_tau(stree);
+  /* Initialize speciation times and create extinct species groups */
+  stree_init_tau(stree);
 
-   /* allocate space for keeping track of coalescent events at each species tree
-      node for each locus */
-   stree->locus_count = (unsigned int)msa_count;
-   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-   {
-      stree->nodes[i]->event = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
-      stree->nodes[i]->event_count = (int *)xcalloc(msa_count, sizeof(int));
-      stree->nodes[i]->seqin_count = (int *)xcalloc(msa_count, sizeof(int));
-      stree->nodes[i]->gene_leaves = (unsigned int *)xcalloc(msa_count,
-         sizeof(unsigned int));
-      /* TODO: The next two allocations might not be necessary when computing
-         theta analytically */
-      stree->nodes[i]->logpr_contrib = (double*)xcalloc(msa_count, sizeof(double));
-      stree->nodes[i]->old_logpr_contrib = (double *)xcalloc(msa_count,
-         sizeof(double));
+  /* allocate space for keeping track of coalescent events at each species tree
+     node for each locus */
+  stree->locus_count = (unsigned int)msa_count;
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
 
-      stree->nodes[i]->t2h = NULL;
-      stree->nodes[i]->old_t2h = NULL;
-      if (!opt_est_theta)
-      {
-         stree->nodes[i]->t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
-         stree->nodes[i]->old_t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
-         stree->nodes[i]->t2h_sum = 0;
-         stree->nodes[i]->event_count_sum = 0;
-      }
+    snode->event = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
+    snode->event_count = (int *)xcalloc(msa_count, sizeof(int));
+    snode->seqin_count = (int *)xcalloc(msa_count, sizeof(int));
+    snode->gene_leaves = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
+    /* TODO: The next two allocations might not be necessary when computing
+       theta analytically */
+    snode->logpr_contrib = (double*)xcalloc(msa_count, sizeof(double));
+    snode->old_logpr_contrib = (double *)xcalloc(msa_count, sizeof(double));
 
-      for (j = 0; j < stree->locus_count; ++j)
-         stree->nodes[i]->event[j] = dlist_create();
-   }
+    snode->t2h = NULL;
+    snode->old_t2h = NULL;
+    if (!opt_est_theta)
+    {
+      snode->t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
+      snode->old_t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
+      snode->t2h_sum = 0;
+      snode->event_count_sum = 0;
+    }
 
-   unsigned int sum_inner = 0;
-   for (i = 0; i < (unsigned int)msa_count; ++i)
-      sum_inner += msa[i]->count - 1;
-   stree_alloc_internals(stree, sum_inner, msa_count);
+    for (j = 0; j < stree->locus_count; ++j)
+      snode->event[j] = dlist_create();
+  }
+
+  unsigned int sum_inner = 0;
+  for (i = 0; i < (unsigned int)msa_count; ++i)
+    sum_inner += msa[i]->count - 1;
+  stree_alloc_internals(stree, sum_inner, msa_count);
 }
 
 void stree_fini()
 {
-   free(__gt_nodes);
-   free(__aux);
-   free(__mark_count);
-   free(__extra_count);
+  free(__gt_nodes);
+  free(__aux);
+  free(__mark_count);
+  free(__extra_count);
 
-   if (opt_est_stree)
-   {
-      free(target_weight);
-      free(target);
-      free(moved_count);
-      free(target_count);
-      free(moved_space);
-      free(gtarget_temp_space);
-      free(gtarget_space);
-      free(snode_contrib_space);
-      free(snode_contrib_count);
-   }
+  if (opt_est_stree)
+  {
+    free(target_weight);
+    free(target);
+    free(moved_count);
+    free(target_count);
+    free(moved_space);
+    free(gtarget_temp_space);
+    free(gtarget_space);
+    free(snode_contrib_space);
+    free(snode_contrib_count);
+  }
 }
 
 static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
@@ -1542,10 +1694,10 @@ static void init_weights(stree_t * stree)
    multispecies coalescent.  Systematic Biology, 2017, 66:823-842.
 */
 long stree_propose_spr(stree_t ** streeptr,
-   gtree_t *** gtree_list_ptr,
-   stree_t ** scloneptr,
-   gtree_t *** gclonesptr,
-   locus_t ** loci)
+                       gtree_t *** gtree_list_ptr,
+                       stree_t ** scloneptr,
+                       gtree_t *** gclonesptr,
+                       locus_t ** loci)
 {
    unsigned int i, j, k = 0;
    unsigned int branch_update_count;

@@ -155,6 +155,10 @@
 #define BPP_SPECIES_PRIOR_SUNIFORM      3
 #define BPP_SPECIES_PRIOR_MAX           3
 
+#define BPP_HPATH_NONE                  0
+#define BPP_HPATH_LEFT                  1
+#define BPP_HPATH_RIGHT                 2
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -284,7 +288,7 @@ typedef struct snode_s
   /* introgression */
   double hgamma;                    /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
-  struct snode_s * hybrid;         /* linked hybridization node */
+  struct snode_s * hybrid;          /* linked hybridization node */
 } snode_t;
 
 typedef struct stree_s
@@ -340,6 +344,14 @@ typedef struct gnode_s
   unsigned int pmatrix_index;
 
   int mark;
+
+  /* Array of flags describing the direction the lineage originating from the
+     current node towards its parent takes on each  hybridization node.
+     
+     Assume x = stree->tip_count and y = stree->inner_count, then entry i of
+     hpath corresponds to the hybridization node at stree->nodes[x+y+i]. The
+     possible values are BPP_HPATH_NONE, BPP_HPATH_LEFT, BPP_HPATH_RIGHT */
+  int * hpath;
 
 } gnode_t;
 
@@ -749,6 +761,9 @@ void stree_alloc_internals(stree_t * stree,
                            unsigned int gtree_inner_sum,
                            long msa_count);
 
+int node_is_bidirection(snode_t * node);
+
+void print_network_table(stree_t * stree);
 
 /* functions in arch.c */
 
