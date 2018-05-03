@@ -47,8 +47,6 @@ static stree_t * load_tree_or_network(void)
   if (!stree)
     fatal("Error while reading species tree");
 
-  if (opt_network)
-    fatal("Modelling hybridization/introgression not implemented yet");
 
   return stree;
 }
@@ -565,6 +563,13 @@ static FILE * init(stree_t ** ptr_stree,
   /* load species tree */
   stree = load_tree_or_network();
   printf(" Done\n");
+
+  /* Show network */
+  if (opt_network)
+  {
+    print_network_table(stree);
+    fatal("Modelling hybridization/introgression not implemented yet");
+  }
 
   /* parse the phylip file */
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
