@@ -785,7 +785,6 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
 
 long getlinecount(const char * filename)
 {
-  long i;
   long linecount = 0;
   FILE * fp;
 

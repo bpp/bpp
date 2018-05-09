@@ -762,6 +762,7 @@ void stree_alloc_internals(stree_t * stree,
                            long msa_count);
 
 int node_is_bidirection(snode_t * node);
+int node_is_mirror(snode_t * node);
 
 void print_network_table(stree_t * stree);
 

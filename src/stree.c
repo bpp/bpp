@@ -147,42 +147,40 @@ void print_network_table(stree_t * stree)
 
 void stree_show_pptable(stree_t * stree)
 {
-   long i, j;
-   long nodes_count = stree->tip_count + stree->inner_count;
-   int index_digits = longint_len(nodes_count);
-   size_t maxlen = strlen("Species");
+  long i, j;
+  long nodes_count = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  int index_digits = longint_len(nodes_count);
+  size_t maxlen = strlen("Species");
 
-   for (i = 0; i < nodes_count; ++i)
-      maxlen = MAX(maxlen, strlen(stree->nodes[i]->label));
+  for (i = 0; i < nodes_count; ++i)
+    maxlen = MAX(maxlen, strlen(stree->nodes[i]->label));
 
-   printf("\nMap of populations and ancestors (1 in map indicates ancestor):\n");
+  printf("\nMap of populations and ancestors (1 in map indicates ancestor):\n");
 
-   /* print space before horizontal species enumeration */
-   for (i = 0; i < index_digits; ++i)
-      printf(" ");
-   printf(" ");
-   printf("Species");
-   for (i = 0; i < (long)(maxlen - strlen("Species")); ++i)
-      printf(" ");
+  /* print space before horizontal species enumeration */
+  for (i = 0; i < index_digits; ++i)
+    printf(" ");
+  printf(" ");
+  printf("Species");
+  for (i = 0; i < (long)(maxlen - strlen("Species")); ++i)
+    printf(" ");
 
-   printf(" ");
-   for (i = 0; i < nodes_count; ++i)
-      printf("  %ld", i);
-   printf("\n");
+  printf(" ");
+  for (i = 0; i < nodes_count; ++i)
+    printf("  %ld", i);
+  printf("\n");
 
-   for (i = 0; i < nodes_count; ++i)
-   {
-      printf("%*ld %-*s ", index_digits, i, (int)maxlen, stree->nodes[i]->label);
+  for (i = 0; i < nodes_count; ++i)
+  {
+    printf("%*ld %-*s ", index_digits, i, (int)maxlen, stree->nodes[i]->label);
 
-      for (j = 0; j < nodes_count; ++j)
-         printf("  %*d", longint_len(j), stree->pptable[i][j]);
+    for (j = 0; j < nodes_count; ++j)
+      printf("  %*d", longint_len(j), stree->pptable[i][j]);
 
-      printf("\n");
-   }
+    printf("\n");
+  }
 
-   printf("\n");
-
-
+  printf("\n");
 }
 
 static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
@@ -467,28 +465,81 @@ static void events_clone(stree_t * stree,
 
 static void stree_label_recursive(snode_t * node)
 {
-   /* if node is a tip return */
-   if (!node->left)
-      return;
+  /* if node is a tip return */
+  if (!node->left)
+     return;
 
-   stree_label_recursive(node->left);
-   stree_label_recursive(node->right);
+  stree_label_recursive(node->left);
+  stree_label_recursive(node->right);
 
-   if (node->label)
-      free(node->label);
+  if (node->label)
+    free(node->label);
 
-   node->label = (char *)xmalloc(strlen(node->left->label) +
-      strlen(node->right->label) + 1);
+  node->label = (char *)xmalloc(strlen(node->left->label) +
+                                strlen(node->right->label) + 1);
 
-   /* concatenate species labels */
-   node->label[0] = 0;
-   strcat(node->label, node->left->label);
-   strcat(node->label, node->right->label);
+  /* concatenate species labels */
+  node->label[0] = 0;
+  strcat(node->label, node->left->label);
+  strcat(node->label, node->right->label);
+}
+
+static void stree_label_network_recursive(snode_t * node)
+{
+  if (!node->left && !node->right) return;
+
+  if (node->left)
+    stree_label_network_recursive(node->left);
+
+  if (node->right)
+    stree_label_network_recursive(node->right);
+
+  if (node->hybrid)
+  {
+    #if 0
+    assert(node->hybrid->label || node->label)
+
+    if (!node->hybrid->label)
+      node->hybrid->label = xstrdup(node->label);
+    else
+      node->label = xstrdup(node->hybrid->label);
+    #endif
+
+    if (node_is_bidirection(node))
+    {
+      /* do nothing */
+    }
+    else
+    {
+      /* i guess do nothing here as well - everything will be sorted out by
+         itself */
+    }
+  }
+
+  /* keep node has a label, keep it */
+  if (!node->label)
+  {
+    size_t len = 0;
+    if (node->left)
+      len += strlen(node->left->label);
+    if (node->right)
+      len += strlen(node->right->label);
+
+    node->label = (char *)xmalloc((len+1)*sizeof(char));
+    node->label[0] = 0;
+    if (node->left)
+      strcat(node->label, node->left->label);
+    if (node->right)
+      strcat(node->label, node->right->label);
+  }
 }
 
 void stree_label(stree_t * stree)
 {
-   stree_label_recursive(stree->root);
+  if  (opt_network)
+    stree_label_network_recursive(stree->root);
+  else
+    stree_label_recursive(stree->root);
 }
 
 static void cb_dealloc_pairlabel(void * data)
@@ -575,7 +626,7 @@ static int ** populations_seqcount(stree_t * stree,
 static void stree_init_tau_recursive(snode_t * node, double prop)
 {
   /* end recursion if node is a tip */
-  if (!node->left)
+  if (!node->left && !node->right)
   {
     if (!node->parent->tau)
       node->theta = -1;
@@ -589,13 +640,39 @@ static void stree_init_tau_recursive(snode_t * node, double prop)
   if (!node->parent->tau)
     node->theta = -1;
 
-  if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-  else
-    node->tau = 0;
+  if (opt_network)      /* a network */
+  {
+    /* if node is the mirrored version of a hybridization / introgression then
+       do not execute the below code (which sets a tau) */
+    if (!node->hybrid || !node_is_mirror(node))
+    {
+      /* I guess the conditions are necessary for a future implementation of
+         species delimitation using netowrks */
+      if (node->parent->tau && node->tau > 0)
+        node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+      else
+        node->tau = 0;
+    }
 
-  stree_init_tau_recursive(node->left, prop);
-  stree_init_tau_recursive(node->right, prop);
+    /* if node is a hybridization / introgression but *not* the mirrored node,
+       then set the tau of the mirrored note to the tau of this node. This may
+       note be necessary, and is only to have the same values in both mirrorred
+       nodes */
+    if (node->hybrid && !node_is_mirror(node))
+      node->hybrid->tau = node->tau;
+  }
+  else                  /* not a network */
+  {
+    if (node->parent->tau && node->tau > 0)
+      node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+    else
+      node->tau = 0;
+  }
+
+  if (node->left)
+    stree_init_tau_recursive(node->left, prop);
+  if (node->right)
+    stree_init_tau_recursive(node->right, prop);
 }
 
 static void stree_init_tau(stree_t * stree)
@@ -607,6 +684,9 @@ static void stree_init_tau(stree_t * stree)
 
    if (opt_method == METHOD_10)    /* method A10 */
    {
+     if (opt_network)
+       fatal("Method A10 with hybridizations not implemented yet");
+
      double r = legacy_rndu();
      int index = (int)(r * delimitation_getparam_count());
      delimitation_set(stree, index);
@@ -616,6 +696,9 @@ static void stree_init_tau(stree_t * stree)
    }
    else if (opt_method == METHOD_11)
    {
+     if (opt_network)
+       fatal("Method A11 with hybridizations not implemented yet");
+
      double r = (long)(stree->tip_count*legacy_rndu());
      if (r < stree->tip_count - 1)
        for (i = stree->tip_count; i < stree->tip_count * 2 - 1; ++i)
@@ -629,7 +712,8 @@ static void stree_init_tau(stree_t * stree)
    if (stree->root->tau)
      stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1)*(0.9 + 0.2*legacy_rndu());
 
-   /* recursively set the speciation time for the remaining inner nodes */
+   /* recursively set the speciation time for the remaining inner nodes. For
+      networks it is not necessary to check if root has both left and right */
    stree_init_tau_recursive(stree->root->left, prop);
    stree_init_tau_recursive(stree->root->right, prop);
 }
@@ -643,6 +727,7 @@ static void stree_init_theta(stree_t * stree,
   long abort = 0;
   long warn = 0;
   unsigned int i, j;
+
 
   /* initialize population sizes for extinct populations and populations
      with more than one lineage at some locus */
@@ -819,8 +904,33 @@ static void stree_init_theta(stree_t * stree,
   {
     snode_t * node = stree->nodes[i];
 
-    node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                  (0.9 + 0.2 * legacy_rndu());
+    if (opt_network && node->hybrid)
+    {
+      /* if this is a hybridization node, then we set a theta only if it's not
+         a bidirectional hybridization AND the nodes have a 'tau-parent'
+         annotation. We also process the mirrored nodes here */
+      node->theta = node->hybrid->theta = -1;
+      node->has_theta = node->hybrid->has_theta = 0;
+      if (!node_is_bidirection(node))
+      {
+        if (node->htau)
+        {
+          node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                        (0.9 + 0.2 * legacy_rndu());
+          node->has_theta = 1;
+        }
+        
+        if (node->hybrid->htau)
+        {
+          node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                                (0.9 + 0.2 * legacy_rndu());
+          node->hybrid->has_theta = 1;
+        }
+      }
+    }
+    else
+      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                    (0.9 + 0.2 * legacy_rndu());
   }
 
   /* deallocate seqcount */
@@ -861,6 +971,26 @@ int node_is_bidirection(snode_t * node)
     return 0;
 
   return 1;
+}
+
+/* TODO: A simpler way would be just to check whether node->node_index >=
+   stree->tip_count + stree->inner_count */
+int node_is_mirror(snode_t * node)
+{
+  int rc = 0;
+
+  if (node_is_bidirection(node))
+  {
+    if (node->left->left == node)
+      rc = 1;
+  }
+  else  /* hybridization event */
+  {
+    if (!node->left && !node->right)
+      rc = 1;
+  }
+
+  return rc;
 }
 
 static void stree_reset_pptable_network_recursive(stree_t * stree,
@@ -963,10 +1093,11 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
    /* species tree inference */
    if (opt_est_stree)
    {
-      target_weight = (double *)xmalloc((stree->tip_count + stree->inner_count) *
-         sizeof(double));
-      target = (snode_t **)xmalloc((stree->tip_count + stree->inner_count) *
-         sizeof(snode_t *));
+      unsigned int stree_nodes = stree->inner_count + stree->tip_count +
+                                 stree->hybrid_count;
+
+      target_weight = (double *)xmalloc((size_t)(stree_nodes) * sizeof(double));
+      target = (snode_t **)xmalloc((size_t)(stree_nodes) * sizeof(snode_t *));
 
       /* TODO: memory is allocated for all loci to aid parallelization */
       moved_count = (unsigned int *)xcalloc(msa_count, sizeof(unsigned int));
@@ -982,7 +1113,6 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
       //    unsigned int sum_nodes = 2*sum_inner + msa_count;
       gtarget_temp_space = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
 
-      unsigned int stree_nodes = stree->inner_count + stree->tip_count;
       snode_contrib_space = (snode_t **)xmalloc((size_t)(msa_count*stree_nodes) *
          sizeof(snode_t *));
       snode_contrib_count = (unsigned int *)xmalloc((size_t)msa_count *
@@ -1039,7 +1169,7 @@ void stree_init(stree_t * stree,
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */
   stree->locus_count = (unsigned int)msa_count;
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
     snode_t * snode = stree->nodes[i];
 
