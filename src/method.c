@@ -566,10 +566,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* Show network */
   if (opt_network)
-  {
     print_network_table(stree);
-    fatal("Modelling hybridization/introgression not implemented yet");
-  }
 
   /* parse the phylip file */
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
@@ -710,18 +707,29 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_method == METHOD_10)          /* species delimitation */
   {
+    assert(opt_network == 0);
+
     long dmodels_count = delimitations_init(stree);
     printf("Number of delimitation models: %ld\n", dmodels_count);
 
     *ptr_posterior = (double *)xcalloc((size_t)dmodels_count,sizeof(double));
   }
 
+  #if 0
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not implemented yet");
+  #endif
+
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count,fp_out);
+
   stree_show_pptable(stree);
 
   if (opt_method == METHOD_11)
+  {
+    assert(opt_network == 0);
     partition_fast(stree->tip_count);
+  }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
   double * locusrate = (double*)xmalloc((size_t)opt_locus_count*sizeof(double));
@@ -830,12 +838,15 @@ static FILE * init(stree_t ** ptr_stree,
     opt_est_locusrate = 0;
   }
 
-  /* TODO CALL HERE */
-
   /* We must first link tip sequences (gene tips) to populations */
   if (opt_est_delimit)          /* species delimitation */
+  {
+    assert(opt_network == 0);
     stree_rootdist(stree,map_list,msa_list,weights);
+  }
 
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not implemented yet");
   gtree = gtree_init(stree,msa_list,map_list,msa_count);
 
   /* the below two lines are specific to method 01 and they generate

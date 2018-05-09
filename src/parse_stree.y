@@ -445,6 +445,8 @@ static void resolve_hybridization(stree_t * stree, long * dups)
 
     hinner->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
     hinner->hybrid->hybrid = hinner;
+    assert(hinner->label);
+    hinner->hybrid->label = xstrdup(hinner->label);
 
     if (htip->parent->left == htip)
       htip->parent->left = hinner->hybrid;
@@ -562,6 +564,10 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
       /* we create an additional node for each introgression event */
       x->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
       y->hybrid = (snode_t *)xcalloc(1,sizeof(snode_t));
+      assert(x->label);
+      assert(y->label);
+      x->hybrid->label = xstrdup(x->label);
+      y->hybrid->label = xstrdup(y->label);
 
       /* link hybridization nodes with their corresponding nodes */
       x->hybrid->hybrid = x;
