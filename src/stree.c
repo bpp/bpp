@@ -744,13 +744,39 @@ static void stree_init_tau_recursive(snode_t * node, double prop)
   if (!node->parent->tau)
     node->theta = -1;
 
-  if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-  else
-    node->tau = 0;
+  if (opt_network)      /* a network */
+  {
+    /* if node is the mirrored version of a hybridization / introgression then
+       do not execute the below code (which sets a tau) */
+    if (!node->hybrid || !node_is_mirror(node))
+    {
+      /* I guess the conditions are necessary for a future implementation of
+         species delimitation using netowrks */
+      if (node->parent->tau && node->tau > 0)
+        node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+      else
+        node->tau = 0;
+    }
 
-  stree_init_tau_recursive(node->left, prop);
-  stree_init_tau_recursive(node->right, prop);
+    /* if node is a hybridization / introgression but *not* the mirrored node,
+       then set the tau of the mirrored note to the tau of this node. This may
+       note be necessary, and is only to have the same values in both mirrorred
+       nodes */
+    if (node->hybrid && !node_is_mirror(node))
+      node->hybrid->tau = node->tau;
+  }
+  else                  /* not a network */
+  {
+    if (node->parent->tau && node->tau > 0)
+      node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+    else
+      node->tau = 0;
+  }
+
+  if (node->left)
+    stree_init_tau_recursive(node->left, prop);
+  if (node->right)
+    stree_init_tau_recursive(node->right, prop);
 }
 
 static void stree_init_tau(stree_t * stree)

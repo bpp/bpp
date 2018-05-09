@@ -717,6 +717,11 @@ static FILE * init(stree_t ** ptr_stree,
     *ptr_posterior = (double *)xcalloc((size_t)dmodels_count,sizeof(double));
   }
 
+  #if 0
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not implemented yet");
+  #endif
+
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count,fp_out);
 
@@ -842,6 +847,8 @@ static FILE * init(stree_t ** ptr_stree,
     stree_rootdist(stree,map_list,msa_list,weights);
   }
 
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not implemented yet");
   gtree = gtree_init(stree,msa_list,map_list,msa_count);
 
   /* the below two lines are specific to method 01 and they generate
