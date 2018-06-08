@@ -416,8 +416,6 @@ static long parse_locusrate(const char * line)
   count = get_long(p, &opt_est_locusrate);
   if (!count) goto l_unwind;
 
-  printf("est_locusrate = %ld\n", opt_est_locusrate);
-
   p += count;
 
   if (is_emptyline(p) && !opt_est_locusrate) ret = 1;
@@ -427,7 +425,6 @@ static long parse_locusrate(const char * line)
   {
     count = get_double(p, &opt_locusrate_alpha);
     if (!count) goto l_unwind;
-    printf("alpha = %f\n", opt_locusrate_alpha);
   }
   else if (opt_est_locusrate == MUTRATE_FROMFILE)
   {
@@ -440,7 +437,6 @@ static long parse_locusrate(const char * line)
   p += count;
 
   if (is_emptyline(p)) ret = 1;
-  printf("ret= %ld\n", ret);
 
 l_unwind:
   free(s);
@@ -649,7 +645,7 @@ static long parse_print(const char * line)
   /* check whether value is -1 in which case nothing else must follow */
   if (opt_print_samples == -1)
   {
-    if (is_emptyline(p)) ret = 1;
+    ret = 1;
     goto l_unwind;
   }
 
