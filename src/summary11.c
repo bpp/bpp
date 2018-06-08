@@ -598,6 +598,7 @@ void mixed_summary(FILE * fp_out)
 
     stree_destroy(t,NULL);
   }
+  assert(line_count);
 
   /* sort by number of species (ascending order - not relevant) */
   qsort(treelist,(size_t)line_count, sizeof(db_stree_t), cb_stree_species);

@@ -311,6 +311,7 @@ void delimit_summary(FILE * fp_out, stree_t * stree)
 
     line_count++;
   }
+  assert(line_count);
 
   for (i = 0; i < dmodels_count; ++i)
     posterior[i] /= line_count;

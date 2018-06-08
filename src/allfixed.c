@@ -440,6 +440,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
     line_count++;
   }
+  assert(line_count > 0);
 
   /* compute means */
   fprintf(stdout, "mean    ");

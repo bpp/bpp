@@ -705,6 +705,7 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
     bipartitions_update(t);
     stree_destroy(t,NULL);
   }
+  assert(line_count);
 
 
   fprintf(stdout, "Species in order:\n");
@@ -785,7 +786,6 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
 
 long getlinecount(const char * filename)
 {
-  long i;
   long linecount = 0;
   FILE * fp;
 

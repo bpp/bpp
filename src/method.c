@@ -1532,10 +1532,16 @@ if(i>=0 && opt_revolutionary_spr_method)
   {
     /* read file and correctly set opt_samples */
     opt_samples = getlinecount(opt_mcmcfile);
-    if (opt_method == METHOD_00)
-      --opt_samples;
+    if (opt_samples)
+    {
+      if ((opt_method == METHOD_00) || (opt_method == METHOD_10))
+        --opt_samples;
+    }
 
-    fprintf(stdout,"Read %ld samples from file %s\n",opt_samples,opt_mcmcfile);
+    if (opt_samples == 0)
+      fatal("Found %ld samples in file %s",opt_samples,opt_mcmcfile);
+    else
+      fprintf(stdout,"Read %ld samples from file %s\n",opt_samples,opt_mcmcfile);
   }
 
   if (opt_print_genetrees)
