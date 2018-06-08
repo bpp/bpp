@@ -24,6 +24,9 @@
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
 
+#define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
+                          (p)->node_index : (p)->hybrid->node_index)) - \
+                        ((t)->tip_count+(t)->inner_count))
 
 /* association of gene nodes to species populations. offset[i] is the 'nodes'
    index at which the gene tree nodes for lineages inside species i are
@@ -532,6 +535,128 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
   free(counter);
 }
 
+static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, snode_t * epoch)
+{
+  long i,j;
+
+  /* this function does the same thing as replace(...) (see comments there)
+     but adapted to hybridization/bidirectional introgression nodes on networks.
+     The main difference is that such nodes do not necessarily have two children */
+  assert(opt_network && epoch->hybrid);
+
+  if (node_is_bidirection(epoch))
+    fatal("Not implemented yet in replace_hybrid()");
+
+  /* check if its the mirrored node (i.e. no children) */
+  if (node_is_mirror(epoch))
+  {
+    /* first find the hybridization node in the pop list */
+    for (j = 0; j < *count; ++j)
+      if (pop[j].snode == epoch->hybrid)
+        break;
+    assert(j != *count);
+
+    pop_t * hpop = pop+j;  /* population corresponding to hybrid. node */
+
+    /* samples gene tree nodes (lineages) and distribute them to pop[i].snode
+       and pop[i].snode->hybrid (ie left and right populations of hybridization)
+       according to probability gamma */
+    int * temp = (int *)xmalloc((size_t)(hpop->seq_count) * sizeof(int));
+
+
+    /* hpop.seq_count is the number of lineages coming from the child of the
+       hybridization node H. We now need to partition these lineages into two
+       populations (H_left and H_right) by sampling.  */
+
+    /* Sample lineages: Fill temp with 0 if lineage goes to epoch (mirror node)
+       or 1 if epoch->hybrid (hybridization) */
+    for (j = 0; j < hpop->seq_count; ++j)
+      temp[j] = (legacy_rndu() <= hpop->snode->hgamma) ? 1 : 0;
+
+    /* count how many lineages ended up in hybridization node */
+    unsigned int hpop_seqcount = 0;
+    for (j = 0; j < hpop->seq_count; ++j)
+      hpop_seqcount += temp[j];
+
+    gnode_t ** hnodes;
+    gnode_t ** mnodes;
+    int * hindices;
+    int * mindices;
+    unsigned int hnodes_count = 0;
+    unsigned int mnodes_count = 0;
+
+    /* allocate arrays holding lineages (gene tree nodes) for the two pops */
+    hnodes = (gnode_t **)xmalloc((size_t)(hpop_seqcount)*sizeof(gnode_t *));
+    mnodes = (gnode_t **)xmalloc((size_t)(hpop->seq_count - hpop_seqcount) *
+                                 sizeof(gnode_t *));
+
+    /* allocate arrays holding sequence indices for the two pops */
+    hindices = (int *)xmalloc((size_t)(hpop_seqcount)*sizeof(int *));
+    mindices = (int *)xmalloc((size_t)(hpop->seq_count-hpop_seqcount)*sizeof(int));
+
+    /* fill hnodes and mnodes */
+    unsigned int hindex = GET_HINDEX(stree,epoch);
+    assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+    /* make sure epoch is a mirror node */
+    assert(!epoch->left && !epoch->right);
+
+    for (j = 0; j < hpop->seq_count; ++j)
+      if (temp[j])
+      {
+        hnodes[hnodes_count] = hpop->nodes[j];
+        hindices[hnodes_count++] = hpop->seq_indices[j];
+
+        hpop->nodes[j]->hpath[hindex] = BPP_HPATH_LEFT;
+      }
+      else
+      {
+        mnodes[mnodes_count] = hpop->nodes[j];
+        mindices[mnodes_count++] = hpop->seq_indices[j];
+
+        hpop->nodes[j]->hpath[hindex] = BPP_HPATH_RIGHT;
+      }
+    assert(hnodes_count == hpop_seqcount);
+
+    #if 0
+    printf("\n[Debug] Assigning %d lineages to hybrid and %d to mirror\n",
+           hnodes_count, mnodes_count);
+    #endif
+
+    /* update the population corresponding to the hybridization node */
+    free(hpop->nodes);
+    free(hpop->seq_indices);
+    hpop->nodes = hnodes;
+    hpop->seq_indices = hindices;
+    hpop->seq_count = hnodes_count;
+
+    /* update the population corresponding to the hybridization node */
+    pop[*count].snode = epoch;
+    pop[*count].nodes = mnodes;
+    pop[*count].seq_indices = mindices;
+    pop[*count].seq_count = mnodes_count;
+    
+    /* we increase by two because on the next iteration in gtree_simulate, count
+       will be decreased and as such we will have +1 new items (this node) */
+    *count = *count + 2; 
+    return;
+  }
+
+  /* find and replace left descendant of current epoch with epoch */
+  assert(!epoch->right);
+  for (i = 0; i < *count; ++i)
+  {
+    if (pop[i].snode == epoch->left)
+      break;
+  }
+  assert(i != *count);
+
+  /* replace population i with new population */
+  pop[i].snode = epoch;
+
+  *count = *count + 1;
+}
+
 static void replace(pop_t * pop, int count, snode_t * epoch)
 {
   int i,j;
@@ -540,6 +665,7 @@ static void replace(pop_t * pop, int count, snode_t * epoch)
      with the smaller index with epoch, and deleting the second child. It also
      merges the sequences (lineages) of the two children into the new population
   */
+  assert(!epoch->hybrid);
 
   /* replace left descendant of current epoch with epoch */
   for (i = 0; i < count; ++i)
@@ -585,6 +711,8 @@ static void replace(pop_t * pop, int count, snode_t * epoch)
   free(pop[i].nodes);
   free(pop[j].seq_indices);
   free(pop[j].nodes);
+  pop[i].seq_indices = NULL;
+  pop[i].nodes = NULL;
 
   /* replace population i with new population */
   pop[i].snode = epoch;
@@ -607,25 +735,116 @@ static int cb_cmp_spectime(const void * a, const void * b)
   return -1;
 }
 
+static void fill_hybrid_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
+{
+  unsigned int i,j;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    assert(node_is_hybridization(mnode));
+    snode_t * hnode = mnode->hybrid;
+    assert(!node_is_mirror(hnode));
+
+    for (j = 0; j < gtree->tip_count; ++j)
+    {
+      if (gtree->nodes[j]->hpath[i] == BPP_HPATH_LEFT)
+        hnode->seqin_count[msa_index]++;
+      else if (gtree->nodes[j]->hpath[i] == BPP_HPATH_RIGHT)
+        mnode->seqin_count[msa_index]++;
+    }
+
+    for (j = gtree->tip_count; j < gtree->tip_count+gtree->inner_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+      if (x->left->hpath[i] == BPP_HPATH_NONE &&
+          x->right->hpath[i] == BPP_HPATH_NONE)
+      {
+        if (x->hpath[i] == BPP_HPATH_LEFT)
+          hnode->seqin_count[msa_index]++;
+        else if (x->hpath[i] == BPP_HPATH_RIGHT)
+          mnode->seqin_count[msa_index]++;
+      }
+    }
+  }
+}
+
 static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
 {
   if (!node->left)
     return;
 
-  fill_seqin_counts_recursive(node->left,msa_index);
-  fill_seqin_counts_recursive(node->right,msa_index);
+  if (node->left)
+    fill_seqin_counts_recursive(node->left,msa_index);
+  if (node->right)
+    fill_seqin_counts_recursive(node->right,msa_index);
 
   snode_t * lnode = node->left;
   snode_t * rnode = node->right;
 
-  node->seqin_count[msa_index] = lnode->seqin_count[msa_index] +
-                                 rnode->seqin_count[msa_index] -
-                                 lnode->event_count[msa_index] -
-                                 rnode->event_count[msa_index];
+  if (opt_network)
+  {
+    if (node->hybrid)
+    {
+      assert(node_is_hybridization(node));
+
+      /* get child node in species tree. Note that it should always be the left
+         child of the hybridization node */
+      /* TODO: Simplify the below IFs, the current status is only for testing
+         correctness */
+      snode_t * child = NULL;
+      if (node->left) 
+      {
+        assert(!child);
+        child = node->left;
+      }
+      if (node->right) 
+      {
+        assert(!child);
+        child = node->right;
+      }
+      if (node->hybrid->left)
+      {
+        assert(!child);
+        child = node->hybrid->left;
+      }
+      if (node->hybrid->right)
+      {
+        assert(!child);
+        child = node->hybrid->right;
+      }
+
+      assert((child->seqin_count[msa_index] - child->event_count[msa_index]) ==
+             (node->seqin_count[msa_index] + node->hybrid->seqin_count[msa_index]));
+
+      return;
+    }
+
+
+    node->seqin_count[msa_index] = 0;
+    if (lnode)
+      node->seqin_count[msa_index] += lnode->seqin_count[msa_index] -
+                                      lnode->event_count[msa_index];
+    if (rnode)
+      node->seqin_count[msa_index] += rnode->seqin_count[msa_index] -
+                                      rnode->event_count[msa_index];
+  }
+  else
+  {
+    /* if no networks then this is valid */
+    node->seqin_count[msa_index] = lnode->seqin_count[msa_index] +
+                                   rnode->seqin_count[msa_index] -
+                                   lnode->event_count[msa_index] -
+                                   rnode->event_count[msa_index];
+  }
 }
 
-void fill_seqin_counts(stree_t * stree, int msa_index)
+void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
 {
+  if (opt_network) 
+    fill_hybrid_seqin_counts(stree, gtree, msa_index);
+
   fill_seqin_counts_recursive(stree->root,msa_index);
 }
 
@@ -635,6 +854,88 @@ static int cb_trav_full(snode_t * x)
     return 0;
 
   return 1;
+}
+
+static void epoch_reorder(snode_t ** epoch,
+                          unsigned int epoch_count,
+                          snode_t * hnode)
+{
+  unsigned int i;
+  unsigned int hindex;
+
+  /* first find the index of hnode in epoch */
+  for (hindex = 0; hindex < epoch_count; ++hindex)
+    if (epoch[hindex] == hnode)
+      break;
+
+  assert(hindex < epoch_count);
+
+  if (node_is_bidirection(hnode))       /* bidirections */
+  {
+    assert(0);
+    for (i = 0; i < hindex; ++i)
+    {
+      if (epoch[i] == epoch[hindex]->hybrid)
+      {
+        SWAP(epoch[i],epoch[hindex]);
+        break;
+      }
+    }
+  }
+  else          /* hybridization */
+  {
+    assert(!node_is_mirror(hnode));
+
+    /* make sure parents are after hybridization event */
+    if (!epoch[hindex]->parent->htau)
+    {
+      for (i = 0; i < hindex; ++i)
+      {
+        if (epoch[i] == epoch[hindex]->parent)
+        {
+          SWAP(epoch[i],epoch[hindex]);
+          hindex = i;
+          break;
+        }
+      }
+    }
+
+    if (!epoch[hindex]->hybrid->parent->htau)
+    {
+      for (i = 0; i < hindex; ++i)
+      {
+        if (epoch[i] == epoch[hindex]->hybrid->parent)
+        {
+          SWAP(epoch[i],epoch[hindex]);
+          hindex = i;
+          break;
+        }
+      }
+    }
+
+    /* make sure its mirror node is directly after it */
+    unsigned int mindex;
+    for (mindex = 0; mindex < epoch_count; ++mindex)
+      if (epoch[mindex] == hnode->hybrid)
+        break;
+    assert(mindex < epoch_count);
+    assert(epoch[mindex]->tau == epoch[hindex]->tau);
+
+    if (mindex < hindex)
+    {
+      assert(mindex == hindex-1);
+      SWAP(epoch[hindex],epoch[mindex]);
+    }
+    else if (mindex > hindex+1)
+    {
+      assert(mindex - hindex <= 3);
+      while (mindex != hindex+1)
+      {
+        SWAP(epoch[mindex],epoch[mindex-1]);
+        mindex--;
+      }
+    }
+  }
 }
 
 static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
@@ -649,24 +950,37 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   gnode_t * inner = NULL;
 
   /* get a list of inner nodes (epochs) */
-  epoch = (snode_t  **)xmalloc(stree->inner_count*sizeof(snode_t *));
+  epoch_count = stree->inner_count;
+  if (opt_network)
+    epoch_count = stree->inner_count + stree->hybrid_count;
+
+  epoch = (snode_t **)xmalloc((size_t)epoch_count*sizeof(snode_t *));
   memcpy(epoch,
          stree->nodes + stree->tip_count,
-         stree->inner_count * sizeof(snode_t *));
+         (epoch_count) * sizeof(snode_t *));
 
   /* sort epochs in ascending order of speciation times */
-  stree_traverse(stree->root,
-                 TREE_TRAVERSE_POSTORDER,
-                 cb_trav_full,
-                 epoch,
-                 &epoch_count);
+  if (opt_network)
+  {
+    memcpy(epoch,
+           stree->nodes + stree->tip_count,
+           (size_t)(epoch_count) * sizeof(snode_t *));
+  }
+  else
+  {
+    stree_traverse(stree->root,
+                   TREE_TRAVERSE_POSTORDER,
+                   cb_trav_full,
+                   epoch,
+                   &epoch_count);
 
-  assert(epoch_count == stree->inner_count);
+    assert(epoch_count == stree->inner_count);
+  }
 
   snode_t ** sortptr = epoch;
 
   /* move zeroes to beginning and store their number in j */
-  for (j = 0, i = 0; i < stree->inner_count; ++i)
+  for (j = 0, i = 0; i < epoch_count; ++i)
   {
     if (epoch[i]->tau == 0)
     {
@@ -679,19 +993,38 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   /* sort nonzero entries */
   sortptr += j;
-  qsort(&(sortptr[0]), stree->inner_count-j, sizeof(snode_t *), cb_cmp_spectime);
+  qsort(&(sortptr[0]), epoch_count-j, sizeof(snode_t *), cb_cmp_spectime);
 
-  epoch_count = stree->inner_count;
+  if (opt_network)
+  {
+    /* if we have a hybridization event, composed of nodes H,S,T, e.g.
 
+                                  S   T  
+                                   \ /
+                                    * H
+                                    |
+
+       we need to make sure that in the case either S or T have the same tau as
+       H, then they must appear *after* H in the 'epoch' array (see Ziheng's diagram)
+    */
+
+    for (i = 0; i < stree->inner_count; ++i)
+    {
+      snode_t * x = stree->nodes[stree->tip_count + i];
+      if (x->hybrid)
+        epoch_reorder(epoch,epoch_count,x);
+    }
+  }
   if (opt_debug)
   {
-    for (i = 0; i < stree->inner_count; ++i)
+    for (i = 0; i < epoch_count; ++i)
       printf("[Debug]: Epoch %d (%s) time - %f\n",
              i, epoch[i]->label, epoch[i]->tau);
   }
 
   /* create one hash table of species and one for sequence->species mappings */
-  pop = (pop_t *)xcalloc(stree->tip_count, sizeof(pop_t));
+  pop = (pop_t *)xcalloc((size_t)(stree->tip_count+stree->hybrid_count),
+                         sizeof(pop_t));
   fill_pop(pop,stree,msa,msa_index);
 
   for (i = 0; i < stree->tip_count; ++i)
@@ -722,7 +1055,8 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   lineage_count = msa->count;
 
   /* allocate space for storing coalescent rates for each population */
-  ci = (double *)xmalloc(stree->tip_count * sizeof(double));
+  ci = (double *)xmalloc((size_t)(stree->tip_count + stree->hybrid_count) *
+                         sizeof(double));
 
   /* current epoch index */
   unsigned int e = 0;
@@ -736,6 +1070,17 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     gtips[i]->pmatrix_index = i;
     gtips[i]->scaler_index = PLL_SCALE_BUFFER_NONE;
     gtips[i]->leaves = 1;
+
+    if (opt_network)
+    {
+      /* TODO: Allocating hpath for tips is unnecessary, as they never pass
+         through a hybridization event. However, if we don't allocate hpath
+         we will need to check that a node is inner when accessing hpath */
+      gtips[i]->hpath = (int *)xmalloc((size_t)(stree->hybrid_count) *
+                                       sizeof(int));
+      for (j = 0; j < stree->hybrid_count; ++j)
+        gtips[i]->hpath[j] = BPP_HPATH_NONE;
+    }
   }
 
   /* fill each population with one gene tip node for each lineage */
@@ -867,6 +1212,24 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       inner->leaves = inner->left->leaves + inner->right->leaves;
       clv_index++;
 
+      if (opt_network)
+      {
+        inner->hpath = (int*)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+        for (i = 0; i < stree->hybrid_count; ++i)
+          inner->hpath[i] = BPP_HPATH_NONE;
+
+        if (pop[j].snode->hybrid)
+        {
+          assert(node_is_hybridization(pop[j].snode));
+
+          unsigned int hindex = GET_HINDEX(stree,pop[j].snode);
+          assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+          inner->hpath[hindex] = node_is_mirror(pop[j].snode) ?
+                                   BPP_HPATH_RIGHT : BPP_HPATH_LEFT;
+        }
+      }
+
       pop[j].snode->event_count[msa_index]++;
       dlist_item_t * dlitem = dlist_append(pop[j].snode->event[msa_index],inner);
       inner->event = dlitem;
@@ -894,7 +1257,10 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
     /* place current epoch in the list of populations, remove its two children
        and add up the lineages of the two descendants */
-    replace(pop,pop_count,epoch[e]);
+    if (opt_network && epoch[e]->hybrid)
+      replace_hybrid(stree,pop,&pop_count,epoch[e]);
+    else
+      replace(pop,pop_count,epoch[e]);
     
     if (e != epoch_count-1)
     {
@@ -935,7 +1301,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   /* Update the number of lineages coming into each ancestral population as the
      sum of lineages coming into its two children populations minus the
      coalescent events that have occured */
-  fill_seqin_counts(stree,msa_index);
+  fill_seqin_counts(stree,gtree,msa_index);
 
   if (opt_debug)
   {
@@ -954,24 +1320,98 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   return gtree;
 }
 
+/* TODO: The following is a very inefficient way of computing gene leave counts
+   for hybridization nodes. For each hybridization node H the method does:
+    1. Go through all gene tree tips of locus msa_index.
+      a. For each tip visit its parent and repeat until we reach the root.
+      b. If any of the visited nodes' hpath flag passes H then increase
+         the gene leaves variable for node H  */
+static void reset_hybrid_gene_leaves_count(stree_t * stree,
+                                           gtree_t * gtree,
+                                           int msa_index)
+{
+  unsigned int i,j;
+  gnode_t * x;
+  snode_t * mnode;
+  snode_t * hnode;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    assert(node_is_hybridization(mnode));
+    hnode = mnode->hybrid;
+    assert(!node_is_mirror(hnode));
+
+    hnode->gene_leaves[msa_index] = 0;
+    mnode->gene_leaves[msa_index] = 0;
+
+    for (j = 0; j < gtree->tip_count; ++j)
+      for (x = gtree->nodes[j]; x; x = x->parent)
+      {
+        if (x->hpath[i] == BPP_HPATH_LEFT)
+        {
+          hnode->gene_leaves[msa_index]++;
+          break;
+        }
+        if (x->hpath[i] == BPP_HPATH_RIGHT)
+        {
+          mnode->gene_leaves[msa_index]++;
+          break;
+        }
+      }
+  }
+}
+
 static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus_count)
 {
   unsigned int j;
 
-  if (!node->left)
+  if (!node->left && !node->right)
     return;
 
-  reset_gene_leaves_count_recursive(node->left,locus_count);
-  reset_gene_leaves_count_recursive(node->right,locus_count);
+  if (node->left)
+    reset_gene_leaves_count_recursive(node->left,locus_count);
+  if (node->right)
+    reset_gene_leaves_count_recursive(node->right,locus_count);
+
+  if (opt_network && node->hybrid)
+  {
+    /* TODO: The below if block is only for testing correctness - it is not
+       necessary and should be removed, but the 'return' statement must be
+       kept */
+
+    assert(node_is_hybridization(node));
+
+    if (node_is_mirror(node))
+      assert(!node->left && !node->right);
+    else
+      assert(node->left && !node->right);
+
+    for (j = 0; j < locus_count; ++j)
+      if (!node_is_mirror(node))
+        assert((node->gene_leaves[j] + node->hybrid->gene_leaves[j]) ==
+               node->left->gene_leaves[j]);
+
+    return;
+  }
 
   for (j = 0; j < locus_count; ++j)
     node->gene_leaves[j] = node->left->gene_leaves[j] +
                            node->right->gene_leaves[j];
 
 }
-void reset_gene_leaves_count(stree_t * stree)
+void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 {
   unsigned int i,j;
+
+  /* gtree is only necessary when opt_network */
+  if (opt_network)
+  {
+    assert(gtree);
+    for (i = 0; i < stree->locus_count; ++i)
+      reset_hybrid_gene_leaves_count(stree,gtree[i],i);
+  }
 
   /* gene leaves is the same as sequences coming in for tip nodes */
   for (i = 0; i < stree->tip_count; ++i)
@@ -980,10 +1420,10 @@ void reset_gene_leaves_count(stree_t * stree)
 
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
 
+  /* TODO: IS THIS NECESSARY ? */
   for (j = 0; j < stree->locus_count; ++j)
     stree->root->gene_leaves[j] = stree->root->left->gene_leaves[j] +
                                   stree->root->right->gene_leaves[j];
-
 }
 
 void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
@@ -1053,7 +1493,7 @@ gtree_t ** gtree_init(stree_t * stree,
   gtree_alloc_internals(gtree,msa_count);
 
   /* reset number of gene leaves associated with each species tree subtree */
-  reset_gene_leaves_count(stree);
+  reset_gene_leaves_count(stree,gtree);
 
   return gtree;
 }
@@ -1258,9 +1698,225 @@ void unlink_event(gnode_t * node, int msa_index)
     node->pop->event[msa_index]->tail = node->event->prev;
 }
 
+/* updates the incoming number of lineages to populations and path flags
+   when age has changed to an older one (i.e. proposing an older node age,
+   or when rejecting a proposed age that is younger than the old age */
+static void network_age_update_upwards(stree_t * stree,
+                                       snode_t * oldpop,
+                                       gnode_t * node,
+                                       int msa_index)
+{
+  unsigned int hindex;
+  snode_t * pop;
+
+  if (oldpop->hybrid && oldpop != node->pop)
+  {
+    assert(!node_is_bidirection(oldpop));
+
+    /* get index of hybridization event */
+    hindex = GET_HINDEX(stree,oldpop);
+    assert(hindex >= 0 && hindex < stree->hybrid_count);
+    
+    /* we do not need to update children path flags as they already
+       contain the correct information */
+    assert((node->left->hpath[hindex] == node->right->hpath[hindex]) &&
+           (node->left->hpath[hindex] == node->hpath[hindex]));
+
+    /* update node flag */
+    node->hpath[hindex] = BPP_HPATH_NONE;
+  }
+
+  pop = oldpop;
+  while (pop != node->pop)
+  {
+    snode_t * father = pop->parent;
+    assert(father);
+
+    if (father->hybrid)
+    {
+      assert(!node_is_bidirection(father));
+      assert(!node_is_mirror(father));
+      
+      /* change path flags */
+      hindex = GET_HINDEX(stree,father);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      /* update flags for children */
+      node->left->hpath[hindex]  = node->hpath[hindex];
+      node->right->hpath[hindex] = node->hpath[hindex];
+
+      /* find correct parent node according to hpath flag */
+      assert(node->hpath[hindex] != BPP_HPATH_NONE);
+      if (node->hpath[hindex] == BPP_HPATH_LEFT)
+        father = father->left ? father : father->hybrid;
+      else
+        father = father->left ? father->hybrid : father;
+
+      /* TODO: The above can be simplified since our data structure
+         assumes that father is the LEFT hybridization node, as the
+         RIGHT hybridization has no children */
+
+      /* reset path flag for node except if it is part of father */
+      if (father != node->pop)
+        node->hpath[hindex] = BPP_HPATH_NONE;
+    }
+    father->seqin_count[msa_index]++;
+
+    pop = father;
+  }
+}
+
+/* updates the incoming number of lineages to populations and path flags
+   when age has changed to a younger one (i.e. proposing a younger node age,
+   or when rejecting a proposed age that is older than the old age */
+static void network_age_update_downwards(stree_t * stree,
+                                         snode_t * oldpop,
+                                         gnode_t * node,
+                                         int msa_index)
+{
+  unsigned int hindex;
+  snode_t * pop = node->pop;
+
+  if (pop->hybrid && pop != oldpop)
+  {
+    assert(!node_is_bidirection(pop));
+
+    /* get index of hybridization event */
+    hindex = GET_HINDEX(stree,pop);
+    assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+    assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
+    node->hpath[hindex] = node->left->hpath[hindex];
+
+    /* we must not reset the children node path flags as they contain
+       the correct information */
+  }
+
+  while (pop != oldpop)
+  {
+    snode_t * father = pop->parent;
+    assert(father);
+
+    if (father->hybrid)
+    {
+      assert(!node_is_bidirection(father));
+      assert(!node_is_mirror(father));
+
+      /* change path flags */
+      hindex = GET_HINDEX(stree,father);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
+
+      if ((father == oldpop) || (father->hybrid == oldpop))
+        assert(node->hpath[hindex] != BPP_HPATH_NONE);
+      else
+        assert(node->hpath[hindex] == BPP_HPATH_NONE);
+
+      if ((father != oldpop) && (father->hybrid != oldpop))
+        node->hpath[hindex] = node->left->hpath[hindex];
+      else
+        assert(node->hpath[hindex] == node->left->hpath[hindex]);
+
+      if (node->hpath[hindex] == BPP_HPATH_LEFT)
+        father = father->left ? father : father->hybrid;
+      else
+        father = father->left ? father->hybrid : father;
+      /* TODO: The above can be simplified since our data structure
+         assumes that father is the LEFT hybridization node, as the
+         RIGHT hybridization has no children */
+
+      /* change children */
+      node->left->hpath[hindex]  = BPP_HPATH_NONE;
+      node->right->hpath[hindex] = BPP_HPATH_NONE;
+    }
+    father->seqin_count[msa_index]--;
+
+    pop = father;
+  }
+}
+
+/* find ancestral population of two gene tree nodes */
+static snode_t * network_mrca_population(stree_t * stree, gnode_t * left, gnode_t * right)
+{
+  /* use pop-pop table to find mrca of the two child populations */
+  snode_t * mrca = left->pop;
+
+  if (left->pop == right->pop) return mrca;
+
+  snode_t * lpop = NULL;
+  snode_t * rpop = NULL;
+  snode_t * father = NULL;
+  unsigned int hindex;
+
+  lpop = left->pop;
+  while (lpop)
+  {
+    rpop = right->pop;
+    while (rpop)
+    {
+      father = rpop->parent;
+      if (father && father->hybrid)
+      {
+        assert(!node_is_bidirection(father));
+        assert(!node_is_mirror(father));
+
+        hindex = GET_HINDEX(stree,father);
+        assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+        if (right->hpath[hindex] == BPP_HPATH_NONE)
+          break;
+
+        if (right->hpath[hindex] == BPP_HPATH_LEFT)
+          father = father->left ? father : father->hybrid;
+        else
+          father = father->left ? father->hybrid : father;
+
+        /* TODO: The above can be simplified since our data structure
+           assumes that father is the LEFT hybridization node, as the
+           RIGHT hybridization has no children */
+      }
+
+      if (lpop == rpop) break;
+
+      rpop = father;
+    }
+
+    if (lpop == rpop) break;
+
+    father = lpop->parent;
+
+    if (father && father->hybrid)
+    {
+      assert(!node_is_bidirection(father));
+      assert(!node_is_mirror(father));
+
+      hindex = GET_HINDEX(stree,father);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      assert(left->hpath[hindex] != BPP_HPATH_NONE);
+
+      if (left->hpath[hindex] == BPP_HPATH_LEFT)
+        father = father->left ? father : father->hybrid;
+      else
+        father = father->left ? father->hybrid : father;
+
+      /* TODO: The above can be simplified since our data structure
+         assumes that father is the LEFT hybridization node, as the
+         RIGHT hybridization has no children */
+    }
+    lpop = father;
+  }
+  assert((rpop == lpop) && (rpop != NULL));
+  mrca = lpop;
+
+  return mrca;
+}
+
 static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
 {
   unsigned int i,k,j;
+  unsigned int stree_total_nodes;
   long accepted = 0;
   double lnacceptance;
   double tnew,minage,maxage,oldage;
@@ -1268,6 +1924,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   double logl;
   snode_t * pop;
   snode_t * oldpop;
+
+  stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   /* TODO: Instead of traversing the gene tree nodes this way, traverse the
      coalescent events for each population in the species tree instead. This
@@ -1278,26 +1936,73 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   {
     gnode_t * node = gtree->nodes[i];
 
-    /* find minimum children age */
+    /* constraint min bound of proposed age by maximum age between children */
     minage = MAX(node->left->time,node->right->time);
 
-    if (node->left->pop != node->right->pop)
+    if (opt_network)
     {
-      snode_t * lpop = NULL;
-      snode_t * rpop = NULL;
+      /* if the children are in different populations then further constraint
+         minage by the tau of their most recent common ancestor population */
+      snode_t * mrca = network_mrca_population(stree, node->left, node->right);
 
-      /* find most recent ancestral population to the two child populations */
-      /* TODO: Speed this up by using a lookup table */
-      for (lpop = node->left->pop; lpop; lpop = lpop->parent)
+      minage = MAX(minage,mrca->tau);
+
+      /* find oldest hybridization event through which the two lineages pass but
+         differ in the path (flag) they take */
+      snode_t * hnode = NULL;
+      unsigned int hoffset = stree->tip_count + stree->inner_count;
+
+      for (j = 0; j < stree->hybrid_count; ++j)
+        if (node->left->hpath[j]  != BPP_HPATH_NONE &&
+            node->right->hpath[j] != BPP_HPATH_NONE &&
+            (node->left->hpath[j] != node->right->hpath[j]) &&
+            (!hnode || (stree->nodes[hoffset+j]->tau > hnode->tau)))
+          hnode = stree->nodes[hoffset+j];
+
+      /* if such node H was found, find the mrca of H_left and H_right */
+      if (hnode)
       {
-        for (rpop = node->right->pop; rpop; rpop = rpop->parent)
-          if (rpop == lpop) break;
-        if (rpop == lpop) break;
+        assert(hnode->hybrid);
+
+        /* TODO: Improvement - no need to go through all nodes */
+        mrca = stree->root;
+        for (j = 0; j < stree_total_nodes; ++j)
+          if (stree->pptable[hnode->node_index][j] &&
+              stree->pptable[hnode->hybrid->node_index][j] &&
+              stree->nodes[j]->tau < mrca->tau)
+            mrca = stree->nodes[j];
+
+        /* Depending on node order, the above loop may not necessarily find the
+           mRCA, but rather a more distant common ancestor when the mRCA is a
+           hybridization event with its two parents having the same age as
+           itself (lateral gene transfer). However this does not affect the
+           method as what we are interested in is the tau of the mRCA which, in
+           that case, is identical among the three nodes. */
       }
 
-      assert(rpop == lpop && rpop != NULL);
+      if (mrca)
+        minage = MAX(minage,mrca->tau);
+    }
+    else        /* not a network */
+    {
+      if (node->left->pop != node->right->pop)
+      {
+        snode_t * lpop = NULL;
+        snode_t * rpop = NULL;
 
-      minage = MAX(minage,lpop->tau);
+        /* find most recent ancestral population to the two child populations */
+        /* TODO: Speed this up by using a lookup table */
+        for (lpop = node->left->pop; lpop; lpop = lpop->parent)
+        {
+          for (rpop = node->right->pop; rpop; rpop = rpop->parent)
+            if (rpop == lpop) break;
+          if (rpop == lpop) break;
+        }
+
+        assert(rpop == lpop && rpop != NULL);
+
+        minage = MAX(minage,lpop->tau);
+      }
     }
 
     /* compute max age. TODO: 999 is placed for compatibility with old bpp */
@@ -1311,9 +2016,47 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     /* find the first ancestral pop with age higher than the proposed tnew */
     /* TODO: Improvement: probably this can start from lpop/rpop (LCA of
         populations of two daughter nodes) */
-    for (pop = node->left->pop; pop->parent; pop = pop->parent)
-      if (pop->parent->tau > tnew)
-        break;
+    if (opt_network)
+    {
+      /* we will use the path flags of tmp to guide us through hybridizations */
+      gnode_t * tmp = NULL;
+      if (tnew > node->time)
+      {
+        pop = node->pop;
+        tmp = node;
+      }
+      else
+      {
+        /* TODO: Improvement - start from the MRCA instead of node->left->pop */
+        pop = node->left->pop;
+        tmp = node->left;
+      }
+      
+      while (pop->parent)
+      {
+        if (pop->hybrid)
+        {
+          assert(!node_is_bidirection(pop));
+
+          unsigned int hindex = GET_HINDEX(stree,pop);
+          assert(hindex >= 0 && hindex < stree->hybrid_count);
+          assert(tmp->hpath[hindex] != BPP_HPATH_NONE);
+
+          if (tmp->hpath[hindex] == BPP_HPATH_LEFT)
+            pop = pop->left ? pop : pop->hybrid;
+          else
+            pop = pop->left ? pop->hybrid : pop;
+        }
+        if (pop->parent->tau > tnew) break;
+        pop = pop->parent;
+      }
+    }
+    else
+    {   /* not a network */
+      for (pop = node->left->pop; pop->parent; pop = pop->parent)
+        if (pop->parent->tau > tnew)
+          break;
+    }
 
     /* save old age and old ancestral population */
     oldage = node->time;
@@ -1351,15 +2094,29 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         /* increase the number of incoming lineages to all populations in the
            path from old population (excluding) to the new population */
-        for (pop = oldpop; pop != node->pop; pop = pop->parent)
-          pop->parent->seqin_count[msa_index]++;
+        if (opt_network)
+        {
+          network_age_update_upwards(stree,oldpop,node,msa_index);
+        }
+        else
+        {
+          for (pop = oldpop; pop != node->pop; pop = pop->parent)
+            pop->parent->seqin_count[msa_index]++;
+        }
       }
-      else
+      else  /* tnew < oldage */
       {
         /* decrease the number of incoming lineages to all populations in the
            path from new population (excluding) to the old population */
-        for (pop = node->pop; pop != oldpop; pop = pop->parent)
-          pop->parent->seqin_count[msa_index]--;
+        if (opt_network)
+        {
+          network_age_update_downwards(stree,oldpop,node,msa_index);
+        }
+        else
+        {
+          for (pop = node->pop; pop != oldpop; pop = pop->parent)
+            pop->parent->seqin_count[msa_index]--;
+        }
       }
     }
 
@@ -1403,17 +2160,59 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         start = node->pop;
         end   = oldpop->parent;
       }
-      for (pop = start; pop != end; pop = pop->parent)
-      {
-        if (opt_est_theta)
-          logpr -= pop->logpr_contrib[msa_index];
-        else
-          logpr -= pop->notheta_logpr_contrib;
 
-        logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
+      if (opt_network)
+      {
+        pop = start;
+        while (pop != end)
+        {
+          if (opt_est_theta)
+            logpr -= pop->logpr_contrib[msa_index];
+          else
+            logpr -= pop->notheta_logpr_contrib;
+
+          logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
+
+          pop = pop->parent;
+          if (pop != end && pop->hybrid)
+          {
+            /* we must choose the correct direction */
+            assert(!node_is_mirror(pop));
+
+            unsigned int hindex = GET_HINDEX(stree,pop);
+            assert(hindex >= 0 && hindex < stree->hybrid_count);
+            
+            /* the two children must have the same flag */
+            assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
+
+            /* depending on whether the proposed age is older than the old node
+               age, we might have already reset the node/children flags.
+               However, either the children or the current node still holds the
+               flag, therefore we use logical OR on child and parent flag to get
+               the path */
+            int hp = node->hpath[hindex] | node->left->hpath[hindex];
+            assert((hp == BPP_HPATH_LEFT) || (hp == BPP_HPATH_RIGHT));
+
+            if (hp == BPP_HPATH_RIGHT)
+              pop = pop->hybrid;
+          }
+        }
+      }
+      else
+      {
+        for (pop = start; pop != end; pop = pop->parent)
+        {
+          if (opt_est_theta)
+            logpr -= pop->logpr_contrib[msa_index];
+          else
+            logpr -= pop->notheta_logpr_contrib;
+
+          logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
+        }
       }
     }
     #else
+      assert(!opt_network);
       if (opt_est_theta)
         logpr = gtree_logprob(stree,locus->heredity[0],msa_index);
       else
@@ -1533,15 +2332,33 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         {
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
-          for (pop=oldpop; pop != node->pop; pop = pop->parent)
-            pop->parent->seqin_count[msa_index]++;
+          if (opt_network)
+          {
+            network_age_update_upwards(stree,oldpop,node,msa_index);
+          }
+          else
+          {
+            /* note that a few lines above we swapped the populations already
+               ( SWAP(node->pop,oldpop) ) and so, oldpop is actually the new
+               population, and node->pop is the old population, and so the for
+               loop below is correct */
+            for (pop=oldpop; pop != node->pop; pop = pop->parent)
+              pop->parent->seqin_count[msa_index]++;
+          }
         }
-        else
+        else  /* tnew > oldage */
         {
           /* decrease the number of incoming lineages to all populations in the
              path from new population (excluding) to the old population */
-          for (pop = node->pop; pop != oldpop; pop = pop->parent)
-            pop->parent->seqin_count[msa_index]--;
+          if (opt_network)
+          {
+            network_age_update_downwards(stree,oldpop,node,msa_index);
+          }
+          else
+          {
+            for (pop = node->pop; pop != oldpop; pop = pop->parent)
+              pop->parent->seqin_count[msa_index]--;
+          }
         }
 
         /* now restore the old log gene tree probability contribution for each
@@ -1550,12 +2367,54 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         snode_t * start = (tnew > oldage) ? node->pop :  oldpop;
         snode_t * end   = (tnew > oldage) ? oldpop->parent : node->pop->parent;
 
-        for (pop = start; pop != end; pop = pop->parent)
+        if (opt_network)
         {
-          if (opt_est_theta)
-            pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
-          else
-            logprob_revert_notheta(pop,msa_index);
+          pop = start;
+          while (pop != end)
+          {
+            if (opt_est_theta)
+              pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+            else
+              logprob_revert_notheta(pop,msa_index);
+
+            pop = pop->parent;
+            if (pop != end && pop->hybrid)
+            {
+              assert(!node_is_bidirection(pop));
+              assert(!node_is_mirror(pop));
+
+              /* we must choose the correct direction */
+              unsigned int hindex;
+              int hp;
+
+              hindex = GET_HINDEX(stree,pop);
+              assert(hindex >= 0 && hindex < stree->hybrid_count);
+              
+              /* the two children must have the same flag */
+              assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
+
+              /* depending on whether the proposed age is older than the old age
+                 or not, we might have reset the node/children flags. However,
+                 either the children or the current node still holds the flag,
+                 therefore we use logical OR on child and parent flag to get the
+                 path */
+              hp = node->hpath[hindex] | node->left->hpath[hindex];
+              assert(hp == BPP_HPATH_LEFT || hp == BPP_HPATH_RIGHT);
+
+              if (hp == BPP_HPATH_RIGHT)
+                pop = pop->hybrid;
+            }
+          }
+        }
+        else
+        {
+          for (pop = start; pop != end; pop = pop->parent)
+          {
+            if (opt_est_theta)
+              pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+            else
+              logprob_revert_notheta(pop,msa_index);
+          }
         }
       }
     }

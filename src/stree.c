@@ -623,8 +623,112 @@ static int ** populations_seqcount(stree_t * stree,
    return seqcount;
 }
 
+/* TODO: Terribly slow (quadratic to number of nodes) method for initializing
+   tau on species tree nodes when we have hybridizations. The method basically
+   iterates the species tree nodes array indefinitely, and at each iteration
+   it sets the tau for the nodes whose parent(s) have been already processed.
+   The iteration stops when no nodes need to be processed */
+static void network_init_tau_iterative(stree_t * stree, double prop)
+{
+  long run = 1;
+  long i;
+
+  assert(opt_network);
+  assert(stree->root->tau && stree->root->tau != 1);
+
+  while (run)
+  {
+    run = 0;
+    for (i = 0; i < stree->inner_count; ++i)
+    {
+      snode_t * x = stree->nodes[stree->tip_count+i];
+      if (!x->parent) continue;
+
+      if (x->tau == 1) assert(x->parent->tau > 0);
+      if (x->hybrid && x->tau)
+        assert(x->hybrid->parent->tau > 0);
+
+      if (x->hybrid && x->tau)
+      {
+        assert(x->parent->parent);
+        assert(x->hybrid->parent->parent);
+        if (x->parent->htau && x->parent->tau == 1)
+        {
+            run  = 1;
+            continue;
+        }
+        if (x->hybrid->parent->htau && x->hybrid->parent->tau == 1)
+        {
+          run = 1;
+          continue;
+        }
+
+        assert(x->parent->parent->tau > 0);
+        if ((x->parent->htau == 0) && (x->parent->parent->tau == 1))
+        {
+          run = 1;
+          continue;
+        }
+
+        assert(x->hybrid->parent->parent->tau > 0);
+        if ((x->hybrid->parent->htau == 0) && (x->hybrid->parent->parent->tau == 1))
+        {
+          run = 1;
+          continue;
+        }
+
+        assert(!x->parent->parent->hybrid);
+        assert(!x->hybrid->parent->parent->hybrid);
+
+        double age1 = (x->parent->htau) ?
+                        x->parent->tau : x->parent->parent->tau;
+        double age2 = (x->hybrid->parent->htau) ?
+                        x->hybrid->parent->tau : x->hybrid->parent->parent->tau;
+
+        if (x->tau != 1)
+          continue;
+
+        x->tau = MIN(age1,age2) * (prop + (1 - prop - 0.02)*legacy_rndu());
+        x->hybrid->tau = x->tau;
+        if (x->parent->htau == 0)
+          x->parent->tau = x->tau;
+        if (x->hybrid->parent->htau == 0)
+          x->hybrid->parent->tau = x->tau;
+      }
+      else
+      {
+        if (x->parent->tau)
+        {
+          if (x->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
+          else
+          {
+            if (x->tau > 0 && x->tau == 1)
+            {
+              if (x->htau)
+              {
+                x->tau = x->parent->tau * (prop + (1 - prop - 0.02)*legacy_rndu());
+              }
+              else
+              {
+                run = 1;
+                continue;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 static void stree_init_tau_recursive(snode_t * node, double prop)
 {
+  assert(!opt_network);
+
   /* end recursion if node is a tip */
   if (!node->left && !node->right)
   {
@@ -640,46 +744,20 @@ static void stree_init_tau_recursive(snode_t * node, double prop)
   if (!node->parent->tau)
     node->theta = -1;
 
-  if (opt_network)      /* a network */
-  {
-    /* if node is the mirrored version of a hybridization / introgression then
-       do not execute the below code (which sets a tau) */
-    if (!node->hybrid || !node_is_mirror(node))
-    {
-      /* I guess the conditions are necessary for a future implementation of
-         species delimitation using netowrks */
-      if (node->parent->tau && node->tau > 0)
-        node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-      else
-        node->tau = 0;
-    }
+  if (node->parent->tau && node->tau > 0)
+    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+  else
+    node->tau = 0;
 
-    /* if node is a hybridization / introgression but *not* the mirrored node,
-       then set the tau of the mirrored note to the tau of this node. This may
-       note be necessary, and is only to have the same values in both mirrorred
-       nodes */
-    if (node->hybrid && !node_is_mirror(node))
-      node->hybrid->tau = node->tau;
-  }
-  else                  /* not a network */
-  {
-    if (node->parent->tau && node->tau > 0)
-      node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
-    else
-      node->tau = 0;
-  }
-
-  if (node->left)
-    stree_init_tau_recursive(node->left, prop);
-  if (node->right)
-    stree_init_tau_recursive(node->right, prop);
+  stree_init_tau_recursive(node->left, prop);
+  stree_init_tau_recursive(node->right, prop);
 }
 
 static void stree_init_tau(stree_t * stree)
 {
   unsigned int i;
 
-  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
     stree->nodes[i]->tau = 1;
 
    if (opt_method == METHOD_10)    /* method A10 */
@@ -714,8 +792,26 @@ static void stree_init_tau(stree_t * stree)
 
    /* recursively set the speciation time for the remaining inner nodes. For
       networks it is not necessary to check if root has both left and right */
-   stree_init_tau_recursive(stree->root->left, prop);
-   stree_init_tau_recursive(stree->root->right, prop);
+   if (opt_network)
+     network_init_tau_iterative(stree, prop);
+   else
+   {
+     stree_init_tau_recursive(stree->root->left, prop);
+     stree_init_tau_recursive(stree->root->right, prop);
+   }
+
+   /* check to see if everything is OK */
+   if (opt_network)
+   {
+     for (i = 0; i < stree->hybrid_count; ++i)
+     {
+       snode_t * h = stree->nodes[stree->tip_count+stree->inner_count+i];
+       assert(h && h->hybrid);
+       assert(!node_is_bidirection(h));
+       assert(node_is_mirror(h));
+       assert((h->parent->tau >= h->tau) && (h->hybrid->tau == h->tau));
+     }
+   }
 }
 
 static void stree_init_theta(stree_t * stree,
@@ -906,31 +1002,61 @@ static void stree_init_theta(stree_t * stree,
 
     if (opt_network && node->hybrid)
     {
-      /* if this is a hybridization node, then we set a theta only if it's not
-         a bidirectional hybridization AND the nodes have a 'tau-parent'
-         annotation. We also process the mirrored nodes here */
       node->theta = node->hybrid->theta = -1;
       node->has_theta = node->hybrid->has_theta = 0;
+
       if (!node_is_bidirection(node))
       {
-        if (node->htau)
+        /* node is a hybridization: we assign a theta to the nodes that
+           compose it that have a 'tau-parent' (htau) annotation */
+
+        if (node->parent->htau)
         {
           node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                         (0.9 + 0.2 * legacy_rndu());
           node->has_theta = 1;
         }
+        else
+        {
+          node->theta = -1;
+          node->has_theta = 0;
+        }
         
-        if (node->hybrid->htau)
+        if (node->hybrid->parent->htau)
         {
           node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                                 (0.9 + 0.2 * legacy_rndu());
           node->hybrid->has_theta = 1;
         }
+        else
+        {
+          node->hybrid->theta = -1;
+          node->hybrid->has_theta = 0;
+        }
+      }
+      else
+      {
+        /* bidirectional introgression */
+
+        assert(0);
+        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                      (0.9 + 0.2 * legacy_rndu());
+        node->has_theta = 1;
+
+        /* the mirrored nodes do not have a theta */
+        node->hybrid->theta = -1;
+        node->hybrid->has_theta = 0;
       }
     }
     else
-      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                    (0.9 + 0.2 * legacy_rndu());
+    {
+      /* 'orginary' inner nodes all have a theta. We discussed with Ziheng the
+         case of inner nodes that have an incoming number of lineages equal to 1
+         whether they should have a theta or not, and decided to keep it for
+         code simplicity */
+         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                       (0.9 + 0.2 * legacy_rndu());
+    }
   }
 
   /* deallocate seqcount */
@@ -989,8 +1115,26 @@ int node_is_mirror(snode_t * node)
     if (!node->left && !node->right)
       rc = 1;
   }
+  
+  /* TODO: Assert it indeed holds that mirror nodes have 
+     index >tip_count+inner_count */
+  //assert(rc == 0 || (node->node_index >= stree->tip_count+stree->inner_count));
 
   return rc;
+}
+
+int node_is_hybridization(snode_t * node)
+{
+  if (!node) return 0;
+
+  if (!node->hybrid) return 0;
+
+  /* check if it's bidirectional introgression */
+  if (node->hybrid->parent->hybrid && node->hybrid->parent->parent == node->hybrid)
+    return 0;
+
+  return 1;
+    
 }
 
 static void stree_reset_pptable_network_recursive(stree_t * stree,
@@ -2533,10 +2677,14 @@ long stree_propose_spr(stree_t ** streeptr,
    else
       y->left = c;
 
+   assert(!opt_network);
    for (i = 0; i < stree->locus_count; ++i)
-      fill_seqin_counts(stree, i);
+      fill_seqin_counts(stree, NULL, i);
 
-   reset_gene_leaves_count(stree);
+   /* TODO: Check whether reset_gene_leaves_count must operate on the whole gtree_list, or whether
+      we can separate the 'reset_hybrid_gene_leaves_count() call inside the function */
+   assert(!opt_network);
+   reset_gene_leaves_count(stree,gtree_list);
    stree_reset_pptable(stree);
 
    init_weights(stree);

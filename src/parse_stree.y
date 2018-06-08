@@ -222,7 +222,7 @@ static void parse_annotation(snode_t * snode, const char * annotation)
         fatal("Cannot parse value (%s) for token (%s) in annotation (%s) - "
               "value must be of type float", s+optlen, s, annotation);
       
-      if (val <= 0 || val >= 1)
+      if (val < 0 || val > 1)
         fatal("Parameter gamma in annotations must be greater than 0 and "
               "smaller than 1");
       
@@ -230,6 +230,10 @@ static void parse_annotation(snode_t * snode, const char * annotation)
     }
     else if (!strcasecmp(s,"tau-parent"))
     {
+      /* temporarily set htau of parents node to the corresponding hybridization
+         node. Later once the tree has been parsed and annotated, a separate
+         loop will reset htau such that hybridization nodes get an htau=1 and
+         their parents have their htau set correctly */
       if (!strcasecmp(s+optlen+1,"yes"))
         snode->htau = 1;
       else if (!strcasecmp(s+optlen+1, "no"))
@@ -298,8 +302,9 @@ static void annotate_bd_introgression(snode_t * xtip,
   }
 
   if (xtip->htau == 1 || xinner->htau || y->htau || ylink->htau)
-    fatal("Bidirectional introgression between (%s) and (%s) requires only one "
-          "tau parameter for the two nodes. Please remove 'tau' annotation",
+    fatal("Bidirectional introgression between (%s) and (%s) requires exactly "
+          "one tau parameter shared by both nodes. Please remove *all* 'tau' "
+          "annotations for these two nodes.",
           xtip->label, y->label);
 
   if (xtip->hgamma && xinner->hgamma)
@@ -347,6 +352,13 @@ static void annotate_hybridization(snode_t * hinner, snode_t * htip)
   assert(hinner->parent);
   assert(hinner->hybrid->parent);
 
+  if (hinner->parent == hinner->hybrid->parent)
+  {
+    /* parallel edges from parent - in this case parent must have a tau. For now
+       we set to hinner/hinner->hybrid what we want the parent's htau to be */
+    hinner->htau = hinner->hybrid->htau = 1;
+  }
+
   if (hinner->data)
   {
     parse_annotation(hinner, (char *)(hinner->data));
@@ -359,6 +371,18 @@ static void annotate_hybridization(snode_t * hinner, snode_t * htip)
     parse_annotation(hinner->hybrid, (char *)(htip->data));
     free(htip->data);
     htip->data = NULL;
+  }
+
+  if (hinner->parent == hinner->hybrid->parent)
+  {
+    /* parallel edges from parent - in this case parent must have a tau.
+       We check whether the htau for one of the two nodes has changed due to
+       annotation. If it did, then we show an error */
+    if (hinner->htau != 1 || hinner->hybrid->htau != 1)
+      fatal("Hybridization event (%s) requires that the parent has a tau. "
+            "Please remove any tau-parent annotation from the node",
+            hinner->label);
+   
   }
 
   if (hinner->hgamma && hinner->hybrid->hgamma)
@@ -982,7 +1006,7 @@ stree_t * stree_wraptree(snode_t * root)
   if (!root)
     fatal("No node found in tree");
 
-  stree_t * tree = (stree_t *)xcalloc(1,sizeof(stree_t));
+  stree_t * stree = (stree_t *)xcalloc(1,sizeof(stree_t));
   
   unsigned int tip_count = stree_count_tips(root);
   assert(tip_count == tip_cnt);
@@ -999,47 +1023,88 @@ stree_t * stree_wraptree(snode_t * root)
     }
   }
 
-  tree->nodes = (snode_t **)xmalloc((tip_cnt+inner_cnt)*sizeof(snode_t *));
+  stree->nodes = (snode_t **)xmalloc((tip_cnt+inner_cnt)*sizeof(snode_t *));
   
   unsigned int tip_index = 0;
   unsigned int inner_index = tip_count;
-//  unsigned int hybrid_index = inner_index + inner_cnt;
 
   /* fill tree->nodes in pre-order */
-  fill_nodes_recursive(root, tree->nodes, &tip_index, &inner_index);
+  fill_nodes_recursive(root, stree->nodes, &tip_index, &inner_index);
 
-  tree->tip_count = tip_count;
-  tree->edge_count = tip_count + inner_cnt + hybrid_cnt - 1;
-  tree->inner_count = inner_cnt;
-  tree->hybrid_count = hybrid_cnt;
-  tree->root = root;
-  tree->pptable = NULL;
+  stree->tip_count = tip_count;
+  stree->edge_count = tip_count + inner_cnt + hybrid_cnt - 1;
+  stree->inner_count = inner_cnt;
+  stree->hybrid_count = hybrid_cnt;
+  stree->root = root;
+  stree->pptable = NULL;
 
   for (i = 0; i < tip_count + inner_cnt; ++i)
-    tree->nodes[i]->node_index = i;
+    stree->nodes[i]->node_index = i;
 
-  resolve_network(tree);
-  if (tree->hybrid_count)
+  resolve_network(stree);
+  if (stree->hybrid_count)
     opt_network = 1;
 
   /* reorder tip nodes if specified */
   if (opt_reorder)
-    reorder(tree);
+    reorder(stree);
 
   for (i = 0; i < tip_cnt + inner_cnt + hybrid_cnt; ++i)
-    tree->nodes[i]->node_index = i;
+    stree->nodes[i]->node_index = i;
 
   /* apply diploid information */
   if (opt_diploid)
   {
-    if (opt_diploid_size != tree->tip_count)
+    if (opt_diploid_size != stree->tip_count)
       fatal("Number of 'diploid' assignments mismatch number of species");
 
-    for (i = 0; i < tree->tip_count; ++i)
-      tree->nodes[i]->diploid = opt_diploid[i];
+    for (i = 0; i < stree->tip_count; ++i)
+      stree->nodes[i]->diploid = opt_diploid[i];
   }
 
-  return tree;
+  if (opt_network)
+  {
+    /* for all nodes that are not hybridization events set htau to 1 */
+    for (i = 0; i < stree->inner_count; ++i)
+    {
+      snode_t * snode = stree->nodes[stree->tip_count+i];
+
+      if (!snode->hybrid) snode->htau = 1;
+    }
+
+    /* now reset the 'htau' values for parents of hybridization events, and set
+       htau to hybridization nodes to 1 (inner nodes) and 0 (mirrored nodes) */
+    for (i = 0; i < stree->hybrid_count; ++i)
+    {
+      snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+      snode_t * hnode = mnode->hybrid;
+      assert(hnode);
+
+      /* bidirection  */
+      if (node_is_bidirection(hnode))
+      {
+        assert(hnode->node_index < stree->tip_count + stree->inner_count);
+
+        /* if htau=0 for all four nodes involved in a bidirectional
+           introgression then set htau=1 to inner node hnode. All other
+           nodes keep htau=0 forever, and will share the tau of hnode */
+        if (!hnode->htau && !mnode->htau && 
+            !mnode->parent->htau && !mnode->parent->hybrid->htau)
+          hnode->htau = 1;
+      }
+      else
+      {
+        hnode->parent->htau = hnode->htau;
+        mnode->parent->htau = mnode->htau;
+
+        hnode->htau = 1;
+        mnode->htau = 0;
+
+      }
+    }
+  }
+
+  return stree;
 }
 
 stree_t * stree_parse_newick(const char * filename)
