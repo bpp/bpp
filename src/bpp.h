@@ -731,9 +731,9 @@ void stree_rootdist(stree_t * stree,
                     msa_t ** msalist,
                     unsigned int ** weights);
 
-void fill_seqin_counts(stree_t * stree, int msa_index);
+void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index);
 
-void reset_gene_leaves_count(stree_t * stree);
+void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree);
 
 void stree_reset_pptable(stree_t * stree);
 
@@ -763,6 +763,7 @@ void stree_alloc_internals(stree_t * stree,
 
 int node_is_bidirection(snode_t * node);
 int node_is_mirror(snode_t * node);
+int node_is_hybridization(snode_t * node);
 
 void print_network_table(stree_t * stree);
 

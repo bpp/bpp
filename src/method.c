@@ -414,7 +414,9 @@ static FILE * resume(stree_t ** ptr_stree,
   stree_t  * stree = *ptr_stree;
 
   gtree_alloc_internals(gtree,opt_locus_count);
-  reset_gene_leaves_count(stree);
+  if (opt_network)
+    fatal("Modelling hybridization/introgression not compatible with resuming");
+  reset_gene_leaves_count(stree,gtree);
   stree_reset_pptable(stree);
 
 
@@ -713,11 +715,6 @@ static FILE * init(stree_t ** ptr_stree,
     *ptr_posterior = (double *)xcalloc((size_t)dmodels_count,sizeof(double));
   }
 
-  #if 0
-  if (opt_network)
-    fatal("Modelling hybridization/introgression not implemented yet");
-  #endif
-
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count,fp_out);
 
@@ -843,14 +840,13 @@ static FILE * init(stree_t ** ptr_stree,
     stree_rootdist(stree,map_list,msa_list,weights);
   }
 
-  if (opt_network)
-    fatal("Modelling hybridization/introgression not implemented yet");
   gtree = gtree_init(stree,msa_list,map_list,msa_count);
 
   /* the below two lines are specific to method 01 and they generate
      space for cloning the species and gene trees */
   if (opt_est_stree)            /* species tree inference */
   {
+    assert(opt_network == 0);
     sclone = stree_clone_init(stree);
     gclones = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
     for (i = 0; i < msa_count; ++i)
@@ -871,8 +867,8 @@ static FILE * init(stree_t ** ptr_stree,
   assert(opt_est_locusrate >= 0 && opt_est_locusrate <= 1);
   assert(opt_est_heredity  >= 0 && opt_est_heredity  <= 1);
 
-
   gtree_update_branch_lengths(gtree, msa_count);
+
   for (i = 0; i < msa_count; ++i)
   {
     msa_t * msa = msa_list[i];
@@ -1299,6 +1295,8 @@ if(i>=0 && opt_revolutionary_spr_method)
     ratio = gtree_propose_ages(locus, gtree, stree);
     pjump[0] = (pjump[0]*(ft_round-1) + ratio) / (double)ft_round;
 
+    if (opt_network)
+      fatal("Modelling hybridization/introgression for SPR not implemented yet");
     /* propose gene tree topologies using SPR */
     ratio = gtree_propose_spr(locus,gtree,stree);
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
