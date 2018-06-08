@@ -573,6 +573,8 @@ static FILE * init(stree_t ** ptr_stree,
   printf(" Done\n");
 
   phylip_close(fd);
+  if (opt_locus_count > msa_count)
+    fatal("Expected %ld loci but found only %ld", opt_locus_count, msa_count);
 
   /* set global variable with number of loci, if not set */
   if (!opt_locus_count)
