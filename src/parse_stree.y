@@ -1027,7 +1027,6 @@ stree_t * stree_wraptree(snode_t * root)
   
   unsigned int tip_index = 0;
   unsigned int inner_index = tip_count;
-//  unsigned int hybrid_index = inner_index + inner_cnt;
 
   /* fill tree->nodes in pre-order */
   fill_nodes_recursive(root, stree->nodes, &tip_index, &inner_index);
@@ -1047,10 +1046,10 @@ stree_t * stree_wraptree(snode_t * root)
     opt_network = 1;
 
   for (i = 0; i < tip_count + inner_cnt; ++i)
-    tree->nodes[i]->node_index = i;
+    stree->nodes[i]->node_index = i;
 
-  resolve_network(tree);
-  if (tree->hybrid_count)
+  resolve_network(stree);
+  if (stree->hybrid_count)
     opt_network = 1;
 
   /* reorder tip nodes if specified */
