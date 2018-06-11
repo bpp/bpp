@@ -372,8 +372,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   /* skip line containing header */
   getnextline(fp);
   assert(strlen(line) > 4);
-  fprintf(stdout, "          %s\n", line+4);
-  fprintf(fp_out, "          %s\n", line+4);
+  char * header = xstrdup(line);
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -413,12 +412,17 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   double * stdev = (double *)xmalloc((size_t)col_count * sizeof(double));
 
   long line_count = 0;
+  long bad_count = 0;
+  long lineno = 0;
+  long prevbad = 0;
 
   /* read data line by line and store in matrix */
   while (getnextline(fp))
   {
     double x;
     char * p = line;
+
+    ++lineno;
 
     /* skip sample number */
     count = get_long(p,&sample_num);
@@ -431,16 +435,49 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     for (i = 0; i < col_count; ++i)
     {
       count = get_double(p,&x);
-      if (!count) goto l_unwind;
+      if (!count)
+      {
+        if (prevbad || (line_count == 0))
+        {
+          if (line_count == 0)
+            fprintf(stderr,
+                    "ERROR: First record has mismatching number of columns\n");
+          else
+            fprintf(stderr,
+                    "ERROR: Found two consecutive records with mismatching "
+                    "number of columns (lines %ld and %ld)\n", lineno-1,lineno);
+          goto l_unwind;
+        }
+        else
+        {
+          fprintf(stderr,
+                  "WARNING: Found and ignored record with mismatching number "
+                  "of columns (line %ld)\n", lineno);
+          prevbad = 1;
+          assert(line_count > 0);
+          bad_count++;
+          break;
+        }
+      }
 
       p += count;
 
       matrix[i][line_count] = x;
     }
-
-    line_count++;
+    if (i == col_count)
+    {
+      line_count++;
+      prevbad = 0;
+    }
   }
   assert(line_count > 0);
+  if (bad_count)
+    fprintf(stderr, "Skipped a total of %ld erroneous records...\n", bad_count);
+
+  fprintf(stdout, "          %s\n", header+4);
+  fprintf(fp_out, "          %s\n", header+4);
+  free(header);
+
 
   /* compute means */
   fprintf(stdout, "mean    ");
