@@ -1045,13 +1045,6 @@ stree_t * stree_wraptree(snode_t * root)
   if (stree->hybrid_count)
     opt_network = 1;
 
-  for (i = 0; i < tip_count + inner_cnt; ++i)
-    stree->nodes[i]->node_index = i;
-
-  resolve_network(stree);
-  if (stree->hybrid_count)
-    opt_network = 1;
-
   /* reorder tip nodes if specified */
   if (opt_reorder)
     reorder(stree);
