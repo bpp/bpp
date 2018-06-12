@@ -497,7 +497,21 @@ static long parse_tauprior(const char * line)
 
   p += count;
 
-  if (is_emptyline(p)) ret = 1;
+  if (is_emptyline(p))
+  {
+    ret = 1;
+  }
+  else
+  {
+    /* now read third token if available */
+    double ignorevalue;
+    count = get_double(p, &ignorevalue);
+    if (!count) goto l_unwind;
+
+    p += count;
+    if (is_emptyline(p))
+      ret = 1;
+  }
   
 l_unwind:
   free(s);
