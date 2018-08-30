@@ -177,7 +177,9 @@ static int cb_cmp_double(const void * a, const void * b)
   double * x = (double *)a;
   double * y = (double *)b;
 
-  return *x > *y;
+  if ( *x > *y) return 1;
+  if ( *x < *y) return -1;
+  return 0;
 }
 
 static double eff_ict(double * y, long n, double mean, double stdev)
