@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
+[![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
 
 ## Introduction
 
@@ -14,7 +15,7 @@ of the BPP software. It should have the following properties:
 * SIMD implementations of time-consuming parts.
 * Linux, Mac and Microsoft Windows compatibility.
 
-BPP currently implements three methods:
+BPP currently implements four methods:
 
 * Estimation of the parameters of species divergence times and population sizes
   under the multi-species coalescent (MSC) model when the species phylogeny is
@@ -26,15 +27,11 @@ BPP currently implements three methods:
 * Species delimitation using a user-specified guide tree (Yang and Rannala,
   2010; Rannala and Yang, 2013)
 
+* Joint species delimitation and species tree estimation (Yang and Rannala 2014)
+
 BPP can also accommodate variable mutation rates among loci (Burgess and Yang,
 2008) and heredity multipliers (Hey and Nielsen, 2004).  Finally, BPP supports
 diploid data. Phasing is done analytically as described by Gronau et al, 2011.
-
-The fourth method (A11) which conducts joint species delimitation and species
-tree inference of unguided species delimitation (Yang and Rannala, 2014) is
-still not implemented in this version of BPP.  If you need to run A11 please
-use the older version available [here](http://abacus.gene.ucl.ac.uk/software.html).
-
 
 ## Compilation instructions
 
@@ -103,7 +100,16 @@ If you would like to resume a checkpoint file, please run:
 bpp --resume [CHECKPOINT-FILE]
 ```
 
-More documentation regarding control files, will be available soon on the [wiki](https://github.com/xflouris/bpp/wiki).
+More documentation regarding control files, will be available soon on the [wiki](https://github.com/bpp/bpp/wiki).
+
+## Citing BPP
+
+Please cite the following publication if you use BPP:
+
+Flouri T., Jiao X., Rannala B., Yang Z. (2018) Species Tree Inference with BPP using Genomic Sequences and the Multispecies Coalescent. Molecular Biology and Evolution (accepted manuscript).
+doi:[10.1093/molbev/msy147](https://doi.org/10.1093/molbev/msy147)
+
+Please note, citing the corresponding of the four underlying methods, may also be appropriate.
 
 ## License and third party licenses
 
@@ -157,7 +163,7 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 # Acknowledgements
 
-Special thanks to Yuttapong Thawornwattana for testing and bug reports.
+Special thanks to Yuttapong Thawornwattana and [Mario dos Reis Barros](http://www.sbcs.qmul.ac.uk/staff/mariodosreisbarros.html) for testing and bug reports.
 
 # References
 
@@ -165,6 +171,11 @@ Special thanks to Yuttapong Thawornwattana for testing and bug reports.
 **The Phylogenetic Likelihood Library.**
 *Systematic Biology*, 64(2):356-362.
 doi:[10.1093/sysbio/syu084](10.1093/sysbio/syu084)
+
+* Flouri T., Jiao X., Rannala B., Yang Z. (2018)
+**Species Tree Inference with BPP using Genomic Sequences and the Multispecies Coalescent.**
+*Molecular Biology and Evolution*, Accepted Manuscript.
+doi:[10.1093/molbev/msy147](https://doi.org/10.1093/molbev/msy147)
 
 * Yang Z., Rannala B. (2003)
 **Bayes Estimation of Species Divergence Times and Ancestral Population Sizes using DNA Sequences From Multiple Loci.**
