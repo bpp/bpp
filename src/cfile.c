@@ -1053,6 +1053,14 @@ void load_cfile()
                  line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"scaling",7))
+      {
+        if (!parse_long(value,&opt_scaling) ||
+            (opt_scaling != 0 && opt_scaling != 1))
+          fatal("Option 'scaling' expects value 0 or 1 (line %ld)",
+                line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 8)
     {

@@ -25,6 +25,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
 
 /* species tree spr move related */
@@ -1222,8 +1223,13 @@ static long propose_tau(locus_t ** loci,
             &partials_count);
 
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                      partials[j]->scaler_index);
+         }
 
          /* update partials */
          locus_update_partials(loci[i], partials, partials_count);
@@ -1321,8 +1327,13 @@ static long propose_tau(locus_t ** loci,
 
          /* revert CLV indices */
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)                                                    
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                      partials[j]->scaler_index);
+         }
 
          /* un-mark nodes */
          for (j = 0; j < k; ++j)
@@ -2329,8 +2340,13 @@ long stree_propose_spr(stree_t ** streeptr,
 
          /* point to the double-buffered partials space */
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree_list[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)                                                    
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree_list[i]->tip_count,
+                                                    partials[j]->scaler_index);
+         }
 
          /* update conditional probabilities (partials) of affected nodes */
          locus_update_partials(loci[i], partials, partials_count);

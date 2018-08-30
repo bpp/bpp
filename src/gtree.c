@@ -23,6 +23,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
 
 /* association of gene nodes to species populations. offset[i] is the 'nodes'
@@ -640,6 +641,7 @@ static int cb_trav_full(snode_t * x)
 static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 {
   int lineage_count = 0;
+  int scaler_index = 0;
   unsigned int i,j,k;
   unsigned int epoch_count;
   double t, tmax, sum;
@@ -858,7 +860,14 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       inner->left  = pop[j].nodes[k1];
       inner->right = pop[j].nodes[k2];
       inner->clv_index = clv_index;
-      inner->scaler_index = PLL_SCALE_BUFFER_NONE;
+
+      if (opt_scaling)
+      {
+        inner->scaler_index = scaler_index++;
+      }
+      else
+        inner->scaler_index = PLL_SCALE_BUFFER_NONE;
+
       inner->pmatrix_index = clv_index;
       inner->left->parent = inner;
       inner->right->parent = inner;
@@ -1442,6 +1451,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       /* swap clv index to compute partials in a new location. This is useful
          when the proposal gets rejected, as we only have swap clv indices */
       temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+      if (opt_scaling)
+        temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
     }
 
     /* update partials */
@@ -1484,6 +1495,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         temp = travbuffer[msa_index][j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
       
       /* now reset branch lengths and pmatrices */
@@ -1957,6 +1970,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
     }
     else
@@ -1981,6 +1996,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
 
       /* now fill the remaining traversal buffer with the root-path starting
@@ -1993,6 +2010,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
     }
 
@@ -2038,6 +2057,8 @@ static long propose_spr(locus_t * locus,
       {
         gnode_t * temp = travbuffer[msa_index][j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
       
       /* now reset branch lengths and pmatrices */
@@ -2221,8 +2242,13 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gnode_t ** gnodeptr = gtree[i]->nodes;
     for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    {
       gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                               gnodeptr[j]->clv_index);
+      if (opt_scaling)                                              
+        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                      gnodeptr[j]->scaler_index);
+    }
     locus_update_all_partials(locus[i],gtree[i]);
 
     /* update reference locus */
@@ -2230,8 +2256,13 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gnodeptr = gtree[ref]->nodes;
     for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+    {
       gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
                                               gnodeptr[j]->clv_index);
+      if (opt_scaling)
+        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+                                                      gnodeptr[j]->scaler_index);
+    }
     locus_update_all_partials(locus[ref],gtree[ref]);
 
     unsigned int param_indices[1] = {0};
@@ -2267,14 +2298,24 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       /* reset selected locus */
       gnodeptr = gtree[i]->nodes;
       for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+      {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                        gnodeptr[j]->scaler_index);
+      }
 
       /* reset reference locus */
       gnodeptr = gtree[ref]->nodes;
       for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+      {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+                                                        gnodeptr[j]->scaler_index);
+      }
       
       for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
         if (refnodes[j]->parent)

@@ -564,6 +564,7 @@ extern long opt_quiet;
 extern long opt_rjmcmc_method;
 extern long opt_samplefreq;
 extern long opt_samples;
+extern long opt_scaling;
 extern long opt_seed;
 extern long opt_usedata;
 extern long opt_version;

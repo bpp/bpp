@@ -862,6 +862,9 @@ static FILE * init(stree_t ** ptr_stree,
     double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
     unsigned int pmatrix_count = gtree[i]->edge_count;
 
+    unsigned int scale_buffers = opt_scaling ?
+                                   2*gtree[i]->inner_count : 0;
+
     /* if species tree inference or locusrate enabled, activate twice as many
        transition probability matrices */
     if (opt_est_stree || opt_est_locusrate || opt_est_heredity)
@@ -879,7 +882,7 @@ static FILE * init(stree_t ** ptr_stree,
                             rate_matrices,              /* subst matrices (1) */
                             pmatrix_count,              /* # prob matrices */
                             1,                          /* # rate categories */
-                            0,                          /* # scale buffers */
+                            scale_buffers,              /* # scale buffers */
                             (unsigned int)opt_arch);    /* attributes */
 
     /* set frequencies for model with index 0 */

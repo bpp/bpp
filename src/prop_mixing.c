@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
 static void all_partials_recursive(gnode_t * node,
                                    unsigned int * trav_size,
@@ -162,7 +163,13 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
-      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
+    {
+      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,
+                                              gt_nodes[j]->clv_index);
+      if (opt_scaling)
+        gt_nodes[j]->scaler_index = SWAP_SCALER_INDEX(gt->tip_count,
+                                                      gt_nodes[j]->scaler_index);
+    }
 
     locus_update_partials(locus[i],gt_nodes,k);
 
@@ -275,6 +282,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                gnodeptr[j]->scaler_index);
         gnodeptr[j]->time = gnodeptr[j]->old_time;
       }
 

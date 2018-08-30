@@ -461,6 +461,9 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   /* write number of prob matrices */
   DUMP(&(locus->prob_matrices),1,fp);
 
+  /* write number of prob matrices */
+  DUMP(&(locus->scale_buffers),1,fp);
+
   /* write attributes */
   DUMP(&(locus->attributes),1,fp);
 

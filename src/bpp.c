@@ -65,6 +65,7 @@ long opt_revolutionary_spr_debug;
 long opt_rjmcmc_method;
 long opt_samplefreq;
 long opt_samples;
+long opt_scaling;
 long opt_seed;
 long opt_usedata;
 long opt_version;
@@ -214,6 +215,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_method = -1;
   opt_samplefreq = 10;
   opt_samples = 0;
+  opt_scaling = 0;
   opt_seed = (long)time(NULL);
   opt_sp_seqcount = NULL;
   opt_streenewick = NULL;

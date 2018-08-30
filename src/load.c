@@ -923,6 +923,7 @@ static void load_locus(FILE * fp, long index)
   unsigned int rate_cats;
   unsigned int rate_matrices;
   unsigned int prob_matrices;
+  unsigned int scale_buffers;
   unsigned int attributes;
   size_t span;
 
@@ -947,6 +948,15 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&prob_matrices,1,fp))
     fatal("Cannot read number of rate matrices");
 
+  /* load number of scale buffers */
+  if (!LOAD(&scale_buffers,1,fp))
+    fatal("Cannot read number of rate matrices");
+
+  /* TODO: Store and load opt_scaling value instead */
+  if (scale_buffers)
+    opt_scaling = 1;
+
+
   /* load attributes */
   if (!LOAD(&attributes,1,fp))
     fatal("Cannot read attributes");
@@ -958,7 +968,7 @@ static void load_locus(FILE * fp, long index)
                               rate_matrices,
                               prob_matrices,
                               rate_cats,
-                              0,
+                              scale_buffers,
                               attributes);
   
   double frequencies[4] = {0.25, 0.25, 0.25, 0.25};

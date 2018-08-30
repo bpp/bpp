@@ -1079,8 +1079,6 @@ double locus_root_loglikelihood(locus_t * locus,
   scaler = (root->scaler_index == PLL_SCALE_BUFFER_NONE) ?
              NULL : locus->scale_buffer[root->scaler_index];
 
-  assert(scaler == NULL);
-
   if (locus->diploid)
   {
     pll_core_root_likelihood_vector(locus->states,
