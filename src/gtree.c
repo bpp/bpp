@@ -23,6 +23,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
 #define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
                           (p)->node_index : (p)->hybrid->node_index)) - \
@@ -48,6 +49,11 @@ static hashtable_t * mht;
 static double * sortbuffer = NULL;
 
 static gnode_t *** travbuffer = NULL;
+
+gnode_t * dbg_msci_y = NULL;
+gnode_t * dbg_msci_a = NULL;
+gnode_t * dbg_msci_s = NULL;
+gnode_t * dbg_msci_t = NULL;
 
 #if 0
 
@@ -252,6 +258,8 @@ void gtree_destroy(gtree_t * tree,
 
     if (node->label)
       free(node->label);
+    if (node->hpath)
+      free(node->hpath);
 
     free(node);
   }
@@ -618,11 +626,6 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
       }
     assert(hnodes_count == hpop_seqcount);
 
-    #if 0
-    printf("\n[Debug] Assigning %d lineages to hybrid and %d to mirror\n",
-           hnodes_count, mnodes_count);
-    #endif
-
     /* update the population corresponding to the hybridization node */
     free(hpop->nodes);
     free(hpop->seq_indices);
@@ -639,6 +642,7 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
     /* we increase by two because on the next iteration in gtree_simulate, count
        will be decreased and as such we will have +1 new items (this node) */
     *count = *count + 2; 
+    free(temp);
     return;
   }
 
@@ -887,7 +891,8 @@ static void epoch_reorder(snode_t ** epoch,
     assert(!node_is_mirror(hnode));
 
     /* make sure parents are after hybridization event */
-    if (!epoch[hindex]->parent->htau)
+    if (!epoch[hindex]->parent->htau ||
+        epoch[hindex]->parent->tau == epoch[hindex]->tau)
     {
       for (i = 0; i < hindex; ++i)
       {
@@ -900,7 +905,8 @@ static void epoch_reorder(snode_t ** epoch,
       }
     }
 
-    if (!epoch[hindex]->hybrid->parent->htau)
+    if (!epoch[hindex]->hybrid->parent->htau ||
+        epoch[hindex]->hybrid->parent->tau == epoch[hindex]->tau)
     {
       for (i = 0; i < hindex; ++i)
       {
@@ -941,6 +947,7 @@ static void epoch_reorder(snode_t ** epoch,
 static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 {
   int lineage_count = 0;
+  int scaler_index = 0;
   unsigned int i,j,k;
   unsigned int epoch_count;
   double t, tmax, sum;
@@ -1151,6 +1158,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       /* generate random waiting time from exponential distribution */
       t += legacy_rndexp(1/sum);
 
+      
       /* if the generated time is larger than the current epoch, and we are not
          yet at the root of the species tree, then break and, subsequently, 
          merge the lineages of the two populations into the current epoch */
@@ -1203,7 +1211,12 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       inner->left  = pop[j].nodes[k1];
       inner->right = pop[j].nodes[k2];
       inner->clv_index = clv_index;
-      inner->scaler_index = PLL_SCALE_BUFFER_NONE;
+
+      if (opt_scaling)
+        inner->scaler_index = scaler_index++;
+      else
+        inner->scaler_index = PLL_SCALE_BUFFER_NONE;
+
       inner->pmatrix_index = clv_index;
       inner->left->parent = inner;
       inner->right->parent = inner;
@@ -1217,17 +1230,6 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         inner->hpath = (int*)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
         for (i = 0; i < stree->hybrid_count; ++i)
           inner->hpath[i] = BPP_HPATH_NONE;
-
-        if (pop[j].snode->hybrid)
-        {
-          assert(node_is_hybridization(pop[j].snode));
-
-          unsigned int hindex = GET_HINDEX(stree,pop[j].snode);
-          assert(hindex >= 0 && hindex < stree->hybrid_count);
-
-          inner->hpath[hindex] = node_is_mirror(pop[j].snode) ?
-                                   BPP_HPATH_RIGHT : BPP_HPATH_LEFT;
-        }
       }
 
       pop[j].snode->event_count[msa_index]++;
@@ -1276,6 +1278,32 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   /* wrap the generated tree structure (made up of linked nodes) into gtree_t */
   gtree_t * gtree = gtree_wraptree(inner, (unsigned int)(msa->count));
+
+  /* set path flags for gene tree root lineage if root coalesces before root
+     population */
+  if (opt_network)
+  {
+    snode_t * father = gtree->root->pop->parent;
+    while (father)
+    {
+      if (father->hybrid)
+      {
+        assert(node_is_hybridization(father));
+
+        unsigned int hindex = GET_HINDEX(stree, father);
+        assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+        if (legacy_rndu() <= father->hgamma)
+           gtree->root->hpath[hindex] = BPP_HPATH_LEFT;
+        else
+        {
+          gtree->root->hpath[hindex] = BPP_HPATH_RIGHT;
+          father = father->hybrid;
+        }        
+      }
+      father = father->parent;
+    }
+  }
 
   /* create a newick string from constructed gene tree and print it on screen */
   if (opt_debug)
@@ -1585,6 +1613,9 @@ double gtree_update_logprob_contrib(snode_t * snode,
       T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
     }
 
+    if (opt_network && snode->hybrid)
+      logpr += snode->seqin_count[msa_index] * log(snode->hgamma);
+
     /* now distinguish between estimating theta and analytical computation */
     if (opt_est_theta)
     {
@@ -1639,7 +1670,7 @@ double gtree_logprob(stree_t * stree, double heredity, long msa_index)
 
   double logpr = 0;
 
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
     logpr += gtree_update_logprob_contrib(stree->nodes[i],heredity,msa_index);
 
   return logpr;
@@ -1680,6 +1711,12 @@ double reflect(double t, double minage, double maxage)
     t = side ? maxage-excess : minage+excess;
   }
 
+  /* for numerical stability */
+  if (t == minage)
+    t += (maxage-minage)*1e-6;
+  else if (t == maxage)
+    t -= (maxage-minage)*1e-6;
+
   return t;
 }
 
@@ -1698,217 +1735,495 @@ void unlink_event(gnode_t * node, int msa_index)
     node->pop->event[msa_index]->tail = node->event->prev;
 }
 
-/* updates the incoming number of lineages to populations and path flags
-   when age has changed to an older one (i.e. proposing an older node age,
-   or when rejecting a proposed age that is younger than the old age */
-static void network_age_update_upwards(stree_t * stree,
-                                       snode_t * oldpop,
-                                       gnode_t * node,
-                                       int msa_index)
+static void interchange_flags(stree_t * stree,
+                              gnode_t * a,
+                              gnode_t * b,
+                              double tbnew,
+                              double tbold,
+                              snode_t * old_b_pop)
+{
+  snode_t * start;
+  snode_t * end;
+  snode_t * pop;
+
+  if (old_b_pop == b->pop) return;
+
+  if (tbnew < tbold)
+  {
+    /* old_b_pop *must* be an ancestor of b->pop */
+    assert(stree->pptable[b->pop->node_index][old_b_pop->node_index]);
+
+    start = b->pop;
+    end = old_b_pop;
+
+    pop = start;
+    while (1)
+    {
+      pop = pop->parent;
+      if (pop->hybrid)
+      {
+        assert(!node_is_bidirection(pop));
+        assert(!node_is_mirror(pop));
+
+        unsigned int hindex = GET_HINDEX(stree,pop);
+        assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+        assert(a->hpath[hindex] != BPP_HPATH_NONE);
+        assert(b->hpath[hindex] == BPP_HPATH_NONE);
+
+        if (a->hpath[hindex] == BPP_HPATH_RIGHT)
+          pop = pop->hybrid;
+
+        b->hpath[hindex] = a->hpath[hindex];
+        a->hpath[hindex] = BPP_HPATH_NONE;
+      }
+      if (pop == end) break;
+    }
+  }
+  else
+  {
+    /* old_b_pop *must* be an ancestor of b->pop */
+    assert(stree->pptable[old_b_pop->node_index][b->pop->node_index]);
+
+    start = old_b_pop;
+    end = b->pop;
+
+    pop = start;
+    while (1)
+    {
+      pop = pop->parent;
+      if (pop->hybrid)
+      {
+        assert(!node_is_bidirection(pop));
+        assert(!node_is_mirror(pop));
+
+        unsigned int hindex = GET_HINDEX(stree,pop);
+        assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+        assert(b->hpath[hindex] != BPP_HPATH_NONE);
+        assert(a->hpath[hindex] == BPP_HPATH_NONE);
+
+        if (b->hpath[hindex] == BPP_HPATH_RIGHT)
+          pop = pop->hybrid;
+
+        a->hpath[hindex] = b->hpath[hindex];
+        b->hpath[hindex] = BPP_HPATH_NONE;
+      }
+      if (pop == end) break;
+    }
+
+  }
+}
+
+
+static void split_flags(stree_t * stree, gnode_t * a)
+{
+  long i;
+  gnode_t * b     = a->parent;
+  gnode_t * c     = b->parent;
+  snode_t * start = b->pop;
+  snode_t * end   = c ? c->pop : stree->root;
+  snode_t * pop;
+
+  /* splits the flags of a long branch a-c when b is placed in between:
+
+     *  c              *  c
+      \                 \
+       \                 \
+        \        ->       *  b
+         \                 \
+          \                 \
+           * a               *  a
+
+     IMPORTANT: The function expects that we already have edge a-b and b-c (b is
+     already inserted)
+
+     IMPORTANT: cleans flags for b beforehand
+  */
+
+  /* reset flags for edge b-c */
+  for (i = 0; i < stree->hybrid_count; ++i)
+    b->hpath[i] = BPP_HPATH_NONE;
+
+  if (start == end) return;
+
+  pop = start;
+  while (1)
+  {
+    pop = pop->parent;
+    if (pop->hybrid)
+    {
+      assert(!node_is_bidirection(pop));
+      assert(!node_is_mirror(pop));
+
+      unsigned hindex = GET_HINDEX(stree,pop);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      assert(a->hpath[hindex] != BPP_HPATH_NONE);
+
+      if (a->hpath[hindex] == BPP_HPATH_RIGHT)
+        pop = pop->hybrid;
+
+      b->hpath[hindex] = a->hpath[hindex];
+      a->hpath[hindex] = BPP_HPATH_NONE;
+    }
+    if (pop == end) break;
+  }
+}
+
+static void join_flags(stree_t * stree, gnode_t * a, int * bpath, snode_t * old_b_pop)
+{
+  gnode_t * c     = a->parent;
+  snode_t * start = old_b_pop;
+  snode_t * end   = c ? c->pop : stree->root;
+  snode_t * pop;
+
+  /* joins the flags of two branches a-b and b-c when b is pruned:
+
+     *  c              *  c
+      \                 \
+       \                 \
+        * b      ->       \
+         \                 \
+          \                 \
+           * a               *  a
+
+     IMPORTANT: The function expects that we already have an edge a-c (b is
+     already pruned off). The flags and populations of b from when b-c used
+     to be an edge are given as bpath and old_b_pop.
+  */
+
+  if (start == end) return;
+
+  assert(stree->pptable[start->node_index][end->node_index]);
+
+  pop = start;
+  while (1)
+  {
+    pop = pop->parent;
+    if (pop->hybrid)
+    {
+      assert(!node_is_bidirection(pop));
+      assert(!node_is_mirror(pop));
+
+      unsigned int hindex = GET_HINDEX(stree,pop);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      assert(bpath[hindex] != BPP_HPATH_NONE);
+
+      if (bpath[hindex] == BPP_HPATH_RIGHT)
+        pop = pop->hybrid;
+
+      a->hpath[hindex] = bpath[hindex];
+    }
+    if (pop == end) break;
+  }
+}
+
+/* sample flags from pop(x) (exclusive) to pop(parent->x) (exclusive), ie
+   sample flags for one branch with two ends fixed in the populations */
+static double sample_hpath(stree_t * stree, gnode_t * x)
+{
+  long i;
+  unsigned int hindex;
+  snode_t * pop;
+  snode_t * start = x->pop;
+  snode_t * end   = x->parent ? x->parent->pop : stree->root;
+  double contrib = 0;
+
+
+
+  if (start == end) 
+  {
+    for (i = 0; i < stree->hybrid_count; ++i)
+      x->hpath[i] = BPP_HPATH_NONE;
+    return contrib;
+  }
+
+  int * visited = (int *)xcalloc((size_t)stree->hybrid_count,sizeof(int));
+
+  assert(start->parent);
+
+  /* sample flags for populations in between (excluding the two end points ) */
+  //for (pop = start->parent; pop != end; pop = pop->parent)
+  pop = start;
+  while (1)
+  {
+    assert(pop);
+    pop = pop->parent;
+    if (pop->hybrid)
+    {
+      assert(!node_is_bidirection(pop));
+      assert(!node_is_mirror(pop));
+
+      hindex = GET_HINDEX(stree,pop);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      visited[hindex] = 1;
+
+      if (stree->pptable[pop->node_index][end->node_index] &&
+          stree->pptable[pop->hybrid->node_index][end->node_index])
+      {
+        if (legacy_rndu() <= pop->hgamma)
+        {
+          x->hpath[hindex] = BPP_HPATH_LEFT;
+          contrib += log(pop->hgamma);
+        }
+        else
+        {
+          x->hpath[hindex] = BPP_HPATH_RIGHT;
+          pop = pop->hybrid;
+          contrib += log(pop->hgamma);
+        }
+      }
+      else
+      {
+        assert(stree->pptable[pop->node_index][end->node_index] ||
+               stree->pptable[pop->hybrid->node_index][end->node_index]);
+
+        if (stree->pptable[pop->node_index][end->node_index])
+          x->hpath[hindex] = BPP_HPATH_LEFT;
+        else
+        {
+          x->hpath[hindex] = BPP_HPATH_RIGHT;
+          pop = pop->hybrid;
+        }
+      }
+    }
+    if (pop == end) break;
+  }
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+    if (!visited[i])
+      x->hpath[i] = BPP_HPATH_NONE;
+  free(visited);
+
+  return contrib;
+}
+
+static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath)
 {
   unsigned int hindex;
   snode_t * pop;
+  snode_t * start = x->pop;
+  snode_t * end   = x->parent ? x->parent->pop : stree->root;
+  double contrib = 0;
 
-  if (oldpop->hybrid && oldpop != node->pop)
+  if (start == end) return contrib;
+
+  assert(start->parent);
+
+  /* sample flags for populations in between (excluding the two end points ) */
+  for (pop = start->parent; pop != end; pop = pop->parent)
   {
-    assert(!node_is_bidirection(oldpop));
-
-    /* get index of hybridization event */
-    hindex = GET_HINDEX(stree,oldpop);
-    assert(hindex >= 0 && hindex < stree->hybrid_count);
-    
-    /* we do not need to update children path flags as they already
-       contain the correct information */
-    assert((node->left->hpath[hindex] == node->right->hpath[hindex]) &&
-           (node->left->hpath[hindex] == node->hpath[hindex]));
-
-    /* update node flag */
-    node->hpath[hindex] = BPP_HPATH_NONE;
-  }
-
-  pop = oldpop;
-  while (pop != node->pop)
-  {
-    snode_t * father = pop->parent;
-    assert(father);
-
-    if (father->hybrid)
+    assert(pop);
+    if (pop->hybrid)
     {
-      assert(!node_is_bidirection(father));
-      assert(!node_is_mirror(father));
-      
-      /* change path flags */
-      hindex = GET_HINDEX(stree,father);
+      assert(!node_is_bidirection(pop));
+      assert(!node_is_mirror(pop));
+
+      hindex = GET_HINDEX(stree,pop);
       assert(hindex >= 0 && hindex < stree->hybrid_count);
 
-      /* update flags for children */
-      node->left->hpath[hindex]  = node->hpath[hindex];
-      node->right->hpath[hindex] = node->hpath[hindex];
+      if (stree->pptable[pop->node_index][end->node_index] &&
+          stree->pptable[pop->hybrid->node_index][end->node_index])
+      {
+        if (old_hpath[hindex] == BPP_HPATH_LEFT)
+        {
+          contrib += log(pop->hgamma);
+        }
+        else
+        {
+          pop = pop->hybrid;
+          contrib += log(pop->hgamma);
+        }
+      }
+      else
+      {
+        assert(stree->pptable[pop->node_index][end->node_index] ||
+               stree->pptable[pop->hybrid->node_index][end->node_index]);
+
+        if (stree->pptable[pop->node_index][end->node_index])
+        {
+          //assert(old_hpath[hindex] == BPP_HPATH_LEFT);
+        }
+        else
+        {
+          //assert(old_hpath[hindex] == BPP_HPATH_RIGHT);
+          pop = pop->hybrid;
+        }
+      }
+    }
+    if (pop == end) break;
+  }
+  return contrib;
+
+}
+
+static void decrease_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_index)
+{
+  unsigned int hindex;
+  unsigned int leaves_count = x->leaves;
+  snode_t * start = x->pop;
+  snode_t * end = stree->root;
+
+  if (start == end) return;
+  
+  while (start != end)
+  {
+    /* skip all ancestral gene nodes in population 'start' */
+    while (x->parent && x->parent->pop == start)
+    {
+      x = x->parent;
+    }
+
+    /* move to ancestral population */
+    start = start->parent;
+
+    if (start->hybrid)
+    {
+      assert(!node_is_bidirection(start));
+      assert(!node_is_mirror(start));
+
+      /* move according to path flags */
+      hindex = GET_HINDEX(stree,start);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
 
       /* find correct parent node according to hpath flag */
-      assert(node->hpath[hindex] != BPP_HPATH_NONE);
-      if (node->hpath[hindex] == BPP_HPATH_LEFT)
-        father = father->left ? father : father->hybrid;
-      else
-        father = father->left ? father->hybrid : father;
-
-      /* TODO: The above can be simplified since our data structure
-         assumes that father is the LEFT hybridization node, as the
-         RIGHT hybridization has no children */
-
-      /* reset path flag for node except if it is part of father */
-      if (father != node->pop)
-        node->hpath[hindex] = BPP_HPATH_NONE;
+      assert(x->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
     }
-    father->seqin_count[msa_index]++;
 
-    pop = father;
+    start->gene_leaves[msa_index] -= leaves_count;
   }
 }
 
-/* updates the incoming number of lineages to populations and path flags
-   when age has changed to a younger one (i.e. proposing a younger node age,
-   or when rejecting a proposed age that is older than the old age */
-static void network_age_update_downwards(stree_t * stree,
-                                         snode_t * oldpop,
-                                         gnode_t * node,
-                                         int msa_index)
+static void increase_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_index)
 {
   unsigned int hindex;
-  snode_t * pop = node->pop;
+  unsigned int leaves_count = x->leaves;
+  snode_t * start = x->pop;
+  snode_t * end = stree->root;
 
-  if (pop->hybrid && pop != oldpop)
+  if (start == end) return;
+
+  while (start != end)
   {
-    assert(!node_is_bidirection(pop));
-
-    /* get index of hybridization event */
-    hindex = GET_HINDEX(stree,pop);
-    assert(hindex >= 0 && hindex < stree->hybrid_count);
-
-    assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
-    node->hpath[hindex] = node->left->hpath[hindex];
-
-    /* we must not reset the children node path flags as they contain
-       the correct information */
-  }
-
-  while (pop != oldpop)
-  {
-    snode_t * father = pop->parent;
-    assert(father);
-
-    if (father->hybrid)
+    /* skip all ancestral gene nodes in population 'start' */
+    while (x->parent && x->parent->pop == start)
     {
-      assert(!node_is_bidirection(father));
-      assert(!node_is_mirror(father));
+      x = x->parent;
+    }
 
-      /* change path flags */
-      hindex = GET_HINDEX(stree,father);
+    /* move to ancestral population */
+    start = start->parent;
+    if (start->hybrid)
+    {
+      assert(!node_is_bidirection(start));
+      assert(!node_is_mirror(start));
+
+      /* move according to path flags */
+      hindex = GET_HINDEX(stree,start);
       assert(hindex >= 0 && hindex < stree->hybrid_count);
 
-      assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
-
-      if ((father == oldpop) || (father->hybrid == oldpop))
-        assert(node->hpath[hindex] != BPP_HPATH_NONE);
-      else
-        assert(node->hpath[hindex] == BPP_HPATH_NONE);
-
-      if ((father != oldpop) && (father->hybrid != oldpop))
-        node->hpath[hindex] = node->left->hpath[hindex];
-      else
-        assert(node->hpath[hindex] == node->left->hpath[hindex]);
-
-      if (node->hpath[hindex] == BPP_HPATH_LEFT)
-        father = father->left ? father : father->hybrid;
-      else
-        father = father->left ? father->hybrid : father;
-      /* TODO: The above can be simplified since our data structure
-         assumes that father is the LEFT hybridization node, as the
-         RIGHT hybridization has no children */
-
-      /* change children */
-      node->left->hpath[hindex]  = BPP_HPATH_NONE;
-      node->right->hpath[hindex] = BPP_HPATH_NONE;
+      /* find correct parent node according to hpath flag */
+      assert(x->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
     }
-    father->seqin_count[msa_index]--;
 
-    pop = father;
+    start->gene_leaves[msa_index] += leaves_count;
   }
 }
 
-/* find ancestral population of two gene tree nodes */
+/* decreases seqin_count from pop(x) (exclusive) to pop(parent->x) (inclusive)
+   unless pop(x) == pop(parent->x), for the species locus index */
+static void decrease_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
+{
+  unsigned int hindex;
+  snode_t * start = x->pop;
+  snode_t * end   = x->parent ? x->parent->pop : stree->root;
+
+  if (start == end) return;
+
+  while (start != end)
+  {
+    start = start->parent;
+
+    if (start->hybrid)
+    {
+      assert(!node_is_bidirection(start));
+      assert(!node_is_mirror(start));
+      
+      /* move according to path flags */
+      hindex = GET_HINDEX(stree,start);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      /* find correct parent node according to hpath flag */
+      assert(x->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
+    }
+
+    start->seqin_count[msa_index]--;
+  }
+}
+
+/* increases seqin_count from pop(x) (exclusive) to pop(parent->x) (inclusive)
+   unless pop(x) == pop(parent->x), for the species locus index */
+static void increase_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
+{
+  unsigned int hindex;
+  snode_t * start = x->pop;
+  snode_t * end   = x->parent ? x->parent->pop : stree->root;
+
+  if (start == end) return;
+
+  while (start != end)
+  {
+    start = start->parent;
+
+    if (start->hybrid)
+    {
+      assert(!node_is_bidirection(start));
+      assert(!node_is_mirror(start));
+      
+      /* move according to path flags */
+      hindex = GET_HINDEX(stree,start);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      assert(x->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
+    }
+
+    start->seqin_count[msa_index]++;
+  }
+}
+
 static snode_t * network_mrca_population(stree_t * stree, gnode_t * left, gnode_t * right)
 {
+  long i;
+  snode_t * mrca = stree->root;
+
   /* use pop-pop table to find mrca of the two child populations */
-  snode_t * mrca = left->pop;
 
-  if (left->pop == right->pop) return mrca;
+  if (left->pop == right->pop) return left->pop;
 
-  snode_t * lpop = NULL;
-  snode_t * rpop = NULL;
-  snode_t * father = NULL;
-  unsigned int hindex;
-
-  lpop = left->pop;
-  while (lpop)
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
-    rpop = right->pop;
-    while (rpop)
+    if (stree->pptable[left->pop->node_index][i] && 
+        stree->pptable[right->pop->node_index][i] &&
+        stree->nodes[i]->tau < mrca->tau)
     {
-      father = rpop->parent;
-      if (father && father->hybrid)
-      {
-        assert(!node_is_bidirection(father));
-        assert(!node_is_mirror(father));
-
-        hindex = GET_HINDEX(stree,father);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
-
-        if (right->hpath[hindex] == BPP_HPATH_NONE)
-          break;
-
-        if (right->hpath[hindex] == BPP_HPATH_LEFT)
-          father = father->left ? father : father->hybrid;
-        else
-          father = father->left ? father->hybrid : father;
-
-        /* TODO: The above can be simplified since our data structure
-           assumes that father is the LEFT hybridization node, as the
-           RIGHT hybridization has no children */
-      }
-
-      if (lpop == rpop) break;
-
-      rpop = father;
+      mrca = stree->nodes[i];
     }
-
-    if (lpop == rpop) break;
-
-    father = lpop->parent;
-
-    if (father && father->hybrid)
-    {
-      assert(!node_is_bidirection(father));
-      assert(!node_is_mirror(father));
-
-      hindex = GET_HINDEX(stree,father);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
-
-      assert(left->hpath[hindex] != BPP_HPATH_NONE);
-
-      if (left->hpath[hindex] == BPP_HPATH_LEFT)
-        father = father->left ? father : father->hybrid;
-      else
-        father = father->left ? father->hybrid : father;
-
-      /* TODO: The above can be simplified since our data structure
-         assumes that father is the LEFT hybridization node, as the
-         RIGHT hybridization has no children */
-    }
-    lpop = father;
   }
-  assert((rpop == lpop) && (rpop != NULL));
-  mrca = lpop;
 
   return mrca;
 }
@@ -1925,6 +2240,14 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   snode_t * pop;
   snode_t * oldpop;
 
+  int * old_hpath_x = NULL;
+  int * old_hpath_c1 = NULL;
+  int * old_hpath_c2 = NULL;
+  double hgamma_contrib = 0;
+  double hgamma_contrib_reverse = 0;
+  double hpop_contrib = 0;
+  double hpop_contrib_reverse = 0;
+
   stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   /* TODO: Instead of traversing the gene tree nodes this way, traverse the
@@ -1936,6 +2259,21 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   {
     gnode_t * node = gtree->nodes[i];
 
+    if (opt_network)
+    {
+      /* store sum of incoming lineages and coalescent events for detecting
+         for which populations we need to recompute the MSC density */
+      for (j = 0; j < stree_total_nodes; ++j)
+      {
+        stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
+                              stree->nodes[j]->seqin_count[msa_index];
+      }
+      hgamma_contrib = 0;
+      hgamma_contrib_reverse = 0;
+      hpop_contrib = 0;
+      hpop_contrib_reverse = 0;
+    }
+
     /* constraint min bound of proposed age by maximum age between children */
     minage = MAX(node->left->time,node->right->time);
 
@@ -1946,42 +2284,6 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       snode_t * mrca = network_mrca_population(stree, node->left, node->right);
 
       minage = MAX(minage,mrca->tau);
-
-      /* find oldest hybridization event through which the two lineages pass but
-         differ in the path (flag) they take */
-      snode_t * hnode = NULL;
-      unsigned int hoffset = stree->tip_count + stree->inner_count;
-
-      for (j = 0; j < stree->hybrid_count; ++j)
-        if (node->left->hpath[j]  != BPP_HPATH_NONE &&
-            node->right->hpath[j] != BPP_HPATH_NONE &&
-            (node->left->hpath[j] != node->right->hpath[j]) &&
-            (!hnode || (stree->nodes[hoffset+j]->tau > hnode->tau)))
-          hnode = stree->nodes[hoffset+j];
-
-      /* if such node H was found, find the mrca of H_left and H_right */
-      if (hnode)
-      {
-        assert(hnode->hybrid);
-
-        /* TODO: Improvement - no need to go through all nodes */
-        mrca = stree->root;
-        for (j = 0; j < stree_total_nodes; ++j)
-          if (stree->pptable[hnode->node_index][j] &&
-              stree->pptable[hnode->hybrid->node_index][j] &&
-              stree->nodes[j]->tau < mrca->tau)
-            mrca = stree->nodes[j];
-
-        /* Depending on node order, the above loop may not necessarily find the
-           mRCA, but rather a more distant common ancestor when the mRCA is a
-           hybridization event with its two parents having the same age as
-           itself (lateral gene transfer). However this does not affect the
-           method as what we are interested in is the tau of the mRCA which, in
-           that case, is identical among the three nodes. */
-      }
-
-      if (mrca)
-        minage = MAX(minage,mrca->tau);
     }
     else        /* not a network */
     {
@@ -2013,49 +2315,95 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     tnew = node->time + opt_finetune_gtage * legacy_rnd_symmetrical();
     tnew = reflect(tnew, minage, maxage);
 
+    assert(tnew != 0);
+
+
     /* find the first ancestral pop with age higher than the proposed tnew */
     /* TODO: Improvement: probably this can start from lpop/rpop (LCA of
         populations of two daughter nodes) */
     if (opt_network)
     {
-      /* we will use the path flags of tmp to guide us through hybridizations */
-      gnode_t * tmp = NULL;
-      if (tnew > node->time)
+      /* allocate temporary storage */
+      long cand_count = 0;
+      snode_t ** candidates = (snode_t **)xmalloc((size_t)stree_total_nodes *
+                                                  sizeof(snode_t *));
+      snode_t * lpop = node->left->pop;
+      snode_t * rpop = node->right->pop;
+
+      /* find all feasible populations compatible with the new age */
+      for (j = 0; j < stree_total_nodes; ++j)
       {
-        pop = node->pop;
-        tmp = node;
-      }
-      else
-      {
-        /* TODO: Improvement - start from the MRCA instead of node->left->pop */
-        pop = node->left->pop;
-        tmp = node->left;
-      }
-      
-      while (pop->parent)
-      {
-        if (pop->hybrid)
+        snode_t * x = stree->nodes[j];
+        if (stree->pptable[lpop->node_index][x->node_index] &&
+            stree->pptable[rpop->node_index][x->node_index] &&
+            (x->tau <= tnew) &&
+            (!x->parent || x->parent->tau > tnew))
         {
-          assert(!node_is_bidirection(pop));
+          if (node->parent &&
+              (!stree->pptable[x->node_index][node->parent->pop->node_index]))
+            continue;
 
-          unsigned int hindex = GET_HINDEX(stree,pop);
-          assert(hindex >= 0 && hindex < stree->hybrid_count);
-          assert(tmp->hpath[hindex] != BPP_HPATH_NONE);
-
-          if (tmp->hpath[hindex] == BPP_HPATH_LEFT)
-            pop = pop->left ? pop : pop->hybrid;
-          else
-            pop = pop->left ? pop->hybrid : pop;
+          candidates[cand_count++] = x;
         }
-        if (pop->parent->tau > tnew) break;
-        pop = pop->parent;
       }
+      assert(cand_count > 0);
+      
+      /* randomly select one such population */
+      j = (int)(cand_count*legacy_rndu());
+      assert(j < cand_count);
+      pop = candidates[j];
+
+      /* compute the denominator for the hasting's correction */ 
+      hpop_contrib = log(1.0 / cand_count);
+
+      /* now compute the numberator for hasting's correction */
+      cand_count = 0;
+      for (j = 0; j < stree_total_nodes; ++j)
+      {
+        snode_t * x = stree->nodes[j];
+        if (stree->pptable[lpop->node_index][x->node_index] &&
+            stree->pptable[rpop->node_index][x->node_index] &&
+            (x->tau <= node->time) &&
+            (!x->parent || x->parent->tau > node->time))
+        {
+          if (node->parent &&
+              (!stree->pptable[x->node_index][node->parent->pop->node_index]))
+            continue;
+
+          cand_count++;
+        }
+      }
+
+      hpop_contrib_reverse = log(1.0 / cand_count);
+
+      free(candidates);
     }
     else
     {   /* not a network */
       for (pop = node->left->pop; pop->parent; pop = pop->parent)
         if (pop->parent->tau > tnew)
           break;
+    }
+
+    if (opt_network)
+    {
+      /* Save old flags for the three nodes, to be used for rollback */
+      old_hpath_x  = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+      old_hpath_c1 = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+      old_hpath_c2 = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+
+      memcpy(old_hpath_x,  node->hpath, stree->hybrid_count*sizeof(int));
+      memcpy(old_hpath_c1, node->left->hpath, stree->hybrid_count*sizeof(int));
+      memcpy(old_hpath_c2, node->right->hpath, stree->hybrid_count*sizeof(int));
+
+      /* Subtract seqin_count (nin) for the three branches */
+      decrease_seqin_count(stree,node->left,msa_index);
+      decrease_seqin_count(stree,node->right,msa_index);
+      decrease_seqin_count(stree,node,msa_index);
+      
+      /* Subtract pop sizes */
+      decrease_gene_leaves_count(stree,node->left,msa_index);
+      decrease_gene_leaves_count(stree,node->right,msa_index);
     }
 
     /* save old age and old ancestral population */
@@ -2094,11 +2442,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         /* increase the number of incoming lineages to all populations in the
            path from old population (excluding) to the new population */
-        if (opt_network)
-        {
-          network_age_update_upwards(stree,oldpop,node,msa_index);
-        }
-        else
+        if (!opt_network)
         {
           for (pop = oldpop; pop != node->pop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]++;
@@ -2108,16 +2452,40 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         /* decrease the number of incoming lineages to all populations in the
            path from new population (excluding) to the old population */
-        if (opt_network)
-        {
-          network_age_update_downwards(stree,oldpop,node,msa_index);
-        }
-        else
+        if (!opt_network)
         {
           for (pop = node->pop; pop != oldpop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]--;
         }
       }
+    }
+
+    if (opt_network)
+    {
+      /* reset and sample new flags */
+      hgamma_contrib += sample_hpath(stree,node);
+      hgamma_contrib += sample_hpath(stree,node->left);
+      hgamma_contrib += sample_hpath(stree,node->right);
+
+      snode_t * newpop = node->pop;
+      node->pop = oldpop;
+
+      hgamma_contrib_reverse += sample_hpath_reverse(stree,node,old_hpath_x);
+      hgamma_contrib_reverse += sample_hpath_reverse(stree,node->left,old_hpath_c1);
+      hgamma_contrib_reverse += sample_hpath_reverse(stree,node->right,old_hpath_c2);
+
+      node->pop = newpop;
+
+      /* increase seqin_count (nin) for the three branches */
+      increase_seqin_count(stree,node->left,msa_index);
+      increase_seqin_count(stree,node->right,msa_index);
+      increase_seqin_count(stree,node,msa_index);
+
+      /* append pop sizes */
+      increase_gene_leaves_count(stree,node->left,msa_index);
+      increase_gene_leaves_count(stree,node->right,msa_index);
+
+      node->pop->hx = -1;
     }
 
     /* quick recomputation  of logpr */
@@ -2136,14 +2504,41 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
     if (oldpop == node->pop)
     {
-      if (opt_est_theta)
-        logpr -= node->pop->logpr_contrib[msa_index];
-      else
-        logpr -= node->pop->notheta_logpr_contrib;
+      /*TODO: BUG: separate to network and non-network case */
+      if (!opt_network)
+      {
+        if (opt_est_theta)
+          logpr -= node->pop->logpr_contrib[msa_index];
+        else
+          logpr -= node->pop->notheta_logpr_contrib;
 
-      logpr += gtree_update_logprob_contrib(node->pop,
-                                            locus->heredity[0],
-                                            msa_index);
+        logpr += gtree_update_logprob_contrib(node->pop,
+                                              locus->heredity[0],
+                                              msa_index);
+      }
+      else
+      {
+        for (j = 0; j < stree_total_nodes; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+          }
+        }
+      }
     }
     else
     {
@@ -2163,38 +2558,24 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
       if (opt_network)
       {
-        pop = start;
-        while (pop != end)
+        for (j = 0; j < stree_total_nodes; ++j)
         {
-          if (opt_est_theta)
-            logpr -= pop->logpr_contrib[msa_index];
-          else
-            logpr -= pop->notheta_logpr_contrib;
-
-          logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
-
-          pop = pop->parent;
-          if (pop != end && pop->hybrid)
+          snode_t * x = stree->nodes[j];
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
           {
-            /* we must choose the correct direction */
-            assert(!node_is_mirror(pop));
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
 
-            unsigned int hindex = GET_HINDEX(stree,pop);
-            assert(hindex >= 0 && hindex < stree->hybrid_count);
-            
-            /* the two children must have the same flag */
-            assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
-
-            /* depending on whether the proposed age is older than the old node
-               age, we might have already reset the node/children flags.
-               However, either the children or the current node still holds the
-               flag, therefore we use logical OR on child and parent flag to get
-               the path */
-            int hp = node->hpath[hindex] | node->left->hpath[hindex];
-            assert((hp == BPP_HPATH_LEFT) || (hp == BPP_HPATH_RIGHT));
-
-            if (hp == BPP_HPATH_RIGHT)
-              pop = pop->hybrid;
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
           }
         }
       }
@@ -2207,7 +2588,9 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           else
             logpr -= pop->notheta_logpr_contrib;
 
-          logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
+          logpr += gtree_update_logprob_contrib(pop,
+                                                locus->heredity[0],
+                                                msa_index);
         }
       }
     }
@@ -2241,6 +2624,9 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       /* swap clv index to compute partials in a new location. This is useful
          when the proposal gets rejected, as we only have swap clv indices */
       temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+      if (opt_scaling)
+        temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                               temp->scaler_index);
     }
 
     /* update partials */
@@ -2250,16 +2636,19 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     unsigned int param_indices[1] = {0};
     logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
+    if (opt_network)
+    {
+      lnacceptance = - (hgamma_contrib - hgamma_contrib_reverse);
+      lnacceptance = lnacceptance - hpop_contrib + hpop_contrib_reverse;
+    }
+    else
+      lnacceptance = 0;
+
     /* lnacceptance ratio */
     if (opt_est_theta)
-      lnacceptance = logpr - gtree->logpr + logl - gtree->logl;
+      lnacceptance += logpr - gtree->logpr + logl - gtree->logl;
     else
-      lnacceptance = logpr - stree->notheta_logpr + logl - gtree->logl;
-
-    if (opt_debug)
-    {
-      fprintf(stdout, "[Debug] (age) lnacceptance = %f\n", lnacceptance);
-    }
+      lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
 
     if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
     {
@@ -2283,6 +2672,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         temp = travbuffer[msa_index][j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
       
       /* now reset branch lengths and pmatrices */
@@ -2294,14 +2685,59 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         travbuffer[msa_index][k++] = node;
       locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
 
+      if (opt_network)
+      {
+        /* Subtract seqin_count (nin) for the three branches */
+        decrease_seqin_count(stree,node->left,msa_index);
+        decrease_seqin_count(stree,node->right,msa_index);
+        decrease_seqin_count(stree,node,msa_index);
+        
+        /* Subtract pop sizes */
+        decrease_gene_leaves_count(stree,node->left,msa_index);
+        decrease_gene_leaves_count(stree,node->right,msa_index);
+      }
+          
       /* reset to old population, and reset gene tree log probability
          contributes for each modified species tree node */
       if (node->pop == oldpop)
       {
-        if (opt_est_theta)
-          node->pop->logpr_contrib[msa_index] = node->pop->old_logpr_contrib[msa_index];
+        if (opt_network)
+        {
+          memcpy(node->hpath, old_hpath_x,  stree->hybrid_count * sizeof(int));
+          memcpy(node->left->hpath, old_hpath_c1, stree->hybrid_count * sizeof(int));
+          memcpy(node->right->hpath, old_hpath_c2, stree->hybrid_count * sizeof(int));
+
+          /* increase seqin_count (nin) for the three branches */
+          increase_seqin_count(stree,node->left,msa_index);
+          increase_seqin_count(stree,node->right,msa_index);
+          increase_seqin_count(stree,node,msa_index);
+
+          /* append pop sizes */
+          increase_gene_leaves_count(stree,node->left,msa_index);
+          increase_gene_leaves_count(stree,node->right,msa_index);
+        }
+
+        if (opt_network)
+        {
+          for (j = 0; j < stree_total_nodes; ++j)
+          {
+            snode_t * x = stree->nodes[j];
+            if (x->hx)
+            {
+              if (opt_est_theta)
+                x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
+              else
+                logprob_revert_notheta(x,msa_index);
+            }
+          }
+        }
         else
-          logprob_revert_notheta(node->pop,msa_index);
+        {
+          if (opt_est_theta)
+            node->pop->logpr_contrib[msa_index] = node->pop->old_logpr_contrib[msa_index];
+          else
+            logprob_revert_notheta(node->pop,msa_index);
+        }
       }
       else
       {
@@ -2314,9 +2750,25 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         node->pop->event_count[msa_index]--;
         if (!opt_est_theta)
           node->pop->event_count_sum--;
-          
+
         /* change population for the current gene tree node */
         SWAP(node->pop,oldpop);
+
+        if (opt_network)
+        {
+          memcpy(node->hpath, old_hpath_x,  stree->hybrid_count * sizeof(int));
+          memcpy(node->left->hpath, old_hpath_c1, stree->hybrid_count * sizeof(int));
+          memcpy(node->right->hpath, old_hpath_c2, stree->hybrid_count * sizeof(int));
+
+          /* increase seqin_count (nin) for the three branches */
+          increase_seqin_count(stree,node->left,msa_index);
+          increase_seqin_count(stree,node->right,msa_index);
+          increase_seqin_count(stree,node,msa_index);
+
+          /* append pop sizes */
+          increase_gene_leaves_count(stree,node->left,msa_index);
+          increase_gene_leaves_count(stree,node->right,msa_index);
+        }
 
         /* now add the coalescent event back to the old population, at the end */
         dlist_item_append(node->pop->event[msa_index],node->event);
@@ -2332,11 +2784,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         {
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
-          if (opt_network)
-          {
-            network_age_update_upwards(stree,oldpop,node,msa_index);
-          }
-          else
+          if (!opt_network)
           {
             /* note that a few lines above we swapped the populations already
                ( SWAP(node->pop,oldpop) ) and so, oldpop is actually the new
@@ -2350,11 +2798,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         {
           /* decrease the number of incoming lineages to all populations in the
              path from new population (excluding) to the old population */
-          if (opt_network)
-          {
-            network_age_update_downwards(stree,oldpop,node,msa_index);
-          }
-          else
+          if (!opt_network)
           {
             for (pop = node->pop; pop != oldpop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]--;
@@ -2369,40 +2813,15 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
         if (opt_network)
         {
-          pop = start;
-          while (pop != end)
+          for (j = 0; j < stree_total_nodes; ++j)
           {
-            if (opt_est_theta)
-              pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
-            else
-              logprob_revert_notheta(pop,msa_index);
-
-            pop = pop->parent;
-            if (pop != end && pop->hybrid)
+            snode_t * x = stree->nodes[j];
+            if (x->hx)
             {
-              assert(!node_is_bidirection(pop));
-              assert(!node_is_mirror(pop));
-
-              /* we must choose the correct direction */
-              unsigned int hindex;
-              int hp;
-
-              hindex = GET_HINDEX(stree,pop);
-              assert(hindex >= 0 && hindex < stree->hybrid_count);
-              
-              /* the two children must have the same flag */
-              assert(node->left->hpath[hindex] == node->right->hpath[hindex]);
-
-              /* depending on whether the proposed age is older than the old age
-                 or not, we might have reset the node/children flags. However,
-                 either the children or the current node still holds the flag,
-                 therefore we use logical OR on child and parent flag to get the
-                 path */
-              hp = node->hpath[hindex] | node->left->hpath[hindex];
-              assert(hp == BPP_HPATH_LEFT || hp == BPP_HPATH_RIGHT);
-
-              if (hp == BPP_HPATH_RIGHT)
-                pop = pop->hybrid;
+              if (opt_est_theta)
+                x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
+              else
+                logprob_revert_notheta(x,msa_index);
             }
           }
         }
@@ -2417,6 +2836,12 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           }
         }
       }
+    }
+    if (opt_network)
+    {
+      free(old_hpath_x);
+      free(old_hpath_c1);
+      free(old_hpath_c2);
     }
   }
   return accepted;
@@ -2445,10 +2870,10 @@ double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
 
 static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
 {
+  int ret = 0;
   gnode_t * sibling;
   gnode_t * father;
   gnode_t * oldroot = gtree->root;
-  int ret = 0;
 
   sibling = (curnode->parent->left == curnode) ? 
                 curnode->parent->right : curnode->parent->left;
@@ -2532,6 +2957,11 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   {
     SWAP(gtree->root->pop,oldroot->pop);
     SWAP(gtree->root->time,oldroot->time);
+
+    #if 1
+    if (opt_network)
+      SWAP(gtree->root->hpath, oldroot->hpath);
+    #endif
     
     gtree->root->left->parent = oldroot;
     gtree->root->right->parent = oldroot;
@@ -2589,6 +3019,205 @@ void gtree_fini(int msa_count)
   free(travbuffer);
 }
 
+static int branch_compat(stree_t * stree,
+                         gnode_t * curnode,
+                         gnode_t * target,
+                         double tnew)
+{
+  unsigned int hindex;
+  snode_t * target_pop;
+  snode_t * end = target->parent ? target->parent->pop : stree->root;
+  
+  
+  assert(target->time < tnew);
+  if (target->parent)
+    assert(target->parent->time > tnew);
+
+  target_pop = target->pop;
+  while (target_pop != end)
+  {
+    snode_t * nextpop;
+
+    if (!target_pop->parent) break;
+
+    nextpop = target_pop->parent;
+    if (nextpop->hybrid)
+    {
+      assert(node_is_hybridization(nextpop));
+      assert(!node_is_mirror(nextpop));
+
+      hindex = GET_HINDEX(stree,nextpop);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(target->hpath[hindex] != BPP_HPATH_NONE);
+
+      if (target->hpath[hindex] == BPP_HPATH_RIGHT)
+        nextpop = nextpop->hybrid;
+    }
+
+    if (nextpop->tau > tnew)
+      break;
+
+    target_pop = nextpop;
+  }
+
+  assert(target_pop);
+
+  if (stree->pptable[curnode->pop->node_index][target_pop->node_index])
+    return 1;
+
+  return 0;
+}
+
+static gnode_t * network_fill_targets(stree_t * stree,
+                                      gtree_t * gtree,
+                                      int msa_index,
+                                      gnode_t * curnode,
+                                      gnode_t * father,
+                                      gnode_t * sibling,
+                                      double tnew,
+                                      unsigned int * target_count,
+                                      unsigned int * source_count,
+                                      snode_t ** pop_target)
+{
+  unsigned int j,k,n,m;
+  unsigned int ptarget_count = 0;
+  unsigned int snodes_count;
+  gnode_t * p;
+  snode_t ** ptarget_list = NULL;
+
+  *pop_target = NULL;
+
+  /* make sure no species tree node is 'marked' */
+  snodes_count = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  for (j = 0; j < snodes_count; ++j)
+    assert(stree->nodes[j]->mark == 0);
+
+  /* mark all species tree nodes nodes ancestor to curnode population, and with
+     branches that include tnew. */
+  for (j = 0; j < snodes_count; ++j)
+  {
+    snode_t * x = stree->nodes[j];
+
+    if (stree->pptable[curnode->pop->node_index][x->node_index] &&
+        //x->gene_leaves[msa_index] > curnode->leaves &&
+        (x->tau <= tnew) && (x->parent && x->parent->tau > tnew))
+    {
+      x->mark = 1;
+      ptarget_count++;
+    }
+  }
+  if (stree->root->tau <= tnew)
+  {
+    stree->root->mark = 1;
+    ptarget_count++;
+  }
+
+  /* fill a list with target populations */
+  ptarget_list = (snode_t **)xmalloc((size_t)ptarget_count *
+                                     sizeof(snode_t *));
+  for (k = 0, j = 0; j < snodes_count; ++j)
+  {
+    if (stree->nodes[j]->mark)
+    {
+      stree->nodes[j]->mark = 0;
+      ptarget_list[k++] = stree->nodes[j];
+    }
+  }
+  assert(k == ptarget_count);
+
+  /* identify target branches on which we can attach the pruned tree */
+  *target_count = 0;
+  if (tnew >= gtree->root->time)
+  {
+    travbuffer[msa_index][*target_count] = gtree->root;
+    *target_count = *target_count + 1;
+  }
+  else
+  {
+    for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+    {
+      p = gtree->nodes[j];
+      m = p->pop->node_index;
+
+      for (k = 0; k < ptarget_count; ++k)
+      {
+        n = ptarget_list[k]->node_index;
+
+        if (p != curnode && p != gtree->root && p->time <= tnew &&
+            p->parent->time > tnew && stree->pptable[m][n] &&
+            branch_compat(stree,curnode,p,tnew))
+        {
+          travbuffer[msa_index][*target_count] = (p == father) ? sibling : p;
+          *target_count = *target_count + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  /* source count */
+  *source_count = 1;
+  if (father != gtree->root)
+  {
+      
+    n = father->pop->node_index;
+    for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+    {
+      p = gtree->nodes[j];
+      m = p->pop->node_index;
+
+      if (p != curnode && p != gtree->root && p != sibling && p != father &&
+          p->time <= father->time && p->parent->time > father->time &&
+          stree->pptable[m][n] &&
+          branch_compat(stree,curnode,p,father->time))
+        *source_count = *source_count + 1;
+    }
+  }
+
+  assert(*target_count);
+  assert(*source_count);
+
+  /* randomly select a target node */
+  gnode_t * target = travbuffer[msa_index][(int)(*target_count*legacy_rndu())];
+  assert(target);
+
+  /* decide on the pop_target */
+  snode_t * pop = target->pop;
+  while (pop->parent && pop->parent->tau < tnew)
+  {
+    pop = pop->parent;
+    if (pop->hybrid)
+    {
+      assert(node_is_hybridization(pop));
+      assert(!node_is_mirror(pop));
+
+      unsigned int hindex = GET_HINDEX(stree,pop);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      int dbg_flag = target->hpath[hindex];
+      if (target->hpath[hindex] == BPP_HPATH_NONE)
+      {
+        assert(target == sibling);
+        assert(father->time < tnew);
+        assert(father->hpath[hindex] != BPP_HPATH_NONE);
+        dbg_flag = father->hpath[hindex];
+      }
+      //assert(target->hpath[hindex] != BPP_HPATH_NONE);
+      assert(dbg_flag != BPP_HPATH_NONE);
+      //if (target->hpath[hindex] == BPP_HPATH_RIGHT)
+      if (dbg_flag == BPP_HPATH_RIGHT)
+        pop = pop->hybrid;
+    }
+  }
+  assert(pop);
+  *pop_target = pop;
+
+  if (ptarget_list)
+    free(ptarget_list);
+
+  return target;
+}
+
 static long propose_spr(locus_t * locus,
                         gtree_t * gtree,
                         stree_t * stree,
@@ -2596,6 +3225,7 @@ static long propose_spr(locus_t * locus,
 {
   unsigned int i,j,k,m,n;
   unsigned int source_count, target_count;
+  unsigned int stree_total_nodes;
   long accepted = 0;
   gnode_t * curnode;
   gnode_t * sibling;
@@ -2606,6 +3236,12 @@ static long propose_spr(locus_t * locus,
   double logpr;
   snode_t * pop;
 
+  int * old_hpath_y = NULL;
+  int * old_hpath_a = NULL;
+  int * old_hpath_s = NULL;
+  int * old_hpath_t = NULL;
+  double hgamma_contrib = 0;
+  double hgamma_contrib_reverse = 0;
 
   /*          
 
@@ -2621,6 +3257,9 @@ static long propose_spr(locus_t * locus,
 
 
   */
+
+  stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
   {
     curnode = gtree->nodes[i];
@@ -2632,10 +3271,45 @@ static long propose_spr(locus_t * locus,
     
     assert(curnode->parent);
 
+    if (opt_network)
+    {
+      /* store sum of incoming lineages and coalescent events for detecting
+         for which populations we need to recompute the MSC density */
+      for (j = 0; j < stree_total_nodes; ++j)
+      {
+        stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
+                              stree->nodes[j]->seqin_count[msa_index];
+      }
+      hgamma_contrib = 0;
+      hgamma_contrib_reverse = 0;
+    }
+
     /* find youngest population with subtree lineages more than current node subtree lineages */
-    for (pop = curnode->pop; pop->gene_leaves[msa_index] <= curnode->leaves; pop = pop->parent)
-      if (!pop->parent)
-        break;
+    if (opt_network)
+    {
+      pop = stree->root;
+
+      decrease_gene_leaves_count(stree,curnode,msa_index);
+      curnode->pop->gene_leaves[msa_index] -= curnode->leaves;
+
+      for (j = 0; j < stree_total_nodes; ++j)
+      {
+        snode_t * x = stree->nodes[j];
+
+        if (stree->pptable[curnode->pop->node_index][x->node_index] &&
+           (x->gene_leaves[msa_index] > 0) && (x->tau < pop->tau))
+          pop = x;
+      }
+      curnode->pop->gene_leaves[msa_index] += curnode->leaves;
+    }
+    else
+    {
+      for (pop = curnode->pop;
+           pop->gene_leaves[msa_index] <= curnode->leaves; 
+           pop = pop->parent)
+        if (!pop->parent)
+          break;
+    }
 
     /* TODO: Set age limits. 999 is set for backwards compatibility with bpp */
     minage = MAX(curnode->time, pop->tau);
@@ -2644,8 +3318,11 @@ static long propose_spr(locus_t * locus,
     tnew = father->time + opt_finetune_gtspr*legacy_rnd_symmetrical();
     tnew = reflect(tnew,minage,maxage);
 
-    for (pop = curnode->pop; pop->parent; pop = pop->parent)
-      if (pop->parent->tau > tnew) break;
+    if (!opt_network)
+    {
+      for (pop = curnode->pop; pop->parent; pop = pop->parent)
+        if (pop->parent->tau > tnew) break;
+    }
 
     snode_t * pop_target = pop;
 
@@ -2653,51 +3330,95 @@ static long propose_spr(locus_t * locus,
     /* TODO: We process the root node first to keep backwards compatibility with
        old bpp results */
 
-    n = pop_target->node_index;
-    target_count = 0;
-    if (tnew >= gtree->root->time)
+    gnode_t * target;
+    if (opt_network)
     {
-      travbuffer[msa_index][target_count++] = gtree->root;
+      target = network_fill_targets(stree,
+                                    gtree,
+                                    msa_index,
+                                    curnode,
+                                    father,
+                                    sibling,
+                                    tnew,
+                                    &target_count,
+                                    &source_count,
+                                    &pop_target);
+
+      dbg_msci_t = target;
     }
     else
     {
-      for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+      n = pop_target->node_index;
+      target_count = 0;
+      if (tnew >= gtree->root->time)
       {
-        p = gtree->nodes[j];
-        m = p->pop->node_index;
-        if (p != curnode && p != gtree->root && p->time <= tnew &&
-            p->parent->time > tnew && stree->pptable[m][n])
-          travbuffer[msa_index][target_count++] = (p == father) ? sibling : p;
+        travbuffer[msa_index][target_count++] = gtree->root;
       }
+      else
+      {
+        for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+        {
+          p = gtree->nodes[j];
+          m = p->pop->node_index;
+          if (p != curnode && p != gtree->root && p->time <= tnew &&
+              p->parent->time > tnew && stree->pptable[m][n])
+            travbuffer[msa_index][target_count++] = (p == father) ? sibling : p;
+        }
+      }
+
+      source_count = 1;
+      if (father != gtree->root)
+      {
+        n = father->pop->node_index;
+        for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+        {
+          p = gtree->nodes[j];
+          m = p->pop->node_index;
+          if (p != curnode && p != gtree->root && p != sibling && p != father &&
+              p->time <= father->time && p->parent->time > father->time &&
+              stree->pptable[m][n])
+            source_count++;
+        }
+      }
+
+      assert(target_count);
+      assert(source_count);
+      
+
+      /* randomly select a target node */
+      target = travbuffer[msa_index][(int)(target_count*legacy_rndu())];
     }
 
-    source_count = 1;
-    if (father != gtree->root)
+    if (opt_network)
     {
-      n = father->pop->node_index;
-      for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
-      {
-        p = gtree->nodes[j];
-        m = p->pop->node_index;
-        if (p != curnode && p != gtree->root && p != sibling && p != father &&
-            p->time <= father->time && p->parent->time > father->time &&
-            stree->pptable[m][n])
-          source_count++;
-      }
+      /* Save old flags for the three nodes, to be used for rollback */
+      old_hpath_y = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+      old_hpath_a = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+      old_hpath_s = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+      old_hpath_t = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+
+      memcpy(old_hpath_y, father->hpath,  stree->hybrid_count*sizeof(int));
+      memcpy(old_hpath_a, curnode->hpath, stree->hybrid_count*sizeof(int));
+      memcpy(old_hpath_s, sibling->hpath, stree->hybrid_count*sizeof(int));
+      memcpy(old_hpath_t, target->hpath,  stree->hybrid_count*sizeof(int));
+
+      /* Subtract seqin_count (nin) for the three branches */
+      decrease_seqin_count(stree,curnode,msa_index);
+      
+      dbg_msci_y = father;
+      dbg_msci_s = sibling;
+      dbg_msci_a = curnode;
     }
-
-    assert(target_count);
-    assert(source_count);
-    
-
-    /* randomly select a target node */
-    gnode_t * target = travbuffer[msa_index][(int)(target_count*legacy_rndu())];
 
     /* regraft subtree */
 
     snode_t * oldpop = father->pop;
     double oldage = father->time;
     father->time = tnew;
+
+    int spr_required = (target != sibling && target != father);
+    gnode_t * dbg_old_father = father;
+
     if (father->pop != pop_target)
     {
       /* TODO: update coalescent events */
@@ -2729,27 +3450,102 @@ static long propose_spr(locus_t * locus,
       {
         /* increase the number of incoming lineages to all populations in the
            path from old population (excluding) to the new population */
-        for (pop = oldpop; pop != father->pop; pop = pop->parent)
-          pop->parent->seqin_count[msa_index]++;
+        if (!opt_network)
+        {
+          for (pop = oldpop; pop != father->pop; pop = pop->parent)
+            pop->parent->seqin_count[msa_index]++;
+        }
       }
       else
       {
         /* decrease the number of incoming lineages to all populations in the
            path from new population (excluding) to the old population */
-        for (pop = father->pop; pop != oldpop; pop = pop->parent)
-          pop->parent->seqin_count[msa_index]--;
+        if (!opt_network)
+        {
+          for (pop = father->pop; pop != oldpop; pop = pop->parent)
+            pop->parent->seqin_count[msa_index]--;
+        }
       }
     }
     
-    int spr_required = (target != sibling && target != father);
-
     /* if the following holds we need to change tree topology */
     int root_changed = 0;
     if (spr_required)
       root_changed = perform_spr(gtree,curnode,target);
 
+    if (root_changed == 2)
+    {
+      assert(gtree->root == father);
+      //assert(gtree->root == sibling);
+      //assert(0);
+    }
+
+    gnode_t * original_father = father;
+
     if (root_changed)
       father = curnode->parent;
+
+    /*******************************/
+    if (root_changed == 1)
+    {
+       assert(father == target);
+    }
+
+    if (opt_network)
+    {
+      /* reset and sample new flags */
+      hgamma_contrib += sample_hpath(stree,curnode);
+
+      if (spr_required)
+      {
+        switch (root_changed)
+        {
+          case 0:
+            join_flags(stree,sibling,old_hpath_y,oldpop);
+            split_flags(stree,target);
+            break;
+
+          case 1:
+            join_flags(stree,sibling,old_hpath_y,oldpop);
+            split_flags(stree,original_father);
+            break;
+
+          case 2:
+            join_flags(stree,gtree->root,old_hpath_y,oldpop);
+            split_flags(stree,target);
+            break;
+
+          default:
+            assert(0);
+        }
+      }
+      else
+      {
+        /* redistribute flags between father and sibling */
+        interchange_flags(stree,
+                          sibling,
+                          father,
+                          tnew,
+                          oldage,
+                          oldpop);
+      }
+
+      snode_t * newpop = father->pop;
+      father->pop = oldpop;
+
+      hgamma_contrib_reverse += sample_hpath_reverse(stree,curnode,old_hpath_a);
+
+      father->pop = newpop;
+
+      /* increase seqin_count (nin) for the three branches */
+      increase_seqin_count(stree, curnode, msa_index);
+
+      /* append pop sizes */
+      increase_gene_leaves_count(stree, curnode, msa_index);
+
+      /* indicate we want to recompute the MSC density for this population */
+      father->pop->hx = -1;
+    }
 
     /* recompute logpr */
     if (opt_est_theta)
@@ -2759,14 +3555,38 @@ static long propose_spr(locus_t * locus,
 
     if (oldpop == father->pop)
     {
-      if (opt_est_theta)
-        logpr -= father->pop->logpr_contrib[msa_index];
-      else
-        logpr -= father->pop->notheta_logpr_contrib;
+      if (opt_network)
+      {
+        for (j = 0; j < stree_total_nodes; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
 
-      logpr += gtree_update_logprob_contrib(father->pop,
-                                            locus->heredity[0],
-                                            msa_index);
+            logpr += gtree_update_logprob_contrib(x,locus->heredity[0],msa_index);
+          }
+        }
+      }
+      else
+      {
+        if (opt_est_theta)
+          logpr -= father->pop->logpr_contrib[msa_index];
+        else
+          logpr -= father->pop->notheta_logpr_contrib;
+
+        logpr += gtree_update_logprob_contrib(father->pop,
+                                              locus->heredity[0],
+                                              msa_index);
+      }
     }
     else
     {
@@ -2783,14 +3603,45 @@ static long propose_spr(locus_t * locus,
         start = father->pop;
         end   = oldpop->parent;
       }
-      for (pop = start; pop != end; pop = pop->parent)
-      {
-        if (opt_est_theta)
-          logpr -= pop->logpr_contrib[msa_index];
-        else
-          logpr -= pop->notheta_logpr_contrib;
 
-        logpr += gtree_update_logprob_contrib(pop,locus->heredity[0],msa_index);
+      /* TODO: The following code is identical to propose_ages(), with the
+         exception that 'node' is 'father' here. Perhaps make it a function */
+      if (opt_network)
+      {
+        for (j = 0; j < stree_total_nodes; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+          }
+        }
+      }
+      else
+      {
+        for (pop = start; pop != end; pop = pop->parent)
+        {
+          if (opt_est_theta)
+            logpr -= pop->logpr_contrib[msa_index];
+          else
+            logpr -= pop->notheta_logpr_contrib;
+
+          logpr += gtree_update_logprob_contrib(pop,
+                                                locus->heredity[0],
+                                                msa_index);
+        }
       }
     }
 
@@ -2816,6 +3667,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
     }
     else
@@ -2840,6 +3693,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
 
       /* now fill the remaining traversal buffer with the root-path starting
@@ -2852,6 +3707,8 @@ static long propose_spr(locus_t * locus,
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
     }
 
@@ -2862,14 +3719,19 @@ static long propose_spr(locus_t * locus,
     unsigned int param_indices[1] = {0};
     double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
+    if (opt_network)
+      lnacceptance = hgamma_contrib_reverse - hgamma_contrib;
+    else
+      lnacceptance = 0;
+
     /* acceptance ratio */
     if (opt_est_theta)
-      lnacceptance = log((double)target_count / source_count) +
-                     logpr - gtree->logpr + logl - gtree->logl;
+      lnacceptance += log((double)target_count / source_count) +
+                      logpr - gtree->logpr + logl - gtree->logl;
     else
     {
-      lnacceptance = log((double)target_count / source_count) +
-                     logpr - stree->notheta_logpr + logl - gtree->logl;
+      lnacceptance += log((double)target_count / source_count) +
+                      logpr - stree->notheta_logpr + logl - gtree->logl;
     }
 
     if (opt_debug)
@@ -2886,7 +3748,6 @@ static long propose_spr(locus_t * locus,
         stree->notheta_logpr = logpr;
 
       gtree->logl = logl;
-
     }
     else
     {
@@ -2897,6 +3758,8 @@ static long propose_spr(locus_t * locus,
       {
         gnode_t * temp = travbuffer[msa_index][j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
+        if (opt_scaling)
+          temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
       }
       
       /* now reset branch lengths and pmatrices */
@@ -2912,6 +3775,18 @@ static long propose_spr(locus_t * locus,
       travbuffer[msa_index][k++] = father->left;
       travbuffer[msa_index][k++] = father->right;  /* target or sibling */
 
+      if (opt_network)
+      {
+        assert(dbg_msci_a == curnode);
+        
+        /* Subtract seqin_count (nin) for the three branches */
+        decrease_seqin_count(stree,curnode,msa_index);
+
+        /* Subtract pop sizes */
+        decrease_gene_leaves_count(stree,curnode,msa_index);
+      }
+
+
       if (spr_required)
       {
         /* if root_changed == 2 it means that the old sibling is now the root,
@@ -2920,6 +3795,13 @@ static long propose_spr(locus_t * locus,
            sibling. Therefore, we must pass the root as the target of the SPR
            (and not the node pointing to the old sibling). In the other cases,
            the target is just the old sibling */
+        if (root_changed == 2)
+        {
+          assert(gtree->root != sibling);
+          assert(gtree->root == dbg_old_father);
+          assert(sibling == curnode->parent);
+          assert(father == sibling);
+        }
         if (root_changed == 2)
           root_changed = perform_spr(gtree,curnode,gtree->root);
         else
@@ -2941,16 +3823,56 @@ static long propose_spr(locus_t * locus,
 
       locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
 
+      if (opt_network)
+      {
+        assert(dbg_msci_a == curnode);
+        assert(dbg_msci_y == father);
+        assert(dbg_msci_s == sibling);
+        assert(dbg_msci_t == target);
+      }
+
       if (father->pop == oldpop)
       {
-        if (opt_est_theta)
-          father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
+        if (opt_network)
+        {
+          memcpy(father->hpath,  old_hpath_y, stree->hybrid_count*sizeof(int));
+          memcpy(curnode->hpath, old_hpath_a, stree->hybrid_count*sizeof(int));
+          memcpy(sibling->hpath, old_hpath_s, stree->hybrid_count*sizeof(int));
+          memcpy(target->hpath,  old_hpath_t, stree->hybrid_count*sizeof(int));
+
+          /* increase seqin_count (nin) for the three branches */
+          increase_seqin_count(stree,curnode,msa_index);
+
+          /* append pop sizes */
+          increase_gene_leaves_count(stree,curnode,msa_index);
+        }
+
+        if (opt_network)
+        {
+          for (j = 0; j < stree_total_nodes; ++j)
+          {
+            snode_t * x = stree->nodes[j];
+            if (x->hx)
+            {
+              if (opt_est_theta)
+                x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
+              else
+                logprob_revert_notheta(x,msa_index);
+            }
+          }
+        }
         else
         {
-          father->pop->t2h_sum -= father->pop->t2h[msa_index];
-          father->pop->t2h[msa_index] = father->pop->old_t2h[msa_index];
-          father->pop->t2h_sum += father->pop->t2h[msa_index];
-          father->pop->notheta_logpr_contrib= father->pop->notheta_old_logpr_contrib;
+          if (opt_est_theta)
+            father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
+          else
+          {
+            /* TODO: The below code is the same as calling logprob_revert_notheta(father->pop,msa_index) */
+            father->pop->t2h_sum -= father->pop->t2h[msa_index];
+            father->pop->t2h[msa_index] = father->pop->old_t2h[msa_index];
+            father->pop->t2h_sum += father->pop->t2h[msa_index];
+            father->pop->notheta_logpr_contrib= father->pop->notheta_old_logpr_contrib;
+          }
         }
       }
       else
@@ -2968,6 +3890,20 @@ static long propose_spr(locus_t * locus,
         /* change population for the current gene tree node */
         SWAP(father->pop,oldpop);
 
+        if (opt_network)
+        {
+          memcpy(father->hpath,  old_hpath_y, stree->hybrid_count*sizeof(int));
+          memcpy(curnode->hpath, old_hpath_a, stree->hybrid_count*sizeof(int));
+          memcpy(sibling->hpath, old_hpath_s, stree->hybrid_count*sizeof(int));
+          memcpy(target->hpath,  old_hpath_t, stree->hybrid_count*sizeof(int));
+
+          /* increase seqin_count (nin) for the three branches */
+          increase_seqin_count(stree,curnode,msa_index);
+
+          /* append pop sizes */
+          increase_gene_leaves_count(stree,curnode,msa_index);
+        }
+
         /* now add the coalescent event back to the old population, at the end */
         dlist_item_append(father->pop->event[msa_index],father->event);
 
@@ -2983,15 +3919,21 @@ static long propose_spr(locus_t * locus,
 
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
-          for (pop=oldpop; pop != father->pop; pop = pop->parent)
-            pop->parent->seqin_count[msa_index]++;
+          if (!opt_network)
+          {
+            for (pop=oldpop; pop != father->pop; pop = pop->parent)
+              pop->parent->seqin_count[msa_index]++;
+          }
         }
         else
         {
           /* decrease the number of incoming lineages to all populations in the
              path from new population (excluding) to the old population */
-          for (pop = father->pop; pop != oldpop; pop = pop->parent)
-            pop->parent->seqin_count[msa_index]--;
+          if (!opt_network)
+          {
+            for (pop = father->pop; pop != oldpop; pop = pop->parent)
+              pop->parent->seqin_count[msa_index]--;
+          }
         }
 
         /* now restore the old log gene tree probability contribution for each
@@ -3000,14 +3942,49 @@ static long propose_spr(locus_t * locus,
         snode_t * start = (tnew > oldage) ? father->pop :  oldpop;
         snode_t * end   = (tnew > oldage) ? oldpop->parent : father->pop->parent;
 
-        for (pop = start; pop != end; pop = pop->parent)
+        if (opt_network)
         {
-          if (opt_est_theta)
-            pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
-          else
-            logprob_revert_notheta(pop,msa_index);
+          for (j = 0; j < stree_total_nodes; ++j)
+          {
+            snode_t * x = stree->nodes[j];
+            if (x->hx)
+            {
+              if (opt_est_theta)
+                x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
+              else
+                logprob_revert_notheta(x,msa_index);
+            }
+          }
+        }
+        else
+        {
+          for (pop = start; pop != end; pop = pop->parent)
+          {
+            if (opt_est_theta)
+              pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+            else
+              logprob_revert_notheta(pop,msa_index);
+          }
         }
       }
+
+      if (opt_network)
+      {
+        assert(dbg_msci_y == father);
+        assert(curnode->hpath[0] == old_hpath_a[0]);
+        assert(father->hpath[0] == old_hpath_y[0]);
+        assert(sibling->hpath[0] == old_hpath_s[0]);
+        assert(target->hpath[0] == old_hpath_t[0]);
+      }
+    }
+
+    /* delete rollback */
+    if (opt_network)
+    {
+      free(old_hpath_y);
+      free(old_hpath_a);
+      free(old_hpath_s);
+      free(old_hpath_t);
     }
   }
   return accepted;
@@ -3080,8 +4057,14 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gnode_t ** gnodeptr = gtree[i]->nodes;
     for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    {
       gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                               gnodeptr[j]->clv_index);
+      if (opt_scaling)
+        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                      gnodeptr[j]->scaler_index);
+    }
+
     locus_update_all_partials(locus[i],gtree[i]);
 
     /* update reference locus */
@@ -3089,8 +4072,13 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gnodeptr = gtree[ref]->nodes;
     for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+    {
       gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
                                               gnodeptr[j]->clv_index);
+      if (opt_scaling)
+         gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+                                                      gnodeptr[j]->scaler_index);
+    }
     locus_update_all_partials(locus[ref],gtree[ref]);
 
     unsigned int param_indices[1] = {0};
@@ -3126,14 +4114,24 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       /* reset selected locus */
       gnodeptr = gtree[i]->nodes;
       for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+      {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                        gnodeptr[j]->scaler_index);
+      }
 
       /* reset reference locus */
       gnodeptr = gtree[ref]->nodes;
       for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+      {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+                                                        gnodeptr[j]->scaler_index);
+      }
       
       for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
         if (refnodes[j]->parent)

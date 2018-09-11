@@ -289,6 +289,7 @@ typedef struct snode_s
   double hgamma;                    /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
   struct snode_s * hybrid;          /* linked hybridization node */
+  long hx;                          /* sum of events count and seqin_count */
 } snode_t;
 
 typedef struct stree_s
@@ -583,16 +584,20 @@ extern long opt_quiet;
 extern long opt_rjmcmc_method;
 extern long opt_samplefreq;
 extern long opt_samples;
+extern long opt_scaling;
 extern long opt_seed;
 extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
+extern double opt_finetune_gamma;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
+extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
-extern double opt_finetune_locusrate;
+extern double opt_gamma_alpha;
+extern double opt_gamma_beta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_locusrate_alpha;
@@ -723,6 +728,8 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+
+double stree_propose_gamma(stree_t * stree, gtree_t ** gtree);
 
 void stree_fini(void);
 

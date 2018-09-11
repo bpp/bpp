@@ -67,7 +67,7 @@ static void reset_finetune_onestep(double * pjump, double * param)
   
 }
 
-static void reset_finetune(double * pjump)
+static void reset_finetune(double * pjump, double * pjump_gamma)
 {
   int i;
   int extra;
@@ -78,6 +78,8 @@ static void reset_finetune(double * pjump)
 
   for (i = 0; i < PROP_COUNT + extra; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
+  if (opt_network)
+    fprintf(stdout, " %8.5f", *pjump_gamma);
   fprintf(stdout, "\n");
 
   fprintf(stdout, "Current finetune: ");
@@ -87,9 +89,12 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
   if (extra)
-    fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
+    fprintf(stdout, " %8.5f", opt_finetune_locusrate);
+  if (opt_network)
+    fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
   else
     fprintf(stdout, "\n");
+
 
   reset_finetune_onestep(pjump+0,&opt_finetune_gtage);
   reset_finetune_onestep(pjump+1,&opt_finetune_gtspr);
@@ -99,6 +104,8 @@ static void reset_finetune(double * pjump)
 
   if (extra)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
+  if (opt_network)
+    reset_finetune_onestep(pjump_gamma, &opt_finetune_gamma);
 
   fprintf(stdout, "New finetune:     ");
   fprintf(stdout, " %8.5f", opt_finetune_gtage);
@@ -107,7 +114,9 @@ static void reset_finetune(double * pjump)
   fprintf(stdout, " %8.5f", opt_finetune_tau);
   fprintf(stdout, " %8.5f", opt_finetune_mix);
   if (extra)
-    fprintf(stdout, " %8.5f\n", opt_finetune_locusrate);
+    fprintf(stdout, " %8.5f", opt_finetune_locusrate);
+  if (opt_network)
+    fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
   else
     fprintf(stdout, "\n");
 }
@@ -162,6 +171,12 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
 {
   int print_labels = 1;
   unsigned int i;
+  unsigned int snodes_total;
+  
+  if (opt_network)
+    snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  else
+    snodes_total = stree->tip_count + stree->inner_count;
 
   if (opt_method == METHOD_10)          /* species delimitation */
     fprintf(fp, "Gen\tnp\ttree");
@@ -176,8 +191,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   /* 1. Print thetas */
   if (opt_est_theta)
   {
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < snodes_total; ++i)
     {
+      /* TODO: Is the 'has_theta' check also necessary ? */
       if (stree->nodes[i]->theta >= 0)
       {
         if (print_labels)
@@ -198,6 +214,13 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       else
         fprintf(fp, "\ttau_%d", i+1);
     }
+  }
+
+  if (opt_network)
+  {
+    unsigned int offset=stree->tip_count+stree->inner_count;
+    for (i = 0; i < stree->hybrid_count; ++i)
+      fprintf(fp, "\tgamma_%s", stree->nodes[offset+i]->hybrid->label);
   }
 
   /* 3. Print mutation rate for each locus */
@@ -237,6 +260,12 @@ static void mcmc_logsample(FILE * fp,
                            long ndspecies)
 {
   unsigned int i;
+  unsigned int snodes_total;
+  
+  if (opt_network)
+    snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  else
+    snodes_total = stree->tip_count + stree->inner_count;
 
   if (opt_method == METHOD_01)          /* species tree inference */
   {
@@ -277,15 +306,24 @@ static void mcmc_logsample(FILE * fp,
   /* then for inner nodes */
   if (opt_est_theta)
   {
-    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    /* TODO: Is the 'has_theta' check also necessary ? */
+    for (i = stree->tip_count; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0)
         fprintf(fp, "\t%.5g", stree->nodes[i]->theta);
   }
 
   /* 2. Print taus for inner nodes */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau)
       fprintf(fp, "\t%.5g", stree->nodes[i]->tau);
+
+  /* 2a. Print gamma for hybridization nodes */
+  if (opt_network)
+  {
+    unsigned int offset=stree->tip_count+stree->inner_count;
+    for (i = 0; i < stree->hybrid_count; ++i)
+      fprintf(fp, "\t%.5g", stree->nodes[offset+i]->hybrid->hgamma);
+  }
 
   /* 3. Print mutation rate for each locus */
   if (opt_est_locusrate && opt_print_locusrate)
@@ -300,6 +338,9 @@ static void mcmc_logsample(FILE * fp,
     for (i = 0; i < opt_locus_count; ++i)
       fprintf(fp, "\t%.5g", locus[i]->heredity[0]);
   }
+
+  /* 22.6.2018 - Testing gene tree node age proposal for MSCi */
+  //fprintf(fp, "\t%f\t%s", gtree[0]->root->time, gtree[0]->root->pop->label);
 
   /* 5. print log-likelihood if usedata=1 */
   if (opt_usedata)
@@ -414,8 +455,6 @@ static FILE * resume(stree_t ** ptr_stree,
   stree_t  * stree = *ptr_stree;
 
   gtree_alloc_internals(gtree,opt_locus_count);
-  if (opt_network)
-    fatal("Modelling hybridization/introgression not compatible with resuming");
   reset_gene_leaves_count(stree,gtree);
   stree_reset_pptable(stree);
 
@@ -568,7 +607,12 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* Show network */
   if (opt_network)
+  {
+    if (opt_finetune_gamma == -1)
+      fatal("Missing finetune value for gamma parameter");
+
     print_network_table(stree);
+  }
 
   /* parse the phylip file */
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
@@ -877,6 +921,9 @@ static FILE * init(stree_t ** ptr_stree,
     double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
     unsigned int pmatrix_count = gtree[i]->edge_count;
 
+    unsigned int scale_buffers = opt_scaling ?
+                                   2*gtree[i]->inner_count : 0;
+
     /* if species tree inference or locusrate enabled, activate twice as many
        transition probability matrices */
     if (opt_est_stree || opt_est_locusrate || opt_est_heredity)
@@ -894,7 +941,7 @@ static FILE * init(stree_t ** ptr_stree,
                             rate_matrices,              /* subst matrices (1) */
                             pmatrix_count,              /* # prob matrices */
                             1,                          /* # rate categories */
-                            0,                          /* # scale buffers */
+                            scale_buffers,              /* # scale buffers */
                             (unsigned int)opt_arch);    /* attributes */
 
     /* set frequencies for model with index 0 */
@@ -1118,6 +1165,8 @@ void cmd_run()
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
 
+  double pjump_gamma = 0;
+
   double * mean_tau = NULL;
   double * mean_theta = NULL;
 
@@ -1222,19 +1271,22 @@ void cmd_run()
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
 /*** Ziheng debugging, to delete ***/
-#if(0)
+#if 0
 if(i>=0 && opt_revolutionary_spr_method)
   opt_revolutionary_spr_debug = 1;
 #endif
 
       if (opt_finetune_reset && opt_burnin >= 200)
-        reset_finetune(pjump);
+        reset_finetune(pjump,&pjump_gamma);
       for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
       memset(pjump, 0, pjump_size * sizeof(double));
+
+      if (opt_network)
+        pjump_gamma = 0;
 
       if (opt_est_delimit)
       {
@@ -1297,8 +1349,6 @@ if(i>=0 && opt_revolutionary_spr_method)
     ratio = gtree_propose_ages(locus, gtree, stree);
     pjump[0] = (pjump[0]*(ft_round-1) + ratio) / (double)ft_round;
 
-    if (opt_network)
-      fatal("Modelling hybridization/introgression for SPR not implemented yet");
     /* propose gene tree topologies using SPR */
     ratio = gtree_propose_spr(locus,gtree,stree);
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
@@ -1325,6 +1375,13 @@ if(i>=0 && opt_revolutionary_spr_method)
     {
       ratio = prop_locusrate_and_heredity(gtree,stree,locus);
       pjump[5] = (pjump[5]*(ft_round-1) + ratio) / (double)ft_round;
+    }
+
+    /* gamma proposal */
+    if (opt_network)
+    {
+      ratio = stree_propose_gamma(stree,gtree);
+      pjump_gamma = (pjump_gamma*(ft_round-1) + ratio) / (double)ft_round;
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -1420,6 +1477,8 @@ if(i>=0 && opt_revolutionary_spr_method)
       printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
       for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
         printf(" %4.2f", pjump[j]);
+      if (opt_network)
+        printf(" %4.2f", pjump_gamma);
       printf(" ");
 
       if (opt_method == METHOD_01)
@@ -1479,10 +1538,10 @@ if(i>=0 && opt_revolutionary_spr_method)
           logpr_sum += gtree[j]->logpr;
       else
         logpr_sum = stree->notheta_logpr;
-      printf(" %7.2f", logpr_sum);
+      printf(" %8.5f", logpr_sum);
 
       if (opt_usedata)
-        printf(" %8.4f", mean_logl);
+        printf(" %8.5f", mean_logl);
 
       if (printk >= 50 && (i+1) % (printk / 20) == 0)
         printf("\n");

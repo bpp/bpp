@@ -518,6 +518,48 @@ l_unwind:
   return ret;
 }
 
+static long parse_gammaprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* TODO: Add third options for dirichlet */
+
+  long count;
+
+  count = get_double(p, &opt_gamma_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_gamma_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+  }
+  else
+  {
+    /* now read third token if available */
+    double ignorevalue;
+    count = get_double(p, &ignorevalue);
+    if (!count) goto l_unwind;
+
+    p += count;
+    if (is_emptyline(p))
+      ret = 1;
+  }
+  
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_heredity(const char * line)
 {
   long ret = 0;
@@ -633,6 +675,19 @@ static long parse_finetune(const char * line)
   if (!count) goto l_unwind;
 
   p += count;
+
+  opt_finetune_gamma = -1;
+  if (is_emptyline(p))
+  {
+    ret = 1;
+  }
+  else
+  {
+    /* 8. gamma finetune */
+    count = get_double(p, &opt_finetune_gamma);
+    if (!count) goto l_unwind;
+    p += count;
+  }
 
   if (is_emptyline(p)) ret = 1;
 
@@ -1053,6 +1108,13 @@ void load_cfile()
                  line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"scaling",7))
+      {
+        if (!parse_long(value,&opt_scaling) ||
+            (opt_scaling != 0 && opt_scaling != 1))
+          fatal("Option 'scaling' expects value 0 or 1 (line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 8)
     {
@@ -1118,6 +1180,13 @@ void load_cfile()
       {
         if (!parse_thetaprior(value))
           fatal("Option 'thetaprior' expects two doubles (line %ld)",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"gammaprior",10))
+      {
+        if (!parse_gammaprior(value))
+          fatal("Option 'gammaprior' expects two doubles (line %ld)",
                 line_count);
         valid = 1;
       }

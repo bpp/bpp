@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
 #define MARK_BRANCH_UPDATE      1
 #define MARK_ANCESTOR_LNODE     2
@@ -546,8 +547,13 @@ long prop_split(gtree_t ** gtree,
                                           i,
                                           partials_count+i);
       for (k = 0; k < partials_count[i]; ++k)
+      {
         partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                    partials[i][k]->clv_index);
+        if (opt_scaling)
+          partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                   partials[i][k]->scaler_index);
+      }
 
       /* update partials */
       locus_update_partials(locus[i],partials[i],partials_count[i]);
@@ -684,8 +690,13 @@ long prop_split(gtree_t ** gtree,
                                    nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)
+        {
           partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                      partials[i][k]->clv_index);
+          if (opt_scaling)
+            partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                             partials[i][k]->scaler_index);
+        }
         gtree[i]->logl  = gtree[i]->old_logl;
       }
       if (opt_est_theta)
@@ -731,7 +742,11 @@ long prop_split(gtree_t ** gtree,
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
+    {
       gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
+      if (opt_scaling)
+        gt_nodes[j]->scaler_index = SWAP_SCALER_INDEX(gt->tip_count,gt_nodes[j]->scaler_index);
+    }
 
     locus_update_partials(locus[i],gt_nodes,k);
 
@@ -921,8 +936,13 @@ long prop_join(gtree_t ** gtree,
                                           partials_count+i);
 
       for (k = 0; k < partials_count[i]; ++k)
+      {
         partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                    partials[i][k]->clv_index);
+        if (opt_scaling)
+          partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                           partials[i][k]->scaler_index);
+      }
 
       /* update partials */
       locus_update_partials(locus[i],partials[i],partials_count[i]);
@@ -1062,8 +1082,13 @@ long prop_join(gtree_t ** gtree,
                                    nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)
+        {
           partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                      partials[i][k]->clv_index);
+          if (opt_scaling)
+            partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                             partials[i][k]->scaler_index);
+        }
 
         gtree[i]->logl = gtree[i]->old_logl;
       }

@@ -177,7 +177,9 @@ static int cb_cmp_double(const void * a, const void * b)
   double * x = (double *)a;
   double * y = (double *)b;
 
-  return *x > *y;
+  if ( *x > *y) return 1;
+  if ( *x < *y) return -1;
+  return 0;
 }
 
 static double eff_ict(double * y, long n, double mean, double stdev)
@@ -364,6 +366,12 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   long sample_num;
   long rc = 0;
   FILE * fp;
+  unsigned int snodes_total;
+  
+  if (opt_network)
+    snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  else
+    snodes_total = stree->tip_count + stree->inner_count;
 
   /* TODO: pretty-fy output */
 
@@ -379,7 +387,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
   /* compute number of theta parameters */
   if (opt_est_theta)
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0)
         col_count++;
 
@@ -387,6 +395,10 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   for (i = 0; i < stree->inner_count; ++i)
     if (stree->nodes[stree->tip_count+i]->tau)
       col_count++;
+
+  /* compute number of gamma parameters */
+  if (opt_network)
+    col_count += stree->hybrid_count;
 
   if (opt_est_locusrate && opt_print_locusrate)
     col_count += opt_locus_count;
@@ -645,8 +657,15 @@ l_unwind:
   if (rc)
   {
     /* write figtree file */
-    write_figtree(stree,mean,hpd025,hpd975);
-    fprintf(stdout, "FigTree tree is in FigTree.tre\n");
+    if (!opt_network)
+    {
+      write_figtree(stree,mean,hpd025,hpd975);
+      fprintf(stdout, "FigTree tree is in FigTree.tre\n");
+    }
+    else
+    {
+      fprintf(stderr, "FigTree tree cannot be printed for networks yet\n");
+    }
   }
 
   free(mean);

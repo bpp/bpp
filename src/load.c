@@ -67,6 +67,13 @@ static void alloc_gtree()
       gt->nodes[j] = (gnode_t *)xmalloc(sizeof(gnode_t));
 
       gt->nodes[j]->node_index = j;
+
+      if (stree->hybrid_count)
+        gt->nodes[j]->hpath = (int *)xmalloc((size_t)(stree->hybrid_count) *
+                                             sizeof(int));
+      else
+        gt->nodes[j]->hpath = NULL;
+
     }
   }
 }
@@ -211,12 +218,19 @@ static void load_chk_section_1(FILE * fp,
                                long * mean_theta_count)
 {
   long i;
+  long total_nodes;
+  char ** labels;
 
   *gtree_offset = NULL;
 
   if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
   printf(" Seed: %ld\n", opt_seed);
+
+  /* read control file name */
+  if (!load_string(fp,&opt_cfile))
+    fatal("Cannot read name of control file");
+  printf(" control file: %s\n", opt_cfile);
 
   /* read MSA filename */
   if (!load_string(fp,&opt_msafile))
@@ -237,6 +251,14 @@ static void load_chk_section_1(FILE * fp,
   if (!load_string(fp,&opt_mcmcfile))
     fatal("Cannot read name of mcmc file");
   printf(" MCMC file: %s\n", opt_mcmcfile);
+
+  /* read network info */
+  if (!LOAD(&opt_network,1,fp))
+    fatal("Cannot read species network flag");
+
+  /* read method info */
+  if (!LOAD(&opt_method,1,fp))
+    fatal("Cannot read species network flag");
 
   /* read speciesdelimitation */
   if (!LOAD(&opt_est_delimit,1,fp))
@@ -287,19 +309,41 @@ static void load_chk_section_1(FILE * fp,
 
   /* read species&tree */
   unsigned int stree_tip_count;
+  unsigned int stree_inner_count;
+  unsigned int stree_hybrid_count;
+  unsigned int stree_edge_count;
   if (!LOAD(&stree_tip_count,1,fp))
     fatal("Cannot read 'species&tree' tag");
+  if (!LOAD(&stree_inner_count,1,fp))
+    fatal("Cannot read 'species&tree' tag");
+  if (!LOAD(&stree_hybrid_count,1,fp))
+    fatal("Cannot read 'species&tree' tag");
+  if (!LOAD(&stree_edge_count,1,fp))
+    fatal("Cannot read 'species&tree' tag");
 
-  char ** labels = (char **)xmalloc((size_t)stree_tip_count*sizeof(char *));
+  labels = (char **)xmalloc((size_t)(stree_tip_count+stree_hybrid_count) *
+                            sizeof(char *));
   for (i = 0; i < stree_tip_count; ++i)
   {
     if (!load_string(fp,labels+i))
+      fatal("Cannot read species labels for 'species&tree' tag");
+  }
+  for (i = 0; i < stree_hybrid_count; ++i)
+  {
+    if (!load_string(fp,labels+stree_tip_count+i))
       fatal("Cannot read species labels for 'species&tree' tag");
   }
   printf(" Species&tree: %u species (", stree_tip_count);
   for (i = 0; i < stree_tip_count; ++i)
     printf(" %s", labels[i]);
   printf(")\n");
+  if (stree_hybrid_count)
+  {
+    printf("Hybridizations:\n");
+    for (i = 0; i < stree_hybrid_count; ++i)
+      printf(" %s\n", labels[stree_tip_count+i]);
+    printf("\n");
+  }
 
   /* read usedata, cleandata and nloci */
   if (!LOAD(&opt_usedata,1,fp))
@@ -340,6 +384,13 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read beta 'theta' tag");
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
 
+  /* laod gamma prior */
+  if (!LOAD(&opt_gamma_alpha,1,fp))
+    fatal("Cannot read alpha of 'gammaprior' tag"); 
+  if (!LOAD(&opt_gamma_beta,1,fp))
+    fatal("Cannot read beta of 'gammaprior' tag"); 
+
+
   /* load locus rate estimation flag */
   if (!LOAD(&opt_est_locusrate,1,fp))
     fatal("Cannot read locusrate tag"); 
@@ -363,6 +414,8 @@ static void load_chk_section_1(FILE * fp,
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
+  if (!LOAD(&opt_finetune_gamma,1,fp))
+    fatal("Cannot read gene tree gamma finetune parameter");
   if (!LOAD(&opt_finetune_gtage,1,fp))
     fatal("Cannot read gene tree age finetune parameter");
   if (!LOAD(&opt_finetune_gtspr,1,fp))
@@ -519,32 +572,38 @@ static void load_chk_section_1(FILE * fp,
   stree = (stree_t *)xmalloc(sizeof(stree_t));
   
   stree->tip_count = stree_tip_count;
-  stree->inner_count = stree_tip_count-1;
-  stree->edge_count = stree->tip_count + stree->inner_count + stree->hybrid_count - 1;
+  stree->inner_count = stree_inner_count;
+  stree->hybrid_count = stree_hybrid_count;
+  stree->edge_count = stree_edge_count;
   stree->locus_count = opt_locus_count;
 
-  size_t alloc = stree->tip_count + stree->inner_count;
-  stree->nodes = (snode_t **)xmalloc(alloc*sizeof(snode_t *));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    stree->nodes[i] = (snode_t *)xmalloc(sizeof(snode_t));
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  stree->nodes = (snode_t **)xmalloc((size_t)total_nodes*sizeof(snode_t *));
+  for (i = 0; i < total_nodes; ++i)
+    stree->nodes[i] = (snode_t *)xcalloc(1,sizeof(snode_t));
 
 
   /* set tip labels */
   for (i = 0; i < stree->tip_count; ++i)
     stree->nodes[i]->label = labels[i];
+
+  unsigned int hoffset = stree->tip_count + stree->inner_count;
+  for (i = 0; i < stree->hybrid_count; ++i)
+    stree->nodes[hoffset+i]->label = labels[stree->tip_count+i];
   free(labels);
 
   for (i = 0; i < stree->inner_count; ++i)
     stree->nodes[stree->tip_count+i]->label = NULL;
 
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
   {
     stree->nodes[i]->node_index = i;
     stree->nodes[i]->data = NULL;
+    stree->nodes[i]->hybrid = NULL;
   }
 
   /* allocate coalescent events */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
   {
     snode_t * node = stree->nodes[i];
 
@@ -570,22 +629,60 @@ static void load_chk_section_1(FILE * fp,
     }
   }
 
-  stree->pptable = (int**)xcalloc(alloc,sizeof(int *));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    stree->pptable[i] = (int *)xcalloc(alloc,sizeof(int));
+  stree->pptable = (int**)xcalloc((size_t)total_nodes,sizeof(int *));
+  for (i = 0; i < total_nodes; ++i)
+    stree->pptable[i] = (int *)xcalloc((size_t)total_nodes,sizeof(int));
+}
+
+static int cb_ascint(const void * a, const void * b)
+{
+  const unsigned int * x = a;
+  const unsigned int * y = b;
+
+  if (*x > *y) return 1;
+  return -1;
 }
 
 void load_chk_section_2(FILE * fp)
 {
+  unsigned int total_nodes;
+  unsigned int hoffset;
   long i,j,k;
+  unsigned int * hindices; 
+
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  hoffset = stree->tip_count + stree->inner_count;
 
   /* reset parent nodes to NULL */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     stree->nodes[i]->parent = NULL;
 
   /* reset child nodes to NULL for tips */
   for (i = 0; i < stree->tip_count; ++i)
     stree->nodes[i]->left = stree->nodes[i]->right = NULL;
+
+  hindices = (unsigned int *)xcalloc((size_t)(stree->hybrid_count),
+                                     sizeof(unsigned int));
+
+  /* load node indices of hybridization events */
+  if (!LOAD(hindices,stree->hybrid_count,fp))
+    fatal("Cannot read species tree topology");
+
+  /* set hybridization links */
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    stree->nodes[hoffset+i]->hybrid = stree->nodes[hindices[i]];
+    stree->nodes[hindices[i]]->hybrid = stree->nodes[hoffset+i];
+    stree->nodes[hindices[i]]->label = xstrdup(stree->nodes[hoffset+i]->label);
+  }
+
+  /* sort hindices in ascending order */
+  qsort(hindices,(size_t)stree->hybrid_count,sizeof(unsigned int), cb_ascint);
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    printf(" !!! hindices: %d\n", hindices[i]);
+  }
 
   /* set left child for each inner node according to checkpoint data */
   for (i = 0; i < stree->inner_count; ++i)
@@ -597,15 +694,32 @@ void load_chk_section_2(FILE * fp)
     stree->nodes[left_child_index]->parent = stree->nodes[stree->tip_count+i];
   }
 
-  /* set right child for each inner node according to checkpoint data */
+  /* set right child for each inner node according to checkpoint data 
+
+     TODO: Update for bidirections */
+  unsigned int remaining_hindices = stree->hybrid_count;
   for (i = 0; i < stree->inner_count; ++i)
   {
     unsigned int right_child_index;
+
+    /* skip reading right child if hybridization node */
+    if (remaining_hindices &&
+        hindices[stree->hybrid_count-remaining_hindices] == stree->tip_count+i)
+    {
+      --remaining_hindices;
+      continue;
+    }
+    printf("Loading i = %ld\n", i);
+
     if (!LOAD(&right_child_index,1,fp))
       fatal("Cannot read species tree topology");
+
+    printf("rightchildindex: %d\n", right_child_index);
     stree->nodes[stree->tip_count+i]->right = stree->nodes[right_child_index];
     stree->nodes[right_child_index]->parent = stree->nodes[stree->tip_count+i];
   }
+
+  free(hindices);
 
   /* now set the root node */
   unsigned nullparent_count = 0;
@@ -622,7 +736,7 @@ void load_chk_section_2(FILE * fp)
 
 
   /* now check species tree consistency */
-  for (i = 0; i < stree->inner_count; ++i)
+  for (i = 0; i < stree->tip_count; ++i)
     assert((stree->nodes[i]->left == stree->nodes[i]->right) &&
            (stree->nodes[i]->left == NULL));
 
@@ -630,17 +744,38 @@ void load_chk_section_2(FILE * fp)
   {
     unsigned int index = stree->tip_count + i;
 
+    if (stree->nodes[index]->hybrid)
+    {
+      assert(!node_is_bidirection(stree->nodes[index]));
+    }
+
+    /* TODO: For parallel hybridization edges, the below assertion does not hold */
     assert(stree->nodes[index]->left != stree->nodes[index]->right);
     if (stree->nodes[index]->parent)
       assert(stree->nodes[index]->left != stree->nodes[index]->parent);
     assert(stree->nodes[index]->left != stree->nodes[index]);
 
     assert(stree->nodes[index]->left->parent == stree->nodes[index]);
-    assert(stree->nodes[index]->right->parent == stree->nodes[index]);
+    if (!stree->nodes[index]->hybrid)
+      assert(stree->nodes[index]->right->parent == stree->nodes[index]);
   }
 
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     stree->nodes[i]->length = 0;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    if (!LOAD(&(stree->nodes[hoffset+i]->hybrid->hgamma),1,fp))
+      fatal("Cannot read genetic contribution (gamma) for node %ld", i);
+
+    stree->nodes[hoffset+i]->hgamma = 1 - stree->nodes[hoffset+i]->hybrid->hgamma;
+  }
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    if (!LOAD(&(stree->nodes[i]->htau),1,fp))
+      fatal("Cannot read parent htau for node %ld", i);
+  }
 
   stree_label(stree);
 
@@ -651,25 +786,25 @@ void load_chk_section_2(FILE * fp)
   #endif
 
   /* read thetas */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(stree->nodes[i]->theta),1,fp))
       fatal("Cannot read species nodes theta");
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(stree->nodes[i]->has_theta),1,fp))
       fatal("Cannot read species nodes has_theta");
 
   /* read taus */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(stree->nodes[i]->tau),1,fp))
       fatal("Cannot read species nodes tau");
 
   /* read support */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(stree->nodes[i]->support),1,fp))
       fatal("Cannot read species nodes support values");
 
   /* read number of coalescent events */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(stree->nodes[i]->event_count,opt_locus_count,fp))
         fatal("Cannot read species event counts");
 
@@ -691,7 +826,7 @@ void load_chk_section_2(FILE * fp)
 
     stree->notheta_old_logpr = 0;
 
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < total_nodes; ++i)
     {
       if (!LOAD(stree->nodes[i]->t2h,opt_locus_count,fp))
         fatal("Cannot read per-locus t2h contributions");
@@ -714,7 +849,7 @@ void load_chk_section_2(FILE * fp)
     fatal("Cannot read species root tau");
 
   /* read number of incoming sequences for each node node */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     if (!LOAD(stree->nodes[i]->seqin_count,opt_locus_count,fp))
         fatal("Cannot read incoming sequence counts");
 
@@ -732,7 +867,7 @@ void load_chk_section_2(FILE * fp)
   /* read event indices for each node */
   unsigned int * buffer = (unsigned int *)xmalloc((size_t)(max_tips*2-1) *
                                                   sizeof(unsigned int));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
   {
     snode_t * snode = stree->nodes[i];
 
@@ -901,6 +1036,11 @@ static void load_gene_tree(FILE * fp, long index)
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
     if (!LOAD(&(gt->nodes[i]->mark),1,fp))
       fatal("Cannot read gene tree marks");
+
+  /* load hpath */
+  for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
+    if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
+      fatal("Cannot read gene tree path flags");
 }
 
 static void load_chk_section_3(FILE * fp, long msa_count)
@@ -923,6 +1063,7 @@ static void load_locus(FILE * fp, long index)
   unsigned int rate_cats;
   unsigned int rate_matrices;
   unsigned int prob_matrices;
+  unsigned int scale_buffers;
   unsigned int attributes;
   size_t span;
 
@@ -947,6 +1088,14 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&prob_matrices,1,fp))
     fatal("Cannot read number of rate matrices");
 
+    /* load number of scale buffers */
+  if (!LOAD(&scale_buffers,1,fp))
+    fatal("Cannot read number of scale buffers");
+
+  /* TODO: Store and load opt_scaling value instead */
+  if (scale_buffers)
+    opt_scaling = 1;
+
   /* load attributes */
   if (!LOAD(&attributes,1,fp))
     fatal("Cannot read attributes");
@@ -958,7 +1107,7 @@ static void load_locus(FILE * fp, long index)
                               rate_matrices,
                               prob_matrices,
                               rate_cats,
-                              0,
+                              scale_buffers,
                               attributes);
   
   double frequencies[4] = {0.25, 0.25, 0.25, 0.25};

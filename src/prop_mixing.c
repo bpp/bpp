@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
 
 static void all_partials_recursive(gnode_t * node,
                                    unsigned int * trav_size,
@@ -59,7 +60,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
   double * notheta_old_logpr = NULL;
 
-  size_t nodes_count = stree->tip_count+stree->inner_count; 
+  size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
 
 
   if (!opt_est_theta)
@@ -73,16 +74,27 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (opt_est_theta)
   {
     /* TODO: Precompute how many theta parameters we have for A00 */
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < nodes_count; ++i)
       if (stree->nodes[i]->theta > 0)
         theta_count++;
   }
   else
     theta_count = 0;
 
-  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->tau > 0)
-      tau_count++;
+  if (opt_network)
+  {
+    for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      if (stree->nodes[i]->tau > 0 && stree->nodes[i]->htau)
+        tau_count++;
+    }
+  }
+  else
+  {
+    for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+      if (stree->nodes[i]->tau > 0)
+        tau_count++;
+  }
 
   lnc = opt_finetune_mix * legacy_rnd_symmetrical();
   c = exp(lnc);
@@ -97,15 +109,15 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   /* TODO: This loop separation is for having the same traversal as old bpp */
 
   /* TODO: Why is this allocation here? Perhaps no longer needed? */
-  snode_t ** snodes = (snode_t **)xmalloc((stree->tip_count+stree->inner_count)*
+  snode_t ** snodes = (snode_t **)xmalloc((nodes_count)*
                                           sizeof(snode_t *));
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < nodes_count; ++i)
     snodes[i] = stree->nodes[i];
 
   /* change the thetas */
   if (opt_est_theta)
   {
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    for (i = 0; i < nodes_count; ++i)
     {
       if (snodes[i]->theta <= 0) continue;
 
@@ -117,15 +129,43 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   }
 
   /* change the taus */
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  if (opt_network)
   {
-    if (snodes[i]->tau == 0) continue;
-    snodes[i]->old_tau = snodes[i]->tau;
-    snodes[i]->tau *= c;
-    if (!snodes[i]->parent)
+    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
-      lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
-                      opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+      if (snodes[i]->tau == 0 || snodes[i]->htau == 0) continue;
+      snodes[i]->old_tau = snodes[i]->tau;
+      snodes[i]->tau *= c;
+      if (snodes[i]->hybrid)
+      {
+        assert(!node_is_bidirection(snodes[i]));
+        assert(!node_is_mirror(snodes[i]));
+        
+        snodes[i]->hybrid->tau = snodes[i]->tau;
+        if (snodes[i]->parent->htau == 0)
+          snodes[i]->parent->tau = snodes[i]->tau;
+        if (snodes[i]->hybrid->parent->htau == 0)
+          snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+      }
+      if (!snodes[i]->parent)
+      {
+        lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
+                        opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+      }
+    }
+  }
+  else
+  {
+    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    {
+      if (snodes[i]->tau == 0) continue;
+      snodes[i]->old_tau = snodes[i]->tau;
+      snodes[i]->tau *= c;
+      if (!snodes[i]->parent)
+      {
+        lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
+                        opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+      }
     }
   }
   
@@ -162,7 +202,12 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
+    {
       gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
+      if (opt_scaling)
+        gt_nodes[j]->scaler_index = SWAP_SCALER_INDEX(gt->tip_count,
+                                                      gt_nodes[j]->scaler_index);
+    }
 
     locus_update_partials(locus[i],gt_nodes,k);
 
@@ -175,7 +220,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
     else
     {
-      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      for (j = 0; j < nodes_count; ++j)
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
         logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
@@ -198,7 +243,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     gt->logl = logl;
 
     free(gt_nodes);
-    
   }
 
   if (!opt_est_theta)
@@ -221,7 +265,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     /* revert thetas and logpr contributions */
     if (opt_est_theta)
     {
-      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      for (i = 0; i < nodes_count; ++i)
       {
         for (j = 0; j < stree->locus_count; ++j)
           snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
@@ -240,7 +284,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
     else
     {
-      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      for (i = 0; i < nodes_count; ++i)
       {
         for (j = 0; j < opt_locus_count; ++j)
           logprob_revert_notheta(stree->nodes[i],j);
@@ -249,16 +293,39 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
 
     /* revert taus */
-    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    if (opt_network)
     {
-      if (snodes[i]->tau == 0) continue;
+      for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+      {
+        if (snodes[i]->tau == 0 || snodes[i]->htau == 0) continue;
 
-      /* TODO: Same here */
+        snodes[i]->tau /= c;
+        if (snodes[i]->hybrid)
+        {
+          assert(!node_is_bidirection(snodes[i]));
+          assert(!node_is_mirror(snodes[i]));
+          
+          snodes[i]->hybrid->tau = snodes[i]->tau;
+          if (snodes[i]->parent->htau == 0)
+            snodes[i]->parent->tau = snodes[i]->tau;
+          if (snodes[i]->hybrid->parent->htau == 0)
+            snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+        }
+      }
+    }
+    else
+    {
+      for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+      {
+        if (snodes[i]->tau == 0) continue;
+
+        /* TODO: Same here */
 #if 0
-      snodes[i]->tau = snodes[i]->old_tau;
+        snodes[i]->tau = snodes[i]->old_tau;
 #else
-      snodes[i]->tau /= c;
+        snodes[i]->tau /= c;
 #endif
+      }
     }
 
     /* go through all loci */
@@ -275,6 +342,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
                                                 gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                gnodeptr[j]->scaler_index);
         gnodeptr[j]->time = gnodeptr[j]->old_time;
       }
 

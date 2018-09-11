@@ -25,6 +25,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
 
 
 /* species tree spr move related */
@@ -650,8 +651,6 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
 
       if (x->hybrid && x->tau)
       {
-        assert(x->parent->parent);
-        assert(x->hybrid->parent->parent);
         if (x->parent->htau && x->parent->tau == 1)
         {
             run  = 1;
@@ -663,22 +662,27 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
           continue;
         }
 
-        assert(x->parent->parent->tau > 0);
-        if ((x->parent->htau == 0) && (x->parent->parent->tau == 1))
+        if (x->parent->htau == 0)
         {
-          run = 1;
-          continue;
+          assert(x->parent->parent);
+          assert(x->parent->parent->tau > 0);
+          if (x->parent->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
         }
 
-        assert(x->hybrid->parent->parent->tau > 0);
-        if ((x->hybrid->parent->htau == 0) && (x->hybrid->parent->parent->tau == 1))
+        if (x->hybrid->parent->htau == 0)
         {
-          run = 1;
-          continue;
+          assert(x->hybrid->parent->parent);
+          assert(x->hybrid->parent->parent->tau > 0);
+          if (x->hybrid->parent->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
         }
-
-        assert(!x->parent->parent->hybrid);
-        assert(!x->hybrid->parent->parent->hybrid);
 
         double age1 = (x->parent->htau) ?
                         x->parent->tau : x->parent->parent->tau;
@@ -800,6 +804,16 @@ static void stree_init_tau(stree_t * stree)
      stree_init_tau_recursive(stree->root->right, prop);
    }
 
+/* 22.6.2018 - Testing gene tree node age proposal for MSCi */
+#if 0
+   /********************/
+   stree->root->tau = 0.4;
+   stree->root->left->tau = 0.2;
+   stree->root->right->tau = 0.3;
+   stree->nodes[stree->tip_count + stree->inner_count]->tau = .1;
+   stree->nodes[stree->tip_count + stree->inner_count]->hybrid->tau = .1;
+#endif
+
    /* check to see if everything is OK */
    if (opt_network)
    {
@@ -812,6 +826,157 @@ static void stree_init_tau(stree_t * stree)
        assert((h->parent->tau >= h->tau) && (h->hybrid->tau == h->tau));
      }
    }
+}
+
+static int propose_gamma(stree_t * stree, gtree_t ** gtree, snode_t * snode)
+{
+  int accepted;
+  long i;
+  double gammanew;
+  double gammaold;
+  double new_logpr;
+  double old_logpr;
+  double lnacceptance;
+
+  assert(!node_is_bidirection(snode));
+  assert(node_is_hybridization(snode));
+  assert(!node_is_mirror(snode));
+
+  gammaold = snode->hgamma;
+  gammanew = gammaold + opt_finetune_gamma * legacy_rnd_symmetrical();
+  gammanew = reflect(gammanew,0,1);
+
+  if (opt_est_theta)
+  {
+    old_logpr = 0;
+    new_logpr = 0;
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      old_logpr += gtree[i]->logpr;
+      new_logpr += gtree[i]->logpr +
+                   snode->seqin_count[i]*(log(gammanew) - log(gammaold)) +
+                   snode->hybrid->seqin_count[i]*(log(1-gammanew) - log(1-gammaold));
+    }
+  }
+  else
+  {
+    old_logpr = stree->notheta_logpr;
+    new_logpr = stree->notheta_logpr;
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      new_logpr += snode->seqin_count[i]*(log(gammanew) - log(gammaold)) +
+                   snode->hybrid->seqin_count[i]*(log(1-gammanew) - log(1-gammaold));
+    }
+  }
+
+  lnacceptance = (opt_gamma_alpha-1) * (log(gammanew) - log(gammaold)) +
+                 (opt_gamma_beta-1) * (log(1-gammanew) - log(1-gammaold)) +
+                 new_logpr - old_logpr;
+
+  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+  {
+    /* accepted */
+
+    accepted = 1;
+    snode->hgamma = gammanew;
+    snode->hybrid->hgamma = 1-gammanew;
+
+    /* update logpr */
+    if (opt_est_theta)
+    {
+      for (i = 0; i < stree->locus_count; ++i)
+      {
+        /* subtract from gene tree log-density the old gamma contributions */
+        gtree[i]->logpr = gtree[i]->logpr -
+                          snode->logpr_contrib[i] -
+                          snode->hybrid->logpr_contrib[i];
+
+        /* update log-density contributions for the two populations */
+        snode->logpr_contrib[i] += snode->seqin_count[i] *
+                                   (log(gammanew) - log(gammaold));
+        snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] *
+                                           (log(1-gammanew) - log(1-gammaold));
+
+        /* add to the gene tree log-density the new gamma contributions */
+        gtree[i]->logpr = gtree[i]->logpr +
+                          snode->logpr_contrib[i] +
+                          snode->hybrid->logpr_contrib[i];
+      }
+    }
+    else
+    {
+      /* subtract from total density (sum of densities of all gene trees) the
+         old gamma contributions from the two populations */
+      stree->notheta_logpr -= snode->notheta_logpr_contrib;
+      stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
+
+      /* compute new contributions */
+      for (i = 0; i < stree->locus_count; ++i)
+      {
+        snode->notheta_logpr_contrib = snode->notheta_logpr_contrib +
+                                       snode->seqin_count[i] * 
+                                       (log(gammanew) - log(gammaold));
+        snode->hybrid->notheta_logpr_contrib = snode->hybrid->notheta_logpr_contrib +
+                                               snode->hybrid->seqin_count[i] * 
+                                               (log(1-gammanew)-log(1-gammaold));
+        
+      }
+
+      /* add new contributions to total log-density */
+      stree->notheta_logpr += snode->notheta_logpr_contrib;
+      stree->notheta_logpr += snode->hybrid->notheta_logpr_contrib;
+    }
+  }
+  else
+  {
+    /* rejected */
+    accepted = 0;
+  }
+  return accepted;
+}
+
+double stree_propose_gamma(stree_t * stree, gtree_t ** gtree)
+{
+  long i;
+  long accepted = 0;
+
+  /* offset to start of hybridization nodes */
+  long offset = stree->tip_count + stree->inner_count;
+
+  /* go through hybridization nodes */
+  for (i = 0; i < stree->hybrid_count; ++i)
+    accepted += propose_gamma(stree,gtree,stree->nodes[offset+i]->hybrid);
+
+  return ((double)accepted / stree->hybrid_count);
+}
+
+static void stree_init_gamma(stree_t * stree)
+{
+  long i;
+
+  long offset = stree->tip_count + stree->inner_count;
+
+  if (opt_gamma_alpha <= 0)
+    fatal("Alpha value for 'gammaprior' must be larger than 0");
+  if (opt_gamma_beta <= 0)
+    fatal("Beta value for 'gammaprior' must be larger than 0");
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * mnode = stree->nodes[offset+i];
+
+    assert(!node_is_bidirection(mnode));
+    assert(node_is_mirror(mnode));
+
+    /* set gamma parameter to the mean */
+    mnode->hybrid->hgamma = (opt_gamma_alpha / (opt_gamma_alpha + opt_gamma_beta));
+
+/****************/
+#if 0
+    mnode->hybrid->hgamma = 0.7;
+#endif
+    mnode->hgamma = 1 - mnode->hybrid->hgamma;
+  }
 }
 
 static void stree_init_theta(stree_t * stree,
@@ -1063,6 +1228,19 @@ static void stree_init_theta(stree_t * stree,
   for (i = 0; i < stree->tip_count; ++i)
     free(seqcount[i]);
   free(seqcount);
+
+/* 22.6.2018 - Testing gene tree node age proposal for MSCi */
+#if 0
+  /******************************/
+  stree->root->theta = 0.2;  /* R */
+  stree->root->left->theta = 0.15;               /* S */
+  stree->root->right->theta = 0.15;              /* T */
+  stree->nodes[stree->tip_count + stree->inner_count]->theta = 0.05;  /* Hr */
+  stree->nodes[stree->tip_count + stree->inner_count]->hybrid->theta = 0.25;  /* Hl */
+  stree->nodes[0]->theta = 0.1;  /* A */
+  stree->nodes[1]->theta = 0.2;  /* B */
+  stree->nodes[2]->theta = 0.3;  /* C */
+#endif
 }
 
 /* bottom up filling of pptable */
@@ -1310,6 +1488,9 @@ void stree_init(stree_t * stree,
   /* Initialize speciation times and create extinct species groups */
   stree_init_tau(stree);
 
+  if (opt_network)
+    stree_init_gamma(stree);
+
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */
   stree->locus_count = (unsigned int)msa_count;
@@ -1429,7 +1610,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
    long accepted = 0;
    snode_t * snode;
 
-   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
    {
       snode = stree->nodes[i];
       if (snode->theta >= 0 && snode->has_theta)
@@ -1443,10 +1624,10 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
 }
 
 static long propose_tau(locus_t ** loci,
-   snode_t * snode,
-   gtree_t ** gtree,
-   stree_t * stree,
-   unsigned int candidate_count)
+                        snode_t * snode,
+                        gtree_t ** gtree,
+                        stree_t * stree,
+                        unsigned int candidate_count)
 {
    unsigned int i, j, k;
    unsigned int offset = 0;
@@ -1466,19 +1647,74 @@ static long propose_tau(locus_t ** loci,
    unsigned int locus_count_above;
    unsigned int locus_count_below;
 
+   unsigned int paffected_count;        /* number of affected populations */
+
    oldage = snode->tau;
 
    /* compute minage and maxage bounds */
-   if (snode->left)
-      minage = MAX(snode->left->tau, snode->right->tau);
+   if (opt_network && snode->hybrid)
+   {
+     assert(node_is_hybridization(snode));
+     assert(!node_is_mirror(snode));
+     assert(snode->left);
 
-   if (snode->parent)
-      maxage = snode->parent->tau;
+     minage = snode->left->tau;
+     if (!snode->parent->htau)
+     {
+       snode_t * sibling = (snode->parent->left == snode) ?
+                             snode->parent->right : snode->parent->left;
+
+       minage = MAX(minage,sibling->tau);
+     }
+     if (!snode->hybrid->parent->htau)
+     {
+       snode_t * sibling = (snode->hybrid->parent->left == snode->hybrid) ?
+                             snode->hybrid->parent->right : snode->hybrid->parent->left;
+
+       minage = MAX(minage,sibling->tau);
+     }
+
+   }
+   else
+   {
+     if (snode->left)
+        minage = MAX(snode->left->tau, snode->right->tau);
+   }
+
+   if (opt_network && snode->hybrid)
+   {
+     assert(node_is_hybridization(snode));
+     assert(!node_is_mirror(snode));
+     assert(snode->parent->parent);
+     assert(snode->hybrid->parent->parent);
+
+     double p1age = snode->parent->htau ?
+                      snode->parent->tau : snode->parent->parent->tau;
+     double p2age = snode->hybrid->parent->htau ?
+                      snode->hybrid->parent->tau : snode->hybrid->parent->parent->tau;
+
+     maxage = MIN(p1age,p2age);
+   }
+   else
+   {
+     if (snode->parent)
+        maxage = snode->parent->tau;
+   }
 
    /* propose new tau */
    newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical();
    newage = reflect(newage, minage, maxage);
    snode->tau = newage;
+
+   if (opt_network && snode->hybrid)
+   {
+     snode->hybrid->tau = snode->tau;
+
+     if (!snode->parent->htau)
+       snode->parent->tau = snode->tau;
+     if (!snode->hybrid->parent->htau)
+       snode->hybrid->parent->tau = snode->tau;
+   }
 
    /* compute factors for multiplying associated gene tree nodes ages */
    minfactor = (newage - minage) / (oldage - minage);
@@ -1502,22 +1738,134 @@ static long propose_tau(locus_t ** loci,
          assert(0);
 
       snode->theta = oldtheta / thetafactor;
+      if (opt_network && snode->hybrid)
+      {
+        /* TODO : Need to update the hybrid as well */
+        //snode->hybrid->theta = 
+      }
 
       lnacceptance += -log(thetafactor) + (-opt_theta_alpha - 1) *
          log(snode->theta / oldtheta) -
          opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
    }
 
-   snode_t * affected[3] = { snode, snode->left, snode->right };
-   double old_logpr_contrib[3] = { 0,0,0 };
+   snode_t * affected[5];
+   double old_logpr_contrib[5] = {0,0,0,0,0};
+
+   if (opt_network && snode->hybrid)
+   {
+     assert(!node_is_bidirection(snode));
+
+     if (snode->parent->htau && snode->hybrid->parent->htau)
+     {
+       /* model H3
+            *
+           / \
+          *   *
+         / \ / \
+        /   +   \
+       /    |    \
+       
+       */
+
+       affected[0] = snode->left;
+       affected[1] = snode;
+       affected[2] = snode->hybrid;
+       paffected_count = 3;
+     }
+     else if (!snode->parent->htau && !snode->hybrid->parent->htau)
+     {
+       /* model H1 
+           *
+          / \
+         /   \
+        *--+--*
+       /   |   \
+
+       */
+
+       snode_t * child;
+
+       paffected_count = 0;
+       for (i = 0; i < stree->locus_count; ++i)
+       {
+         assert(snode->parent->event_count[i] == 0);
+         assert(snode->hybrid->parent->event_count[i] == 0);
+       }
+
+       affected[paffected_count++] = snode->parent->parent;
+       if (snode->hybrid->parent->parent != snode->parent->parent)
+         affected[paffected_count++] = snode->hybrid->parent->parent;
+
+       child = (snode->parent->left == snode) ?
+                 snode->parent->right : snode->parent->left;
+       affected[paffected_count++] = child;
+       child = (snode->hybrid->parent->left == snode->hybrid) ?
+                 snode->hybrid->parent->right : snode->hybrid->parent->left;
+       affected[paffected_count++] = child; 
+       affected[paffected_count++] = snode->left;
+     }
+     else
+     {
+       /* model H2
+              *                  *
+             / \                / \
+            /   *      or      *   \
+           /   / \            / \   \
+          *---+   \          /   +---*
+         /    |    \        /    |    \
+
+       */
+
+       assert((!snode->parent->htau && snode->hybrid->parent->htau) ||
+              (snode->parent->htau && !snode->hybrid->parent->htau));
+
+       paffected_count = 0;
+
+       /* assertions */
+       if (!snode->parent->htau)
+         for (i = 0; i < stree->locus_count; ++i)
+           assert(snode->parent->event_count[i] == 0);
+       if (!snode->hybrid->parent->htau)
+         for (i = 0; i < stree->locus_count; ++i)
+           assert(snode->hybrid->parent->event_count[i] == 0);
+
+       if (!snode->parent->htau)
+       {
+         affected[paffected_count++] = snode->parent->parent;
+         snode_t * child = (snode->parent->left == snode) ?
+                             snode->parent->right : snode->parent->left;
+         affected[paffected_count++] = child;
+         affected[paffected_count++] = snode->hybrid;
+       }
+       else
+       {
+         assert(!snode->hybrid->parent->htau);
+         affected[paffected_count++] = snode->hybrid->parent->parent;
+         snode_t * child = (snode->hybrid->parent->left == snode) ?
+                             snode->hybrid->parent->right : snode->hybrid->parent->left;
+         affected[paffected_count++] = child;
+         affected[paffected_count++] = snode;
+       }
+
+       affected[paffected_count++] = snode->left;
+     }
+   }
+   else
+   {
+     paffected_count = 3;
+     affected[0] = snode;
+     affected[1] = snode->left;
+     affected[2] = snode->right;
+   }
+
    if (!opt_est_theta)
    {
-      old_logpr_contrib[0] = affected[0]->notheta_logpr_contrib;
-      old_logpr_contrib[1] = affected[1]->notheta_logpr_contrib;
-      old_logpr_contrib[2] = affected[2]->notheta_logpr_contrib;
+      for (i = 0; i < paffected_count; ++i)
+        old_logpr_contrib[i] = affected[i]->notheta_logpr_contrib;
 
       logpr = stree->notheta_logpr;
-      for (j = 0; j < 3; ++j)
+      for (j = 0; j < paffected_count; ++j)
          logpr -= affected[j]->notheta_logpr_contrib;
    }
 
@@ -1536,7 +1884,7 @@ static long propose_tau(locus_t ** loci,
          whose ages fall within the new age interval, update their age and mark
          them. Also, count how many of them are above the old species node age,
          and how many are below. Finally, update the gene tree probabilities */
-      for (j = 0; j < 3; ++j)
+      for (j = 0; j < paffected_count; ++j)
       {
          /* process events for current population */
          if (affected[j]->event_count)
@@ -1545,7 +1893,8 @@ static long propose_tau(locus_t ** loci,
             for (event = affected[j]->event[i]->head; event; event = event->next)
             {
                gnode_t * node = (gnode_t *)(event->data);
-               if (node->time < minage) continue;
+               //if (node->time < minage) continue;
+               if ((node->time < minage) || (node->time > maxage)) continue;
 
                gt_nodesptr[k] = node;
                node->mark = FLAG_PARTIAL_UPDATE;
@@ -1644,12 +1993,17 @@ static long propose_tau(locus_t ** loci,
          /* get list of nodes for which partials must be recomputed */
          unsigned int partials_count;
          gnode_t ** partials = gtree_return_partials(gtree[i]->root,
-            i,
-            &partials_count);
+                                                     i,
+                                                     &partials_count);
 
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                    partials[j]->scaler_index);
+         }
 
          /* update partials */
          locus_update_partials(loci[i], partials, partials_count);
@@ -1674,7 +2028,7 @@ static long propose_tau(locus_t ** loci,
 
    if (!opt_est_theta)
    {
-      for (j = 0; j < 3; ++j)
+      for (j = 0; j < paffected_count; ++j)
          logpr += affected[j]->notheta_logpr_contrib;
 
       logpr_diff = logpr - stree->notheta_logpr;
@@ -1683,7 +2037,7 @@ static long propose_tau(locus_t ** loci,
    }
 
    lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
-      count_above*log(maxfactor);
+                   count_above*log(maxfactor);
 
    if (opt_debug)
       printf("[Debug] (tau) lnacceptance = %f\n", lnacceptance);
@@ -1711,9 +2065,24 @@ static long propose_tau(locus_t ** loci,
       /* rejected */
       offset = 0;
       snode->tau = oldage;
+      if (opt_network && snode->hybrid)
+      {
+        snode->hybrid->tau = snode->tau;
+
+        if (!snode->parent->htau)
+          snode->parent->tau = snode->tau;
+        if (!snode->hybrid->parent->htau)
+          snode->hybrid->parent->tau = snode->tau;
+      }
 
       if (opt_est_theta)
+      {
          snode->theta = oldtheta;
+         if (opt_network && snode->hybrid)
+         {
+           /* TODO: Need to update hybrid theta */
+         }
+      }
 
       for (i = 0; i < stree->locus_count; ++i)
       {
@@ -1727,28 +2096,31 @@ static long propose_tau(locus_t ** loci,
 
          /* restore logpr contributions */
          if (opt_est_theta)
-            for (j = 0; j < 3; ++j)
-               gtree_update_logprob_contrib(affected[j], loci[i]->heredity[0], i);
+           for (j = 0; j < paffected_count; ++j)
+             gtree_update_logprob_contrib(affected[j], loci[i]->heredity[0], i);
          else
          {
-            for (j = 0; j < 3; ++j)
-               logprob_revert_notheta(affected[j], i);
+           for (j = 0; j < paffected_count; ++j)
+             logprob_revert_notheta(affected[j], i);
          }
-
-
 
          /* get the list of nodes for which CLVs must be reverted, i.e. all marked
             nodes and all nodes whose left or right subtree has at least one marked
             node */
          unsigned int partials_count;
          gnode_t ** partials = gtree_return_partials(gtree[i]->root,
-            i,
-            &partials_count);
+                                                     i,
+                                                     &partials_count);
 
          /* revert CLV indices */
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                    partials[j]->scaler_index);
+         }
 
          /* un-mark nodes */
          for (j = 0; j < k; ++j)
@@ -1779,7 +2151,7 @@ static long propose_tau(locus_t ** loci,
       }
       if (!opt_est_theta)
       {
-         for (j = 0; j < 3; ++j)
+         for (j = 0; j < paffected_count; ++j)
             affected[j]->notheta_logpr_contrib = old_logpr_contrib[j];
 
          stree->notheta_logpr = stree->notheta_old_logpr;
@@ -2759,8 +3131,13 @@ long stree_propose_spr(stree_t ** streeptr,
 
          /* point to the double-buffered partials space */
          for (j = 0; j < partials_count; ++j)
+         {
             partials[j]->clv_index = SWAP_CLV_INDEX(gtree_list[i]->tip_count,
-               partials[j]->clv_index);
+                                                    partials[j]->clv_index);
+            if (opt_scaling)
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree_list[i]->tip_count,
+                                                    partials[j]->scaler_index);
+         }
 
          /* update conditional probabilities (partials) of affected nodes */
          locus_update_partials(loci[i], partials, partials_count);

@@ -178,9 +178,13 @@ static void dump_chk_section_1(FILE * fp,
                                long mean_theta_count)
 {
   size_t i;
+  unsigned int hoffset = stree->tip_count+stree->inner_count;
 
   /* write seed */
   DUMP(&opt_seed,1,fp);
+
+  /* write control file */
+  DUMP(opt_cfile,strlen(opt_cfile)+1,fp);
 
   /* write seqfile */
   DUMP(opt_msafile,strlen(opt_msafile)+1,fp);
@@ -193,6 +197,12 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write mcmcfile */
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
+
+  /* write network info */
+  DUMP(&opt_network,1,fp);
+
+  /* write method info */
+  DUMP(&opt_method,1,fp);
 
   /* write speciesdelimitation */
   DUMP(&opt_est_delimit,1,fp);
@@ -221,8 +231,15 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write species&tree */
   DUMP(&(stree->tip_count),1,fp);
+  DUMP(&(stree->inner_count),1,fp);
+  DUMP(&(stree->hybrid_count),1,fp);
+  DUMP(&(stree->edge_count),1,fp);
   for (i = 0; i < stree->tip_count; ++i)
     DUMP(stree->nodes[i]->label,strlen(stree->nodes[i]->label)+1,fp);
+  for (i = 0; i < stree->hybrid_count; ++i)
+    DUMP(stree->nodes[hoffset+i]->label,
+         strlen(stree->nodes[hoffset+i]->label)+1,
+         fp);
   
   /* write usedata, cleandata and nloci */
   DUMP(&opt_usedata,1,fp);
@@ -244,6 +261,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_tau_alpha,1,fp);
   DUMP(&opt_tau_beta,1,fp);
 
+  DUMP(&opt_gamma_alpha,1,fp);
+  DUMP(&opt_gamma_beta,1,fp);
+
   /* whether locus mutation rate is estimated */
   DUMP(&opt_est_locusrate,1,fp);
   DUMP(&opt_locusrate_alpha,1,fp);
@@ -255,6 +275,7 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
+  DUMP(&opt_finetune_gamma,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
   DUMP(&opt_finetune_theta,1,fp);
@@ -321,34 +342,60 @@ static void dump_chk_section_1(FILE * fp,
 
 static void dump_chk_section_2(FILE * fp, stree_t * stree)
 {
+  unsigned int total_nodes;
+  unsigned int hoffset;
   long i,j;
+
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+
+  /* write node indices of hybridization events */
+  hoffset = stree->tip_count + stree->inner_count;
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    assert(!node_is_bidirection(stree->nodes[hoffset+i]));
+    assert(node_is_mirror(stree->nodes[hoffset+i]));
+    DUMP(&(stree->nodes[hoffset+i]->hybrid->node_index),1,fp);
+  }
 
   /* write left child node indices */
   for (i = 0; i < stree->inner_count; ++i)
     DUMP(&(stree->nodes[stree->tip_count+i]->left->node_index),1,fp);
 
+
   /* write right child node indices */
   for (i = 0; i < stree->inner_count; ++i)
-    DUMP(&(stree->nodes[stree->tip_count+i]->right->node_index),1,fp);
+  {
+    if (!stree->nodes[stree->tip_count+i]->hybrid)
+    {
+      DUMP(&(stree->nodes[stree->tip_count+i]->right->node_index),1,fp);
+    }
+  }
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+    DUMP(&(stree->nodes[hoffset+i]->hybrid->hgamma),1,fp);
+
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->htau),1,fp);
+
 
   /* TODO: We do not need to write theta when !opt_est_theta */
   /* write theta */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->theta),1,fp);
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->has_theta),1,fp);
 
   /* write tau */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->tau),1,fp);
 
   /* write support */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->support),1,fp);
 
   /* write number of coalescent events */
   assert(opt_locus_count == stree->locus_count);
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(stree->nodes[i]->event_count,opt_locus_count,fp);
 
 //  /* write MSC density contribution - TODO: Candidate for removal */
@@ -361,7 +408,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&(stree->notheta_logpr),1,fp);
     DUMP(&(stree->notheta_hfactor),1,fp);
     DUMP(&(stree->notheta_sfactor),1,fp);
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < total_nodes; ++i)
     {
       DUMP(stree->nodes[i]->t2h,opt_locus_count,fp);
       DUMP(&(stree->nodes[i]->t2h_sum),1,fp);
@@ -374,11 +421,11 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
   /* TODO : Perhaps write only seqin_count for tips? */
   /* write number of incoming sequences for each node */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
     DUMP(stree->nodes[i]->seqin_count,opt_locus_count,fp);
 
   /* write event indices for each node */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
   {
     for (j = 0; j < opt_locus_count; ++j)
     {
@@ -396,7 +443,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   }
 }
 
-static void dump_gene_tree(FILE * fp, gtree_t * gtree)
+static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count)
 {
   long i;
 
@@ -439,6 +486,10 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree)
   /* write mark - TODO: Candidate for removal */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
     DUMP(&(gtree->nodes[i]->mark),1,fp);
+
+  /* write hpath */
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+    DUMP(gtree->nodes[i]->hpath,hybrid_count,fp);
 }
 
 static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
@@ -460,6 +511,9 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   /* write number of prob matrices */
   DUMP(&(locus->prob_matrices),1,fp);
+
+  /* write number of prob matrices */
+  DUMP(&(locus->scale_buffers),1,fp);
 
   /* write attributes */
   DUMP(&(locus->attributes),1,fp);
@@ -510,13 +564,13 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   }
 }
 
-static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, long msa_count)
+static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, stree_t * stree, long msa_count)
 {
   long i;
 
   for (i = 0; i < msa_count; ++i)
   {
-    dump_gene_tree(fp,gtree_list[i]);
+    dump_gene_tree(fp,gtree_list[i],stree->hybrid_count);
   }
 }
 
@@ -605,7 +659,7 @@ int checkpoint_dump(stree_t * stree,
   dump_chk_section_2(fp,stree);
 
   /* write section 3 */
-  dump_chk_section_3(fp,gtree_list,stree->locus_count);
+  dump_chk_section_3(fp,gtree_list,stree,stree->locus_count);
 
   /* write section 4 */
   dump_chk_section_4(fp,gtree_list,locus_list,stree->locus_count);

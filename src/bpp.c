@@ -66,16 +66,20 @@ long opt_revolutionary_spr_debug;
 long opt_rjmcmc_method;
 long opt_samplefreq;
 long opt_samples;
+long opt_scaling;
 long opt_seed;
 long opt_usedata;
 long opt_version;
 double opt_bfbeta;
+double opt_finetune_gamma;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
 double opt_finetune_mix;
 double opt_finetune_tau;
 double opt_finetune_theta;
+double opt_gamma_alpha;
+double opt_gamma_beta;
 double opt_heredity_alpha;
 double opt_heredity_beta;
 double opt_locusrate_alpha;
@@ -182,6 +186,7 @@ void args_init(int argc, char ** argv)
   opt_revolutionary_spr_method = 0;
   opt_revolutionary_spr_debug = 0;
 #endif
+  opt_finetune_gamma = 0.001;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_mix   = 0.3;
@@ -189,6 +194,8 @@ void args_init(int argc, char ** argv)
   opt_finetune_reset = 0;
   opt_finetune_tau   = 0.001;
   opt_finetune_theta = 0.001;
+  opt_gamma_alpha = 0;
+  opt_gamma_beta = 0;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -216,6 +223,7 @@ void args_init(int argc, char ** argv)
   opt_rjmcmc_method = -1;
   opt_samplefreq = 10;
   opt_samples = 0;
+  opt_scaling = 0;
   opt_seed = (long)time(NULL);
   opt_sp_seqcount = NULL;
   opt_streenewick = NULL;
@@ -403,6 +411,7 @@ int main (int argc, char * argv[])
   else if (opt_resume || opt_cfile)
   {
     cmd_run();
+    //d_mcmc();
   }
 
   dealloc_switches();
