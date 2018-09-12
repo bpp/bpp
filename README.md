@@ -170,12 +170,12 @@ Special thanks to Yuttapong Thawornwattana and [Mario dos Reis Barros](http://ww
 * Flouri T., Carrasco FI, Darriba D., Aberer AJ, Nguyen LT, Minh BQ, Haeseler A., Stamatakis A. (2015)
 **The Phylogenetic Likelihood Library.**
 *Systematic Biology*, 64(2):356-362.
-doi:[10.1093/sysbio/syu084](10.1093/sysbio/syu084)
+doi:[10.1093/sysbio/syu084](http://dx.doi.org/10.1093/sysbio/syu084)
 
 * Flouri T., Jiao X., Rannala B., Yang Z. (2018)
 **Species Tree Inference with BPP using Genomic Sequences and the Multispecies Coalescent.**
 *Molecular Biology and Evolution*, Accepted Manuscript.
-doi:[10.1093/molbev/msy147](https://doi.org/10.1093/molbev/msy147)
+doi:[10.1093/molbev/msy147](http://dx.doi.org/10.1093/molbev/msy147)
 
 * Yang Z., Rannala B. (2003)
 **Bayes Estimation of Species Divergence Times and Ancestral Population Sizes using DNA Sequences From Multiple Loci.**
@@ -210,7 +210,7 @@ doi:[10.1534/genetics.112.149039](http://dx.doi.org/10.1534/genetics.112.149039)
 * Yang Z., Rannala B. (2014)
 **Unguided species delimitation using DNA sequence data from multiple loci.**
 *Molecular Biology and Evolution*, 31(12):3125-3135.
-doi:[10.1093/molbev/msu279](10.1093/molbev/msu279)
+doi:[10.1093/molbev/msu279](http://dx.doi.org/10.1093/molbev/msu279)
 
 * Rannala B., Yang Z. (2017)
 **Efficient Bayesian Species Tree Inference under the Multispecies Coalescent.**
