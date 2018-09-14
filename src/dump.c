@@ -194,6 +194,12 @@ static void dump_chk_section_1(FILE * fp,
   /* write mcmcfile */
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
 
+  /* write checkpoint info */
+  DUMP(&opt_checkpoint,1,fp);
+  DUMP(&opt_checkpoint_current,1,fp);
+  DUMP(&opt_checkpoint_initial,1,fp);
+  DUMP(&opt_checkpoint_step,1,fp);
+
   /* write speciesdelimitation */
   DUMP(&opt_est_delimit,1,fp);
   DUMP(&opt_rjmcmc_method,1,fp);

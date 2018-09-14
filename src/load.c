@@ -238,6 +238,16 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read name of mcmc file");
   printf(" MCMC file: %s\n", opt_mcmcfile);
 
+  /* read checkpoint info */
+  if (!LOAD(&opt_checkpoint,1,fp))
+    fatal("Cannot read 'checkpoint' flag");
+  if (!LOAD(&opt_checkpoint_current,1,fp))
+    fatal("Cannot read 'checkpoint' status");
+  if (!LOAD(&opt_checkpoint_initial,1,fp))
+    fatal("Cannot read 'checkpoint' tag initial value");
+  if (!LOAD(&opt_checkpoint_step,1,fp))
+    fatal("Cannot read 'checkpoint' tag step value");
+
   /* read speciesdelimitation */
   if (!LOAD(&opt_est_delimit,1,fp))
     fatal("Cannot read 'speciesdelimitation' tag");

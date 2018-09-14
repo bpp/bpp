@@ -85,7 +85,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 0
-#define VERSION_PATCH 1
+#define VERSION_PATCH 2
 
 /* checkpoint version */
 #define VERSION_CHKP 1
