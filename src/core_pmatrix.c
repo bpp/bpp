@@ -72,8 +72,14 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
       }
       else
       {
+        #if 0
         double a =  (1 + 3*exp(-4*t/3) ) / 4;
         double b = (1 - a) / 3;
+        #endif
+
+        double exptm1 = expm1(-4*t/3);
+        double a = 1 + 3/4. * exptm1;
+        double b = -exptm1/4;
 
         pmat[0]  = a;
         pmat[1]  = b;
