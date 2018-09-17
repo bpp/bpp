@@ -1676,30 +1676,32 @@ double gtree_logprob(stree_t * stree, double heredity, long msa_index)
   return logpr;
 }
 
-double reflect(double t, double minage, double maxage)
+double reflect(double x, double a, double b)
 {
   int side = 0;
   double n,excess = 0;
-  const double EPSILON = 1e-100;
+  const double EPSILON = 1e-200;
 
-  if (maxage-minage < EPSILON)
+  /* returns a variable in range (a,b) by reflecting x back into the range */
+
+  if (b-a < EPSILON)
     fatal("Internal error when proposing gene tree noge age");
 
 
-  if (t < minage)
+  if (x < a)
   {
-    excess = minage - t;
+    excess = a - x;
     side = 0;
   }
-  else if (t > maxage)
+  else if (x > b)
   {
-    excess = t - maxage;
+    excess = x - b;
     side = 1;
   }
 
   if (excess)
   {
-    double diff = maxage - minage;
+    double diff = b - a;
 
     n = floor(excess / diff);
 
@@ -1708,16 +1710,15 @@ double reflect(double t, double minage, double maxage)
 
     excess -= n*diff;
 
-    t = side ? maxage-excess : minage+excess;
+    x = side ? b-excess : a+excess;
   }
 
-  /* for numerical stability */
-  if (t == minage)
-    t += (maxage-minage)*1e-6;
-  else if (t == maxage)
-    t -= (maxage-minage)*1e-6;
+   /* The following is to fix the problem of x landing on the boundary,
+   due to small chances and rounding errors */
+   while (x - a < EPSILON || b - x < EPSILON)
+      x = (b - a)*legacy_rndu();
 
-  return t;
+  return x;
 }
 
 void unlink_event(gnode_t * node, int msa_index)
@@ -3029,7 +3030,7 @@ static int branch_compat(stree_t * stree,
   snode_t * end = target->parent ? target->parent->pop : stree->root;
   
   
-  assert(target->time < tnew);
+  assert(target->time <= tnew);
   if (target->parent)
     assert(target->parent->time > tnew);
 
