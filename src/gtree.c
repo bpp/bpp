@@ -1253,8 +1253,8 @@ double reflect(double x, double a, double b)
 
    /* The following is to fix the problem of x landing on the boundary,
    due to small chances and rounding errors */
-   while (x - a < EPSILON || b - x < EPSILON)
-      x = (b - a)*legacy_rndu();
+   while ((x - a < EPSILON) || (b - x < EPSILON))
+      x = a + (b - a)*legacy_rndu();
 
   return x;
 }
