@@ -417,10 +417,7 @@ static gtree_t * gtree_wraptree(gnode_t * root,
   {
     /* if tip counts is set to 0 then recursively count the number of tips */
     tip_count = gtree_count_tips(root);
-    if (tip_count < 2)
-    {
-      fatal("Input tree contains no inner nodes.");
-    }
+    assert(tip_count);
   }
 
   tree->nodes = (gnode_t **)xmalloc((2*tip_count-1)*sizeof(gnode_t *));
@@ -454,6 +451,16 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
        with the corresponding population using its species tag */
   for (j = 0; j < stree->tip_count; ++j)
     pop[j].snode = stree->nodes[j];
+
+  if (stree->tip_count == 1)
+  {
+    pop[0].seq_count = msa->count;
+    pop[0].seq_indices = (int *)xcalloc((size_t)(msa->count),sizeof(int));
+    pop[0].nodes = (gnode_t **)xcalloc((size_t)(msa->count),sizeof(gnode_t *));
+    for (i = 0; i < msa->count; ++i)
+      pop[0].seq_indices[i] = i;
+    return;
+  }
 
   for (j = 0; j < (unsigned int)(msa->count); ++j)
   {
@@ -989,9 +996,12 @@ void reset_gene_leaves_count(stree_t * stree)
 
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
 
-  for (j = 0; j < stree->locus_count; ++j)
-    stree->root->gene_leaves[j] = stree->root->left->gene_leaves[j] +
-                                  stree->root->right->gene_leaves[j];
+  if (stree->tip_count > 1)
+  {
+    for (j = 0; j < stree->locus_count; ++j)
+      stree->root->gene_leaves[j] = stree->root->left->gene_leaves[j] +
+                                    stree->root->right->gene_leaves[j];
+  }
 
 }
 
@@ -1045,8 +1055,16 @@ gtree_t ** gtree_init(stree_t * stree,
   gtree = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
 
   /* create mapping hash tables */
-  sht = species_hash(stree);
-  mht = maplist_hash(maplist,sht);
+  if (stree->tip_count == 1)
+  {
+    sht = NULL;
+    mht = NULL;
+  }
+  else
+  {
+    sht = species_hash(stree);
+    mht = maplist_hash(maplist,sht);
+  }
 
   /* generate random starting gene trees for each alignment */
   printf("Generating gene trees....");
@@ -1055,8 +1073,11 @@ gtree_t ** gtree_init(stree_t * stree,
   printf(" Done\n");
 
   /* destroy the hash tables */
-  hashtable_destroy(sht,NULL);
-  hashtable_destroy(mht,cb_dealloc_pairlabel);
+  if (stree->tip_count > 1)
+  {
+    hashtable_destroy(sht,NULL);
+    hashtable_destroy(mht,cb_dealloc_pairlabel);
+  }
 
   /* allocate static internal arrays sortbuffer and travbuffer */
   gtree_alloc_internals(gtree,msa_count);

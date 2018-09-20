@@ -887,11 +887,14 @@ static void check_validity()
   if (opt_theta_beta <= 0)
     fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
 
-  if (opt_tau_alpha <= 1)
-    fatal("Alpha value of Inv-Gamma(a,b) of tauprior must be > 1");
+  if (species_count > 1)
+  {
+    if (opt_tau_alpha <= 1)
+      fatal("Alpha value of Inv-Gamma(a,b) of tauprior must be > 1");
 
-  if (opt_tau_beta <= 0)
-    fatal("Beta value of Inv-Gamma(a,b) of tauprior must be > 0");
+    if (opt_tau_beta <= 0)
+      fatal("Beta value of Inv-Gamma(a,b) of tauprior must be > 0");
+  }
 
   if (opt_samples < 1)
     fatal("Option 'nsample' must be a positive integer greater than zero");
@@ -1169,14 +1172,25 @@ void load_cfile()
                 "tag (line %ld).\nExpected number of species is %ld.\n",
                 line_count, spcount);
 
-        if (!getnextline(fp))
-          fatal("Incomplete 'species&tree' record (line %ld)", line_count);
+        if (spcount > 1)
+        {
+          if (!getnextline(fp))
+            fatal("Incomplete 'species&tree' record (line %ld)", line_count);
 
-        ++line_count;
+          ++line_count;
 
-        if (!get_string (line,&opt_streenewick))
-          fatal("Expected newick tree string in 'species&tree' (line %ld)",
-                 line_count);
+          if (!get_string (line,&opt_streenewick))
+            fatal("Expected newick tree string in 'species&tree' (line %ld)",
+                   line_count);
+        }
+        else if (spcount == 1)
+        {
+          opt_streenewick = (char *)xmalloc((size_t)(strlen(opt_reorder)+2) *
+                                            sizeof(char));
+          strcpy(opt_streenewick, opt_reorder);
+          opt_streenewick[strlen(opt_reorder)] = ';';
+          opt_streenewick[strlen(opt_reorder)+1] = '\0';
+        }
         valid = 1;
       }
     }
@@ -1242,6 +1256,9 @@ void load_cfile()
 
   if (opt_diploid)
     update_sp_seqcount();
+
+  if (species_count == 1 && opt_method != METHOD_00)
+    fatal("You can only use method A00 with one species");
 
   fclose(fp);
 }

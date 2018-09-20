@@ -644,7 +644,7 @@ l_unwind:
     free(matrix[i]);
   free(matrix);
 
-  if (rc)
+  if (rc && stree->tip_count > 1)
   {
     /* write figtree file */
     write_figtree(stree,mean,hpd025,hpd975);

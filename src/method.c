@@ -546,6 +546,7 @@ static FILE * init(stree_t ** ptr_stree,
   double * pjump;
   FILE * fp_mcmc = NULL;
   FILE * fp_out;
+  list_t * map_list = NULL;
   stree_t * stree;
   FILE ** fp_gtree;
   msa_t ** msa_list;
@@ -614,9 +615,12 @@ static FILE * init(stree_t ** ptr_stree,
   msa_summary(msa_list,msa_count);
 
   /* parse map file */
-  printf("Parsing map file...");
-  list_t * map_list = yy_parse_map(opt_mapfile);
-  printf(" Done\n");
+  if (stree->tip_count > 1)
+  {
+    printf("Parsing map file...");
+    map_list = yy_parse_map(opt_mapfile);
+    printf(" Done\n");
+  }
   #if 0
   maplist_print(map_list);
   #endif
@@ -1063,8 +1067,11 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_gclones = gclones;
 
   /* deallocate maplist */
-  list_clear(map_list,map_dealloc);
-  free(map_list);
+  if (stree->tip_count > 1)
+  {
+    list_clear(map_list,map_dealloc);
+    free(map_list);
+  }
 
   /* deallocate alignments */
   for (i = 0; i < msa_count; ++i)

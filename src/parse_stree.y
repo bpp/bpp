@@ -168,6 +168,15 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tree->left->parent  = tree;
   tree->right->parent = tree;
 
+}
+       | label SEMICOLON
+{
+  tree->left   = NULL;
+  tree->right  = NULL;
+  tree->label  = $1;
+  tree->length = 0;
+  tree->parent = NULL;
+  tree->leaves = 1;
 };
 
 subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
@@ -251,7 +260,7 @@ static void reorder(stree_t * stree)
     if (opt_reorder[i] == ',')
       commas_count++;
 
-  if (!commas_count || commas_count+1 != stree->tip_count)
+  if (commas_count+1 != stree->tip_count)
     fatal("Labels (%d) specified in --reorder do not match species tree", commas_count);
 
   hashtable_t * ht = hashtable_create(stree->tip_count);
@@ -334,10 +343,6 @@ stree_t * stree_wraptree(snode_t * root,
   {
     /* if tip counts is set to 0 then recursively count the number of tips */
     tip_count = stree_count_tips(root);
-    if (tip_count < 2)
-    {
-      fatal("Input tree contains no inner nodes.");
-    }
   }
 
   tree->nodes = (snode_t **)xmalloc((2*tip_count-1)*sizeof(snode_t *));

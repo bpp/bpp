@@ -52,6 +52,17 @@ static unsigned int * get_diploid_info(msa_t * msa, int msa_id)
 
   diploid = (unsigned int *)xmalloc((size_t)(msa->count)*sizeof(unsigned int));
 
+  /* if we have only one species */
+  if (sht == NULL && mht == NULL)
+  {
+    assert(opt_diploid_size == 1);
+
+    for (i = 0; i < msa->count; ++i)
+      diploid[i] = opt_diploid[0] ? 1 : 0;
+
+    return diploid;
+  }
+
   for (i = 0; i < msa->count; ++i)
   {
     char * label = msa->label[i];
@@ -577,7 +588,10 @@ unsigned long ** diploid_resolve(stree_t * stree,
   cleandata = (int *)xcalloc((size_t)msa_count,sizeof(int));
 
   /* init hash tables */
-  diploid_resolution_init(stree,maplist);
+  if (stree->tip_count == 1)
+    sht = mht = NULL;
+  else
+    diploid_resolution_init(stree,maplist);
 
   resolution_count = (unsigned long **)xmalloc((size_t)msa_count *
                                                sizeof(unsigned long *));
@@ -591,10 +605,12 @@ unsigned long ** diploid_resolve(stree_t * stree,
   }
 
   /* update map file with new labels */
-  update_map_list(maplist);
+  if (stree->tip_count > 1)
+    update_map_list(maplist);
 
   /* deallocate hash tables */
-  diploid_resolution_fini();
+  if (stree->tip_count > 1)
+    diploid_resolution_fini();
 
   free(cleandata);
 

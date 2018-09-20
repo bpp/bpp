@@ -94,7 +94,8 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   unsigned long size_section = 0;
   size_section += sizeof(unsigned long);              /* seed */
   size_section += strlen(opt_msafile)+1;              /* msa filename */
-  size_section += strlen(opt_mapfile)+1;              /* imap filename */
+  if (opt_mapfile)
+    size_section += strlen(opt_mapfile)+1;            /* imap filename */
   size_section += strlen(opt_outfile)+1;              /* output filename */
   size_section += strlen(opt_mcmcfile)+1;             /* mcmc filename */
   
@@ -185,8 +186,13 @@ static void dump_chk_section_1(FILE * fp,
   /* write seqfile */
   DUMP(opt_msafile,strlen(opt_msafile)+1,fp);
 
+  /* write whether we will write a map file */
+  long mapfile_present = (opt_mapfile ? 1 : 0);
+  DUMP(&mapfile_present,1,fp);
+
   /* write imap file */
-  DUMP(opt_mapfile,strlen(opt_mapfile)+1,fp);
+  if (mapfile_present)
+    DUMP(opt_mapfile,strlen(opt_mapfile)+1,fp);
 
   /* write outfile */
   DUMP(opt_outfile,strlen(opt_outfile)+1,fp);
