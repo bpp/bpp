@@ -554,23 +554,37 @@ static void cb_dealloc_pairlabel(void * data)
 /* return an array of per-locus number of sequences for each species (tip in
    species tree) */
 static int ** populations_seqcount(stree_t * stree,
-   msa_t ** msalist,
-   list_t * maplist,
-   int msa_count)
+                                   msa_t ** msalist,
+                                   list_t * maplist,
+                                   int msa_count)
 {
    unsigned int i, j, k;
    snode_t * node;
+   hashtable_t * sht = NULL;
+   hashtable_t * mht = NULL;
 
    assert(msa_count >= 0);
 
    /* create one hash table of species and one for sequence->species mappings */
-   hashtable_t * sht = species_hash(stree);
-   hashtable_t * mht = maplist_hash(maplist, sht);
+   if (stree->tip_count > 1)
+   {
+     sht = species_hash(stree);
+     mht = maplist_hash(maplist, sht);
+   }
 
    /* create perloci sequence counters for tip and inner nodes */
    int ** seqcount = (int **)xmalloc(stree->tip_count * sizeof(int *));
    for (i = 0; i < stree->tip_count; ++i)
       seqcount[i] = (int *)xcalloc(msa_count, sizeof(int));
+
+   /* one species case */
+   if (stree->tip_count == 1)
+   {
+     for (j = 0; j < (unsigned int)(msa_count); ++j)
+       seqcount[0][j] = msalist[j]->count;
+
+     return seqcount;
+   }
 
    /* go through the alignments and match each sequence with the corresponding
       species */
@@ -1485,8 +1499,15 @@ void stree_init(stree_t * stree,
   /* Initialize population sizes */
   stree_init_theta(stree, msa, maplist, msa_count, fp_out);
 
-  /* Initialize speciation times and create extinct species groups */
-  stree_init_tau(stree);
+  if (stree->tip_count > 1)
+  {
+    /* Initialize speciation times and create extinct species groups */
+    stree_init_tau(stree);
+  }
+  else
+  {
+    stree->nodes[0]->tau = 0;
+  }
 
   if (opt_network)
     stree_init_gamma(stree);

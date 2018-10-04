@@ -237,10 +237,18 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read name of MSA file");
   printf(" MSA file: %s\n", opt_msafile);
 
-  /* read imap filename */
-  if (!load_string(fp,&opt_mapfile))
-    fatal("Cannot read name of map file");
-  printf(" Map file: %s\n", opt_mapfile);
+  long mapfile_present;
+  opt_mapfile = NULL;
+  if (!LOAD(&mapfile_present,1,fp))
+    fatal("Cannot read mapfile information");
+
+  if (mapfile_present)
+  {
+    /* read imap filename */
+    if (!load_string(fp,&opt_mapfile))
+      fatal("Cannot read name of map file");
+    printf(" Map file: %s\n", opt_mapfile);
+  }
 
   /* read output filename */
   if (!load_string(fp,&opt_outfile))
@@ -732,17 +740,24 @@ void load_chk_section_2(FILE * fp)
   free(hindices);
 
   /* now set the root node */
-  unsigned nullparent_count = 0;
-  for (i = 0; i < stree->inner_count; ++i)
+  if (stree->tip_count == 1)
   {
-    if (!stree->nodes[stree->tip_count+i]->parent)
-    {
-      stree->root = stree->nodes[stree->tip_count+i];
-      nullparent_count++;
-    }
+    stree->root = stree->nodes[0];
   }
-  if (nullparent_count != 1)
-    fatal("Erroneous species tree structure");
+  else
+  {
+    unsigned nullparent_count = 0;
+    for (i = 0; i < stree->inner_count; ++i)
+    {
+      if (!stree->nodes[stree->tip_count+i]->parent)
+      {
+        stree->root = stree->nodes[stree->tip_count+i];
+        nullparent_count++;
+      }
+    }
+    if (nullparent_count != 1)
+      fatal("Erroneous species tree structure");
+  }
 
 
   /* now check species tree consistency */

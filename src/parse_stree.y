@@ -813,6 +813,17 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tree->right->parent = tree;
 
   inner_cnt++;
+}
+       | label SEMICOLON
+{
+  tree->left  = NULL;
+  tree->right = NULL;
+  tree->label = $1;
+  tree->length = 0;
+  tree->parent = NULL;
+  tree->leaves = 1;
+
+  tip_cnt++;
 };
 
 subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
@@ -1011,17 +1022,17 @@ stree_t * stree_wraptree(snode_t * root)
   unsigned int tip_count = stree_count_tips(root);
   assert(tip_count == tip_cnt);
 
-  if (tip_count < 2 && tip_count != 0)
+  if (tip_count == 0)
     fatal("Invalid number of tips in input tree (%u).", tip_count);
 
+  #if 0
   if (tip_count == 0)
   {
     /* if tip counts is set to 0 then recursively count the number of tips */
-    if (tip_count < 2)
-    {
-      fatal("Input tree contains no inner nodes.");
-    }
+    /* TODO: Check difference with master version. Here stree_count_tips is
+       always called at the beginning */
   }
+  #endif
 
   stree->nodes = (snode_t **)xmalloc((tip_cnt+inner_cnt)*sizeof(snode_t *));
   

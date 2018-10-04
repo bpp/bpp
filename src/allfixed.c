@@ -654,7 +654,7 @@ l_unwind:
     free(matrix[i]);
   free(matrix);
 
-  if (rc)
+  if (rc && stree->tip_count > 1)
   {
     /* write figtree file */
     if (!opt_network)
