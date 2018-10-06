@@ -1805,8 +1805,6 @@ static long propose_tau(locus_t ** loci,
 
        */
 
-       snode_t * child;
-
        paffected_count = 0;
        for (i = 0; i < stree->locus_count; ++i)
        {
@@ -1820,6 +1818,7 @@ static long propose_tau(locus_t ** loci,
        affected[paffected_count++] = snode->parent->right;
        affected[paffected_count++] = snode->hybrid->parent->left;
        affected[paffected_count++] = snode->hybrid->parent->right;
+       affected[paffected_count++] = snode->left;
      }
      else
      {
