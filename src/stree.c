@@ -1770,8 +1770,8 @@ static long propose_tau(locus_t ** loci,
          opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
    }
 
-   snode_t * affected[5];
-   double old_logpr_contrib[5] = {0,0,0,0,0};
+   snode_t * affected[7];
+   double old_logpr_contrib[7] = {0,0,0,0,0,0,0};
 
    if (opt_network && snode->hybrid)
    {
@@ -1810,21 +1810,16 @@ static long propose_tau(locus_t ** loci,
        paffected_count = 0;
        for (i = 0; i < stree->locus_count; ++i)
        {
-         assert(snode->parent->event_count[i] == 0);
-         assert(snode->hybrid->parent->event_count[i] == 0);
+         assert(snode->event_count[i] == 0);
+         assert(snode->hybrid->event_count[i] == 0);
        }
 
-       affected[paffected_count++] = snode->parent->parent;
-       if (snode->hybrid->parent->parent != snode->parent->parent)
-         affected[paffected_count++] = snode->hybrid->parent->parent;
-
-       child = (snode->parent->left == snode) ?
-                 snode->parent->right : snode->parent->left;
-       affected[paffected_count++] = child;
-       child = (snode->hybrid->parent->left == snode->hybrid) ?
-                 snode->hybrid->parent->right : snode->hybrid->parent->left;
-       affected[paffected_count++] = child; 
-       affected[paffected_count++] = snode->left;
+       affected[paffected_count++] = snode->parent;
+       affected[paffected_count++] = snode->hybrid->parent;
+       affected[paffected_count++] = snode->parent->left;
+       affected[paffected_count++] = snode->parent->right;
+       affected[paffected_count++] = snode->hybrid->parent->left;
+       affected[paffected_count++] = snode->hybrid->parent->right;
      }
      else
      {
@@ -1846,26 +1841,25 @@ static long propose_tau(locus_t ** loci,
        /* assertions */
        if (!snode->parent->htau)
          for (i = 0; i < stree->locus_count; ++i)
-           assert(snode->parent->event_count[i] == 0);
+           assert(snode->event_count[i] == 0);
        if (!snode->hybrid->parent->htau)
          for (i = 0; i < stree->locus_count; ++i)
-           assert(snode->hybrid->parent->event_count[i] == 0);
+           assert(snode->hybrid->event_count[i] == 0);
 
        if (!snode->parent->htau)
        {
-         affected[paffected_count++] = snode->parent->parent;
-         snode_t * child = (snode->parent->left == snode) ?
-                             snode->parent->right : snode->parent->left;
-         affected[paffected_count++] = child;
+         affected[paffected_count++] = snode->parent;
+         affected[paffected_count++] = snode->parent->left;
+         affected[paffected_count++] = snode->parent->right;
          affected[paffected_count++] = snode->hybrid;
        }
        else
        {
          assert(!snode->hybrid->parent->htau);
-         affected[paffected_count++] = snode->hybrid->parent->parent;
-         snode_t * child = (snode->hybrid->parent->left == snode) ?
-                             snode->hybrid->parent->right : snode->hybrid->parent->left;
-         affected[paffected_count++] = child;
+
+         affected[paffected_count++] = snode->hybrid->parent;
+         affected[paffected_count++] = snode->hybrid->parent->left;
+         affected[paffected_count++] = snode->hybrid->parent->right;
          affected[paffected_count++] = snode;
        }
 
