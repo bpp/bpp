@@ -2195,13 +2195,13 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 
    /* compute number of nodes with tau > 0 */
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      if (stree->nodes[i]->tau > 0)
+      if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
          candidate_count++;
 
 
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
    {
-      if (stree->nodes[i]->tau > 0)
+      if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
          accepted += propose_tau(loci, stree->nodes[i], gtree, stree, candidate_count);
    }
 
