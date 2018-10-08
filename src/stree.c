@@ -1750,27 +1750,32 @@ static long propose_tau(locus_t ** loci,
    /* change theta as well */
    if (opt_est_theta)
    {
-      oldtheta = snode->theta;
-      if (theta_method == 1)
-         thetafactor = newage / oldage;
-      else if (theta_method == 2)
-         thetafactor = (newage - minage) / (oldage - minage);
-      else
-         assert(0);
-
-      /* check is needed for network code. When the two parents of snode have
-         no tau, then snode has no theta */
+      /* network code might have snode without a theta (i.e snode->theta == -1)
+         when snode is a hybrid node and its two parents have no tau */
       if (snode->theta != -1)
-        snode->theta = oldtheta / thetafactor;
-      if (opt_network && snode->hybrid)
       {
-        /* TODO : Need to update the hybrid as well */
-        //snode->hybrid->theta = 
-      }
+        oldtheta = snode->theta;
+        if (theta_method == 1)
+           thetafactor = newage / oldage;
+        else if (theta_method == 2)
+           thetafactor = (newage - minage) / (oldage - minage);
+        else
+           assert(0);
 
-      lnacceptance += -log(thetafactor) + (-opt_theta_alpha - 1) *
-         log(snode->theta / oldtheta) -
-         opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
+        /* check is needed for network code. When the two parents of snode have
+           no tau, then snode has no theta */
+        if (snode->theta != -1)
+          snode->theta = oldtheta / thetafactor;
+        if (opt_network && snode->hybrid)
+        {
+          /* TODO : Need to update the hybrid as well */
+          //snode->hybrid->theta = 
+        }
+
+        lnacceptance += -log(thetafactor) + (-opt_theta_alpha - 1) *
+                        log(snode->theta / oldtheta) -
+                        opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
+      }
    }
 
    snode_t * affected[7];
@@ -2094,11 +2099,16 @@ static long propose_tau(locus_t ** loci,
 
       if (opt_est_theta)
       {
-         snode->theta = oldtheta;
-         if (opt_network && snode->hybrid)
-         {
-           /* TODO: Need to update hybrid theta */
-         }
+        /* the -1 check is due to network code (when snode is hybridization with
+           its two parents having no tau) */
+        if (snode->theta != -1)
+        {
+          snode->theta = oldtheta;
+          if (opt_network && snode->hybrid)
+          {
+            /* TODO: Need to update hybrid theta */
+          }
+        }
       }
 
       for (i = 0; i < stree->locus_count; ++i)
