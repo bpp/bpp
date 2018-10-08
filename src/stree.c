@@ -1758,7 +1758,10 @@ static long propose_tau(locus_t ** loci,
       else
          assert(0);
 
-      snode->theta = oldtheta / thetafactor;
+      /* check is needed for network code. When the two parents of snode have
+         no tau, then snode has no theta */
+      if (snode->theta != -1)
+        snode->theta = oldtheta / thetafactor;
       if (opt_network && snode->hybrid)
       {
         /* TODO : Need to update the hybrid as well */
