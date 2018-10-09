@@ -1706,8 +1706,8 @@ static long propose_tau(locus_t ** loci,
    {
      assert(node_is_hybridization(snode));
      assert(!node_is_mirror(snode));
-     assert(snode->parent->parent);
-     assert(snode->hybrid->parent->parent);
+     assert(snode->parent->htau || snode->parent->parent);
+     assert(snode->hybrid->parent->htau || snode->hybrid->parent->parent);
 
      double p1age = snode->parent->htau ?
                       snode->parent->tau : snode->parent->parent->tau;

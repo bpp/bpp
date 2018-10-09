@@ -1115,6 +1115,9 @@ stree_t * stree_wraptree(snode_t * root)
     }
   }
 
+  if (opt_network && stree->root->htau == 0)
+    fatal("Error: species tree root requires a tau parameter [tau-parent=yes]");
+
   return stree;
 }
 
