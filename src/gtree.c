@@ -3181,15 +3181,15 @@ static gnode_t * network_fill_targets(stree_t * stree,
   if (father != gtree->root)
   {
       
-    n = father->pop->node_index;
+    n = curnode->pop->node_index;
     for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
     {
       p = gtree->nodes[j];
-      m = p->pop->node_index;
+      m = p->parent ? p->parent->pop->node_index : stree->root->node_index;
 
       if (p != curnode && p != gtree->root && p != sibling && p != father &&
           p->time <= father->time && p->parent->time > father->time &&
-          stree->pptable[m][n] &&
+          stree->pptable[n][m] &&
           branch_compat(stree,curnode,p,father->time))
         *source_count = *source_count + 1;
     }
