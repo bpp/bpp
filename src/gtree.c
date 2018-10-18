@@ -1691,7 +1691,6 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   father->leaves = father->left->leaves + father->right->leaves;
   if (target == gtree->root)
   {
-    father->leaves = gtree->root->leaves;
     gtree->root = father;
     ret = 1;
   }

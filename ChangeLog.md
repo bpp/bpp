@@ -2,6 +2,10 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.0.4] - 2018-10-18
+### Fixed
+ - minor bug in gene tree SPR move
+
 ## [4.0.3] - 2018-09-20
 ### Fixed
  - rare numerical problems for boundary cases in reflect function

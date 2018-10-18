@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
-[![Version](https://img.shields.io/badge/version-4.0.3-blue.svg)](https://github.com/bpp/bpp)
+[![Version](https://img.shields.io/badge/version-4.0.4-blue.svg)](https://github.com/bpp/bpp)
 
 ## Introduction
 
