@@ -550,6 +550,44 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
   free(counter);
 }
 
+static void network_bd_distribute_lineages(pop_t * pop, long mindex, long hindex)
+{
+  size_t new_seqcount;
+  int * new_indices;
+  gnode_t ** new_nodes;
+
+  if (pop[mindex].seq_count)
+  {
+    /* allocate new arrays */
+    new_seqcount = pop[hindex].seq_count + pop[mindex].seq_count;
+    new_indices = (int *)xmalloc(new_seqcount * sizeof(int));
+    new_nodes = (gnode_t **)xmalloc(new_seqcount * sizeof(gnode_t *));
+
+    /* copy indices from hybrid and mirror node to new arrays */
+    memcpy(new_indices,
+           pop[hindex].seq_indices,
+           pop[hindex].seq_count * sizeof(int));
+    memcpy(new_indices+pop[hindex].seq_count,
+           pop[mindex].seq_indices,
+           pop[mindex].seq_count * sizeof(int));
+    
+    /* copy nodes from hybrid and mirror node to new arrays */
+    memcpy(new_nodes,
+           pop[hindex].nodes,
+           pop[hindex].seq_count * sizeof(gnode_t *));
+    memcpy(new_nodes+pop[hindex].seq_count,
+           pop[mindex].nodes,
+           pop[mindex].seq_count * sizeof(gnode_t *));
+    
+    /* free old arrays at hybrid node and set the new ones */
+    free(pop[hindex].seq_indices);
+    free(pop[hindex].nodes);
+    pop[hindex].seq_indices = new_indices;
+    pop[hindex].nodes       = new_nodes;
+    pop[hindex].seq_count   = new_seqcount;
+  }
+}
+
 static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, snode_t * epoch)
 {
   long i,j;
@@ -558,9 +596,6 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
      but adapted to hybridization/bidirectional introgression nodes on networks.
      The main difference is that such nodes do not necessarily have two children */
   assert(opt_network && epoch->hybrid);
-
-  if (node_is_bidirection(epoch))
-    fatal("Not implemented yet in replace_hybrid()");
 
   /* check if its the mirrored node (i.e. no children) */
   if (node_is_mirror(epoch))
@@ -614,7 +649,15 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
     assert(hindex >= 0 && hindex < stree->hybrid_count);
 
     /* make sure epoch is a mirror node */
-    assert(!epoch->left && !epoch->right);
+    if (node_is_bidirection(epoch))
+    {
+      assert(!epoch->left && !epoch->right);
+    }
+    else
+    {
+      assert(node_is_hybridization(epoch));
+      assert(!epoch->left && !epoch->right);
+    }
 
     for (j = 0; j < hpop->seq_count; ++j)
       if (temp[j])
@@ -630,6 +673,11 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
         mindices[mnodes_count++] = hpop->seq_indices[j];
 
         hpop->nodes[j]->hpath[hindex] = BPP_HPATH_RIGHT;
+        if (node_is_bidirection(epoch))
+        {
+          unsigned int hindex2 = GET_HINDEX(stree,epoch->parent);
+          hpop->nodes[j]->hpath[hindex2] = BPP_HPATH_LEFT;
+        }
       }
     assert(hnodes_count == hpop_seqcount);
 
@@ -646,15 +694,91 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
     pop[*count].seq_indices = mindices;
     pop[*count].seq_count = mnodes_count;
     
+    if (node_is_bidirection(epoch))
+    {
+      long h1_index;
+      long h2_index;
+      long m1_index;
+      long m2_index;
+      assert(node_is_mirror(epoch->parent->hybrid));
+
+      /* first find the other hybridization mirror node in the pop list */
+      for (j = 0; j < *count; ++j)
+        if (pop[j].snode == epoch->parent->hybrid)
+          break;
+
+      /* other side of introgression found */
+      if (j < *count)
+      {
+        m1_index = j;
+        m2_index = *count;
+
+        /* now find the two hybridization nodes */
+
+        for (j = 0; j < *count; ++j)
+          if (pop[j].snode == epoch->parent)
+            break;
+        assert(j < *count);
+        h1_index = j;
+
+        for (j = 0; j < *count; ++j)
+          if (pop[j].snode == epoch->hybrid)
+            break;
+        assert(j < *count);
+        h2_index = j;
+
+        /* move lineages stored in mirror nodes to the opposite hybrid nodes, i.e.
+           
+           m1 -> h2 and m2 -> h1;
+        */
+
+        network_bd_distribute_lineages(pop, m1_index, h2_index);
+        network_bd_distribute_lineages(pop, m2_index, h1_index);
+
+        if (m1_index > m2_index) SWAP(m1_index,m2_index);
+        if (h1_index > h2_index) SWAP(h1_index,h2_index);
+
+        assert(h1_index < h2_index && h1_index < m1_index && h1_index < m2_index);
+        assert(m1_index < m2_index);
+        assert(m2_index == *count);
+
+        free(pop[m1_index].seq_indices);
+        free(pop[m1_index].nodes);
+        free(pop[m2_index].seq_indices);
+        free(pop[m2_index].nodes);
+        pop[m1_index].seq_indices = pop[m2_index].seq_indices = NULL;
+        pop[m1_index].nodes = pop[m2_index].nodes = NULL;
+        pop[m1_index].seq_count = pop[m2_index].seq_count = 0;
+        pop[m1_index].snode = pop[m2_index].snode = NULL;
+        if (h2_index > m1_index)
+        {
+          pop[m1_index].snode = pop[h2_index].snode;
+          pop[m1_index].nodes = pop[h2_index].nodes;
+          pop[m1_index].seq_indices = pop[h2_index].seq_indices;
+          pop[m1_index].seq_count = pop[h2_index].seq_count;
+        }
+
+        assert(*count > 1);
+        *count = *count - 2;
+
+      }
+    }
+
     /* we increase by two because on the next iteration in gtree_simulate, count
        will be decreased and as such we will have +1 new items (this node) */
     *count = *count + 2; 
     free(temp);
+
     return;
   }
 
   /* find and replace left descendant of current epoch with epoch */
-  assert(!epoch->right);
+  assert(!node_is_mirror(epoch));
+  if (node_is_bidirection(epoch))
+    assert(epoch->left && epoch->right);
+  else
+    assert(epoch->left && !epoch->right);
+
   for (i = 0; i < *count; ++i)
   {
     if (pop[i].snode == epoch->left)
@@ -753,32 +877,75 @@ static void fill_hybrid_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_i
   for (i = 0; i < stree->hybrid_count; ++i)
   {
     snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
-
-    assert(node_is_hybridization(mnode));
     snode_t * hnode = mnode->hybrid;
-    assert(!node_is_mirror(hnode));
 
-    for (j = 0; j < gtree->tip_count; ++j)
+    /* hybridization */
+    if (node_is_hybridization(mnode))
     {
-      if (gtree->nodes[j]->hpath[i] == BPP_HPATH_LEFT)
-        hnode->seqin_count[msa_index]++;
-      else if (gtree->nodes[j]->hpath[i] == BPP_HPATH_RIGHT)
-        mnode->seqin_count[msa_index]++;
-    }
-
-    for (j = gtree->tip_count; j < gtree->tip_count+gtree->inner_count; ++j)
-    {
-      gnode_t * x = gtree->nodes[j];
-      if (x->left->hpath[i] == BPP_HPATH_NONE &&
-          x->right->hpath[i] == BPP_HPATH_NONE)
+      assert(!node_is_mirror(hnode));
+      for (j = 0; j < gtree->tip_count; ++j)
       {
-        if (x->hpath[i] == BPP_HPATH_LEFT)
+        if (gtree->nodes[j]->hpath[i] == BPP_HPATH_LEFT)
           hnode->seqin_count[msa_index]++;
-        else if (x->hpath[i] == BPP_HPATH_RIGHT)
+        else if (gtree->nodes[j]->hpath[i] == BPP_HPATH_RIGHT)
           mnode->seqin_count[msa_index]++;
       }
+
+      for (j = gtree->tip_count; j < gtree->tip_count+gtree->inner_count; ++j)
+      {
+        /* TODO: The NONE/NONE check is probably unnecessary, change to assertion */
+        gnode_t * x = gtree->nodes[j];
+        if (x->left->hpath[i] == BPP_HPATH_NONE &&
+            x->right->hpath[i] == BPP_HPATH_NONE)
+        {
+          if (x->hpath[i] == BPP_HPATH_LEFT)
+            hnode->seqin_count[msa_index]++;
+          else if (x->hpath[i] == BPP_HPATH_RIGHT)
+            mnode->seqin_count[msa_index]++;
+        }
+      }
     }
-  }
+    else     /* bidirection */
+    {
+      assert(node_is_bidirection(mnode));
+      assert(!node_is_mirror(hnode));
+      unsigned int hindex2 = GET_HINDEX(stree,mnode->parent);
+
+      for (j = 0; j < gtree->tip_count; ++j)
+      {
+        if (gtree->nodes[j]->hpath[i] == BPP_HPATH_LEFT)
+        {
+          if (gtree->nodes[j]->hpath[hindex2] == BPP_HPATH_NONE)
+            hnode->seqin_count[msa_index]++;
+        }
+        else if (gtree->nodes[j]->hpath[i] == BPP_HPATH_RIGHT)
+        {
+          mnode->seqin_count[msa_index]++;
+          mnode->parent->seqin_count[msa_index]++;
+        }
+      }
+
+      for (j = gtree->tip_count; j < gtree->tip_count+gtree->inner_count; ++j)
+      {
+        /* TODO: The NONE/NONE check is probably unnecessary, change to assertion */
+        gnode_t * x = gtree->nodes[j];
+        if (x->left->hpath[i] == BPP_HPATH_NONE &&
+            x->right->hpath[i] == BPP_HPATH_NONE)
+        {
+          if (x->hpath[i] == BPP_HPATH_LEFT)
+          {
+            if (x->hpath[hindex2] == BPP_HPATH_NONE)
+              hnode->seqin_count[msa_index]++;
+          }
+          else if (x->hpath[i] == BPP_HPATH_RIGHT)
+          {
+            mnode->seqin_count[msa_index]++;
+            mnode->parent->seqin_count[msa_index]++;
+          }
+        }
+      }
+    } /* end of else bidirection */
+  } /* end of for */
 }
 
 static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
@@ -798,37 +965,53 @@ static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
   {
     if (node->hybrid)
     {
-      assert(node_is_hybridization(node));
+      if (node_is_hybridization(node))
+      {
 
-      /* get child node in species tree. Note that it should always be the left
-         child of the hybridization node */
-      /* TODO: Simplify the below IFs, the current status is only for testing
-         correctness */
-      snode_t * child = NULL;
-      if (node->left) 
-      {
-        assert(!child);
-        child = node->left;
-      }
-      if (node->right) 
-      {
-        assert(!child);
-        child = node->right;
-      }
-      if (node->hybrid->left)
-      {
-        assert(!child);
-        child = node->hybrid->left;
-      }
-      if (node->hybrid->right)
-      {
-        assert(!child);
-        child = node->hybrid->right;
-      }
+        /* get child node in species tree. Note that it should always be the left
+           child of the hybridization node */
+        /* TODO: Simplify the below IFs, the current status is only for testing
+           correctness */
+        snode_t * child = NULL;
+        if (node->left) 
+        {
+          assert(!child);
+          child = node->left;
+        }
+        if (node->right) 
+        {
+          assert(!child);
+          child = node->right;
+        }
+        if (node->hybrid->left)
+        {
+          assert(!child);
+          child = node->hybrid->left;
+        }
+        if (node->hybrid->right)
+        {
+          assert(!child);
+          child = node->hybrid->right;
+        }
 
-      assert((child->seqin_count[msa_index] - child->event_count[msa_index]) ==
-             (node->seqin_count[msa_index] + node->hybrid->seqin_count[msa_index]));
+        assert((child->seqin_count[msa_index] - child->event_count[msa_index]) ==
+               (node->seqin_count[msa_index] + node->hybrid->seqin_count[msa_index]));
+      }
+      else
+      {
+        assert(node_is_bidirection(node));
 
+        if (node_is_mirror(node))
+        {
+        }
+        else
+        {
+          assert(node->left && node->right);
+
+          /* cannot do the checks here as the opposite node might have not yet been processed */
+        }
+
+      }
       return;
     }
 
@@ -857,6 +1040,36 @@ void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
     fill_hybrid_seqin_counts(stree, gtree, msa_index);
 
   fill_seqin_counts_recursive(stree->root,msa_index);
+
+  /* TODO: This is only an optional check, delete */
+  if (opt_network)
+  {
+    long i;
+    for (i = 0; i < stree->hybrid_count; ++i)
+    {
+      snode_t * hnode;
+      snode_t * mnode;
+
+      mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+      hnode = mnode->hybrid;
+
+      if (node_is_bidirection(hnode))
+      {
+        assert(node_is_mirror(mnode));
+        assert(!node_is_mirror(hnode));
+
+        assert(mnode->parent && mnode->parent->hybrid);
+        assert(mnode->seqin_count[msa_index] <= mnode->parent->seqin_count[msa_index]);
+
+        assert(hnode->right && hnode->right->hybrid);
+        assert(hnode->seqin_count[msa_index] >= hnode->right->seqin_count[msa_index]);
+
+        assert(hnode->seqin_count[msa_index] + hnode->right->hybrid->seqin_count[msa_index] ==
+               hnode->left->seqin_count[msa_index] - hnode->left->event_count[msa_index] +
+               hnode->right->hybrid->left->seqin_count[msa_index] - hnode->right->hybrid->left->event_count[msa_index]);
+      }
+    }
+  }
 }
 
 static int cb_trav_full(snode_t * x)
@@ -883,7 +1096,7 @@ static void epoch_reorder(snode_t ** epoch,
 
   if (node_is_bidirection(hnode))       /* bidirections */
   {
-    assert(0);
+    /* we need to have mirror nodes right after their hybrid counterparts */
     for (i = 0; i < hindex; ++i)
     {
       if (epoch[i] == epoch[hindex]->hybrid)
@@ -1136,7 +1349,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   for (; ; --pop_count)
   {
     /* set max waiting time for this epoch */
-    if (pop_count == 1)
+    if (pop_count == 1 && pop[0].snode == stree->root)
       tmax = -1;
     else
       tmax = epoch[e]->tau;
@@ -1169,7 +1382,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       /* if the generated time is larger than the current epoch, and we are not
          yet at the root of the species tree, then break and, subsequently, 
          merge the lineages of the two populations into the current epoch */
-      if (t > tmax && pop_count != 1) break;
+      if (t > tmax && (pop_count != 1 || pop[0].snode != stree->root)) break;
 
       if (opt_debug)
         fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
@@ -1262,7 +1475,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
     t = tmax;
 
-    if (pop_count == 1 || lineage_count == 1) break;
+    if (lineage_count == 1 || (pop_count == 1 && pop[0].snode == stree->root)) break;
 
     /* place current epoch in the list of populations, remove its two children
        and add up the lineages of the two descendants */
@@ -1295,7 +1508,7 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     {
       if (father->hybrid)
       {
-        assert(node_is_hybridization(father));
+        long bidir = node_is_bidirection(father);
 
         unsigned int hindex = GET_HINDEX(stree, father);
         assert(hindex >= 0 && hindex < stree->hybrid_count);
@@ -1305,7 +1518,17 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         else
         {
           gtree->root->hpath[hindex] = BPP_HPATH_RIGHT;
-          father = father->hybrid;
+          if (bidir)
+          {
+            assert(!node_is_mirror(father));
+            unsigned int hindex2 = GET_HINDEX(stree,father->right);
+            gtree->root->hpath[hindex2] = BPP_HPATH_LEFT;
+            father = father->right->hybrid;
+          }
+          else  /* hybridization */
+          {
+            father = father->hybrid;
+          }
         }        
       }
       father = father->parent;
@@ -1369,29 +1592,54 @@ static void reset_hybrid_gene_leaves_count(stree_t * stree,
   gnode_t * x;
   snode_t * mnode;
   snode_t * hnode;
+  long bidir = 0;
 
   for (i = 0; i < stree->hybrid_count; ++i)
   {
     mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
-
-    assert(node_is_hybridization(mnode));
     hnode = mnode->hybrid;
     assert(!node_is_mirror(hnode));
 
     hnode->gene_leaves[msa_index] = 0;
     mnode->gene_leaves[msa_index] = 0;
+  }
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    //assert(node_is_hybridization(mnode));
+    bidir = 0;
+    if (node_is_bidirection(mnode))
+      bidir = 1;
+
+    hnode = mnode->hybrid;
+    assert(!node_is_mirror(hnode));
+
 
     for (j = 0; j < gtree->tip_count; ++j)
       for (x = gtree->nodes[j]; x; x = x->parent)
       {
         if (x->hpath[i] == BPP_HPATH_LEFT)
         {
-          hnode->gene_leaves[msa_index]++;
+          if (bidir)
+          {
+            unsigned int hindex2 = GET_HINDEX(stree,mnode->parent);
+            if (x->hpath[hindex2] == BPP_HPATH_NONE)
+              hnode->gene_leaves[msa_index]++;
+          }
+          else
+            hnode->gene_leaves[msa_index]++;
           break;
         }
         if (x->hpath[i] == BPP_HPATH_RIGHT)
         {
           mnode->gene_leaves[msa_index]++;
+          if (bidir)
+          {
+            assert(mnode->parent && mnode->parent->hybrid);
+            mnode->parent->gene_leaves[msa_index]++;
+          }
           break;
         }
       }
@@ -1416,17 +1664,32 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
        necessary and should be removed, but the 'return' statement must be
        kept */
 
-    assert(node_is_hybridization(node));
+    if (node_is_hybridization(node))
+    {
+      if (node_is_mirror(node))
+        assert(!node->left && !node->right);
+      else
+        assert(node->left && !node->right);
 
-    if (node_is_mirror(node))
-      assert(!node->left && !node->right);
+      for (j = 0; j < locus_count; ++j)
+        if (!node_is_mirror(node))
+          assert((node->gene_leaves[j] + node->hybrid->gene_leaves[j]) ==
+                 node->left->gene_leaves[j]);
+    }
     else
-      assert(node->left && !node->right);
+    {
+      /* bidirection */
+      assert(node_is_bidirection(node));
 
-    for (j = 0; j < locus_count; ++j)
-      if (!node_is_mirror(node))
-        assert((node->gene_leaves[j] + node->hybrid->gene_leaves[j]) ==
-               node->left->gene_leaves[j]);
+      for (j = 0; j < locus_count; ++j)
+        if (!node_is_mirror(node))
+        {
+          assert(node->left && node->right);
+
+          /* TODO: we cannot perform this check as gene_leaves[j] from node->hybrid->left->hybrid
+             may not be yet filled */
+        }
+    }
 
     return;
   }
@@ -1635,7 +1898,12 @@ double gtree_update_logprob_contrib(snode_t * snode,
     }
 
     if (opt_network && snode->hybrid)
-      logpr += snode->seqin_count[msa_index] * log(snode->hgamma);
+    {
+      if (node_is_bidirection(snode) && !node_is_mirror(snode))
+        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hgamma);
+      else
+        logpr += snode->seqin_count[msa_index] * log(snode->hgamma);
+    }
 
     /* now distinguish between estimating theta and analytical computation */
     if (opt_est_theta)
@@ -1784,7 +2052,6 @@ static void interchange_flags(stree_t * stree,
       pop = pop->parent;
       if (pop->hybrid)
       {
-        assert(!node_is_bidirection(pop));
         assert(!node_is_mirror(pop));
 
         unsigned int hindex = GET_HINDEX(stree,pop);
@@ -1816,7 +2083,6 @@ static void interchange_flags(stree_t * stree,
       pop = pop->parent;
       if (pop->hybrid)
       {
-        assert(!node_is_bidirection(pop));
         assert(!node_is_mirror(pop));
 
         unsigned int hindex = GET_HINDEX(stree,pop);
@@ -1875,7 +2141,6 @@ static void split_flags(stree_t * stree, gnode_t * a)
     pop = pop->parent;
     if (pop->hybrid)
     {
-      assert(!node_is_bidirection(pop));
       assert(!node_is_mirror(pop));
 
       unsigned hindex = GET_HINDEX(stree,pop);
@@ -1925,7 +2190,6 @@ static void join_flags(stree_t * stree, gnode_t * a, int * bpath, snode_t * old_
     pop = pop->parent;
     if (pop->hybrid)
     {
-      assert(!node_is_bidirection(pop));
       assert(!node_is_mirror(pop));
 
       unsigned int hindex = GET_HINDEX(stree,pop);
@@ -1948,6 +2212,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
 {
   long i;
   unsigned int hindex;
+  long bidir = 0;
   snode_t * pop;
   snode_t * start = x->pop;
   snode_t * end   = x->parent ? x->parent->pop : stree->root;
@@ -1962,6 +2227,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
     return contrib;
   }
 
+  /* array to keep track of which hybridization nodes were visited */
   int * visited = (int *)xcalloc((size_t)stree->hybrid_count,sizeof(int));
 
   assert(start->parent);
@@ -1971,11 +2237,11 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
   pop = start;
   while (1)
   {
-    assert(pop);
+    assert(pop && pop->parent);
     pop = pop->parent;
     if (pop->hybrid)
     {
-      assert(!node_is_bidirection(pop));
+      bidir = node_is_bidirection(pop);
       assert(!node_is_mirror(pop));
 
       hindex = GET_HINDEX(stree,pop);
@@ -1994,8 +2260,25 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
         else
         {
           x->hpath[hindex] = BPP_HPATH_RIGHT;
-          pop = pop->hybrid;
-          contrib += log(pop->hgamma);
+          if (bidir)
+          {
+            /* do two steps (nodes) in one go */
+
+            /* count contribution for first part of bidirection */
+            contrib += log(pop->hybrid->hgamma);
+
+            /* move to opposite node, set flag, and set visited */
+            pop = pop->hybrid->parent;
+            hindex = GET_HINDEX(stree,pop);
+            x->hpath[hindex] = BPP_HPATH_LEFT;
+            visited[hindex] = 1;
+          }
+          else
+          {
+            pop = pop->hybrid;
+            contrib += log(pop->hgamma);
+          }
+
         }
       }
       else
@@ -2008,13 +2291,32 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
         else
         {
           x->hpath[hindex] = BPP_HPATH_RIGHT;
-          pop = pop->hybrid;
+          if (bidir)
+          {
+            /* do two steps (nodes) in one go */
+
+            assert(pop->hybrid && pop->hybrid->parent);  /* TODO DEBUG */
+
+            /* move to opposite node, set flag, and set visited */
+            pop = pop->hybrid->parent;
+            hindex = GET_HINDEX(stree,pop);
+            x->hpath[hindex] = BPP_HPATH_LEFT;
+            visited[hindex] = 1;
+          }
+          else
+          {
+            pop = pop->hybrid;
+            assert(pop->parent);  /* TODO DEBUG */
+          }
         }
       }
     }
     if (pop == end) break;
   }
 
+  /* reset to BPP_HPATH_NONE for those hybridization nodes that were *NOT*
+     visited, since the branch could have a flag for some of them from its
+     previous state */
   for (i = 0; i < stree->hybrid_count; ++i)
     if (!visited[i])
       x->hpath[i] = BPP_HPATH_NONE;
@@ -2026,6 +2328,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
 static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath)
 {
   unsigned int hindex;
+  long bidir = 0;
   snode_t * pop;
   snode_t * start = x->pop;
   snode_t * end   = x->parent ? x->parent->pop : stree->root;
@@ -2041,7 +2344,7 @@ static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath
     assert(pop);
     if (pop->hybrid)
     {
-      assert(!node_is_bidirection(pop));
+      bidir = node_is_bidirection(pop);
       assert(!node_is_mirror(pop));
 
       hindex = GET_HINDEX(stree,pop);
@@ -2056,8 +2359,16 @@ static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath
         }
         else
         {
-          pop = pop->hybrid;
-          contrib += log(pop->hgamma);
+          if (bidir)
+          {
+            contrib += log(pop->hybrid->hgamma);
+            pop = pop->hybrid->parent;
+          }
+          else
+          {
+            pop = pop->hybrid;
+            contrib += log(pop->hgamma);
+          }
         }
       }
       else
@@ -2072,7 +2383,10 @@ static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath
         else
         {
           //assert(old_hpath[hindex] == BPP_HPATH_RIGHT);
-          pop = pop->hybrid;
+          if (bidir)
+            pop = pop->hybrid->parent;
+          else
+            pop = pop->hybrid;
         }
       }
     }
@@ -2104,7 +2418,6 @@ static void decrease_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_ind
 
     if (start->hybrid)
     {
-      assert(!node_is_bidirection(start));
       assert(!node_is_mirror(start));
 
       /* move according to path flags */
@@ -2117,7 +2430,6 @@ static void decrease_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_ind
       if (x->hpath[hindex] == BPP_HPATH_RIGHT)
         start = start->hybrid;
     }
-
     start->gene_leaves[msa_index] -= leaves_count;
   }
 }
@@ -2143,7 +2455,6 @@ static void increase_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_ind
     start = start->parent;
     if (start->hybrid)
     {
-      assert(!node_is_bidirection(start));
       assert(!node_is_mirror(start));
 
       /* move according to path flags */
@@ -2177,8 +2488,12 @@ static void decrease_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
 
     if (start->hybrid)
     {
-      assert(!node_is_bidirection(start));
       assert(!node_is_mirror(start));
+
+      /* 
+        In the case of bidirectional introgression where the lineage goes right
+        (i.e. to the node opposite), the algorithm will always visit the mirror
+        node first, and immediately after the opposite hybrid node */
       
       /* move according to path flags */
       hindex = GET_HINDEX(stree,start);
@@ -2190,7 +2505,6 @@ static void decrease_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
       if (x->hpath[hindex] == BPP_HPATH_RIGHT)
         start = start->hybrid;
     }
-
     start->seqin_count[msa_index]--;
   }
 }
@@ -2211,7 +2525,6 @@ static void increase_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
 
     if (start->hybrid)
     {
-      assert(!node_is_bidirection(start));
       assert(!node_is_mirror(start));
       
       /* move according to path flags */
@@ -2289,6 +2602,18 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       {
         stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
                               stree->nodes[j]->seqin_count[msa_index];
+      }
+
+      /* TODO: The following loop corrects for bidirectional nodes */
+      for (j = 0; j < stree->hybrid_count; ++j)
+      {
+        snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+        if (node_is_bidirection(snode))
+        {
+          assert(snode->event_count[msa_index] == 0);
+          snode->parent->hx -= snode->seqin_count[msa_index];
+        }
       }
       hgamma_contrib = 0;
       hgamma_contrib_reverse = 0;
@@ -2540,7 +2865,38 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       }
       else
       {
-        for (j = 0; j < stree_total_nodes; ++j)
+        /* have a separate loop for hybrid mirror nodes to correct the problem
+           of detecting populations that need MSC recomputation for
+           bidirectional case */
+        for (j = 0; j < stree->hybrid_count; ++j)
+        {
+          snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+          /* correct for bidirectional introgression non-mirror nodes */
+          if (node_is_bidirection(x) && x->parent->hx != -1)
+              x->parent->hx += x->seqin_count[msa_index];
+
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+            /* correct for bidirectional introgression non-mirror nodes */
+            if (node_is_bidirection(x))
+                x->parent->hx = -1;
+          }
+        }
+        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
@@ -2580,7 +2936,38 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
       if (opt_network)
       {
-        for (j = 0; j < stree_total_nodes; ++j)
+        /* have a separate loop for hybrid mirror nodes to correct the problem
+           of detecting populations that need MSC recomputation for
+           bidirectional case */
+        for (j = 0; j < stree->hybrid_count; ++j)
+        {
+          snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+          /* correct for bidirectional introgression non-mirror nodes */
+          if (node_is_bidirection(x) && x->parent->hx != -1)
+              x->parent->hx += x->seqin_count[msa_index];
+
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+            /* correct for bidirectional introgression non-mirror nodes */
+            if (node_is_bidirection(x))
+                x->parent->hx = -1;
+          }
+        }
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
@@ -3064,7 +3451,6 @@ static int branch_compat(stree_t * stree,
     nextpop = target_pop->parent;
     if (nextpop->hybrid)
     {
-      assert(node_is_hybridization(nextpop));
       assert(!node_is_mirror(nextpop));
 
       hindex = GET_HINDEX(stree,nextpop);
@@ -3134,8 +3520,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
   }
 
   /* fill a list with target populations */
-  ptarget_list = (snode_t **)xmalloc((size_t)ptarget_count *
-                                     sizeof(snode_t *));
+  ptarget_list = (snode_t **)xmalloc((size_t)ptarget_count*sizeof(snode_t *));
   for (k = 0, j = 0; j < snodes_count; ++j)
   {
     if (stree->nodes[j]->mark)
@@ -3189,8 +3574,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
 
       if (p != curnode && p != gtree->root && p != sibling && p != father &&
           p->time <= father->time && p->parent->time > father->time &&
-          stree->pptable[n][m] &&
-          branch_compat(stree,curnode,p,father->time))
+          stree->pptable[n][m] && branch_compat(stree,curnode,p,father->time))
         *source_count = *source_count + 1;
     }
   }
@@ -3209,7 +3593,6 @@ static gnode_t * network_fill_targets(stree_t * stree,
     pop = pop->parent;
     if (pop->hybrid)
     {
-      assert(node_is_hybridization(pop));
       assert(!node_is_mirror(pop));
 
       unsigned int hindex = GET_HINDEX(stree,pop);
@@ -3218,6 +3601,13 @@ static gnode_t * network_fill_targets(stree_t * stree,
       int dbg_flag = target->hpath[hindex];
       if (target->hpath[hindex] == BPP_HPATH_NONE)
       {
+        /* This case happens when the target node is the sibling of curnode
+           (i.e. the other child of father) and tnew is older than father->time,
+           and at the same time, the lineage from father to its parent passes
+           through a hybridization event, and as such, target does not have that
+           flag (it is in father).
+        */
+
         assert(target == sibling);
         assert(father->time < tnew);
         assert(father->hpath[hindex] != BPP_HPATH_NONE);
@@ -3300,6 +3690,17 @@ static long propose_spr(locus_t * locus,
       {
         stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
                               stree->nodes[j]->seqin_count[msa_index];
+      }
+      /* TODO: The following loop corrects for bidirectional nodes */
+      for (j = 0; j < stree->hybrid_count; ++j)
+      {
+        snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+        if (node_is_bidirection(snode))
+        {
+          assert(snode->event_count[msa_index] == 0);
+          snode->parent->hx -= snode->seqin_count[msa_index];
+        }
       }
       hgamma_contrib = 0;
       hgamma_contrib_reverse = 0;
@@ -3578,7 +3979,38 @@ static long propose_spr(locus_t * locus,
     {
       if (opt_network)
       {
-        for (j = 0; j < stree_total_nodes; ++j)
+        /* have a separate loop for hybrid mirror nodes to correct the problem
+           of detecting populations that need MSC recomputation for
+           bidirectional case */
+        for (j = 0; j < stree->hybrid_count; ++j)
+        {
+          snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+          /* correct for bidirectional introgression non-mirror nodes */
+          if (node_is_bidirection(x) && x->parent->hx != -1)
+              x->parent->hx += x->seqin_count[msa_index];
+
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+            /* correct for bidirectional introgression non-mirror nodes */
+            if (node_is_bidirection(x))
+                x->parent->hx = -1;
+          }
+        }
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
@@ -3629,7 +4061,38 @@ static long propose_spr(locus_t * locus,
          exception that 'node' is 'father' here. Perhaps make it a function */
       if (opt_network)
       {
-        for (j = 0; j < stree_total_nodes; ++j)
+        /* have a separate loop for hybrid mirror nodes to correct the problem
+           of detecting populations that need MSC recomputation for
+           bidirectional case */
+        for (j = 0; j < stree->hybrid_count; ++j)
+        {
+          snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
+
+          /* correct for bidirectional introgression non-mirror nodes */
+          if (node_is_bidirection(x) && x->parent->hx != -1)
+              x->parent->hx += x->seqin_count[msa_index];
+
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          {
+            x->hx = 0;  /* MSC density is not changed */
+          }
+          else
+          {
+            x->hx = 1;  /* MSC density has changed */
+            if (opt_est_theta)
+              logpr -= x->logpr_contrib[msa_index];
+            else
+              logpr -= x->notheta_logpr_contrib;
+
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index);
+            /* correct for bidirectional introgression non-mirror nodes */
+            if (node_is_bidirection(x))
+                x->parent->hx = -1;
+          }
+        }
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)

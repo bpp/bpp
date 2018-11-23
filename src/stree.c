@@ -146,6 +146,70 @@ void print_network_table(stree_t * stree)
   printf("\n");
 }
 
+void debug_print_network_node_attribs(stree_t * stree)
+{
+  long i,j;
+  long msa_index;
+  unsigned int total_nodes;
+  char * s;
+
+  int pad = 8;
+  int minpad = 5;
+  int dots = 3;
+  int spc = 1;
+  if (pad < minpad)
+    fatal("Please set padding (pad) to at least %ld\n", minpad);
+  if (dots >= pad)
+    fatal("Please set number of dots (dots) to at most %ld\n", pad-1);
+  
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+
+  /* print header */
+  printf("The following table prints [seqin/events/leaves] for each locus at each species tree node\n");
+  printf("%-*s", pad, "Locus");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    printf("%-*s", spc, " ");
+    
+    s = NULL;
+    xasprintf(&s, "%ld (%s)", i, stree->nodes[i]->label);
+    if (strlen(s) > (size_t)pad)
+    {
+      for (j = 0; j < dots; ++j)
+        s[strlen(s)-j-1] = '.';
+      s[pad] = 0;
+    }
+      
+    printf("%*s", pad, s);
+  }
+  printf("\n");
+
+  for (msa_index = 0; msa_index < stree->locus_count; ++msa_index)
+  {
+    printf("%-*ld", pad, msa_index);
+
+    for (i = 0; i < total_nodes; ++i)
+    {
+      printf("%-*s", spc, " ");
+      s = NULL;
+      xasprintf(&s,
+                "%d/%d/%d",
+                stree->nodes[i]->seqin_count[msa_index],
+                stree->nodes[i]->event_count[msa_index],
+                stree->nodes[i]->gene_leaves[msa_index]);
+      if (strlen(s) > (size_t)pad)
+      {
+        for (j = 0; j < dots; ++j)
+          s[strlen(s)-j-1] = '.';
+        s[pad] = 0;
+      }
+      printf("%*s", pad, s);
+      free(s);
+    }
+    printf("\n");
+  }
+}
+
 void stree_show_pptable(stree_t * stree)
 {
   long i, j;
@@ -665,53 +729,97 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
 
       if (x->hybrid && x->tau)
       {
-        if (x->parent->htau && x->parent->tau == 1)
+        if (node_is_hybridization(x))
         {
-            run  = 1;
-            continue;
-        }
-        if (x->hybrid->parent->htau && x->hybrid->parent->tau == 1)
-        {
-          run = 1;
-          continue;
-        }
 
-        if (x->parent->htau == 0)
-        {
-          assert(x->parent->parent);
-          assert(x->parent->parent->tau > 0);
-          if (x->parent->parent->tau == 1)
+          /* hybridization nodes */
+
+          if (x->parent->htau && x->parent->tau == 1)
+          {
+              run  = 1;
+              continue;
+          }
+          if (x->hybrid->parent->htau && x->hybrid->parent->tau == 1)
           {
             run = 1;
             continue;
           }
-        }
 
-        if (x->hybrid->parent->htau == 0)
+          if (x->parent->htau == 0)
+          {
+            assert(x->parent->parent);
+            assert(x->parent->parent->tau > 0);
+            if (x->parent->parent->tau == 1)
+            {
+              run = 1;
+              continue;
+            }
+          }
+
+          if (x->hybrid->parent->htau == 0)
+          {
+            assert(x->hybrid->parent->parent);
+            assert(x->hybrid->parent->parent->tau > 0);
+            if (x->hybrid->parent->parent->tau == 1)
+            {
+              run = 1;
+              continue;
+            }
+          }
+          double age1 = (x->parent->htau) ?
+                          x->parent->tau : x->parent->parent->tau;
+          double age2 = (x->hybrid->parent->htau) ?
+                          x->hybrid->parent->tau : x->hybrid->parent->parent->tau;
+
+          if (x->tau != 1)
+            continue;
+
+          x->tau = MIN(age1,age2) * (prop + (1 - prop - 0.02)*legacy_rndu());
+          x->hybrid->tau = x->tau;
+          if (x->parent->htau == 0)
+            x->parent->tau = x->tau;
+          if (x->hybrid->parent->htau == 0)
+            x->hybrid->parent->tau = x->tau;
+        }
+        else
         {
-          assert(x->hybrid->parent->parent);
-          assert(x->hybrid->parent->parent->tau > 0);
-          if (x->hybrid->parent->parent->tau == 1)
+
+          /* bidirectional introgression nodes */
+
+          assert(node_is_bidirection(x));
+
+          assert(x->parent->htau || 
+                 (x->parent->hybrid && node_is_bidirection(x->parent)));
+
+          /* TODO: Account for parallel bidirectional introgressions among two
+             lineages with no speciations in between. The thing we need to check
+             is that parent->htau may be 0 when visiting the bottom bidirection */
+
+          assert(!node_is_mirror(x));
+          if (x->parent->tau == 1 || x->right->hybrid->parent->tau == 1)
           {
             run = 1;
             continue;
           }
+
+          assert(x->hybrid->parent);
+          assert(x->hybrid->parent->hybrid);
+
+          if (x->tau != 1) continue;
+
+          assert(x->hybrid->tau == 1 &&
+                 x->right->tau == 1 &&
+                 x->right->hybrid->tau == 1);
+
+          double age = x->parent->tau*(prop + (1 - prop - 0.02)*legacy_rndu());
+
+          x->tau                = age;
+          x->hybrid->tau        = age;
+          x->right->tau         = age;
+          x->right->hybrid->tau = age;
+
         }
 
-        double age1 = (x->parent->htau) ?
-                        x->parent->tau : x->parent->parent->tau;
-        double age2 = (x->hybrid->parent->htau) ?
-                        x->hybrid->parent->tau : x->hybrid->parent->parent->tau;
-
-        if (x->tau != 1)
-          continue;
-
-        x->tau = MIN(age1,age2) * (prop + (1 - prop - 0.02)*legacy_rndu());
-        x->hybrid->tau = x->tau;
-        if (x->parent->htau == 0)
-          x->parent->tau = x->tau;
-        if (x->hybrid->parent->htau == 0)
-          x->hybrid->parent->tau = x->tau;
       }
       else
       {
@@ -818,7 +926,35 @@ static void stree_init_tau(stree_t * stree)
      stree_init_tau_recursive(stree->root->right, prop);
    }
 
-/* 22.6.2018 - Testing gene tree node age proposal for MSCi */
+/* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
+#if (defined DEBUG_MSCi)
+   /* two bidirectional introgressions */
+   stree->nodes[2]->tau  = 0.6;   /* R */
+   stree->nodes[3]->tau  = 0.35;  /* Sl */
+   stree->nodes[4]->tau  = 0.15;  /* Xl */
+   stree->nodes[5]->tau  = 0.15;  /* Yl */
+   stree->nodes[6]->tau  = 0.35;  /* Tl */
+   stree->nodes[7]->tau  = 0.35;  /* Sr */
+   stree->nodes[8]->tau  = 0.15;  /* Xr */
+   stree->nodes[9]->tau  = 0.15;  /* Yr */
+   stree->nodes[10]->tau = 0.35;  /* Tr */
+#endif
+#if (0)
+   /* one bidirectional introgression */
+   stree->nodes[2]->tau = 0.5;  /* R */
+   stree->nodes[3]->tau = 0.3;  /* Xl */
+   stree->nodes[4]->tau = 0.3;  /* Yl */
+   stree->nodes[5]->tau = 0.3;  /* Xr */
+   stree->nodes[6]->tau = 0.3;  /* Yr */
+#endif
+#if (0)
+   stree->nodes[3]->tau = 0.5;
+   stree->nodes[4]->tau = 0.3;
+   stree->nodes[5]->tau = 0.2;
+   stree->nodes[6]->tau = stree->nodes[9]->tau = 0.1;
+   stree->nodes[7]->tau = stree->nodes[10]->tau = 0.2;
+   stree->nodes[8]->tau = 0.4;
+#endif
 #if 0
    /********************/
    stree->root->tau = 0.4;
@@ -835,9 +971,18 @@ static void stree_init_tau(stree_t * stree)
      {
        snode_t * h = stree->nodes[stree->tip_count+stree->inner_count+i];
        assert(h && h->hybrid);
-       assert(!node_is_bidirection(h));
        assert(node_is_mirror(h));
-       assert((h->parent->tau >= h->tau) && (h->hybrid->tau == h->tau));
+       if (node_is_hybridization(h))
+         assert((h->parent->tau >= h->tau) && (h->hybrid->tau == h->tau));
+       else
+       {
+         assert(node_is_bidirection(h));
+         assert(h->hybrid->parent->tau > h->tau);
+         assert(h->hybrid->tau == h->tau &&
+                h->hybrid->right->tau == h->tau &&
+                h->hybrid->right->hybrid->tau == h->tau);
+         assert(h->hybrid->right->hybrid->parent->tau > h->tau);
+       }
      }
    }
 }
@@ -852,8 +997,6 @@ static int propose_gamma(stree_t * stree, gtree_t ** gtree, snode_t * snode)
   double old_logpr;
   double lnacceptance;
 
-  assert(!node_is_bidirection(snode));
-  assert(node_is_hybridization(snode));
   assert(!node_is_mirror(snode));
 
   gammaold = snode->hgamma;
@@ -979,18 +1122,38 @@ static void stree_init_gamma(stree_t * stree)
   {
     snode_t * mnode = stree->nodes[offset+i];
 
-    assert(!node_is_bidirection(mnode));
-    assert(node_is_mirror(mnode));
+    assert(node_is_bidirection(mnode) || node_is_mirror(mnode));
 
     /* set gamma parameter to the mean */
     mnode->hybrid->hgamma = (opt_gamma_alpha / (opt_gamma_alpha + opt_gamma_beta));
-
-/****************/
-#if 0
-    mnode->hybrid->hgamma = 0.7;
-#endif
     mnode->hgamma = 1 - mnode->hybrid->hgamma;
   }
+
+    /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
+#if (defined DEBUG_MSCi)
+   /* two bidirectional introgressions */
+  stree->nodes[3]->hgamma  = 0.3;                         /* Sl */
+  stree->nodes[4]->hgamma  = 0.4;                         /* Xl */
+  stree->nodes[5]->hgamma  = 0.5;                         /* Yl */
+  stree->nodes[6]->hgamma  = 0.8;                         /* Tl */
+  stree->nodes[7]->hgamma  = 1-stree->nodes[3]->hgamma;   /* Sr */
+  stree->nodes[8]->hgamma  = 1-stree->nodes[4]->hgamma;   /* Xr */
+  stree->nodes[9]->hgamma  = 1-stree->nodes[5]->hgamma;   /* Yr */
+  stree->nodes[10]->hgamma = 1-stree->nodes[6]->hgamma;   /* Tr */
+#endif
+#if (0)
+   /* one bidirectional introgression */
+  stree->nodes[3]->hgamma = 0.3;
+  stree->nodes[4]->hgamma = 0.4;
+  stree->nodes[5]->hgamma = 1-stree->nodes[3]->hgamma;
+  stree->nodes[6]->hgamma = 1-stree->nodes[4]->hgamma;
+#endif
+#if (0)
+  stree->nodes[6]->hgamma = 0.3;
+  stree->nodes[7]->hgamma = 0.4;
+  stree->nodes[9]->hgamma = 1 - stree->nodes[6]->hgamma;
+  stree->nodes[10]->hgamma = 1 - stree->nodes[7]->hgamma;
+#endif
 }
 
 static void stree_init_theta(stree_t * stree,
@@ -1217,7 +1380,6 @@ static void stree_init_theta(stree_t * stree,
       {
         /* bidirectional introgression */
 
-        assert(0);
         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                       (0.9 + 0.2 * legacy_rndu());
         node->has_theta = 1;
@@ -1244,6 +1406,43 @@ static void stree_init_theta(stree_t * stree,
   free(seqcount);
 
 /* 22.6.2018 - Testing gene tree node age proposal for MSCi */
+#if (defined DEBUG_MSCi)
+   /* two bidirectional introgressions */
+  stree->nodes[0]->theta  = 0.1;    /*  A */
+  stree->nodes[1]->theta  = 0.2;    /*  B */
+  stree->nodes[2]->theta  = 0.2;    /*  R */
+  stree->nodes[3]->theta  = 0.15;   /* Sl */
+  stree->nodes[4]->theta  = 0.25;   /* Xl */
+  stree->nodes[5]->theta  = 0.15;   /* Yl */
+  stree->nodes[6]->theta  = 0.25;   /* Tl */
+  stree->nodes[7]->theta  = 0.15;   /* Sr */
+  stree->nodes[8]->theta  = 0.25;   /* Xr */
+  stree->nodes[9]->theta  = 0.15;   /* Yr */
+  stree->nodes[10]->theta = 0.25;   /* Tr */
+#endif
+#if (0)
+   /* one bidirectional introgression */
+  stree->nodes[0]->theta = 0.1;   /* A */
+  stree->nodes[1]->theta = 0.2;   /* B */
+  stree->nodes[2]->theta = 0.2;   /* R */
+  stree->nodes[3]->theta = 0.15;   /* Xl */
+  stree->nodes[4]->theta = 0.25;   /* Yl */
+  stree->nodes[5]->theta = 0.15;   /* Xr */
+  stree->nodes[6]->theta = 0.25;   /* Yr */
+#endif
+#if (0)
+  stree->nodes[0]->theta = 0.1;   /* A */
+  stree->nodes[1]->theta = 0.2;   /* B */
+  stree->nodes[2]->theta = 0.3;   /* C */
+  stree->nodes[3]->theta = 0.2;   /* R */
+  stree->nodes[4]->theta = 0.15;   /* S */
+  stree->nodes[5]->theta = 0.25;   /* U */
+  stree->nodes[6]->theta = 0.05;   /* Xl */
+  stree->nodes[7]->theta = 0.25;   /* Yl */
+  stree->nodes[8]->theta = 0.15;   /* T */
+  stree->nodes[9]->theta = 0.5;   /* Xr */
+  stree->nodes[10]->theta = 0.35;   /* Yr */
+#endif
 #if 0
   /******************************/
   stree->root->theta = 0.2;  /* R */
@@ -1280,52 +1479,61 @@ static void stree_reset_pptable_tree(stree_t * stree)
 
 int node_is_bidirection(snode_t * node)
 {
-  assert(node->hybrid);
+  assert(node && node->hybrid);
 
-  /* check whether it's a hybridization (i.e. one of the two linked nodes has
-     no children */
-  if ((!node->left && !node->right) ||
-      (!node->hybrid->left && !node->hybrid->right))
-    return 0;
+  snode_t * hnode;    /* hybrid node */
+  snode_t * mnode;    /* mirror node */
 
-  return 1;
+  if (!node->left && !node->right)
+    mnode = node;
+  else
+    mnode = node->hybrid;
+
+  hnode = mnode->hybrid;
+
+  if (hnode->left && hnode->right) return 1;
+
+  assert(!hnode->right);
+
+  return 0;
 }
+
 
 /* TODO: A simpler way would be just to check whether node->node_index >=
    stree->tip_count + stree->inner_count */
 int node_is_mirror(snode_t * node)
 {
-  int rc = 0;
+  assert(node);
+  assert(node->hybrid);
+  assert(node && node->hybrid);
 
-  if (node_is_bidirection(node))
-  {
-    if (node->left->left == node)
-      rc = 1;
-  }
-  else  /* hybridization event */
-  {
-    if (!node->left && !node->right)
-      rc = 1;
-  }
-  
-  /* TODO: Assert it indeed holds that mirror nodes have 
-     index >tip_count+inner_count */
-  //assert(rc == 0 || (node->node_index >= stree->tip_count+stree->inner_count));
+  if (node->left || node->right)
+    return 0;
 
-  return rc;
+  return 1;
 }
 
 int node_is_hybridization(snode_t * node)
 {
-  if (!node) return 0;
+  assert(node && node->hybrid);
 
+  if (!node) return 0;
   if (!node->hybrid) return 0;
 
+  return !node_is_bidirection(node);
+
+  #if 0
+  if ((!node->left && !node->right) ||
+      (!node->hybrid->left && !node->hybrid->right))
+    return 1;
+  #if 0
   /* check if it's bidirectional introgression */
   if (node->hybrid->parent->hybrid && node->hybrid->parent->parent == node->hybrid)
     return 0;
+  #endif
 
-  return 1;
+  return 0;
+  #endif
     
 }
 
@@ -1349,22 +1557,11 @@ static void stree_reset_pptable_network_recursive(stree_t * stree,
     /* check whether hybridization or bidirectional introgression */
     if (node_is_bidirection(node))
     {
-      /* get one of the opposite (mirror) node */
-      snode_t * mnode = NULL;
-
-      if (node->left->left == node)
-        mnode = node->left;
-      else if (node->hybrid->left->left == node->hybrid)
-        mnode = node->hybrid->left;
-      else
-        fatal("Internal error [bidir] (stree_reset_pptable_network_recursive)");
-
-      stree->pptable[mnode->node_index][ancestor->node_index] = 1;
-      stree->pptable[mnode->hybrid->node_index][ancestor->node_index] = 1;
-
-      assert(mnode->hybrid->left && !mnode->hybrid->right);
-
-      stree_reset_pptable_network_recursive(stree,mnode->hybrid->left,ancestor);
+      if (node_is_mirror(node))
+      {
+        /* move to the opposite child */
+        stree_reset_pptable_network_recursive(stree,node->hybrid->left,ancestor);
+      }
     }
     else
     {
@@ -1383,14 +1580,17 @@ static void stree_reset_pptable_network_recursive(stree_t * stree,
 static void stree_reset_pptable_network(stree_t * stree)
 {
   unsigned int i;
+  unsigned int nodes_count;
+  
+  nodes_count = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
   /* zero-out pptable */
-  for (i=0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  for (i=0; i < nodes_count; ++i)
     memset(stree->pptable[i],
            0,
-           (stree->tip_count + stree->inner_count) * sizeof(int));
+           nodes_count*sizeof(int));
 
-  for (i=0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  for (i=0; i < nodes_count; ++i)
     stree_reset_pptable_network_recursive(stree,stree->nodes[i],stree->nodes[i]);
 }
 
@@ -1499,7 +1699,7 @@ void stree_init(stree_t * stree,
   /* Initialize population sizes */
   stree_init_theta(stree, msa, maplist, msa_count, fp_out);
 
-  if (stree->tip_count > 1)
+  if (stree->tip_count > 1 || opt_network)
   {
     /* Initialize speciation times and create extinct species groups */
     stree_init_tau(stree);
@@ -1675,46 +1875,72 @@ static long propose_tau(locus_t ** loci,
    /* compute minage and maxage bounds */
    if (opt_network && snode->hybrid)
    {
-     assert(node_is_hybridization(snode));
-     assert(!node_is_mirror(snode));
-     assert(snode->left);
-
-     minage = snode->left->tau;
-     if (!snode->parent->htau)
+     if (node_is_hybridization(snode))
      {
-       snode_t * sibling = (snode->parent->left == snode) ?
-                             snode->parent->right : snode->parent->left;
+       /* hybridization */
+       assert(!node_is_mirror(snode));
+       assert(snode->left && !snode->right);
 
-       minage = MAX(minage,sibling->tau);
+       minage = snode->left->tau;
+       if (!snode->parent->htau)
+       {
+         snode_t * sibling = (snode->parent->left == snode) ?
+                               snode->parent->right : snode->parent->left;
+
+         minage = MAX(minage,sibling->tau);
+       }
+       if (!snode->hybrid->parent->htau)
+       {
+         snode_t * sibling = (snode->hybrid->parent->left == snode->hybrid) ?
+                               snode->hybrid->parent->right : snode->hybrid->parent->left;
+
+         minage = MAX(minage,sibling->tau);
+       }
      }
-     if (!snode->hybrid->parent->htau)
+     else
      {
-       snode_t * sibling = (snode->hybrid->parent->left == snode->hybrid) ?
-                             snode->hybrid->parent->right : snode->hybrid->parent->left;
+       /* bidirectional introgression */
+       assert(node_is_bidirection(snode));
+       assert(!node_is_mirror(snode));
+       assert(snode->left && snode->right);
+       assert(snode->right->hybrid && snode->right->hybrid->left);
+       assert(snode->htau && !snode->hybrid->htau &&
+              !snode->hybrid->parent->htau && !snode->right->htau);
 
-       minage = MAX(minage,sibling->tau);
+       minage = MAX(snode->left->tau,snode->right->hybrid->left->tau);
      }
-
    }
    else
    {
      if (snode->left)
-        minage = MAX(snode->left->tau, snode->right->tau);
+       minage = MAX(snode->left->tau, snode->right->tau);
    }
 
    if (opt_network && snode->hybrid)
    {
-     assert(node_is_hybridization(snode));
-     assert(!node_is_mirror(snode));
-     assert(snode->parent->htau || snode->parent->parent);
-     assert(snode->hybrid->parent->htau || snode->hybrid->parent->parent);
+     if (node_is_hybridization(snode))
+     {
+       assert(!node_is_mirror(snode));
+       assert(snode->parent->htau || snode->parent->parent);
+       assert(snode->hybrid->parent->htau || snode->hybrid->parent->parent);
 
-     double p1age = snode->parent->htau ?
-                      snode->parent->tau : snode->parent->parent->tau;
-     double p2age = snode->hybrid->parent->htau ?
-                      snode->hybrid->parent->tau : snode->hybrid->parent->parent->tau;
+       double p1age = snode->parent->htau ?
+                        snode->parent->tau : snode->parent->parent->tau;
+       double p2age = snode->hybrid->parent->htau ?
+                        snode->hybrid->parent->tau : snode->hybrid->parent->parent->tau;
 
-     maxage = MIN(p1age,p2age);
+       maxage = MIN(p1age,p2age);
+     }
+     else
+     {
+       assert(node_is_bidirection(snode));
+       assert(!node_is_mirror(snode));
+       
+       double p1age = snode->parent->tau;
+       double p2age = snode->right->hybrid->parent->tau;
+
+       maxage = MIN(p1age,p2age);
+     }
    }
    else
    {
@@ -1729,12 +1955,24 @@ static long propose_tau(locus_t ** loci,
 
    if (opt_network && snode->hybrid)
    {
-     snode->hybrid->tau = snode->tau;
+     if (node_is_hybridization(snode))
+     {
+       snode->hybrid->tau = snode->tau;
 
-     if (!snode->parent->htau)
-       snode->parent->tau = snode->tau;
-     if (!snode->hybrid->parent->htau)
-       snode->hybrid->parent->tau = snode->tau;
+       if (!snode->parent->htau)
+         snode->parent->tau = snode->tau;
+       if (!snode->hybrid->parent->htau)
+         snode->hybrid->parent->tau = snode->tau;
+     }
+     else
+     {
+       assert(node_is_bidirection(snode));
+       assert(!node_is_mirror(snode));
+
+       snode->hybrid->tau        = snode->tau;
+       snode->right->tau         = snode->tau;
+       snode->right->hybrid->tau = snode->tau;
+     }
    }
 
    /* compute factors for multiplying associated gene tree nodes ages */
@@ -1783,93 +2021,111 @@ static long propose_tau(locus_t ** loci,
 
    if (opt_network && snode->hybrid)
    {
-     assert(!node_is_bidirection(snode));
-
-     if (snode->parent->htau && snode->hybrid->parent->htau)
+     if (node_is_hybridization(snode))
      {
-       /* model H3
-            *
-           / \
-          *   *
-         / \ / \
-        /   +   \
-       /    |    \
-       
-       */
-
-       affected[0] = snode->left;
-       affected[1] = snode;
-       affected[2] = snode->hybrid;
-       paffected_count = 3;
-     }
-     else if (!snode->parent->htau && !snode->hybrid->parent->htau)
-     {
-       /* model H1 
-           *
-          / \
-         /   \
-        *--+--*
-       /   |   \
-
-       */
-
-       paffected_count = 0;
-       for (i = 0; i < stree->locus_count; ++i)
+       if (snode->parent->htau && snode->hybrid->parent->htau)
        {
-         assert(snode->event_count[i] == 0);
-         assert(snode->hybrid->event_count[i] == 0);
+         /* model H3
+              *
+             / \
+            *   *
+           / \ / \
+          /   +   \
+         /    |    \
+         
+         */
+
+         affected[0] = snode->left;
+         affected[1] = snode;
+         affected[2] = snode->hybrid;
+         paffected_count = 3;
        }
-
-       affected[paffected_count++] = snode->parent;
-       affected[paffected_count++] = snode->hybrid->parent;
-       affected[paffected_count++] = snode->parent->left;
-       affected[paffected_count++] = snode->parent->right;
-       affected[paffected_count++] = snode->hybrid->parent->left;
-       affected[paffected_count++] = snode->hybrid->parent->right;
-       affected[paffected_count++] = snode->left;
-     }
-     else
-     {
-       /* model H2
-              *                  *
-             / \                / \
-            /   *      or      *   \
-           /   / \            / \   \
-          *---+   \          /   +---*
-         /    |    \        /    |    \
-
-       */
-
-       assert((!snode->parent->htau && snode->hybrid->parent->htau) ||
-              (snode->parent->htau && !snode->hybrid->parent->htau));
-
-       paffected_count = 0;
-
-       /* assertions */
-       if (!snode->parent->htau)
-         for (i = 0; i < stree->locus_count; ++i)
-           assert(snode->event_count[i] == 0);
-       if (!snode->hybrid->parent->htau)
-         for (i = 0; i < stree->locus_count; ++i)
-           assert(snode->hybrid->event_count[i] == 0);
-
-       if (!snode->parent->htau)
+       else if (!snode->parent->htau && !snode->hybrid->parent->htau)
        {
+         /* model H1 
+             *
+            / \
+           /   \
+          *--+--*
+         /   |   \
+
+         */
+
+         paffected_count = 0;
+         for (i = 0; i < stree->locus_count; ++i)
+         {
+           assert(snode->event_count[i] == 0);
+           assert(snode->hybrid->event_count[i] == 0);
+         }
+
          affected[paffected_count++] = snode->parent;
+         affected[paffected_count++] = snode->hybrid->parent;
          affected[paffected_count++] = snode->parent->left;
          affected[paffected_count++] = snode->parent->right;
-         affected[paffected_count++] = snode->hybrid;
+         affected[paffected_count++] = snode->hybrid->parent->left;
+         affected[paffected_count++] = snode->hybrid->parent->right;
+         affected[paffected_count++] = snode->left;
        }
        else
        {
-         assert(!snode->hybrid->parent->htau);
+         /* model H2
+                *                  *
+               / \                / \
+              /   *      or      *   \
+             /   / \            / \   \
+            *---+   \          /   +---*
+           /    |    \        /    |    \
 
-         affected[paffected_count++] = snode->hybrid->parent;
-         affected[paffected_count++] = snode->hybrid->parent->left;
-         affected[paffected_count++] = snode->hybrid->parent->right;
-         affected[paffected_count++] = snode;
+         */
+
+         assert((!snode->parent->htau && snode->hybrid->parent->htau) ||
+                (snode->parent->htau && !snode->hybrid->parent->htau));
+
+         paffected_count = 0;
+
+         /* assertions */
+         if (!snode->parent->htau)
+           for (i = 0; i < stree->locus_count; ++i)
+             assert(snode->event_count[i] == 0);
+         if (!snode->hybrid->parent->htau)
+           for (i = 0; i < stree->locus_count; ++i)
+             assert(snode->hybrid->event_count[i] == 0);
+
+         if (!snode->parent->htau)
+         {
+           affected[paffected_count++] = snode->parent;
+           affected[paffected_count++] = snode->parent->left;
+           affected[paffected_count++] = snode->parent->right;
+           affected[paffected_count++] = snode->hybrid;
+         }
+         else
+         {
+           assert(!snode->hybrid->parent->htau);
+
+           affected[paffected_count++] = snode->hybrid->parent;
+           affected[paffected_count++] = snode->hybrid->parent->left;
+           affected[paffected_count++] = snode->hybrid->parent->right;
+           affected[paffected_count++] = snode;
+         }
+
+         affected[paffected_count++] = snode->left;
+       }
+     }
+     else
+     {
+       assert(node_is_bidirection(snode));
+       for (i = 0; i < stree->locus_count; ++i)
+       {
+         assert(snode->hybrid->event_count[i] == 0);
+         assert(snode->right->event_count[i] == 0);
        }
 
+       paffected_count = 0;
+       affected[paffected_count++] = snode;
+       affected[paffected_count++] = snode->hybrid;
+       affected[paffected_count++] = snode->right;
+       affected[paffected_count++] = snode->right->hybrid;
+       affected[paffected_count++] = snode->right->hybrid->left;
        affected[paffected_count++] = snode->left;
      }
    }
@@ -2089,12 +2345,23 @@ static long propose_tau(locus_t ** loci,
       snode->tau = oldage;
       if (opt_network && snode->hybrid)
       {
-        snode->hybrid->tau = snode->tau;
+        if (node_is_hybridization(snode))
+        {
+          snode->hybrid->tau = snode->tau;
 
-        if (!snode->parent->htau)
-          snode->parent->tau = snode->tau;
-        if (!snode->hybrid->parent->htau)
-          snode->hybrid->parent->tau = snode->tau;
+          if (!snode->parent->htau)
+            snode->parent->tau = snode->tau;
+          if (!snode->hybrid->parent->htau)
+            snode->hybrid->parent->tau = snode->tau;
+        }
+        else
+        {
+          assert(node_is_bidirection(snode));
+
+          snode->hybrid->tau        = snode->tau;
+          snode->right->tau         = snode->tau;
+          snode->right->hybrid->tau = snode->tau;
+        }
       }
 
       if (opt_est_theta)

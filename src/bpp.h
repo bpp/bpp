@@ -75,6 +75,10 @@
 #define strcasecmp _stricmp
 #endif
 
+#if 0
+#define DEBUG_MSCi 1
+#endif
+
 /* constants */
 
 #define PROG_NAME "bpp"
@@ -773,6 +777,7 @@ int node_is_mirror(snode_t * node);
 int node_is_hybridization(snode_t * node);
 
 void print_network_table(stree_t * stree);
+void debug_print_network_node_attribs(stree_t * stree);
 
 /* functions in arch.c */
 

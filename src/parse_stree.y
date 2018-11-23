@@ -272,7 +272,7 @@ static void annotate_bd_introgression(snode_t * xtip,
 
   /* better safe than sorry */
   assert(!xtip->left && !xtip->right);          /* xtip is tip */
-  assert(xinner->left || xinner->right);        /* xinner is inner */
+  assert(xinner->left && xinner->right);        /* xinner is inner */
   assert(y->left || y->right);                  /* y is inner */
   assert(ylink->left || ylink->right);          /* ylink is inner */
   
@@ -524,15 +524,15 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
 
   /* check for bidirectional introgression 
 
-          *           ((A,(B)Y)X,(X,B)Y)R;
+          *  R        ((A,(B)Y)X,(X)Y)R;
          / \
       X /   \          Method:
        *     \           1. Find a tip (link1) for which an inner node with
       / \  Y  \  Y          identical label exists (in this case X) 
      /   *     *         2. Get the parent of tip node X (in this case node Y)
-    /    |     |\        3. Check that inner node X has an unary child with the
-   /     |     | \          same label as Y (name it link2)                           
-   A     B     B  X      4. Create hybrid nodes for both X and Y                 
+    /    |     |         3. Check that inner node X has an unary child with the
+   /     |     |           same label as Y (name it link2)                           
+   A     B     X         4. Create hybrid nodes for both X and Y                 
                          5. Link the corresponding nodes to obtain the diagram   
                             below
    
@@ -554,18 +554,19 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
     /* if no duplicate label for current tip node, move to next tip */
     if (!stree->nodes[i] || dups[i] == i) continue;
 
-    /* if the duplicate of tip is a tip, ignore */
-    if (dups[i] < stree->tip_count) continue;
+    /* if the duplicate of tip is a tip, fail as we checked this in
+       create_duplicate_indices */
+    assert(dups[i] >= stree->tip_count);
 
     /* root cannot be duplicated */
     assert(stree->nodes[i]->parent);
 
     /* get pointers to the two inner nodes which are candidates for a
        bidirectional introgression */
-    snode_t * x = stree->nodes[dups[i]];
-    snode_t * y = stree->nodes[i]->parent;
+    snode_t * x = stree->nodes[dups[i]];        /* inner node x */
+    snode_t * y = stree->nodes[i]->parent;      /* parent of tip node x */
     if (!y->label) continue;
-    link1 = stree->nodes[i];
+    link1 = stree->nodes[i];                    /* tip node x */
 
     assert(x->left || x->right);      /* confirm x is an inner node */
     assert(x->label);
@@ -579,10 +580,10 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
     if (link2)
     {
       /* link2 must be an unary node */
-      assert((link2->left && !link2->right) || (!link2->left && link2->right));
+      assert(link2->left && !link2->right);
 
       hybrid_cnt += 2;
-      tip_cnt -= 2;
+      tip_cnt -= 1;
       inner_cnt--;
 
       /* we create an additional node for each introgression event */
@@ -597,36 +598,32 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
       x->hybrid->hybrid = x;
       y->hybrid->hybrid = y;
 
-      /* define parents of hybridization nodes */
-      x->hybrid->parent = y->hybrid;
-      y->hybrid->parent = x->hybrid;
+      /* define parents of (mirror) hybridization nodes */
+      x->hybrid->parent = y;
+      y->hybrid->parent = x;
 
       /* define one child (as left child node) for hybridization nodes */
-      x->hybrid->left = y->hybrid;
-      y->hybrid->left = x->hybrid;
-
-      x->hybrid->leaves = y->leaves;
-      y->hybrid->leaves = x->leaves;
+      x->hybrid->left  = NULL;
+      y->hybrid->left  = NULL;
+      x->hybrid->right = NULL;
+      y->hybrid->right = NULL;
 
       /* annotate */
       annotate_bd_introgression(link1, x, y, link2);
 
       /* now destroy redundant nodes/subtrees (i.e. link1 and link2) */
-      if (link1->parent->left == link1)
-      {
-        link1->parent->left = link1->parent->right;
-        link1->parent->right = NULL;
-      }
-      else
-      {
-        assert(link1 == link1->parent->right);
-        link1->parent->right = NULL;
-      }
+      assert(y == link1->parent);
+      assert(y->left == link1 && y->right == NULL);
+      y->left = NULL;
       link1->parent = NULL;
       stree->nodes[link1->node_index] = NULL;
       stree_graph_destroy(link1,NULL);
 
-      /* now the same for link2 */
+      /* link y with child of link2 */
+      y->left = link2->left;
+      y->left->parent = y;
+
+      /* now destroy link2 */
       if (link2->parent->left == link2)
       {
         link2->parent->left = link2->parent->right;
@@ -639,11 +636,19 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
       }
       link2->parent = NULL;
       stree->nodes[link2->node_index] = NULL;
-      if (link2->left)
-        stree->nodes[link2->left->node_index] = NULL;
-      else
-        stree->nodes[link2->right->node_index] = NULL;
+      assert(link2->left && link2->right == NULL);
+      link2->left = NULL;
       stree_graph_destroy(link2,NULL);
+
+      x->right = y->hybrid;
+      y->right = x->hybrid;
+
+      y->leaves = y->left->leaves;
+      x->leaves = x->left->leaves;
+      x->hybrid->leaves = 0;
+      y->hybrid->leaves = 0;
+
+
     }
   }
 
@@ -716,8 +721,9 @@ static void validate_stree(stree_t * stree)
 
 /* creates array dups, such that dups[i] is the index of a node with identical
    label to node stree->nodes[i]. If more than one duplicate exists for a given
-   node, the procedure ends with an error. If no duplicate exists for a node,
-   then dup[i] = i */
+   node, the procedure ends with an error. If a duplicate tip label is found,
+   the procedure ends with error. If no duplicate exists for a node, or a non-tip
+   duplicate exists, then dup[i] = i. */
 static long * create_duplicate_indices(stree_t * stree)
 {
   long i,j;
@@ -750,6 +756,12 @@ static long * create_duplicate_indices(stree_t * stree)
     if (freq > 2)
       fatal("Node with label %s appears more %ld times (allowed twice)",
             stree->nodes[i]->label, freq);
+    else if (freq == 2)
+    {
+      /* if both are tips */
+      if (i < stree->tip_count && dups[i] < stree->tip_count)
+        fatal("Tip node with label %s appears more than once in the tree");
+    }
   }
   return dups;
 }

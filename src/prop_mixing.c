@@ -138,14 +138,27 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       snodes[i]->tau *= c;
       if (snodes[i]->hybrid)
       {
-        assert(!node_is_bidirection(snodes[i]));
-        assert(!node_is_mirror(snodes[i]));
-        
-        snodes[i]->hybrid->tau = snodes[i]->tau;
-        if (snodes[i]->parent->htau == 0)
-          snodes[i]->parent->tau = snodes[i]->tau;
-        if (snodes[i]->hybrid->parent->htau == 0)
-          snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+        if (node_is_hybridization(snodes[i]))
+        {
+          assert(!node_is_mirror(snodes[i]));
+          snodes[i]->hybrid->tau = snodes[i]->tau;
+          if (snodes[i]->parent->htau == 0)
+            snodes[i]->parent->tau = snodes[i]->tau;
+          if (snodes[i]->hybrid->parent->htau == 0)
+            snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+        }
+        else
+        {
+          assert(node_is_bidirection(snodes[i]));
+          assert(!node_is_mirror(snodes[i]));
+
+          assert(snodes[i]->htau && !snodes[i]->hybrid->htau &&
+                 !snodes[i]->hybrid->parent->htau && !snodes[i]->right->htau);
+          snodes[i]->hybrid->tau        = snodes[i]->tau;
+          snodes[i]->right->tau         = snodes[i]->tau;
+          snodes[i]->right->hybrid->tau = snodes[i]->tau;
+          
+        }
       }
       if (!snodes[i]->parent)
       {
@@ -302,14 +315,24 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         snodes[i]->tau /= c;
         if (snodes[i]->hybrid)
         {
-          assert(!node_is_bidirection(snodes[i]));
-          assert(!node_is_mirror(snodes[i]));
           
-          snodes[i]->hybrid->tau = snodes[i]->tau;
-          if (snodes[i]->parent->htau == 0)
-            snodes[i]->parent->tau = snodes[i]->tau;
-          if (snodes[i]->hybrid->parent->htau == 0)
-            snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+          if (node_is_hybridization(snodes[i]))
+          {
+            assert(!node_is_mirror(snodes[i]));
+            snodes[i]->hybrid->tau = snodes[i]->tau;
+            if (snodes[i]->parent->htau == 0)
+              snodes[i]->parent->tau = snodes[i]->tau;
+            if (snodes[i]->hybrid->parent->htau == 0)
+              snodes[i]->hybrid->parent->tau = snodes[i]->tau;
+          }
+          else
+          {
+            assert(node_is_bidirection(snodes[i]));
+            assert(!node_is_mirror(snodes[i]));
+            snodes[i]->hybrid->tau        = snodes[i]->tau;
+            snodes[i]->right->tau         = snodes[i]->tau;
+            snodes[i]->right->hybrid->tau = snodes[i]->tau;
+          }
         }
       }
     }

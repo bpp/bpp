@@ -95,6 +95,31 @@ static long is_emptyline(const char * line)
   return 0;
 }
 
+static long starts_with_opar(const char * line)
+{
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  if (p[ws] != '(')
+  {
+    free(s);
+    return 0;
+  }
+
+  return 1;
+}
+
 
 static long get_string(const char * line, char ** value)
 {
@@ -987,17 +1012,27 @@ static void check_validity()
 
 void load_cfile()
 {
-  FILE * fp;
   long line_count = 0;
+  FILE * fp;
+
+  /* the following variable is used for checking whether we have a newick
+     string in the species&tree tag, in the case of 1 species. For species
+     trees we do not accept a tree, whereas for network we require a newick
+     string. The program always reads a line. If that line is a tree it is
+     processed, otherwise this variable is set such that we do not read another
+     line */
+  long line_not_processed = 0;
 
   fp = xopen(opt_cfile,"r");
 
-  while (getnextline(fp))
+  while (line_not_processed || getnextline(fp))
   {
     int valid = 0;
     char * token;
     char * value;
     long token_len;
+
+    line_not_processed = 0;
 
     ++line_count;
     token_len = get_token(line,&token,&value);
@@ -1240,17 +1275,40 @@ void load_cfile()
 
           ++line_count;
 
-          if (!get_string (line,&opt_streenewick))
+          if (!get_string(line,&opt_streenewick))
             fatal("Expected newick tree string in 'species&tree' (line %ld)",
                    line_count);
         }
         else if (spcount == 1)
         {
-          opt_streenewick = (char *)xmalloc((size_t)(strlen(opt_reorder)+2) *
-                                            sizeof(char));
-          strcpy(opt_streenewick, opt_reorder);
-          opt_streenewick[strlen(opt_reorder)] = ';';
-          opt_streenewick[strlen(opt_reorder)+1] = '\0';
+          /* TODO: This is an ugly hack to account for the case where we have 1
+             species and a network */
+          int reached_eof = 0;
+          if (!getnextline(fp))
+            reached_eof = 1; 
+
+          ++line_count;
+          line_not_processed = 1;
+
+          if (!reached_eof && starts_with_opar(line))
+          {
+            if (!get_string(line,&opt_streenewick))
+              fatal("Expected newick string in 'species&tree' (line %ld)",
+                    line_count);
+            
+            line_not_processed = 0;
+          }
+          else
+          {
+            opt_streenewick = (char *)xmalloc((size_t)(strlen(opt_reorder)+2) *
+                                              sizeof(char));
+            strcpy(opt_streenewick, opt_reorder);
+            opt_streenewick[strlen(opt_reorder)] = ';';
+            opt_streenewick[strlen(opt_reorder)+1] = '\0';
+          }
+
+          if (reached_eof)
+            break;
         }
         valid = 1;
       }

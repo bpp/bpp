@@ -190,12 +190,12 @@ static double eff_ict(double * y, long n, double mean, double stdev)
   long i,j;
   double tint = 1;
   double rho, rho0 = 0;
+  long maxlag = 2000;
+  long minNr = 10;
 
-  /* TODO: ADDED NOW */
   double * x = (double *)xmalloc((size_t)n * sizeof(double));
   for (i = 0; i < n; ++i)
     x[i] = (y[i]-mean)/stdev;
-
 
   if (stdev/(fabs(mean)+1) < 1E-9)
   {
@@ -203,15 +203,15 @@ static double eff_ict(double * y, long n, double mean, double stdev)
   }
   else
   {
-    for (i = 1; i < n-10; ++i)
+    for (i = 1; i < MIN(maxlag,n-minNr); ++i)
     {
       rho = 0;
       for (j = 0; j < n - i; ++j)
         rho += x[j]*x[i+j];
 
-      rho /= (n-1);
+      rho /= (n-i);
 
-      if (i > 10 && rho+rho0 < 0)
+      if (i > minNr && rho+rho0 < 0)
         break;
 
       tint += rho*2;
