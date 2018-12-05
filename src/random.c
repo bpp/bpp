@@ -29,7 +29,32 @@ static unsigned int z_rndu = 666;
 
 void legacy_init()
 {
-  z_rndu = (unsigned int)opt_seed;
+   int seed = (int)opt_seed;
+
+   /* z_rndu = (unsigned int)opt_seed; */
+   if (sizeof(int) != 4)
+      fatal("oh-oh, we are in trouble.  int not 32-bit?  rndu() assumes 32-bit int.");
+
+   if (seed <= 0) {
+      FILE *frand = fopen("/dev/urandom", "r");
+      if (frand) {
+         if (fread(&seed, sizeof(int), 1, frand) != 1)
+            fatal("failure to read white noise...");
+         fclose(frand);
+         seed = abs(seed * 2 - 1);
+      }
+      else {
+         seed = abs(1234 * (int)time(NULL) + 1);
+      }
+
+      FILE *fseed;
+      fseed = fopen("SeedUsed", "w");
+      if (fseed == NULL) fatal("can't open file SeedUsed.");
+      fprintf(fseed, "%d\n", seed);
+      fclose(fseed);
+   }
+
+   z_rndu = (unsigned int)seed;
 }
 
 unsigned int get_legacy_rndu_status()
