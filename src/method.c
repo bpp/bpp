@@ -1612,10 +1612,9 @@ void cmd_run()
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
       mcmc_logsample(fp_mcmc,i+1,stree,gtree,locus,dparam_count,ndspecies);
-      #if 0
-      if ((i + 1) % (opt_samplefreq*1) == 0)
+      if ((i + 1) % (opt_samplefreq*10) == 0)
          fflush(fp_mcmc);
-      #endif
+
       if (opt_print_genetrees)
         print_gtree(fp_gtree,gtree);
     }

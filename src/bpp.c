@@ -259,7 +259,7 @@ void args_init(int argc, char ** argv)
   opt_samplefreq = 10;
   opt_samples = 0;
   opt_scaling = 0;
-  opt_seed = (long)time(NULL);
+  opt_seed = -1;
   opt_simulate = NULL;
   opt_siterate_fixed = 1;
   opt_siterate_alpha = 0;
