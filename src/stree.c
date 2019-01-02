@@ -210,7 +210,7 @@ void debug_print_network_node_attribs(stree_t * stree)
   }
 }
 
-void stree_show_pptable(stree_t * stree)
+void stree_show_pptable(stree_t * stree, int show_taus_and_thetas)
 {
   long i, j;
   long nodes_count = stree->tip_count + stree->inner_count + stree->hybrid_count;
@@ -241,6 +241,12 @@ void stree_show_pptable(stree_t * stree)
 
     for (j = 0; j < nodes_count; ++j)
       printf("  %*d", longint_len(j), stree->pptable[i][j]);
+
+    if (show_taus_and_thetas)
+    {
+      printf("  tau = %f  theta = %f",
+             stree->nodes[i]->tau, stree->nodes[i]->theta);
+    }
 
     printf("\n");
   }
@@ -1656,21 +1662,15 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
    }
 }
 
-void stree_init(stree_t * stree,
-                msa_t ** msa,
-                list_t * maplist,
-                int msa_count,
-                FILE * fp_out)
+void stree_init_pptable(stree_t * stree)
 {
-  unsigned int i, j;
   size_t pptable_size;
+  unsigned int i;
+
 #if 0
    snode_t * curnode;
    snode_t * ancnode;
 #endif
-
-  /* safety check */
-  assert(msa_count > 0);
   assert(opt_network == !!stree->hybrid_count);
 
   pptable_size = stree->tip_count + stree->inner_count + stree->hybrid_count;
@@ -1690,7 +1690,21 @@ void stree_init(stree_t * stree,
             stree->pptable[curnode->node_index][ancnode->node_index] = 1;
    }
 #endif
+}
 
+void stree_init(stree_t * stree,
+                msa_t ** msa,
+                list_t * maplist,
+                int msa_count,
+                FILE * fp_out)
+{
+  unsigned int i, j;
+
+  /* safety check */
+  assert(msa_count > 0);
+  assert(opt_network == !!stree->hybrid_count);
+
+  stree_init_pptable(stree);
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */

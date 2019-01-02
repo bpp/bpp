@@ -802,16 +802,17 @@ static void resolve_network(stree_t * stree)
 %token OBRA
 %token CBRA
 %token COMMA
+%token HASH
 %token COLON SEMICOLON
 %token<s> STRING
 %token<d> NUMBER
 %type<s> label optional_label optional_annotation string_list
-%type<d> number optional_length
+%type<d> number optional_length optional_theta
 %type<tree> subtree
 %start input
 %%
 
-input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
+input: OPAR subtree COMMA subtree CPAR optional_label optional_length optional_theta SEMICOLON
 {
   tree->left   = $2;
   tree->right  = $4;
@@ -819,7 +820,9 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tree->length = $7 ? atof($7) : 0;
   tree->parent = NULL;
   tree->leaves = $2->leaves + $4->leaves;
+  tree->theta  = $8 ? atof($8) : 0;
   free($7);
+  if ($8) free($8);
 
   tree->left->parent  = tree;
   tree->right->parent = tree;
@@ -838,7 +841,7 @@ input: OPAR subtree COMMA subtree CPAR optional_label optional_length SEMICOLON
   tip_cnt++;
 };
 
-subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
+subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length optional_theta
 {
   $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->left   = $2;
@@ -846,14 +849,16 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$->label  = $6;
   $$->length = $7 ? atof($7) : 0;
   $$->leaves = $2->leaves + $4->leaves;
+  $$->theta  = $8 ? atof($8) : 0;
   free($7);
+  if ($8) free($8);
 
   $$->left->parent  = $$;
   $$->right->parent = $$;
 
   inner_cnt++;
 }
-       | OPAR subtree CPAR label optional_annotation optional_length
+       | OPAR subtree CPAR label optional_annotation optional_length optional_theta
 {
   $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->left   = $2;
@@ -861,7 +866,9 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$->label  = $4;
   $$->length = $6 ? atof($6) : 0;
   $$->leaves = $2->leaves;
+  $$->theta  = $7 ? atof($7) : 0;
   free($6);
+  if ($7) free($7);
 
   if ($5) 
     $$->data = (void *)($5);
@@ -869,16 +876,18 @@ subtree: OPAR subtree COMMA subtree CPAR optional_label optional_length
   $$->left->parent = $$;
   inner_cnt++;
 }
-       | label optional_annotation optional_length
+       | label optional_annotation optional_length optional_theta
 {
   $$ = (snode_t *)calloc(1, sizeof(snode_t));
   $$->label  = $1;
   $$->length = $3 ? atof($3) : 0;
   $$->leaves = 1;
+  $$->theta  = $4 ? atof($4) : 0;
   $$->left   = NULL;
   $$->right  = NULL;
   tip_cnt++;
   free($3);
+  if ($4) free($4);
 
   if ($2)
     $$->data = (void *)($2);
@@ -900,6 +909,7 @@ string_list: STRING
 };
 optional_label:  {$$ = NULL;} | label  {$$ = $1;};
 optional_length: {$$ = NULL;} | COLON number {$$ = $2;};
+optional_theta:  {$$ = NULL;} | HASH number {$$ = $2;};
 label: STRING    {$$=$1;} | NUMBER {$$=$1;};
 number: NUMBER   {$$=$1;};
 

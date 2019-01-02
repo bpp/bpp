@@ -182,6 +182,7 @@ static int cb_cmp_double(const void * a, const void * b)
   return 0;
 }
 
+#if 1
 static double eff_ict(double * y, long n, double mean, double stdev)
 {
   /* This calculates Efficiency or Tint using Geyer's (1992) initial positive
@@ -223,6 +224,49 @@ static double eff_ict(double * y, long n, double mean, double stdev)
 
   return tint;
 }
+#else
+static double eff_ict(double * y, long n, double mean, double stdev)
+{
+  /* This calculates Efficiency or Tint using Geyer's (1992) initial positive
+     sequence method */
+
+  long i,j;
+  double tint = 1;
+  double rho, rho0 = 0;
+
+  /* TODO: ADDED NOW */
+  double * x = (double *)xmalloc((size_t)n * sizeof(double));
+  for (i = 0; i < n; ++i)
+    x[i] = (y[i]-mean)/stdev;
+
+
+  if (stdev/(fabs(mean)+1) < 1E-9)
+  {
+   tint = n;
+  }
+  else
+  {
+    for (i = 1; i < n-10; ++i)
+    {
+      rho = 0;
+      for (j = 0; j < n - i; ++j)
+        rho += x[j]*x[i+j];
+
+      rho /= (n-1);
+
+      if (i > 10 && rho+rho0 < 0)
+        break;
+
+      tint += rho*2;
+      rho0 = rho;
+    }
+  }
+
+  free(x);
+
+  return tint;
+}
+#endif
 
 static void hpd_interval(double * x,
                          long n,

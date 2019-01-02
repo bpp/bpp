@@ -85,6 +85,7 @@ static char * append(size_t * dstlen, const char * src, size_t srclen)
 \(                { return OPAR;                                               }
 "]"               { return CBRA;                                               }
 "["               { return OBRA;                                               }
+"#"               { return HASH;                                              }
 \,                { return COMMA;                                              }
 \"                { string_length = 0; BEGIN(quot);                            }
 \'                { string_length = 0; BEGIN(apos);                            }
@@ -94,7 +95,7 @@ static char * append(size_t * dstlen, const char * src, size_t srclen)
 [+-]?(([0-9]+[\.]?[0-9]*)|([0-9]*[\.]?[0-9]+))([eE][+-]?[0-9]+)? {
                     stree_lval.d = xstrndup(stree_text,stree_leng); 
                     return NUMBER;                                             }
-[^ \'\",\(\):;\[\]\t\n\r][^ \t\n\r\)\(\[\]\,:;]* {
+[^ \#\'\",\(\):;\[\]\t\n\r][^ \t\n\r\)\(\[\]\,:;]* {
                     stree_lval.s = xstrndup(stree_text,stree_leng);
                     return STRING;                                             }
 [ \t\r]           { ;                                                          }

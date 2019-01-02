@@ -33,6 +33,7 @@
 #include <sys/stat.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <ctype.h>
 
 #ifdef _MSC_VER
 #include <pmmintrin.h>
@@ -163,6 +164,13 @@
 #define BPP_HPATH_LEFT                  1
 #define BPP_HPATH_RIGHT                 2
 
+#define BPP_SUBST_MODEL_JC69            0
+#define BPP_SUBST_MODEL_GTR             7
+
+#define BPP_CLOCK_GLOBAL                1
+#define BPP_CLOCK_IND                   2
+#define BPP_CLOCK_AC                    3
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -237,6 +245,7 @@ typedef struct snode_s
 {
   char * label;
   double length;
+  double rate;
   double theta;
   double tau;
   double old_tau;
@@ -557,12 +566,14 @@ typedef struct pair_s
 /* options */
 
 extern long opt_arch;
+extern long opt_basefreqs_fixed;
 extern long opt_burnin;
 extern long opt_checkpoint;
 extern long opt_checkpoint_current;
 extern long opt_checkpoint_initial;
 extern long opt_checkpoint_step;
 extern long opt_cleandata;
+extern long opt_clock;
 extern long opt_debug;
 extern long opt_delimit_prior;
 extern long opt_diploid_size;
@@ -576,23 +587,30 @@ extern long opt_revolutionary_spr_debug;
 extern long opt_finetune_reset;
 extern long opt_help;
 extern long opt_locus_count;
+extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
+extern long opt_migration;
+extern long opt_model;
 extern long opt_network;
 extern long opt_onlysummary;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;
 extern long opt_print_locusrate;
 extern long opt_print_samples;
+extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rjmcmc_method;
 extern long opt_samplefreq;
 extern long opt_samples;
 extern long opt_scaling;
 extern long opt_seed;
+extern long opt_siterate_cats;
+extern long opt_siterate_fixed;
 extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
+extern double opt_clock_alpha;
 extern double opt_finetune_gamma;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
@@ -608,23 +626,34 @@ extern double opt_locusrate_alpha;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern double opt_siterate_alpha;
+extern double opt_siterate_beta;
 extern double opt_tau_alpha;
 extern double opt_tau_beta;
 extern double opt_theta_alpha;
 extern double opt_theta_beta;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
+extern double * opt_basefreqs_params;
+extern double * opt_migration_matrix;
+extern double * opt_migration_events;
+extern double * opt_qrates_params;
 extern char * cmdline;
 extern char * opt_cfile;
+extern char * opt_concatfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
+extern char * opt_modelparafile;
 extern char * opt_msafile;
 extern char * opt_locusrate_filename;
 extern char * opt_outfile;
 extern char * opt_reorder;
 extern char * opt_resume;
+extern char * opt_simulate;
 extern char * opt_streenewick;
+extern char * opt_treefile;
+extern char ** opt_migration_labels;
 
 /* common data */
 
@@ -632,9 +661,11 @@ extern __THREAD int bpp_errno;
 extern __THREAD char bpp_errmsg[200];
 
 extern const unsigned int pll_map_nt[256];
+extern const unsigned int pll_map_nt_tcag[256];
 extern const unsigned int pll_map_fasta[256];
 extern const unsigned int pll_map_amb[256];
 extern const unsigned int pll_map_validjc69[16];
+extern const unsigned int bpp_tolower_table[256];
 
 extern long mmx_present;
 extern long sse_present;
@@ -669,6 +700,7 @@ long getusec(void);
 FILE * xopen(const char * filename, const char * mode);
 void * pll_aligned_alloc(size_t size, size_t alignment);
 void pll_aligned_free(void * ptr);
+int xtolower(int c);
 
 /* functions in bpp.c */
 
@@ -760,13 +792,15 @@ stree_t * stree_clone_init(stree_t * stree);
 
 void stree_label(stree_t * stree);
 
-void stree_show_pptable(stree_t * stree);
+void stree_show_pptable(stree_t * stree, int show_taus_and_thetas);
 
 void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
                 FILE * fp_out);
+
+void stree_init_pptable(stree_t * stree);
 
 void stree_alloc_internals(stree_t * stree,
                            unsigned int gtree_inner_sum,
@@ -868,6 +902,9 @@ double legacy_rndbeta (double p, double q);
 double legacy_rndgamma (double a);
 unsigned int get_legacy_rndu_status(void);
 void set_legacy_rndu_status(unsigned int x);
+void legacy_rnddirichlet(double * output, double * alpha, long k);
+long legacy_rndpoisson(double m);
+
 
 /* functions in gtree.c */
 
@@ -877,6 +914,8 @@ gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
                       int msa_count);
+void gtree_simulate_init(stree_t * stree, list_t * maplist);
+void gtree_simulate_fini(void);
 
 char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *));
@@ -910,6 +949,8 @@ gnode_t ** gtree_return_partials(gnode_t * root,
 void unlink_event(gnode_t * node, int msa_index);
 
 double prop_locusrate_and_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 
 /* functions in prop_mixing.c */
 
@@ -1192,6 +1233,12 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
                                      const unsigned int * params_indices,
                                      unsigned int count,
                                      unsigned int attrib);
+
+void pll_update_eigen(double * eigenvecs,
+                      double * inv_eigenvecs,
+                      double * eigenvals,
+                      double * freqs,
+                      double * subst_params);
 
 /* functions in core_likelihood.c */
 
@@ -1649,4 +1696,12 @@ void pll_core_root_likelihood_vec_avx2(unsigned int states,
                                        const unsigned int * pattern_weights,
                                        const unsigned int * freqs_indices,
                                        double * persite_lh);
+
+/* functions in cfile_sim.c */
+
+void load_cfile_sim(void);
+
+/* functions in simulate.c */
+
+void cmd_simulate(void);
 #endif

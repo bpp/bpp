@@ -194,3 +194,9 @@ int xasprintf(char ** strp, const char * fmt, ...)
   return r;
 }
 #endif
+
+int xtolower(int c)
+{
+  if (c < 0 || c >= 256) return c;
+  return bpp_tolower_table[c];
+}

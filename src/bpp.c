@@ -35,12 +35,14 @@ __THREAD char bpp_errmsg[200] = {0};
 
 /* options */
 long opt_arch;
+long opt_basefreqs_fixed;
 long opt_burnin;
 long opt_checkpoint;
 long opt_checkpoint_current;
 long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_cleandata;
+long opt_clock;
 long opt_debug;
 long opt_delimit_prior;
 long opt_diploid_size;
@@ -52,14 +54,18 @@ long opt_est_theta;
 long opt_finetune_reset;
 long opt_help;
 long opt_locus_count;
+long opt_locus_simlen;
 long opt_max_species_count;
 long opt_method;
+long opt_migration;
+long opt_model;
 long opt_network;
 long opt_onlysummary;
 long opt_print_genetrees;
 long opt_print_hscalars;
 long opt_print_locusrate;
 long opt_print_samples;
+long opt_qrates_fixed;
 long opt_quiet;
 long opt_revolutionary_spr_method;
 long opt_revolutionary_spr_debug;
@@ -68,9 +74,12 @@ long opt_samplefreq;
 long opt_samples;
 long opt_scaling;
 long opt_seed;
+long opt_siterate_fixed;
+long opt_siterate_cats;
 long opt_usedata;
 long opt_version;
 double opt_bfbeta;
+double opt_clock_alpha;
 double opt_finetune_gamma;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
@@ -86,6 +95,8 @@ double opt_locusrate_alpha;
 double opt_rjmcmc_alpha;
 double opt_rjmcmc_epsilon;
 double opt_rjmcmc_mean;
+double opt_siterate_alpha;
+double opt_siterate_beta;
 double opt_tau_alpha;
 double opt_tau_beta;
 double opt_theta_alpha;
@@ -93,15 +104,24 @@ double opt_theta_beta;
 long * opt_diploid;
 long * opt_sp_seqcount;
 char * opt_cfile;
+char * opt_concatfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
-char * opt_msafile;
 char * opt_mcmcfile;
+char * opt_modelparafile;
+char * opt_msafile;
 char * opt_outfile;
 char * opt_reorder;
 char * opt_resume;
+char * opt_simulate;
 char * opt_streenewick;
+char * opt_treefile;
+double * opt_basefreqs_params;
+double * opt_migration_events;
+double * opt_migration_matrix;
+double * opt_qrates_params;
+char ** opt_migration_labels;
 
 long mmx_present;
 long sse_present;
@@ -125,6 +145,7 @@ static struct option long_options[] =
   {"exp_method", required_argument, 0, 0 },  /* 5 */
   {"exp_debug",  no_argument,       0, 0 },  /* 6 */
   {"resume",     required_argument, 0, 0 },  /* 7 */
+  {"simulate",   required_argument, 0, 0 },  /* 8 */
   { 0, 0, 0, 0 }
 };
 
@@ -161,15 +182,20 @@ void args_init(int argc, char ** argv)
   progname = argv[0];
 
   opt_arch = -1;
+  opt_basefreqs_fixed = -1;
+  opt_basefreqs_params = NULL;
   opt_bfbeta = 1;
   opt_burnin = 100;
   opt_cfile = NULL;
+  opt_clock = 1;
+  opt_clock_alpha = 0;
 
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;
   opt_checkpoint_current = 0;
   opt_checkpoint_step = 0;
   opt_cleandata = 0;
+  opt_concatfile = NULL;
   opt_debug = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
@@ -203,10 +229,17 @@ void args_init(int argc, char ** argv)
   opt_locusrate_alpha = 0;
   opt_locusrate_filename = NULL;
   opt_locus_count = 0;
+  opt_locus_simlen = 0;
   opt_mapfile = NULL;
   opt_max_species_count = 0;
   opt_mcmcfile = NULL;
   opt_method = -1;
+  opt_migration = 0;
+  opt_migration_events = NULL;
+  opt_migration_labels = NULL;
+  opt_migration_matrix = NULL;
+  opt_model = -1;
+  opt_modelparafile = NULL;
   opt_msafile = NULL;
   opt_network = 0;
   opt_onlysummary = 0;
@@ -215,6 +248,8 @@ void args_init(int argc, char ** argv)
   opt_print_hscalars = 0;
   opt_print_locusrate = 0;
   opt_print_samples = 1;
+  opt_qrates_fixed = -1;
+  opt_qrates_params = NULL;
   opt_quiet = 0;
   opt_resume = NULL;
   opt_rjmcmc_alpha = -1;
@@ -225,12 +260,18 @@ void args_init(int argc, char ** argv)
   opt_samples = 0;
   opt_scaling = 0;
   opt_seed = (long)time(NULL);
+  opt_simulate = NULL;
+  opt_siterate_fixed = 1;
+  opt_siterate_alpha = 0;
+  opt_siterate_beta = 0;
+  opt_siterate_cats = 5;
   opt_sp_seqcount = NULL;
   opt_streenewick = NULL;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
+  opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
 
@@ -279,6 +320,10 @@ void args_init(int argc, char ** argv)
         opt_resume = optarg;
         break;
 
+      case 8:
+        opt_simulate = optarg;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -291,6 +336,8 @@ void args_init(int argc, char ** argv)
 
   if (opt_cfile)
     load_cfile();
+  if (opt_simulate)
+    load_cfile_sim();
 
   /* check for number of independent commands selected */
   if (opt_version)
@@ -300,6 +347,8 @@ void args_init(int argc, char ** argv)
   if (opt_cfile)
     commands++;
   if (opt_resume)
+    commands++;
+  if (opt_simulate)
     commands++;
 
   /* if more than one independent command, fail */
@@ -324,6 +373,13 @@ static void dealloc_switches()
   if (opt_reorder) free(opt_reorder);
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
+
+  /* mccoal switches */
+  if (opt_basefreqs_params) free(opt_basefreqs_params);
+  if (opt_concatfile) free(opt_concatfile);
+  if (opt_modelparafile) free(opt_modelparafile);
+  if (opt_qrates_params) free(opt_qrates_params);
+  if (opt_treefile) free(opt_treefile);
 }
 
 void cmd_help()
@@ -412,6 +468,10 @@ int main (int argc, char * argv[])
   {
     cmd_run();
     //d_mcmc();
+  }
+  else if (opt_simulate)
+  {
+    cmd_simulate();
   }
 
   dealloc_switches();

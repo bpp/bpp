@@ -509,8 +509,12 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
   int * counter = (int *)xcalloc(stree->tip_count, sizeof(int));
   for (i = 0; i < stree->tip_count; ++i)
   {
-    pop[i].seq_indices = (int *)xcalloc(pop[i].seq_count,sizeof(int));
-    pop[i].nodes = (gnode_t **)xcalloc(pop[i].seq_count,sizeof(gnode_t *));
+    size_t alloc_size = pop[i].seq_count;
+    if (opt_migration)
+      alloc_size = msa->count;
+
+    pop[i].seq_indices = (int *)xcalloc(alloc_size,sizeof(int));
+    pop[i].nodes = (gnode_t **)xcalloc(alloc_size,sizeof(gnode_t *));
   }
   
   for (j = 0; j < (unsigned int)(msa->count); ++j)
@@ -1164,17 +1168,21 @@ static void epoch_reorder(snode_t ** epoch,
   }
 }
 
-static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 {
   int lineage_count = 0;
   int scaler_index = 0;
   unsigned int i,j,k;
   unsigned int epoch_count;
-  double t, tmax, sum;
+  double t, tmax, csum, msum=0;
   double * ci;
+  double * migrate = NULL;
   pop_t * pop;
   snode_t ** epoch;
   gnode_t * inner = NULL;
+
+  if (opt_migration)
+    migrate = (double *)xmalloc((size_t)stree->tip_count * sizeof(double));
 
   /* get a list of inner nodes (epochs) */
   epoch_count = stree->inner_count;
@@ -1359,24 +1367,43 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       if (!tmax) break;
 
       /* calculate poisson rates: ci[j] is coalescent rate for population j */
-      for (j=0, sum=0; j < pop_count; ++j)
+      for (j=0, csum=0; j < pop_count; ++j)
       {
         k = pop[j].seq_count;
 
         if (k >= 2)
         {
           ci[j] = k*(k-1)/pop[j].snode->theta;
-          sum += ci[j];
+          csum += ci[j];
         }
         else
           ci[j] = 0;
       }
 
-      if (sum < 1e-300)
+      if (opt_migration)
+      {
+        assert(!opt_network);
+        msum = 0;
+        long matrix_span = stree->tip_count + stree->inner_count;
+        for (j = 0; j < pop_count; ++j)
+        {
+          for (k = 0, migrate[j] = 0; k < pop_count; ++k)
+          {
+            long mindexk = pop[k].snode->node_index;
+            long mindexj = pop[j].snode->node_index;
+            migrate[j] += pop[j].seq_count *
+                          opt_migration_matrix[mindexk * matrix_span + mindexj] /
+                          pop[j].snode->theta*4;
+          }
+          msum += migrate[j];
+        }
+      }
+
+      if (csum+msum < 1e-300)
         break;
 
       /* generate random waiting time from exponential distribution */
-      t += legacy_rndexp(1/sum);
+      t += legacy_rndexp(1/(csum+msum));
 
       
       /* if the generated time is larger than the current epoch, and we are not
@@ -1391,86 +1418,131 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
       /* select an available population at random using the poisson rates as
          weights */
-      double r = legacy_rndu()*sum;
-      double tmp = 0;
-      for (j = 0; j < pop_count; ++j)
+      double r = legacy_rndu()*(csum+msum);
+      if (r < csum)
       {
-        tmp += ci[j];
-        if (r < tmp) break;
+        double tmp = 0;
+        for (j = 0; j < pop_count; ++j)
+        {
+          tmp += ci[j];
+          if (r < tmp) break;
+        }
+
+        assert(j < pop_count);
+
+        /* now choose two lineages from selected population j in exactly the same
+           way as the original BPP */
+        k = pop[j].seq_count * (pop[j].seq_count-1) * legacy_rndu();
+
+        unsigned int k1 = k / (pop[j].seq_count-1);
+        unsigned int k2 = k % (pop[j].seq_count-1);
+
+        if (k2 >= k1)
+          k2++;
+        else
+          SWAP(k1,k2);
+
+        if (opt_debug)
+        {
+          fprintf(stdout, "[Debug]: Coalesce (%3d,%3d) into %3d (age: %f)\n",
+                  pop[j].nodes[k1]->clv_index,
+                  pop[j].nodes[k2]->clv_index,
+                  clv_index,
+                  t);
+        }
+
+        pop[j].seq_count--;
+        
+        /* allocate and fill new inner node as the parent of the gene tree nodes
+           representing lineages k1 and k2 */
+        inner = (gnode_t *)xcalloc(1,sizeof(gnode_t));
+        inner->parent = NULL;
+        inner->left  = pop[j].nodes[k1];
+        inner->right = pop[j].nodes[k2];
+        inner->clv_index = clv_index;
+
+        if (opt_scaling)
+          inner->scaler_index = scaler_index++;
+        else
+          inner->scaler_index = PLL_SCALE_BUFFER_NONE;
+
+        inner->pmatrix_index = clv_index;
+        inner->left->parent = inner;
+        inner->right->parent = inner;
+        inner->time = t;
+        inner->pop = pop[j].snode;
+        inner->leaves = inner->left->leaves + inner->right->leaves;
+        clv_index++;
+
+        if (opt_network)
+        {
+          inner->hpath = (int*)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
+          for (i = 0; i < stree->hybrid_count; ++i)
+            inner->hpath[i] = BPP_HPATH_NONE;
+        }
+
+        pop[j].snode->event_count[msa_index]++;
+        dlist_item_t * dlitem = dlist_append(pop[j].snode->event[msa_index],inner);
+        inner->event = dlitem;
+        if (!opt_est_theta)
+          pop[j].snode->event_count_sum++;
+
+        /* in pop j, replace k1 by the new node, and remove k2 (replace it with
+           last node in list) */
+        pop[j].seq_indices[k1] = -1;   /* TODO HERE clv vector */
+        pop[j].nodes[k1] = inner;
+
+        if (k2 != pop[j].seq_count)
+        {
+          pop[j].seq_indices[k2] = pop[j].seq_indices[pop[j].seq_count];
+          pop[j].nodes[k2] = pop[j].nodes[pop[j].seq_count];
+        }
+        
+        /* break if this was the last available lineage in the current locus */
+        if (--lineage_count == 1) break;
       }
-
-      assert(j < pop_count);
-
-      /* now choose two lineages from selected population j in exactly the same
-         way as the original BPP */
-      k = pop[j].seq_count * (pop[j].seq_count-1) * legacy_rndu();
-
-      unsigned int k1 = k / (pop[j].seq_count-1);
-      unsigned int k2 = k % (pop[j].seq_count-1);
-
-      if (k2 >= k1)
-        k2++;
       else
-        SWAP(k1,k2);
-
-      if (opt_debug)
       {
-        fprintf(stdout, "[Debug]: Coalesce (%3d,%3d) into %3d (age: %f)\n",
-                pop[j].nodes[k1]->clv_index,
-                pop[j].nodes[k2]->clv_index,
-                clv_index,
-                t);
+        r -= csum;
+        double tmp = 0;
+        for (j = 0; j < pop_count; ++j)
+        {
+          tmp += migrate[j];
+          if (r < tmp) break;
+        }
+
+        if (j == pop_count)
+          fatal("The impossible just happened! Report gree_simulate()");
+        tmp -= migrate[j];
+
+        long mindexk = pop[0].snode->node_index;
+        long mindexj = pop[j].snode->node_index;
+        long matrix_span = stree->tip_count + stree->inner_count;
+        for (k = 0; k < pop_count-1; ++k)
+        {
+          mindexk = pop[k].snode->node_index;
+          tmp += pop[j].seq_count * 
+                 opt_migration_matrix[mindexk * matrix_span + mindexj] /
+                 pop[j].snode->theta*4;
+          if (r < tmp)
+            break;
+        }
+        mindexk = pop[k].snode->node_index;
+
+        opt_migration_events[mindexk * matrix_span + mindexj] += 1;
+
+        /* i is a migrant from population k to j */
+        i = (long)(pop[j].seq_count * legacy_rndu());
+
+        /* shift up lineages in pop j */
+        pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+        pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+        if (i != --pop[j].seq_count)
+        {
+          pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
+          pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
+        }
       }
-
-      pop[j].seq_count--;
-      
-      /* allocate and fill new inner node as the parent of the gene tree nodes
-         representing lineages k1 and k2 */
-      inner = (gnode_t *)xcalloc(1,sizeof(gnode_t));
-      inner->parent = NULL;
-      inner->left  = pop[j].nodes[k1];
-      inner->right = pop[j].nodes[k2];
-      inner->clv_index = clv_index;
-
-      if (opt_scaling)
-        inner->scaler_index = scaler_index++;
-      else
-        inner->scaler_index = PLL_SCALE_BUFFER_NONE;
-
-      inner->pmatrix_index = clv_index;
-      inner->left->parent = inner;
-      inner->right->parent = inner;
-      inner->time = t;
-      inner->pop = pop[j].snode;
-      inner->leaves = inner->left->leaves + inner->right->leaves;
-      clv_index++;
-
-      if (opt_network)
-      {
-        inner->hpath = (int*)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
-        for (i = 0; i < stree->hybrid_count; ++i)
-          inner->hpath[i] = BPP_HPATH_NONE;
-      }
-
-      pop[j].snode->event_count[msa_index]++;
-      dlist_item_t * dlitem = dlist_append(pop[j].snode->event[msa_index],inner);
-      inner->event = dlitem;
-      if (!opt_est_theta)
-        pop[j].snode->event_count_sum++;
-
-      /* in pop j, replace k1 by the new node, and remove k2 (replace it with
-         last node in list) */
-      pop[j].seq_indices[k1] = -1;   /* TODO HERE clv vector */
-      pop[j].nodes[k1] = inner;
-
-      if (k2 != pop[j].seq_count)
-      {
-        pop[j].seq_indices[k2] = pop[j].seq_indices[pop[j].seq_count];
-        pop[j].nodes[k2] = pop[j].nodes[pop[j].seq_count];
-      }
-      
-      /* break if this was the last available lineage in the current locus */
-      if (--lineage_count == 1) break;
     }
 
     t = tmax;
@@ -1489,6 +1561,9 @@ static gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       ++e;
     }
   }
+
+  if (migrate)
+    free(migrate);
 
   for(i = 0; i < pop_count; ++i)
   {
@@ -1763,6 +1838,29 @@ void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
   }
 
 }
+
+void gtree_simulate_init(stree_t * stree, list_t * maplist)
+{
+  if (stree->tip_count == 1)
+  {
+    sht = NULL;
+    mht = NULL;
+  }
+  else
+  {
+    sht = species_hash(stree);
+    mht = maplist_hash(maplist,sht);
+  }
+}
+
+void gtree_simulate_fini()
+{
+  if (sht)
+    hashtable_destroy(sht,NULL);
+  if (mht)
+    hashtable_destroy(mht,cb_dealloc_pairlabel);
+}
+                        
 
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,

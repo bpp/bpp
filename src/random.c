@@ -146,3 +146,60 @@ double legacy_rndbeta (double p, double q)
    gamma2 = legacy_rndgamma(q);
    return gamma1/(gamma1+gamma2);
 }
+
+void legacy_rnddirichlet(double * output, double * alpha, long k)
+{
+  /* generates a random variate from the dirichlet distribution with K cats */
+
+  long i;
+  double s = 0;
+  
+  for (i = 0; i < k; ++i)
+    s += output[i] = legacy_rndgamma(alpha[i]);
+
+  for (i = 0; i < k; ++i)
+    output[i] /= s;
+}
+
+long legacy_rndpoisson(double m)
+{
+   /* m is the rate parameter of the poisson
+      Numerical Recipes in C, 2nd ed. pp. 293-295
+   */
+   static double sq, alm, g, oldm = -1;
+   double em, t, y;
+
+   /* search from the origin
+      if (m<5) {
+         if (m!=oldm) { oldm=m; g=exp(-m); }
+         y=rndu();  sq=alm=g;
+         for (em=0; ; ) {
+            if (y<sq) break;
+            sq+= (alm*=m/ ++em);
+         }
+      }
+   */
+   if (m < 12) {
+      if (m != oldm) { oldm = m; g = exp(-m); }
+      em = -1; t = 1;
+      for (; ;) {
+         em++; t *= legacy_rndu();
+         if (t <= g) break;
+      }
+   }
+   else {
+      if (m != oldm) {
+         oldm = m;  sq = sqrt(2 * m);  alm = log(m);
+         g = m*alm - lgamma(m + 1);
+      }
+      do {
+         do {
+            y = tan(3.141592654*legacy_rndu());
+            em = sq*y + m;
+         } while (em < 0);
+         em = floor(em);
+         t = 0.9*(1 + y*y)*exp(em*alm - lgamma(em + 1) - g);
+      } while (legacy_rndu() > t);
+   }
+   return ((long)em);
+}
