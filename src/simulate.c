@@ -343,11 +343,11 @@ static double QuantileChi2(double prob, double v)
           Chi2 distribution.  Applied Statistics 24: 385-388.  (AS91)
       Converted into C by Ziheng Yang, Oct. 1993.
    */
-   double e = .5e-6, aa = .6931471805, p = prob, g, small = 1e-6;
+   double e = .5e-6, aa = .6931471805, p = prob, g, smallv = 1e-6;
    double xx, c, ch, a = 0, q = 0, p1 = 0, p2 = 0, t = 0, x = 0, b = 0, s1, s2, s3, s4, s5, s6;
 
-   if (p < small)   return(0);
-   if (p > 1 - small) return(9999);
+   if (p < smallv)   return(0);
+   if (p > 1 - smallv) return(9999);
    if (v <= 0)      return (-1);
 
    g = lgamma(v / 2);
