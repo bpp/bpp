@@ -472,6 +472,13 @@ static void resolve_hybridization(stree_t * stree, long * dups)
     assert(hinner->label);
     hinner->hybrid->label = xstrdup(hinner->label);
 
+    /* if simulation, copy branch length and theta */
+    if (opt_simulate)
+    {
+      hinner->hybrid->theta  = htip->theta;
+      hinner->hybrid->length = htip->length;
+    }
+
     if (htip->parent->left == htip)
       htip->parent->left = hinner->hybrid;
     else
@@ -608,6 +615,13 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
       x->hybrid->right = NULL;
       y->hybrid->right = NULL;
 
+      /* if simulation, copy branch length and theta */
+      if (opt_simulate)
+      {
+        x->hybrid->tau   = link1->tau;
+        x->hybrid->theta = link1->theta;
+      }
+
       /* annotate */
       annotate_bd_introgression(link1, x, y, link2);
 
@@ -638,6 +652,14 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
       stree->nodes[link2->node_index] = NULL;
       assert(link2->left && link2->right == NULL);
       link2->left = NULL;
+
+      /* if simulation, copy branch length and theta */
+      if (opt_simulate)
+      {
+        y->hybrid->tau   = link2->tau;
+        y->hybrid->theta = link2->theta;
+      }
+
       stree_graph_destroy(link2,NULL);
 
       x->right = y->hybrid;

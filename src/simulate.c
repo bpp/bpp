@@ -92,9 +92,17 @@ static void print_settings(stree_t * stree)
     fprintf(stdout, " %s (%ld)", stree->nodes[i]->label, opt_sp_seqcount[i]);
   }
   fprintf(stdout,"\n");
-  char * newick = stree_export_newick(stree->root, cb_serialize_branch);
-  printf("  %s\n", newick);
-  free(newick);
+  if (opt_network)
+  {
+    printf("  NETWORK\n");
+    print_network_table(stree);
+  }
+  else
+  {
+    char * newick = stree_export_newick(stree->root, cb_serialize_branch);
+    printf("  %s\n", newick);
+    free(newick);
+  }
 
   stree_show_pptable(stree, BPP_TRUE);
 }
@@ -1352,6 +1360,189 @@ static void simulate(stree_t * stree)
     free(siteorder);
 }
 
+static void assign_thetas(stree_t * stree)
+{
+  long i;
+  assert(opt_network);
+  /* this is copied from stree_init_theta(...) */
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    stree->nodes[i]->has_theta = 1;
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (opt_sp_seqcount[i] < 2)
+    {
+      stree->nodes[i]->theta = -1;
+      stree->nodes[i]->has_theta = 0;
+    }
+  }
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode_t * node = stree->nodes[i];
+
+    if (opt_network && node->hybrid)
+    {
+      if (!node_is_bidirection(node))
+      {
+        /* node is hybridization: we assign a theta to the nodes that
+           compose it that have a 'tau-parent' (htau) annotation */
+        if (node->parent->htau)
+        {
+          node->has_theta = 1;
+          assert(node->theta > 0);
+        }
+        else
+        {
+          node->theta = -1;
+          node->has_theta = 0;
+        }
+
+        if (node->hybrid->parent->htau)
+        {
+          node->hybrid->has_theta = 1;
+          assert(node->hybrid->theta > 0);
+        }
+        else
+        {
+          node->hybrid->theta = -1;
+          node->hybrid->has_theta = 0;
+        }
+      }
+      else
+      {
+        /* bidirectional introgression */
+
+        node->has_theta = 1;
+        node->hybrid->theta = -1;
+        node->hybrid->has_theta = 0;
+      }
+    }
+  }
+}
+
+static void validate_and_set_taus(stree_t * stree)
+{
+  long i;
+  long hoffset = stree->tip_count + stree->inner_count;
+  double tau = 0;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * mnode = stree->nodes[hoffset+i];
+    snode_t * hnode = mnode->hybrid;
+
+    if (!node_is_bidirection(hnode))
+    {
+      /* hybridization */
+      if (mnode->tau > 0 && hnode->tau > 0 && mnode->tau != hnode->tau)
+        fatal("Misspecified tau for hybridization node %s", hnode->label);
+
+      if (hnode->tau > 0)
+        tau = hnode->tau;
+      if (mnode->tau > 0)
+        tau = mnode->tau;
+
+      assert(hnode->parent);
+      assert(mnode->parent);
+
+      if (tau && !hnode->parent->htau && hnode->parent->tau > 0 &&
+          hnode->parent->tau != tau)
+        fatal("Conflicting tau for nodes %s and %s",
+              hnode->parent->label, hnode->label);
+
+      if (tau && !mnode->parent->htau && mnode->parent->tau > 0 &&
+          mnode->parent->tau != tau)
+        fatal("Conflicting tau for nodes %s and %s",
+              mnode->parent->label, hnode->label);
+
+      if (mnode->tau <= 0 && hnode->tau <= 0)
+      {
+        if (hnode->parent->htau && mnode->parent->htau)
+          fatal("Missing tau for hybridization node %s", hnode->label);
+        else if (!hnode->parent->htau && !mnode->parent->htau)
+        {
+          if (hnode->parent->tau <= 0 && mnode->parent->tau <= 0)
+            fatal("Missing tau for hybridization node %s", hnode->label);
+
+          if (hnode->parent->tau > 0 && mnode->parent->tau > 0 &&
+              hnode->parent->tau != mnode->parent->tau)
+            fatal("Conflicting tau for nodes %s and %s",
+                  hnode->parent->label, mnode->parent->label);
+
+          if (hnode->parent->tau <= 0)
+            tau = mnode->parent->tau;
+          else
+            tau = hnode->parent->tau;
+        }
+        else if (!hnode->parent->htau)
+        {
+          if (hnode->parent->tau <= 0)
+            fatal("Missing tau for hybridization node %s", hnode->label);
+
+          tau = hnode->parent->tau;
+        }
+        else
+        {
+          if (mnode->parent->tau <= 0)
+            fatal("Missing tau for hybridization node %s", hnode->label);
+
+          tau = mnode->parent->tau;
+        }
+      }
+
+      assert(tau > 0);
+
+      mnode->tau = hnode->tau = tau;
+      if (!mnode->parent->htau)
+        mnode->parent->tau = tau;
+      if (!hnode->parent->htau)
+        hnode->parent->tau = tau;
+    }
+    else
+    {
+      /* bidirectional introgression */
+
+      snode_t * ohnode = mnode->parent;
+      snode_t * omnode = hnode->right;
+
+      assert(ohnode->hybrid == omnode && omnode != NULL);
+
+      if (mnode->tau > 0 && hnode->tau > 0 && mnode->tau != hnode->tau)
+        fatal("Misspecified tau for introgression node %s", hnode->label);
+
+      double atau = 0;
+      if (hnode->tau > 0)
+        atau = hnode->tau;
+      if (mnode->tau > 0)
+        atau = mnode->tau;
+
+      if (omnode->tau > 0 && ohnode->tau > 0 && omnode->tau != ohnode->tau)
+        fatal("Misspecified tau for introgression node %s", ohnode->label);
+
+      double btau = 0;
+      if (ohnode->tau > 0)
+        btau = ohnode->tau;
+      if (omnode->tau > 0)
+        btau = omnode->tau;
+
+      if (atau <= 0 && btau <= 0)
+        fatal("Missing tau for introgression node %s", hnode->label);
+      else if (atau > 0 && btau > 0 && atau != btau)
+        fatal("Conflicting tau for introgression nodes %s and %s",
+              hnode->label, ohnode->label);
+
+      if (atau > 0)
+        tau = atau;
+      else
+        tau = btau;
+
+      hnode->tau = mnode->tau = ohnode->tau = omnode->tau = tau;
+    }
+  }
+}
+
 void cmd_simulate()
 {
   long i;
@@ -1363,13 +1554,23 @@ void cmd_simulate()
 
   assert(opt_network == !!stree->hybrid_count);
 
-  /* TODO: HYBRID */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
     stree->nodes[i]->tau = stree->nodes[i]->length;
 
   /* allocate and set pptable */
   stree_init_pptable(stree);
   stree_label(stree);
+
+  if (opt_network)
+  {
+    long hoffset = stree->tip_count+stree->inner_count;
+    for (i = 0; i < stree->hybrid_count; ++i)
+      stree->nodes[hoffset+i]->tau = stree->nodes[hoffset+i]->hybrid->tau;
+
+    assign_thetas(stree);
+    validate_and_set_taus(stree);
+  }
+
 
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */
