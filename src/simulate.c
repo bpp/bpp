@@ -795,9 +795,16 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
       for (j = 0; j < (long)strlen(seqname); ++j)
         seqname[j] = xtolower(seqname[j]);
 
+      #ifndef SIM_OLD_FORMAT
+      long index = 0;
+      #endif
       for (j = m; j < m+opt_sp_seqcount[i]; j += 2)
       {
+        #ifdef SIM_OLD_FORMAT
         xasprintf(label+k, "%s%ld_%ld^%s", seqname, j-m+1, j-m+2, stree->nodes[i]->label);
+        #else
+        xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
+        #endif
         sequence[k] = consensus(msa->sequence[j],msa->sequence[j+1],msa->length);
 
         gtree->nodes[j]->data = sequence[k];
