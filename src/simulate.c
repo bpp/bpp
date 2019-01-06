@@ -859,8 +859,8 @@ static void write_concat_seqs(FILE * fp, msa_t ** msa)
   fprintf(fp, "\n\n");
 
   free(x);
-
 }
+
 static void write_seqs(FILE * fp, msa_t * msa, long species_count)
 {
   long i,j;
@@ -870,7 +870,7 @@ static void write_seqs(FILE * fp, msa_t * msa, long species_count)
   long seq_sum = 0;
   for (i = 0; i < species_count; ++i)
     seq_sum += opt_sp_seqcount[i] / (opt_diploid[i] ? 2 : 1);
-  assert(seq_sum == msa->count);
+  //assert(seq_sum == msa->count);
 
   for (i = 0; i < msa->count; ++i)
   {
@@ -884,6 +884,62 @@ static void write_seqs(FILE * fp, msa_t * msa, long species_count)
     fprintf(fp, "\n");
   }
   fprintf(fp, "\n\n");
+}
+
+static void write_diploid_rand_seqs(FILE * fp_seqrand,
+                                    stree_t * stree,
+                                    msa_t * msa)
+{
+  long i,j,k,m;
+  char ** sequence;
+
+  msa_t * new_msa = (msa_t *)xcalloc(1,sizeof(msa_t));
+  new_msa->count = msa->count;
+  new_msa->length = msa->length;
+  new_msa->label = msa->label;
+
+  long seq_sum = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+    seq_sum += opt_sp_seqcount[i];
+  assert(seq_sum == msa->count);
+
+  /* allocate new storage for sequences and labels */
+  sequence = (char **)xmalloc((size_t)(msa->count) * sizeof(char *));
+  for (i = 0; i < msa->count; ++i)
+    sequence[i] = (char *)xmalloc((size_t)(msa->length) * sizeof(char));
+
+  j = 0; m = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (opt_diploid[i])
+    {
+      for (j = m; j < m+opt_sp_seqcount[i]; j += 2)
+      {
+        memcpy(sequence[j],   msa->sequence[j],   msa->length * sizeof(char));
+        memcpy(sequence[j+1], msa->sequence[j+1], msa->length * sizeof(char));
+        for (k = 0; k < msa->length; ++k)
+
+        /* randomly resolve */
+        if (sequence[j][k] != sequence[j+1][k] && legacy_rndu() < 0.5)
+          SWAP(sequence[j][k],sequence[j+1][k]);
+      }
+    }
+    else
+    {
+      for (j = m; j < m+opt_sp_seqcount[i]; ++j)
+        memcpy(sequence[j], msa->sequence[j], msa->length * sizeof(char));
+    }
+    m += opt_sp_seqcount[i];
+  }
+
+  new_msa->sequence = sequence;
+
+  write_seqs(fp_seqrand, new_msa, stree->tip_count);
+  
+  for (i = 0; i < msa->count; ++i)
+    free(sequence[i]);
+  free(sequence);
+  free(new_msa);
 }
 
 static void set_migration_rates(stree_t * stree)
@@ -992,6 +1048,8 @@ static void simulate(stree_t * stree)
   FILE * fp_tree = NULL;
   FILE * fp_param = NULL;
   FILE * fp_map = NULL;
+  FILE * fp_seqfull = NULL;
+  FILE * fp_seqrand = NULL;
 
   /* open output files */
   if (opt_msafile)
@@ -1071,6 +1129,23 @@ static void simulate(stree_t * stree)
   locus_seqcount = 0;
   for (i = 0; i < stree->tip_count; ++i)
     locus_seqcount += opt_sp_seqcount[i];
+
+  if (opt_msafile)
+  {
+    if (hets < locus_seqcount)
+    {
+      char * filename = NULL;
+      xasprintf(&filename, "%s.full", opt_msafile);
+      fp_seqfull = xopen(filename,"w");
+      free(filename);
+
+      filename = NULL;
+      xasprintf(&filename, "%s.rand", opt_msafile);
+      fp_seqrand = xopen(filename,"w");
+      free(filename);
+    }
+  }
+
 
   /* 1. create maplist (Imap) and 2. initialize two hashtables which are used
      when calling gtree_simulate for quick access to a sequence population */
@@ -1271,7 +1346,16 @@ static void simulate(stree_t * stree)
 
       /* collapse diploid sequences */
       if (hets < msa[i]->count)
+      {
+        /* write full data first */
+        if (fp_seqfull)
+          write_seqs(fp_seqfull, msa[i], stree->tip_count);
+        if (fp_seqrand)
+          write_diploid_rand_seqs(fp_seqrand,stree,msa[i]);
+
+        /* then collapse sequences */
         collapse_diploid(stree,gtree[i],msa[i],hets);
+      }
 
       /* write sequences */
       write_seqs(fp_seq, msa[i], stree->tip_count);
@@ -1353,6 +1437,11 @@ static void simulate(stree_t * stree)
   assert(opt_mapfile);
   if (opt_mapfile)
     fclose(fp_map);
+
+  if (fp_seqfull)
+    fclose(fp_seqfull);
+  if (fp_seqrand)
+    fclose(fp_seqrand);
 
   if (g_order)
     free(g_order);
