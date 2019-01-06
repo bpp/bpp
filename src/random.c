@@ -73,9 +73,18 @@ double legacy_rndu()
    From Ripley (1987) p. 46 or table 2.4 line 2. 
    This may return 0 or 1, which can be a problem.
 */
+
+   /* the below random number generator is the one used until v4.0.6.
+      Change if 0 to if 1 to use it */
+   #if 0
    z_rndu = z_rndu*69069 + 1;
    if(z_rndu==0 || z_rndu==4294967295)  z_rndu = 13;
    return z_rndu/4294967295.0;
+   #else
+   z_rndu = z_rndu * 69069 + 1;
+   if (z_rndu == 0)  z_rndu = 12345671;
+   return ldexp((double)z_rndu, -32);
+   #endif
 }
 
 static double rndTriangle()
