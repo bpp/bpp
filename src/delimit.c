@@ -468,11 +468,12 @@ long delimitations_count(stree_t * stree)
 static void print()
 {
   int i;
+  const long thread_index = 0;
 
   char * delimitation = dmodels[dmodels_count++]; 
 
   for (i=0; i<trav_size; ++i)
-    delimitation[i] = (trav[i]->mark & FLAG_MISC) ? '1' : '0';
+    delimitation[i] = (trav[i]->mark[thread_index] & FLAG_MISC) ? '1' : '0';
   delimitation[trav_size] = 0;
 }
 
@@ -496,18 +497,20 @@ void delimitation_set(stree_t * stree, long index)
 
 static void explore(snode_t ** start, snode_t ** end)
 {
+  const long thread_index = 0;
+
   while (end != start)
   {
     snode_t * curnode = *end;
 
-    if (curnode->parent->mark & FLAG_MISC)
+    if (curnode->parent->mark[thread_index] & FLAG_MISC)
     {
-      curnode->mark |= FLAG_MISC;   /* set flag */
+      curnode->mark[thread_index] |= FLAG_MISC;   /* set flag */
       print();
 
       explore(end, trav+trav_size-1);
 
-      curnode->mark &= ~FLAG_MISC;  /* unset flag */
+      curnode->mark[thread_index] &= ~FLAG_MISC;  /* unset flag */
     }
 
     end--;
@@ -533,6 +536,7 @@ long delimitations_init(stree_t * stree)
 {
   unsigned int index = 0;
   long i;
+  const long thread_index = 0;
 
   dmodels_count = delimitations_count(stree);
   printf("Total species delimitations: %ld\n", dmodels_count);
@@ -551,20 +555,20 @@ long delimitations_init(stree_t * stree)
   dprior = (double *)xmalloc(dmodels_count * sizeof(double));
 
   for (i = 0; i < stree->inner_count; ++i)
-    trav[i]->mark &= ~FLAG_MISC;    /* unset flag */
+    trav[i]->mark[thread_index] &= ~FLAG_MISC;    /* unset flag */
 
   /* print current delimitation model, i.e. all zeros 000..0 */
   dmodels_count = 0;
   print();
 
   /* print next model with only one population at the root, i.e. 1000...0 */
-  stree->root->mark |= FLAG_MISC;   /* set flag */
+  stree->root->mark[thread_index] |= FLAG_MISC;   /* set flag */
   print();
 
   /* recursively explore all other possibilities */
   explore(trav,trav+trav_size-1);
 
-  stree->root->mark &= ~FLAG_MISC;  /* unset flag */
+  stree->root->mark[thread_index] &= ~FLAG_MISC;  /* unset flag */
 
   #if 0
   for (i = 0; i < dmodels_count; ++i)

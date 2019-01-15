@@ -58,6 +58,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   double lnacceptance;
   long accepted = 0;
 
+  const long thread_index = 0;
+
   double * notheta_old_logpr = NULL;
 
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
@@ -96,7 +98,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         tau_count++;
   }
 
-  lnc = opt_finetune_mix * legacy_rnd_symmetrical();
+  lnc = opt_finetune_mix * legacy_rnd_symmetrical(thread_index);
   c = exp(lnc);
 
   /* sum of inner nodes for all loci */
@@ -230,13 +232,16 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
 
     if (opt_est_theta)
-      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
     else
     {
       for (j = 0; j < nodes_count; ++j)
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
-        logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+        logpr += gtree_update_logprob_contrib(stree->nodes[j],
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
       }
     }
         
@@ -265,7 +270,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
 
 
-  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     /* accept */
     accepted = 1;

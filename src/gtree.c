@@ -46,14 +46,16 @@ typedef struct pop_s
 static hashtable_t * sht;
 static hashtable_t * mht;
 
-static double * sortbuffer = NULL;
+/* one sortbuffer per thread (used as space to sort coalescent times when
+   computing MSC density) to avoid reallocation */
+static double ** sortbuffer_r = NULL;
 
 static gnode_t *** travbuffer = NULL;
 
-gnode_t * dbg_msci_y = NULL;
-gnode_t * dbg_msci_a = NULL;
-gnode_t * dbg_msci_s = NULL;
-gnode_t * dbg_msci_t = NULL;
+__THREAD gnode_t * dbg_msci_y = NULL;
+__THREAD gnode_t * dbg_msci_a = NULL;
+__THREAD gnode_t * dbg_msci_s = NULL;
+__THREAD gnode_t * dbg_msci_t = NULL;
 
 #if 0
 
@@ -592,7 +594,11 @@ static void network_bd_distribute_lineages(pop_t * pop, long mindex, long hindex
   }
 }
 
-static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, snode_t * epoch)
+static void replace_hybrid(stree_t * stree,
+                           pop_t * pop,
+                           unsigned int * count,
+                           snode_t * epoch,
+                           long thread_index)
 {
   long i,j;
 
@@ -625,7 +631,7 @@ static void replace_hybrid(stree_t * stree, pop_t * pop, unsigned int * count, s
     /* Sample lineages: Fill temp with 0 if lineage goes to epoch (mirror node)
        or 1 if epoch->hybrid (hybridization) */
     for (j = 0; j < hpop->seq_count; ++j)
-      temp[j] = (legacy_rndu() <= hpop->snode->hgamma) ? 1 : 0;
+      temp[j] = (legacy_rndu(thread_index) <= hpop->snode->hgamma) ? 1 : 0;
 
     /* count how many lineages ended up in hybridization node */
     unsigned int hpop_seqcount = 0;
@@ -1180,6 +1186,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   pop_t * pop;
   snode_t ** epoch;
   gnode_t * inner = NULL;
+  const long thread_index = 0;
 
   if (opt_migration)
     migrate = (double *)xmalloc((size_t)stree->tip_count * sizeof(double));
@@ -1403,7 +1410,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         break;
 
       /* generate random waiting time from exponential distribution */
-      t += legacy_rndexp(1/(csum+msum));
+      t += legacy_rndexp(thread_index,1/(csum+msum));
 
       
       /* if the generated time is larger than the current epoch, and we are not
@@ -1418,7 +1425,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
       /* select an available population at random using the poisson rates as
          weights */
-      double r = legacy_rndu()*(csum+msum);
+      double r = legacy_rndu(thread_index)*(csum+msum);
       if (r < csum)
       {
         double tmp = 0;
@@ -1432,7 +1439,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
         /* now choose two lineages from selected population j in exactly the same
            way as the original BPP */
-        k = pop[j].seq_count * (pop[j].seq_count-1) * legacy_rndu();
+        k = pop[j].seq_count * (pop[j].seq_count-1) * legacy_rndu(thread_index);
 
         unsigned int k1 = k / (pop[j].seq_count-1);
         unsigned int k2 = k % (pop[j].seq_count-1);
@@ -1532,7 +1539,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         opt_migration_events[mindexk * matrix_span + mindexj] += 1;
 
         /* i is a migrant from population k to j */
-        i = (long)(pop[j].seq_count * legacy_rndu());
+        i = (long)(pop[j].seq_count * legacy_rndu(thread_index));
 
         /* shift up lineages in pop j */
         pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
@@ -1552,7 +1559,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     /* place current epoch in the list of populations, remove its two children
        and add up the lineages of the two descendants */
     if (opt_network && epoch[e]->hybrid)
-      replace_hybrid(stree,pop,&pop_count,epoch[e]);
+      replace_hybrid(stree,pop,&pop_count,epoch[e],thread_index);
     else
       replace(pop,pop_count,epoch[e]);
     
@@ -1588,7 +1595,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         unsigned int hindex = GET_HINDEX(stree, father);
         assert(hindex >= 0 && hindex < stree->hybrid_count);
 
-        if (legacy_rndu() <= father->hgamma)
+        if (legacy_rndu(thread_index) <= father->hgamma)
            gtree->root->hpath[hindex] = BPP_HPATH_LEFT;
         else
         {
@@ -1815,7 +1822,27 @@ void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
 
   /* alloate buffer for sorting coalescent times plus two for the beginning
      and end of epoch */
-  sortbuffer = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+  
+  #ifdef DEBUG_THREADS
+  if (opt_threads == 1)
+  {
+    opt_threads = DEBUG_THREADS_COUNT;
+    sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+    for (i = 0; i < opt_threads; ++i)
+      sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+    opt_threads = 1;
+  }
+  else
+  {
+    sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+    for (i = 0; i < opt_threads; ++i)
+      sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+  }
+  #else
+  sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+  for (i = 0; i < opt_threads; ++i)
+    sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+  #endif
   
   /* allocate traversal buffers */
   travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
@@ -1942,12 +1969,15 @@ void logprob_revert_notheta(snode_t * snode, long msa_index)
 
 double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
-                                    long msa_index)
+                                    long msa_index,
+                                    long thread_index)
 {
     unsigned int j,k,n;
     double logpr = 0;
     double T2h = 0;
     dlist_item_t * event;
+
+    double * sortbuffer = sortbuffer_r[thread_index];
 
     sortbuffer[0] = snode->tau;
     j = 1;
@@ -2051,19 +2081,19 @@ double gtree_update_logprob_contrib(snode_t * snode,
     return logpr;
 }
 
-double gtree_logprob(stree_t * stree, double heredity, long msa_index)
+double gtree_logprob(stree_t * stree, double heredity, long msa_index, long thread_index)
 {
   unsigned int i;
 
   double logpr = 0;
 
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
-    logpr += gtree_update_logprob_contrib(stree->nodes[i],heredity,msa_index);
+    logpr += gtree_update_logprob_contrib(stree->nodes[i],heredity,msa_index, thread_index);
 
   return logpr;
 }
 
-double reflect(double x, double a, double b)
+double reflect(double x, double a, double b, long thread_index)
 {
   int side = 0;
   double n,excess = 0;
@@ -2103,7 +2133,7 @@ double reflect(double x, double a, double b)
    /* The following is to fix the problem of x landing on the boundary,
    due to small chances and rounding errors */
    while ((x - a < EPSILON) || (b - x < EPSILON))
-      x = a + (b - a)*legacy_rndu();
+      x = a + (b - a)*legacy_rndu(thread_index);
 
   return x;
 }
@@ -2306,7 +2336,7 @@ static void join_flags(stree_t * stree, gnode_t * a, int * bpath, snode_t * old_
 
 /* sample flags from pop(x) (exclusive) to pop(parent->x) (exclusive), ie
    sample flags for one branch with two ends fixed in the populations */
-static double sample_hpath(stree_t * stree, gnode_t * x)
+static double sample_hpath(stree_t * stree, gnode_t * x, long thread_index)
 {
   long i;
   unsigned int hindex;
@@ -2350,7 +2380,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x)
       if (stree->pptable[pop->node_index][end->node_index] &&
           stree->pptable[pop->hybrid->node_index][end->node_index])
       {
-        if (legacy_rndu() <= pop->hgamma)
+        if (legacy_rndu(thread_index) <= pop->hgamma)
         {
           x->hpath[hindex] = BPP_HPATH_LEFT;
           contrib += log(pop->hgamma);
@@ -2661,7 +2691,11 @@ static snode_t * network_mrca_population(stree_t * stree, gnode_t * left, gnode_
   return mrca;
 }
 
-static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int msa_index)
+static long propose_ages(locus_t * locus,
+                         gtree_t * gtree,
+                         stree_t * stree,
+                         int msa_index,
+                         long thread_index)
 {
   unsigned int i,k,j;
   unsigned int stree_total_nodes;
@@ -2698,8 +2732,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
          for which populations we need to recompute the MSC density */
       for (j = 0; j < stree_total_nodes; ++j)
       {
-        stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
-                              stree->nodes[j]->seqin_count[msa_index];
+        stree->nodes[j]->hx[thread_index] = stree->nodes[j]->event_count[msa_index] +
+                                            stree->nodes[j]->seqin_count[msa_index];
       }
 
       /* TODO: The following loop corrects for bidirectional nodes */
@@ -2710,7 +2744,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
         if (node_is_bidirection(snode))
         {
           assert(snode->event_count[msa_index] == 0);
-          snode->parent->hx -= snode->seqin_count[msa_index];
+          snode->parent->hx[thread_index] -= snode->seqin_count[msa_index];
         }
       }
       hgamma_contrib = 0;
@@ -2757,8 +2791,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
     assert(maxage > minage);
 
-    tnew = node->time + opt_finetune_gtage * legacy_rnd_symmetrical();
-    tnew = reflect(tnew, minage, maxage);
+    tnew = node->time + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);
+    tnew = reflect(tnew, minage, maxage, thread_index);
 
     assert(tnew != 0);
 
@@ -2794,7 +2828,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       assert(cand_count > 0);
       
       /* randomly select one such population */
-      j = (int)(cand_count*legacy_rndu());
+      j = (int)(cand_count*legacy_rndu(thread_index));
       assert(j < cand_count);
       pop = candidates[j];
 
@@ -2908,9 +2942,9 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     if (opt_network)
     {
       /* reset and sample new flags */
-      hgamma_contrib += sample_hpath(stree,node);
-      hgamma_contrib += sample_hpath(stree,node->left);
-      hgamma_contrib += sample_hpath(stree,node->right);
+      hgamma_contrib += sample_hpath(stree,node,thread_index);
+      hgamma_contrib += sample_hpath(stree,node->left, thread_index);
+      hgamma_contrib += sample_hpath(stree,node->right, thread_index);
 
       snode_t * newpop = node->pop;
       node->pop = oldpop;
@@ -2930,7 +2964,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
       increase_gene_leaves_count(stree,node->left,msa_index);
       increase_gene_leaves_count(stree,node->right,msa_index);
 
-      node->pop->hx = -1;
+      node->pop->hx[thread_index] = -1;
     }
 
     /* quick recomputation  of logpr */
@@ -2959,7 +2993,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
         logpr += gtree_update_logprob_contrib(node->pop,
                                               locus->heredity[0],
-                                              msa_index);
+                                              msa_index,
+                                              thread_index);
       }
       else
       {
@@ -2971,16 +3006,16 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
 
           /* correct for bidirectional introgression non-mirror nodes */
-          if (node_is_bidirection(x) && x->parent->hx != -1)
-              x->parent->hx += x->seqin_count[msa_index];
+          if (node_is_bidirection(x) && x->parent->hx[thread_index] != -1)
+              x->parent->hx[thread_index] += x->seqin_count[msa_index];
 
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -2988,22 +3023,23 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx = -1;
+                x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -3011,7 +3047,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
           }
         }
       }
@@ -3042,16 +3079,16 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
 
           /* correct for bidirectional introgression non-mirror nodes */
-          if (node_is_bidirection(x) && x->parent->hx != -1)
-              x->parent->hx += x->seqin_count[msa_index];
+          if (node_is_bidirection(x) && x->parent->hx[thread_index] != -1)
+              x->parent->hx[thread_index] += x->seqin_count[msa_index];
 
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -3059,22 +3096,23 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx = -1;
+                x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -3082,7 +3120,8 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
           }
         }
       }
@@ -3097,14 +3136,15 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
 
           logpr += gtree_update_logprob_contrib(pop,
                                                 locus->heredity[0],
-                                                msa_index);
+                                                msa_index,
+                                                thread_index);
         }
       }
     }
     #else
       assert(!opt_network);
       if (opt_est_theta)
-        logpr = gtree_logprob(stree,locus->heredity[0],msa_index);
+        logpr = gtree_logprob(stree,locus->heredity[0],msa_index,thread_index);
       else
         assert(0);
 
@@ -3157,7 +3197,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
     else
       lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
 
-    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
@@ -3229,7 +3269,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           for (j = 0; j < stree_total_nodes; ++j)
           {
             snode_t * x = stree->nodes[j];
-            if (x->hx)
+            if (x->hx[thread_index])
             {
               if (opt_est_theta)
                 x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
@@ -3323,7 +3363,7 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
           for (j = 0; j < stree_total_nodes; ++j)
           {
             snode_t * x = stree->nodes[j];
-            if (x->hx)
+            if (x->hx[thread_index])
             {
               if (opt_est_theta)
                 x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
@@ -3354,24 +3394,85 @@ static long propose_ages(locus_t * locus, gtree_t * gtree, stree_t * stree, int 
   return accepted;
 }
 
-double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
+double gtree_propose_ages_serial(locus_t ** locus,
+                                 gtree_t ** gtree,
+                                 stree_t * stree)
 {
   unsigned int i;
   long proposal_count = 0;
   long accepted = 0;
 
+  #ifdef DEBUG_THREADS
+  /* simulate parallel execution with DEBUG_THREADS_COUNT threads, by assigning
+     each locus the index of the corresponding random number generator it would
+     be assigned in a parallel execution */
+  assert(DEBUG_THREADS_COUNT <= stree->locus_count);
+  long * indices = (long *)xmalloc((size_t)(stree->locus_count) * sizeof(long));
+  long loci_per_thread = opt_locus_count / DEBUG_THREADS_COUNT;
+  long loci_remaining = opt_locus_count % DEBUG_THREADS_COUNT;
+
+  long load = 0;
+  long thread_index = -1;
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    if  (load == 0)
+    {
+      load = loci_per_thread + (loci_remaining > 0 ? 1 : 0);
+      if (loci_remaining)
+        --loci_remaining;
+      ++thread_index;
+    }
+    indices[i] = thread_index;
+    --load;
+  }
+  #endif
+
   for (i = 0; i < stree->locus_count; ++i)
   {
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->inner_count;
-    accepted += propose_ages(locus[i],gtree[i],stree,i);
+    #ifdef DEBUG_THREADS
+    accepted += propose_ages(locus[i],gtree[i],stree,i,indices[i]);
+    #else
+    accepted += propose_ages(locus[i],gtree[i],stree,i,0);
+    #endif
   }
+
+  #ifdef DEBUG_THREADS
+  free(indices);
+  #endif
 
   if (!accepted)
     return 0;
 
   return ((double)accepted/proposal_count);
+}
 
+void gtree_propose_ages_parallel(locus_t ** locus,
+                                 gtree_t ** gtree,
+                                 stree_t * stree,
+                                 long locus_start,
+                                 long locus_count,
+                                 long thread_index,
+                                 long * p_proposal_count,
+                                 long * p_accepted)
+{
+  unsigned int i;
+  long proposal_count = 0;
+  long accepted = 0;
+
+  assert(locus_start >= 0);
+  assert(locus_count > 0);
+
+  for (i = locus_start; i < locus_start+locus_count; ++i)
+  {
+    /* TODO: Fix this to account mcmc.moveinnode in original bpp */
+    proposal_count += gtree[i]->inner_count;
+    accepted += propose_ages(locus[i],gtree[i],stree,i,thread_index);
+  }
+
+  *p_proposal_count = proposal_count;
+  *p_accepted = accepted;
 }
 
 
@@ -3519,7 +3620,27 @@ void gtree_fini(int msa_count)
 
   /* free all module memory allocations */
 
-  free(sortbuffer);
+  #ifdef DEBUG_THREADS
+  if (opt_threads == 1)
+  {
+    opt_threads = DEBUG_THREADS_COUNT;
+    for (i = 0; i < opt_threads; ++i)
+      free(sortbuffer_r[i]);
+    free(sortbuffer_r);
+    opt_threads = 1;
+  }
+  else
+  {
+    for (i = 0; i < opt_threads; ++i)
+      free(sortbuffer_r[i]);
+    free(sortbuffer_r);
+  }
+  #else
+  for (i = 0; i < opt_threads; ++i)
+    free(sortbuffer_r[i]);
+  free(sortbuffer_r);
+  #endif
+
   for (i = 0; i < msa_count; ++i)
     free(travbuffer[i]);
   free(travbuffer);
@@ -3582,7 +3703,8 @@ static gnode_t * network_fill_targets(stree_t * stree,
                                       double tnew,
                                       unsigned int * target_count,
                                       unsigned int * source_count,
-                                      snode_t ** pop_target)
+                                      snode_t ** pop_target,
+                                      long thread_index)
 {
   unsigned int j,k,n,m;
   unsigned int ptarget_count = 0;
@@ -3595,7 +3717,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
   /* make sure no species tree node is 'marked' */
   snodes_count = stree->tip_count + stree->inner_count + stree->hybrid_count;
   for (j = 0; j < snodes_count; ++j)
-    assert(stree->nodes[j]->mark == 0);
+    assert(stree->nodes[j]->mark[thread_index] == 0);
 
   /* mark all species tree nodes nodes ancestor to curnode population, and with
      branches that include tnew. */
@@ -3607,13 +3729,13 @@ static gnode_t * network_fill_targets(stree_t * stree,
         //x->gene_leaves[msa_index] > curnode->leaves &&
         (x->tau <= tnew) && (x->parent && x->parent->tau > tnew))
     {
-      x->mark = 1;
+      x->mark[thread_index] = 1;
       ptarget_count++;
     }
   }
   if (stree->root->tau <= tnew)
   {
-    stree->root->mark = 1;
+    stree->root->mark[thread_index] = 1;
     ptarget_count++;
   }
 
@@ -3621,9 +3743,9 @@ static gnode_t * network_fill_targets(stree_t * stree,
   ptarget_list = (snode_t **)xmalloc((size_t)ptarget_count*sizeof(snode_t *));
   for (k = 0, j = 0; j < snodes_count; ++j)
   {
-    if (stree->nodes[j]->mark)
+    if (stree->nodes[j]->mark[thread_index])
     {
-      stree->nodes[j]->mark = 0;
+      stree->nodes[j]->mark[thread_index] = 0;
       ptarget_list[k++] = stree->nodes[j];
     }
   }
@@ -3681,7 +3803,8 @@ static gnode_t * network_fill_targets(stree_t * stree,
   assert(*source_count);
 
   /* randomly select a target node */
-  gnode_t * target = travbuffer[msa_index][(int)(*target_count*legacy_rndu())];
+  gnode_t * target = travbuffer[msa_index][(int)(*target_count *
+                                                 legacy_rndu(thread_index))];
   assert(target);
 
   /* decide on the pop_target */
@@ -3730,7 +3853,8 @@ static gnode_t * network_fill_targets(stree_t * stree,
 static long propose_spr(locus_t * locus,
                         gtree_t * gtree,
                         stree_t * stree,
-                        int msa_index)
+                        int msa_index,
+                        long thread_index)
 {
   unsigned int i,j,k,m,n;
   unsigned int source_count, target_count;
@@ -3786,8 +3910,8 @@ static long propose_spr(locus_t * locus,
          for which populations we need to recompute the MSC density */
       for (j = 0; j < stree_total_nodes; ++j)
       {
-        stree->nodes[j]->hx = stree->nodes[j]->event_count[msa_index] +
-                              stree->nodes[j]->seqin_count[msa_index];
+        stree->nodes[j]->hx[thread_index] = stree->nodes[j]->event_count[msa_index] +
+                                            stree->nodes[j]->seqin_count[msa_index];
       }
       /* TODO: The following loop corrects for bidirectional nodes */
       for (j = 0; j < stree->hybrid_count; ++j)
@@ -3797,7 +3921,7 @@ static long propose_spr(locus_t * locus,
         if (node_is_bidirection(snode))
         {
           assert(snode->event_count[msa_index] == 0);
-          snode->parent->hx -= snode->seqin_count[msa_index];
+          snode->parent->hx[thread_index] -= snode->seqin_count[msa_index];
         }
       }
       hgamma_contrib = 0;
@@ -3835,8 +3959,8 @@ static long propose_spr(locus_t * locus,
     minage = MAX(curnode->time, pop->tau);
     maxage = 999;
 
-    tnew = father->time + opt_finetune_gtspr*legacy_rnd_symmetrical();
-    tnew = reflect(tnew,minage,maxage);
+    tnew = father->time+opt_finetune_gtspr*legacy_rnd_symmetrical(thread_index);
+    tnew = reflect(tnew,minage,maxage,thread_index);
 
     if (!opt_network)
     {
@@ -3862,7 +3986,8 @@ static long propose_spr(locus_t * locus,
                                     tnew,
                                     &target_count,
                                     &source_count,
-                                    &pop_target);
+                                    &pop_target,
+                                    thread_index);
 
       dbg_msci_t = target;
     }
@@ -3906,7 +4031,8 @@ static long propose_spr(locus_t * locus,
       
 
       /* randomly select a target node */
-      target = travbuffer[msa_index][(int)(target_count*legacy_rndu())];
+      target = travbuffer[msa_index][(int)(target_count *
+                                           legacy_rndu(thread_index))];
     }
 
     if (opt_network)
@@ -4014,7 +4140,7 @@ static long propose_spr(locus_t * locus,
     if (opt_network)
     {
       /* reset and sample new flags */
-      hgamma_contrib += sample_hpath(stree,curnode);
+      hgamma_contrib += sample_hpath(stree,curnode,thread_index);
 
       if (spr_required)
       {
@@ -4064,7 +4190,7 @@ static long propose_spr(locus_t * locus,
       increase_gene_leaves_count(stree, curnode, msa_index);
 
       /* indicate we want to recompute the MSC density for this population */
-      father->pop->hx = -1;
+      father->pop->hx[thread_index] = -1;
     }
 
     /* recompute logpr */
@@ -4085,16 +4211,16 @@ static long propose_spr(locus_t * locus,
           snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
 
           /* correct for bidirectional introgression non-mirror nodes */
-          if (node_is_bidirection(x) && x->parent->hx != -1)
-              x->parent->hx += x->seqin_count[msa_index];
+          if (node_is_bidirection(x) && x->parent->hx[thread_index] != -1)
+              x->parent->hx[thread_index] += x->seqin_count[msa_index];
 
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -4102,28 +4228,32 @@ static long propose_spr(locus_t * locus,
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx = -1;
+                x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
               logpr -= x->notheta_logpr_contrib;
 
-            logpr += gtree_update_logprob_contrib(x,locus->heredity[0],msa_index);
+            logpr += gtree_update_logprob_contrib(x,
+                                                  locus->heredity[0],
+                                                  msa_index,
+                                                  thread_index);
           }
         }
       }
@@ -4136,7 +4266,8 @@ static long propose_spr(locus_t * locus,
 
         logpr += gtree_update_logprob_contrib(father->pop,
                                               locus->heredity[0],
-                                              msa_index);
+                                              msa_index,
+                                              thread_index);
       }
     }
     else
@@ -4167,16 +4298,16 @@ static long propose_spr(locus_t * locus,
           snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+j];
 
           /* correct for bidirectional introgression non-mirror nodes */
-          if (node_is_bidirection(x) && x->parent->hx != -1)
-              x->parent->hx += x->seqin_count[msa_index];
+          if (node_is_bidirection(x) && x->parent->hx[thread_index] != -1)
+              x->parent->hx[thread_index] += x->seqin_count[msa_index];
 
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -4184,22 +4315,23 @@ static long propose_spr(locus_t * locus,
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx = -1;
+                x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
-          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx)
+          if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
-            x->hx = 0;  /* MSC density is not changed */
+            x->hx[thread_index] = 0;  /* MSC density is not changed */
           }
           else
           {
-            x->hx = 1;  /* MSC density has changed */
+            x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
               logpr -= x->logpr_contrib[msa_index];
             else
@@ -4207,7 +4339,8 @@ static long propose_spr(locus_t * locus,
 
             logpr += gtree_update_logprob_contrib(x,
                                                   locus->heredity[0],
-                                                  msa_index);
+                                                  msa_index,
+                                                  thread_index);
           }
         }
       }
@@ -4222,7 +4355,8 @@ static long propose_spr(locus_t * locus,
 
           logpr += gtree_update_logprob_contrib(pop,
                                                 locus->heredity[0],
-                                                msa_index);
+                                                msa_index,
+                                                thread_index);
         }
       }
     }
@@ -4319,7 +4453,7 @@ static long propose_spr(locus_t * locus,
     if (opt_debug)
       printf("[Debug] (spr) lnacceptance = %f\n", lnacceptance);
 
-    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
@@ -4434,7 +4568,7 @@ static long propose_spr(locus_t * locus,
           for (j = 0; j < stree_total_nodes; ++j)
           {
             snode_t * x = stree->nodes[j];
-            if (x->hx)
+            if (x->hx[thread_index])
             {
               if (opt_est_theta)
                 x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
@@ -4529,7 +4663,7 @@ static long propose_spr(locus_t * locus,
           for (j = 0; j < stree_total_nodes; ++j)
           {
             snode_t * x = stree->nodes[j];
-            if (x->hx)
+            if (x->hx[thread_index])
             {
               if (opt_est_theta)
                 x->logpr_contrib[msa_index] = x->old_logpr_contrib[msa_index];
@@ -4572,18 +4706,53 @@ static long propose_spr(locus_t * locus,
   return accepted;
 }
 
-double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
+double gtree_propose_spr_serial(locus_t ** locus,
+                                gtree_t ** gtree,
+                                stree_t * stree)
 {
   unsigned int i;
   long proposal_count = 0;
   long accepted = 0;
 
+  #ifdef DEBUG_THREADS
+  /* simulate parallel execution with DEBUG_THREADS_COUNT threads, by assigning
+     each locus the index of the corresponding random number generator it would
+     be assigned in a parallel execution */
+  assert(DEBUG_THREADS_COUNT <= stree->locus_count);
+  long * indices = (long *)xmalloc((size_t)(stree->locus_count) * sizeof(long));
+  long loci_per_thread = opt_locus_count / DEBUG_THREADS_COUNT;
+  long loci_remaining = opt_locus_count % DEBUG_THREADS_COUNT;
+
+  long load = 0;
+  long thread_index = -1;
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    if  (load == 0)
+    {
+      load = loci_per_thread + (loci_remaining > 0 ? 1 : 0);
+      if (loci_remaining)
+        --loci_remaining;
+      ++thread_index;
+    }
+    indices[i] = thread_index;
+    --load;
+  }
+  #endif
+
   for (i = 0; i < stree->locus_count; ++i)
   {
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->edge_count;
-    accepted += propose_spr(locus[i],gtree[i],stree,i);
+    #ifdef DEBUG_THREADS
+    accepted += propose_spr(locus[i],gtree[i],stree,i,indices[i]);
+    #else
+    accepted += propose_spr(locus[i],gtree[i],stree,i,0);
+    #endif
   }
+
+  #ifdef DEBUG_THREADS
+  free(indices);
+  #endif
 
   if (!accepted)
     return 0;
@@ -4591,7 +4760,37 @@ double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree)
   return ((double)accepted/proposal_count);
 }
 
-static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+void gtree_propose_spr_parallel(locus_t ** locus,
+                                gtree_t ** gtree,
+                                stree_t * stree,
+                                long locus_start,
+                                long locus_count,
+                                long thread_index,
+                                long * p_proposal_count,
+                                long * p_accepted)
+{
+  unsigned int i;
+  long proposal_count = 0;
+  long accepted = 0;
+
+  assert(locus_start >= 0);
+  assert(locus_count > 0);
+
+  for (i = locus_start; i < locus_start+locus_count; ++i)
+  {
+    /* TODO: Fix this to account mcmc.moveinnode in original bpp */
+    proposal_count += gtree[i]->edge_count;
+    accepted += propose_spr(locus[i],gtree[i],stree,i,thread_index);
+  }
+
+  *p_proposal_count = proposal_count;
+  *p_accepted = accepted;
+}
+
+static long prop_locusrate(gtree_t ** gtree,
+                           stree_t * stree,
+                           locus_t ** locus,
+                           long thread_index)
 {
   long i,j;
   long ref;
@@ -4624,8 +4823,9 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     old_locrate = locus[i]->mut_rates[0];
     old_refrate = locus[ref]->mut_rates[0];
 
-    new_locrate = reflect(old_locrate+opt_finetune_locusrate*legacy_rnd_symmetrical(),
-                          0, old_locrate + old_refrate);
+    double r = old_locrate + opt_finetune_locusrate * 
+               legacy_rnd_symmetrical(thread_index);
+    new_locrate = reflect(r, 0, old_locrate + old_refrate, thread_index);
     new_refrate = locus[ref]->mut_rates[0] - (new_locrate - old_locrate);
 
     locus[i]->mut_rates[0] = new_locrate;
@@ -4679,7 +4879,7 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     if (opt_debug)
       fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
 
-    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accept */
       accepted++;
@@ -4726,7 +4926,10 @@ static long prop_locusrate(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   return accepted;
 }
 
-static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+static long prop_heredity(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index)
 {
   long i,j;
   long accepted = 0;
@@ -4743,7 +4946,7 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
 
     hold = locus[i]->heredity[0];
-    hnew = hold + opt_finetune_locusrate*legacy_rnd_symmetrical();
+    hnew = hold + opt_finetune_locusrate*legacy_rnd_symmetrical(thread_index);
     if (hnew < 0) hnew *= -1;
     
     locus[i]->heredity[0] = hnew;
@@ -4751,13 +4954,13 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
                    opt_heredity_beta*(hnew-hold);
 
     if (opt_est_theta)
-      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i, thread_index);
     else
     {
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
-        logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+        logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i,thread_index);
       }
     }
 
@@ -4794,7 +4997,7 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     if (opt_debug)
       fprintf(stdout, "[Debug] (heredity) lnacceptance = %f\n", lnacceptance);
-    if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
@@ -4823,16 +5026,19 @@ static long prop_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   return accepted;
 }
 
-double prop_locusrate_and_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
+double prop_locusrate_and_heredity(gtree_t ** gtree,
+                                   stree_t * stree,
+                                   locus_t ** locus,
+                                   long thread_index)
 {
   long accepted = 0;
   double divisor = 0;
 
   if (opt_est_locusrate)
-    accepted = prop_locusrate(gtree,stree,locus);
+    accepted = prop_locusrate(gtree,stree,locus,thread_index);
 
   if (opt_est_heredity)
-    accepted += prop_heredity(gtree,stree,locus);
+    accepted += prop_heredity(gtree,stree,locus,thread_index);
 
   if (opt_est_locusrate)
     divisor = opt_locus_count-1;

@@ -27,7 +27,6 @@
 #define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
 #define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
 
-
 /* species tree spr move related */
 #define LINEAGE_A       16
 #define LINEAGE_OTHER   32
@@ -268,11 +267,15 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
    clone->old_tau = snode->old_tau;
    clone->old_theta = snode->old_theta;
    clone->leaves = snode->leaves;
-   clone->mark = snode->mark;
    clone->support = snode->support;
    clone->weight = snode->weight;
    clone->node_index = snode->node_index;
    clone->has_theta = snode->has_theta;
+
+   if (!clone->mark)
+     clone->mark = (int *)xmalloc((size_t)opt_threads*sizeof(int));
+   memcpy(clone->mark, snode->mark, (size_t)opt_threads*sizeof(int));
+   //clone->mark = snode->mark;
 
    /* points to relatives */
    if (snode->parent)
@@ -713,7 +716,9 @@ static int ** populations_seqcount(stree_t * stree,
    iterates the species tree nodes array indefinitely, and at each iteration
    it sets the tau for the nodes whose parent(s) have been already processed.
    The iteration stops when no nodes need to be processed */
-static void network_init_tau_iterative(stree_t * stree, double prop)
+static void network_init_tau_iterative(stree_t * stree,
+                                       double prop,
+                                       long thread_index)
 {
   long run = 1;
   long i;
@@ -780,7 +785,8 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
           if (x->tau != 1)
             continue;
 
-          x->tau = MIN(age1,age2) * (prop + (1 - prop - 0.02)*legacy_rndu());
+          x->tau = MIN(age1,age2) *
+                   (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
           x->hybrid->tau = x->tau;
           if (x->parent->htau == 0)
             x->parent->tau = x->tau;
@@ -817,7 +823,8 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
                  x->right->tau == 1 &&
                  x->right->hybrid->tau == 1);
 
-          double age = x->parent->tau*(prop + (1 - prop - 0.02)*legacy_rndu());
+          double age = x->parent->tau*
+                       (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
 
           x->tau                = age;
           x->hybrid->tau        = age;
@@ -842,7 +849,8 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
             {
               if (x->htau)
               {
-                x->tau = x->parent->tau * (prop + (1 - prop - 0.02)*legacy_rndu());
+                x->tau = x->parent->tau *
+                         (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
               }
               else
               {
@@ -857,7 +865,9 @@ static void network_init_tau_iterative(stree_t * stree, double prop)
   }
 }
 
-static void stree_init_tau_recursive(snode_t * node, double prop)
+static void stree_init_tau_recursive(snode_t * node,
+                                     double prop,
+                                     long thread_index)
 {
   assert(!opt_network);
 
@@ -877,15 +887,15 @@ static void stree_init_tau_recursive(snode_t * node, double prop)
     node->theta = -1;
 
   if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu());
+    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
   else
     node->tau = 0;
 
-  stree_init_tau_recursive(node->left, prop);
-  stree_init_tau_recursive(node->right, prop);
+  stree_init_tau_recursive(node->left, prop, thread_index);
+  stree_init_tau_recursive(node->right, prop, thread_index);
 }
 
-static void stree_init_tau(stree_t * stree)
+static void stree_init_tau(stree_t * stree, long thread_index)
 {
   unsigned int i;
 
@@ -897,7 +907,7 @@ static void stree_init_tau(stree_t * stree)
      if (opt_network)
        fatal("Method A10 with hybridizations not implemented yet");
 
-     double r = legacy_rndu();
+     double r = legacy_rndu(thread_index);
      int index = (int)(r * delimitation_getparam_count());
      delimitation_set(stree, index);
 
@@ -909,7 +919,7 @@ static void stree_init_tau(stree_t * stree)
      if (opt_network)
        fatal("Method A11 with hybridizations not implemented yet");
 
-     double r = (long)(stree->tip_count*legacy_rndu());
+     double r = (long)(stree->tip_count*legacy_rndu(thread_index));
      if (r < stree->tip_count - 1)
        for (i = stree->tip_count; i < stree->tip_count * 2 - 1; ++i)
          stree->nodes[i]->tau = !stree->pptable[i][stree->tip_count + (long)r];
@@ -920,16 +930,17 @@ static void stree_init_tau(stree_t * stree)
 
    /* set the speciation time for root */
    if (stree->root->tau)
-     stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1)*(0.9 + 0.2*legacy_rndu());
+     stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
+                        (0.9 + 0.2*legacy_rndu(thread_index));
 
    /* recursively set the speciation time for the remaining inner nodes. For
       networks it is not necessary to check if root has both left and right */
    if (opt_network)
-     network_init_tau_iterative(stree, prop);
+     network_init_tau_iterative(stree, prop, thread_index);
    else
    {
-     stree_init_tau_recursive(stree->root->left, prop);
-     stree_init_tau_recursive(stree->root->right, prop);
+     stree_init_tau_recursive(stree->root->left, prop, thread_index);
+     stree_init_tau_recursive(stree->root->right, prop, thread_index);
    }
 
 /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
@@ -993,7 +1004,10 @@ static void stree_init_tau(stree_t * stree)
    }
 }
 
-static int propose_gamma(stree_t * stree, gtree_t ** gtree, snode_t * snode)
+static int propose_gamma(stree_t * stree,
+                         gtree_t ** gtree,
+                         snode_t * snode,
+                         long thread_index)
 {
   int accepted;
   long i;
@@ -1006,8 +1020,8 @@ static int propose_gamma(stree_t * stree, gtree_t ** gtree, snode_t * snode)
   assert(!node_is_mirror(snode));
 
   gammaold = snode->hgamma;
-  gammanew = gammaold + opt_finetune_gamma * legacy_rnd_symmetrical();
-  gammanew = reflect(gammanew,0,1);
+  gammanew = gammaold + opt_finetune_gamma*legacy_rnd_symmetrical(thread_index);
+  gammanew = reflect(gammanew,0,1,thread_index);
 
   if (opt_est_theta)
   {
@@ -1036,7 +1050,7 @@ static int propose_gamma(stree_t * stree, gtree_t ** gtree, snode_t * snode)
                  (opt_gamma_beta-1) * (log(1-gammanew) - log(1-gammaold)) +
                  new_logpr - old_logpr;
 
-  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     /* accepted */
 
@@ -1103,12 +1117,17 @@ double stree_propose_gamma(stree_t * stree, gtree_t ** gtree)
   long i;
   long accepted = 0;
 
+  long thread_index = 0;
+
   /* offset to start of hybridization nodes */
   long offset = stree->tip_count + stree->inner_count;
 
   /* go through hybridization nodes */
   for (i = 0; i < stree->hybrid_count; ++i)
-    accepted += propose_gamma(stree,gtree,stree->nodes[offset+i]->hybrid);
+    accepted += propose_gamma(stree,
+                              gtree,
+                              stree->nodes[offset+i]->hybrid,
+                              thread_index);
 
   return ((double)accepted / stree->hybrid_count);
 }
@@ -1166,7 +1185,8 @@ static void stree_init_theta(stree_t * stree,
                              msa_t ** msalist,
                              list_t * maplist,
                              int msa_count,
-                             FILE * fp_out)
+                             FILE * fp_out,
+                             long thread_index)
 {
   long abort = 0;
   long warn = 0;
@@ -1339,7 +1359,7 @@ static void stree_init_theta(stree_t * stree,
 
      /* otherwise set theta around the mean of the inverse gamma prior */
      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                   (0.9 + 0.2 * legacy_rndu());
+                   (0.9 + 0.2 * legacy_rndu(thread_index));
    }
 #endif
 
@@ -1361,7 +1381,7 @@ static void stree_init_theta(stree_t * stree,
         if (node->parent->htau)
         {
           node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                        (0.9 + 0.2 * legacy_rndu());
+                        (0.9 + 0.2 * legacy_rndu(thread_index));
           node->has_theta = 1;
         }
         else
@@ -1373,7 +1393,7 @@ static void stree_init_theta(stree_t * stree,
         if (node->hybrid->parent->htau)
         {
           node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                                (0.9 + 0.2 * legacy_rndu());
+                                (0.9 + 0.2 * legacy_rndu(thread_index));
           node->hybrid->has_theta = 1;
         }
         else
@@ -1387,7 +1407,7 @@ static void stree_init_theta(stree_t * stree,
         /* bidirectional introgression */
 
         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                      (0.9 + 0.2 * legacy_rndu());
+                      (0.9 + 0.2 * legacy_rndu(thread_index));
         node->has_theta = 1;
 
         /* the mirrored nodes do not have a theta */
@@ -1402,7 +1422,7 @@ static void stree_init_theta(stree_t * stree,
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
          node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                       (0.9 + 0.2 * legacy_rndu());
+                       (0.9 + 0.2 * legacy_rndu(thread_index));
     }
   }
 
@@ -1692,6 +1712,38 @@ void stree_init_pptable(stree_t * stree)
 #endif
 }
 
+static void network_init_hx(stree_t * stree)
+{
+  long i;
+
+  #ifdef DEBUG_THREADS
+  if (opt_threads == 1)
+  {
+    opt_threads = DEBUG_THREADS_COUNT;
+    for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+    {
+      snode_t * node = stree->nodes[i];
+      node->hx = (long *)xcalloc((size_t)opt_threads,sizeof(long));
+    }
+    opt_threads = 1;
+  }
+  else
+  {
+    for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+    {
+      snode_t * node = stree->nodes[i];
+      node->hx = (long *)xcalloc((size_t)opt_threads,sizeof(long));
+    }
+  }
+  #else
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  {
+    snode_t * node = stree->nodes[i];
+    node->hx = (long *)xcalloc((size_t)opt_threads,sizeof(long));
+  }
+  #endif
+}
+
 void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
@@ -1699,6 +1751,8 @@ void stree_init(stree_t * stree,
                 FILE * fp_out)
 {
   unsigned int i, j;
+
+  long thread_index = 0;
 
   /* safety check */
   assert(msa_count > 0);
@@ -1711,12 +1765,12 @@ void stree_init(stree_t * stree,
   stree_label(stree);
 
   /* Initialize population sizes */
-  stree_init_theta(stree, msa, maplist, msa_count, fp_out);
+  stree_init_theta(stree, msa, maplist, msa_count, fp_out, thread_index);
 
   if (stree->tip_count > 1 || opt_network)
   {
     /* Initialize speciation times and create extinct species groups */
-    stree_init_tau(stree);
+    stree_init_tau(stree, thread_index);
   }
   else
   {
@@ -1725,6 +1779,12 @@ void stree_init(stree_t * stree,
 
   if (opt_network)
     stree_init_gamma(stree);
+
+  /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
+     species tree cloning functions do not call wraptree and that would require
+     duplicate code */
+  if (opt_network)
+    network_init_hx(stree);
 
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */
@@ -1783,7 +1843,10 @@ void stree_fini()
   }
 }
 
-static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
+static int propose_theta(gtree_t ** gtree,
+                         locus_t ** locus,
+                         snode_t * snode,
+                         long thread_index)
 {
    long i;
    double thetaold;
@@ -1792,7 +1855,7 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
 
    thetaold = snode->theta;
 
-   thetanew = thetaold + opt_finetune_theta * legacy_rnd_symmetrical();
+   thetanew = thetaold + opt_finetune_theta*legacy_rnd_symmetrical(thread_index);
 
    if (thetanew < 0)
       thetanew = -thetanew;
@@ -1808,7 +1871,7 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
       gtree[i]->old_logpr = gtree[i]->logpr;
 
       gtree[i]->logpr -= snode->logpr_contrib[i];
-      gtree_update_logprob_contrib(snode, locus[i]->heredity[0], i);
+      gtree_update_logprob_contrib(snode, locus[i]->heredity[0], i, thread_index);
       gtree[i]->logpr += snode->logpr_contrib[i];
 
       lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
@@ -1818,7 +1881,7 @@ static int propose_theta(gtree_t ** gtree, locus_t ** locus, snode_t * snode)
    if (opt_debug)
       printf("[Debug] (theta) lnacceptance = %f\n", lnacceptance);
 
-   if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
    {
       return 1;
    }
@@ -1845,12 +1908,14 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
    long accepted = 0;
    snode_t * snode;
 
+   long thread_index = 0;
+
    for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
    {
       snode = stree->nodes[i];
       if (snode->theta >= 0 && snode->has_theta)
       {
-         accepted += propose_theta(gtree, locus, stree->nodes[i]);
+         accepted += propose_theta(gtree, locus, stree->nodes[i], thread_index);
          theta_count++;
       }
    }
@@ -1862,7 +1927,8 @@ static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
                         stree_t * stree,
-                        unsigned int candidate_count)
+                        unsigned int candidate_count,
+                        long thread_index)
 {
    unsigned int i, j, k;
    unsigned int offset = 0;
@@ -1963,8 +2029,8 @@ static long propose_tau(locus_t ** loci,
    }
 
    /* propose new tau */
-   newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical();
-   newage = reflect(newage, minage, maxage);
+   newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
+   newage = reflect(newage, minage, maxage, thread_index);
    snode->tau = newage;
 
    if (opt_network && snode->hybrid)
@@ -2207,7 +2273,10 @@ static long propose_tau(locus_t ** loci,
             if (opt_est_theta)
                logpr -= affected[j]->logpr_contrib[i];
 
-            double xtmp = gtree_update_logprob_contrib(affected[j], loci[i]->heredity[0], i);
+            double xtmp = gtree_update_logprob_contrib(affected[j],
+                                                       loci[i]->heredity[0],
+                                                       i,
+                                                       thread_index);
 
             if (opt_est_theta)
                logpr += xtmp;
@@ -2334,7 +2403,7 @@ static long propose_tau(locus_t ** loci,
    if (opt_debug)
       printf("[Debug] (tau) lnacceptance = %f\n", lnacceptance);
 
-   if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
    {
       /* accepted */
       accepted++;
@@ -2405,7 +2474,10 @@ static long propose_tau(locus_t ** loci,
          /* restore logpr contributions */
          if (opt_est_theta)
            for (j = 0; j < paffected_count; ++j)
-             gtree_update_logprob_contrib(affected[j], loci[i]->heredity[0], i);
+             gtree_update_logprob_contrib(affected[j],
+                                          loci[i]->heredity[0],
+                                          i,
+                                          thread_index);
          else
          {
            for (j = 0; j < paffected_count; ++j)
@@ -2474,6 +2546,8 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
    unsigned int candidate_count = 0;
    long accepted = 0;
 
+   long thread_index = 0;
+
    /* compute number of nodes with tau > 0 */
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
       if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
@@ -2483,16 +2557,21 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
    {
       if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
-         accepted += propose_tau(loci, stree->nodes[i], gtree, stree, candidate_count);
+         accepted += propose_tau(loci,
+                                 stree->nodes[i],
+                                 gtree,
+                                 stree,
+                                 candidate_count,
+                                 thread_index);
    }
 
    return ((double)accepted / candidate_count);
 }
 
 void stree_rootdist(stree_t * stree,
-   list_t * maplist,
-   msa_t ** msalist,
-   unsigned int ** weights)
+                    list_t * maplist,
+                    msa_t ** msalist,
+                    unsigned int ** weights)
 {
    unsigned int i, j, k, n;
    unsigned int msa_count = stree->locus_count;
@@ -2661,6 +2740,8 @@ long stree_propose_spr(stree_t ** streeptr,
    double sum = 0;
    double lnacceptance = 0;
 
+   long thread_index = 0;
+
    /* the following clones the species tree and gene trees, and then
       we work on a copy */
    stree_t * original_stree = *streeptr;
@@ -2682,7 +2763,7 @@ long stree_propose_spr(stree_t ** streeptr,
    init_weights(stree);
 
    /* randomly select a branch according to weights */
-   r = legacy_rndu();
+   r = legacy_rndu(thread_index);
    for (i = stree->tip_count; i < stree->tip_count + stree->inner_count - 1; ++i)
    {
       sum += stree->nodes[i]->weight;
@@ -2707,7 +2788,7 @@ long stree_propose_spr(stree_t ** streeptr,
 
    /* Randomly select children of y in randomly selected order */
    snode_t *a, *b;
-   if ((int)(2 * legacy_rndu()) == 0)
+   if ((int)(2 * legacy_rndu(thread_index)) == 0)
    {
       a = y->left;
       b = y->right;
@@ -2760,7 +2841,7 @@ long stree_propose_spr(stree_t ** streeptr,
       target_weight[i] /= sum;
 
    /* randomly select one node among the candidates to become node C */
-   r = legacy_rndu();
+   r = legacy_rndu(thread_index);
    for (i = 0, sum = 0; i < target_count - 1; ++i)
    {
       sum += target_weight[i];
@@ -2949,7 +3030,7 @@ long stree_propose_spr(stree_t ** streeptr,
                }
  
                /* randomly select a target node according to weights */
-               r = legacy_rndu() * sum;
+               r = legacy_rndu(thread_index) * sum;
                for (n = 0; n < target_count - 1; ++n)  /* Z: no need for last comparison and rndu may be 1. */
                  if (r < tweight[n]) break;
                gtarget_nodes[moved_count[i] - 1] = gtarget_list[n];
@@ -2963,7 +3044,7 @@ long stree_propose_spr(stree_t ** streeptr,
                gtarget_nodes[moved_count[i] - 1] = gtarget_list[0];
          }
          else  /* randomly select a target from list */
-            gtarget_nodes[moved_count[i] - 1] = gtarget_list[(int)(target_count*legacy_rndu())];
+            gtarget_nodes[moved_count[i] - 1] = gtarget_list[(int)(target_count*legacy_rndu(thread_index))];
 
          source_count = 1;
          gsources_list[0] = intact;
@@ -3163,18 +3244,18 @@ long stree_propose_spr(stree_t ** streeptr,
          unlink_event(node, i);
 
          node->pop->event_count[i]--;
-         if (!(node->pop->mark & FLAG_POP_UPDATE))
+         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
          {
-            node->pop->mark |= FLAG_POP_UPDATE;
+            node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
             snode_contrib[snode_contrib_count[i]++] = node->pop;
          }
          if (!opt_est_theta)
             node->pop->event_count_sum--;
 
          node->pop = pop_cz;
-         if (!(node->pop->mark & FLAG_POP_UPDATE))
+         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
          {
-            node->pop->mark |= FLAG_POP_UPDATE;
+            node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
             snode_contrib[snode_contrib_count[i]++] = node->pop;
          }
 
@@ -3206,18 +3287,18 @@ long stree_propose_spr(stree_t ** streeptr,
             unlink_event(node, i);
 
             node->pop->event_count[i]--;
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
             if (!opt_est_theta)
                node->pop->event_count_sum--;
 
             node->pop = b;
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
 
@@ -3235,18 +3316,18 @@ long stree_propose_spr(stree_t ** streeptr,
             unlink_event(node, i);
 
             node->pop->event_count[i]--;
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
             if (!opt_est_theta)
                node->pop->event_count_sum--;
 
             node->pop = y;
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
 
@@ -3270,9 +3351,9 @@ long stree_propose_spr(stree_t ** streeptr,
             unlink_event(node, i);
 
             node->pop->event_count[i]--;
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
             if (!opt_est_theta)
@@ -3283,9 +3364,9 @@ long stree_propose_spr(stree_t ** streeptr,
             else
                node->pop = pop;
 
-            if (!(node->pop->mark & FLAG_POP_UPDATE))
+            if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
             {
-               node->pop->mark |= FLAG_POP_UPDATE;
+               node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
                snode_contrib[snode_contrib_count[i]++] = node->pop;
             }
 
@@ -3301,11 +3382,11 @@ long stree_propose_spr(stree_t ** streeptr,
            (a) they have not been already flagged in a previous step
            (b) there is more than one outgoing lineages (entering its parent population).
       */
-      if (!(y->mark & FLAG_POP_UPDATE) && (y->seqin_count[i] - y->event_count[i] > 1))
+      if (!(y->mark[thread_index] & FLAG_POP_UPDATE) && (y->seqin_count[i] - y->event_count[i] > 1))
          snode_contrib[snode_contrib_count[i]++] = y;
-      if (!(c->mark & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->event_count[i] > 1))
+      if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->event_count[i] > 1))
          snode_contrib[snode_contrib_count[i]++] = c;
-      if (!(b->mark & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->event_count[i] > 1))
+      if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->event_count[i] > 1))
          snode_contrib[snode_contrib_count[i]++] = b;
 
       moved_nodes += gtree->inner_count;
@@ -3318,7 +3399,7 @@ long stree_propose_spr(stree_t ** streeptr,
 
       /* reset species tree marks */
       for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-         stree->nodes[j]->mark = 0;
+         stree->nodes[j]->mark[thread_index] = 0;
    } /* end of locus */
 
    /* update species tree */
@@ -3474,11 +3555,11 @@ long stree_propose_spr(stree_t ** streeptr,
          changed due to the reset_gene_leaves_count() call, but were previously
          not marked for log-probability contribution update */
       for (j = 0; j < snode_contrib_count[i]; ++j)
-         snode_contrib[j]->mark |= FLAG_POP_UPDATE;
+         snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
       for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
       {
          snode_t * snode = stree->nodes[j];
-         if (!(snode->mark & FLAG_POP_UPDATE) &&
+         if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
             (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
             snode_contrib[snode_contrib_count[i]++] = snode;
       }
@@ -3492,7 +3573,7 @@ long stree_propose_spr(stree_t ** streeptr,
          else
             logpr_notheta -= snode_contrib[j]->notheta_logpr_contrib;
 
-         double xtmp = gtree_update_logprob_contrib(snode_contrib[j], loci[i]->heredity[0], i);
+         double xtmp = gtree_update_logprob_contrib(snode_contrib[j], loci[i]->heredity[0], i, thread_index);
 
          if (opt_est_theta)
             gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
@@ -3502,7 +3583,7 @@ long stree_propose_spr(stree_t ** streeptr,
 
       /* reset markings on affected populations */
       for (j = 0; j < snode_contrib_count[i]; ++j)
-         snode_contrib[j]->mark = 0;
+         snode_contrib[j]->mark[thread_index] = 0;
 #endif
 
 
@@ -3533,5 +3614,5 @@ long stree_propose_spr(stree_t ** streeptr,
       and species tree nodes are re-labeled, but all this is done in method_01.c
    */
    //return (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance));
-   return (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance));
+   return (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance));
 }

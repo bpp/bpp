@@ -76,6 +76,7 @@ long opt_scaling;
 long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
+long opt_threads;
 long opt_usedata;
 long opt_version;
 double opt_bfbeta;
@@ -271,6 +272,7 @@ void args_init(int argc, char ** argv)
   opt_tau_beta = 0;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
+  opt_threads = 1;
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
@@ -454,7 +456,20 @@ int main (int argc, char * argv[])
     cpu_setarch();
 
   /* intiialize random number generators */
+  #ifdef DEBUG_THREADS
+  /* simulate the results of DEBUG_THREADS_COUNT threads with a single thread.
+     This part is to init DEBUG_THREADS_COUNT random number generators */
+  if (opt_threads == 1)
+  {
+    opt_threads = DEBUG_THREADS_COUNT;
+    legacy_init();
+    opt_threads = 1;
+  }
+  else
+    legacy_init();
+  #else
   legacy_init();
+  #endif
 
   if (opt_help)
   {
@@ -474,6 +489,7 @@ int main (int argc, char * argv[])
     cmd_simulate();
   }
 
+  legacy_fini();
   dealloc_switches();
   free(cmdline);
   return (0);

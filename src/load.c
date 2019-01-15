@@ -143,14 +143,17 @@ void load_chk_header(FILE * fp)
   if (sizeof(double) != chk_size_double)
     fatal("Mismatching double size");
 
-  unsigned int rng_state;
   unsigned int sections;
   unsigned long size_section;
 
-  if (!LOAD(&rng_state,1,fp))
-    fatal("Cannot read RNG state");
-  printf(" RNG state: %u\n", rng_state);
-  set_legacy_rndu_status(rng_state);
+  if (!LOAD(&opt_threads,1,fp))
+    fatal("Cannot read number of threads");
+  
+  unsigned int * rng = (unsigned int *)xmalloc((size_t)opt_threads *
+                                               sizeof(unsigned int));
+  if (!LOAD(rng,opt_threads,fp))
+    fatal("Cannot read RNG states");
+  set_legacy_rndu_array(rng);
 
   if (!LOAD(&sections,1,fp))
     fatal("Cannot read number of sections");
@@ -646,6 +649,19 @@ static void load_chk_section_1(FILE * fp,
       node->event_count_sum = 0;
     }
   }
+
+  /* allocate hx */
+  if (opt_network)
+  {
+    for (i = 0; i < total_nodes; ++i)
+    {
+      stree->nodes[i]->hx = (long *)xcalloc((size_t)opt_threads,sizeof(long));
+    }
+  }
+
+  /* allocate re-entrant marks */
+  for (i = 0; i < total_nodes; ++i)
+    stree->nodes[i]->mark = (int *)xcalloc((size_t)opt_threads,sizeof(int));
 
   stree->pptable = (int**)xcalloc((size_t)total_nodes,sizeof(int *));
   for (i = 0; i < total_nodes; ++i)

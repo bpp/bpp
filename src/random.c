@@ -25,11 +25,12 @@
 #define sBactrian  sqrt(1-mBactrian*mBactrian)
 
 /* legacy random number generators */
-static unsigned int z_rndu = 666;
+static unsigned int * z_rndu = NULL;
 
 void legacy_init()
 {
    int seed = (int)opt_seed;
+   long i;
 
    /* z_rndu = (unsigned int)opt_seed; */
    if (sizeof(int) != 4)
@@ -54,20 +55,39 @@ void legacy_init()
       fclose(fseed);
    }
 
-   z_rndu = (unsigned int)seed;
+   assert(opt_threads >= 1);
+
+   z_rndu = (unsigned int *)xmalloc((size_t)opt_threads * sizeof(unsigned int));
+   for (i = 0; i < opt_threads; ++i)
+     z_rndu[i] = (unsigned int)seed;
 }
 
-unsigned int get_legacy_rndu_status()
+void legacy_fini()
+{
+  free(z_rndu);
+}
+
+unsigned int get_legacy_rndu_status(long index)
+{
+  return z_rndu[index];
+}
+
+unsigned int * get_legacy_rndu_array()
 {
   return z_rndu;
 }
 
-void set_legacy_rndu_status(unsigned int x)
+void set_legacy_rndu_status(long index, unsigned int x)
+{
+  z_rndu[index] = x;
+}
+
+void set_legacy_rndu_array(unsigned int * x)
 {
   z_rndu = x;
 }
 
-double legacy_rndu()
+double legacy_rndu(long index)
 {
 /* 32-bit integer assumed.
    From Ripley (1987) p. 46 or table 2.4 line 2. 
@@ -77,21 +97,21 @@ double legacy_rndu()
    /* the below random number generator is the one used until v4.0.6.
       Change if 0 to if 1 to use it */
    #if 0
-   z_rndu = z_rndu*69069 + 1;
-   if(z_rndu==0 || z_rndu==4294967295)  z_rndu = 13;
-   return z_rndu/4294967295.0;
+   z_rndu[index] = z_rndu[index]*69069 + 1;
+   if(z_rndu[index] == 0 || z_rndu[index] == 4294967295)  z_rndu[index] = 13;
+   return z_rndu[index]/4294967295.0;
    #else
-   z_rndu = z_rndu * 69069 + 1;
-   if (z_rndu == 0)  z_rndu = 12345671;
-   return ldexp((double)z_rndu, -32);
+   z_rndu[index] = z_rndu[index] * 69069 + 1;
+   if (z_rndu[index] == 0)  z_rndu[index] = 12345671;
+   return ldexp((double)(z_rndu[index]), -32);
    #endif
 }
 
-static double rndTriangle()
+static double rndTriangle(long index)
 {
 	double u, z;
 /* Standard Triangle variate, generated using inverse CDF  */
-	u = legacy_rndu();
+	u = legacy_rndu(index);
 	if(u > 0.5)
 		z =  sqrt(6.0) - 2.0*sqrt(3.0*(1.0 - u));
    else
@@ -99,17 +119,17 @@ static double rndTriangle()
 	return z;
 }
 
-static double rndBactrianTriangle()
+static double rndBactrianTriangle(long index)
 {
 /* This returns a variate from the 1:1 mixture of two Triangle Tri(-m, 1-m^2) and Tri(m, 1-m^2),
    which has mean 0 and variance 1. 
 */
-   double z = mBactrian + rndTriangle()*sBactrian;
-   if (legacy_rndu() < 0.5) z = -z;
+   double z = mBactrian + rndTriangle(index)*sBactrian;
+   if (legacy_rndu(index) < 0.5) z = -z;
    return (z);
 }
 
-static double rndNormal (void)
+static double rndNormal(long index)
 {
 /* Standard normal variate, using the Box-Muller method (1958), improved by 
    Marsaglia and Bray (1964).  The method generates a pair of N(0,1) variates, 
@@ -119,8 +139,8 @@ static double rndNormal (void)
    double u, v, s;
 
    for (; ;) {
-      u = 2*legacy_rndu() - 1;
-      v = 2*legacy_rndu() - 1;
+      u = 2*legacy_rndu(index) - 1;
+      v = 2*legacy_rndu(index) - 1;
       s = u*u + v*v;
       if (s>0 && s<1) break;
    }
@@ -129,12 +149,12 @@ static double rndNormal (void)
 }
 
 
-double legacy_rnd_symmetrical()
+double legacy_rnd_symmetrical(long index)
 {
-  return rndBactrianTriangle();
+  return rndBactrianTriangle(index);
 }
 
-double legacy_rndgamma (double a)
+double legacy_rndgamma (long index, double a)
 {
 /* This returns a random variable from gamma(a, 1).
    Marsaglia and Tsang (2000) A Simple Method for generating gamma variables", 
@@ -150,12 +170,12 @@ double legacy_rndgamma (double a)
 
    for (; ; ) {
       do {
-         x = rndNormal( );
+         x = rndNormal(index);
          v = 1.0 + c * x;
       } while (v <= 0);
 
       v *= v * v;
-      u = legacy_rndu( );
+      u = legacy_rndu(index);
 
       if (u < 1 - 0.0331 * x * x * x * x)
          break;
@@ -165,23 +185,23 @@ double legacy_rndgamma (double a)
    v *= d;
 
    if (a0 < 1)    /* this may cause underflow if a is small, like 0.01 */
-      v *= pow(legacy_rndu( ), 1 / a0);
+      v *= pow(legacy_rndu(index), 1 / a0);
    if (v == 0)   /* underflow */
       v = smallv;
    return v;
 }
 
-double legacy_rndbeta (double p, double q)
+double legacy_rndbeta (long index, double p, double q)
 {
 /* this generates a random beta(p,q) variate
 */
    double gamma1, gamma2;
-   gamma1 = legacy_rndgamma(p);
-   gamma2 = legacy_rndgamma(q);
+   gamma1 = legacy_rndgamma(index,p);
+   gamma2 = legacy_rndgamma(index,q);
    return gamma1/(gamma1+gamma2);
 }
 
-void legacy_rnddirichlet(double * output, double * alpha, long k)
+void legacy_rnddirichlet(long index, double * output, double * alpha, long k)
 {
   /* generates a random variate from the dirichlet distribution with K cats */
 
@@ -189,13 +209,13 @@ void legacy_rnddirichlet(double * output, double * alpha, long k)
   double s = 0;
   
   for (i = 0; i < k; ++i)
-    s += output[i] = legacy_rndgamma(alpha[i]);
+    s += output[i] = legacy_rndgamma(index,alpha[i]);
 
   for (i = 0; i < k; ++i)
     output[i] /= s;
 }
 
-long legacy_rndpoisson(double m)
+long legacy_rndpoisson(long index, double m)
 {
    /* m is the rate parameter of the poisson
       Numerical Recipes in C, 2nd ed. pp. 293-295
@@ -217,7 +237,7 @@ long legacy_rndpoisson(double m)
       if (m != oldm) { oldm = m; g = exp(-m); }
       em = -1; t = 1;
       for (; ;) {
-         em++; t *= legacy_rndu();
+         em++; t *= legacy_rndu(index);
          if (t <= g) break;
       }
    }
@@ -228,12 +248,12 @@ long legacy_rndpoisson(double m)
       }
       do {
          do {
-            y = tan(3.141592654*legacy_rndu());
+            y = tan(3.141592654*legacy_rndu(index));
             em = sq*y + m;
          } while (em < 0);
          em = floor(em);
          t = 0.9*(1 + y*y)*exp(em*alm - lgamma(em + 1) - g);
-      } while (legacy_rndu() > t);
+      } while (legacy_rndu(index) > t);
    }
    return ((long)em);
 }

@@ -46,7 +46,7 @@ endif
 #CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O0 $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
-LIBS=-lm
+LIBS=-lm -lpthread
 
 BISON = bison
 FLEX = flex
@@ -61,7 +61,7 @@ OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
      output.o core_partials_sse.o dlist.o allfixed.o core_likelihood_sse.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \
      experimental.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
-     $(AVXOBJ) $(AVX2OBJ)
+     threads.o $(AVXOBJ) $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

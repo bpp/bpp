@@ -1139,7 +1139,7 @@ void load_cfile()
       {
         if (!parse_long(value,&opt_samples) || opt_samples <= 0)
           fatal("Option 'nsample' expects a positive integer (line %ld)",
-                 line_count);
+                line_count);
         valid = 1;
       }
       else if (!strncasecmp(token,"scaling",7))
@@ -1147,6 +1147,13 @@ void load_cfile()
         if (!parse_long(value,&opt_scaling) ||
             (opt_scaling != 0 && opt_scaling != 1))
           fatal("Option 'scaling' expects value 0 or 1 (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"threads",7))
+      {
+        if (!parse_long(value,&opt_threads) || (opt_threads <= 0))
+          fatal("Option 'threads' requires a positive integer (line %ld)",
+                line_count);
         valid = 1;
       }
     }

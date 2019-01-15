@@ -102,11 +102,11 @@ static int remove_ambiguous(msa_t * msa, int * ambiguous)
   for (i = 0, j = msa->length-1; i < msa->length && j >= 0; ++i, --j)
   {
     /* find next ambiguous site from left to right */
-    while (!ambiguous[i])
+    while (i < msa->length && !ambiguous[i])
       ++i;
 
     /* find next non-ambigous site from right to left */
-    while (ambiguous[j])
+    while (j >= 0 && ambiguous[j])
       --j;
 
     /* if we moved all sites containing ambiguities to the right, break */

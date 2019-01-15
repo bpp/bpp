@@ -145,6 +145,12 @@ void stree_destroy(stree_t * tree,
     if (node->old_t2h)
       free(node->old_t2h);
 
+    if (node->hx)
+      free(node->hx);
+
+    if (node->mark)
+      free(node->mark);
+
     free(node);
   }
 

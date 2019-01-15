@@ -83,8 +83,9 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   DUMP(&size_type,1,fp);
 
   /* write RNG value */
-  unsigned int rng = get_legacy_rndu_status();
-  DUMP(&rng,1,fp);
+  DUMP(&opt_threads,1,fp);
+  unsigned int * rng = get_legacy_rndu_array();
+  DUMP(rng,opt_threads,fp);
 
   /* number of sections */
   unsigned int sections = 3;

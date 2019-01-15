@@ -28,6 +28,10 @@
 #define DNA_QRATES_COUNT        6
 #define DNA_STATES_COUNT        4
 
+
+/* TODO: Simulation is at the moment single-threaded */
+static const long thread_index_zero = 0;
+
 static long * g_order = NULL;
 
 static char charmap_nt_tcag[16] =
@@ -154,7 +158,7 @@ static int MultiNomialAlias(int n, int ncat, double * F, int * L, int * nobs)
 
    for (i = 0; i < ncat; i++)  nobs[i] = 0;
    for (i = 0; i < n; i++) {
-      r = legacy_rndu()*ncat;
+      r = legacy_rndu(thread_index_zero)*ncat;
       k = (int)r;
       r -= k;
       if (r <= F[k]) nobs[k]++;
@@ -462,7 +466,8 @@ static double * rates4sites(double locus_siterate_alpha, int cdf)
   else
   {
     for (i = 0; i < opt_locus_simlen; ++i)
-      rates[i] = legacy_rndgamma(locus_siterate_alpha) / locus_siterate_alpha;
+      rates[i] = legacy_rndgamma(thread_index_zero,locus_siterate_alpha) /
+                 locus_siterate_alpha;
   }
   if (cdf)
   {
@@ -506,20 +511,21 @@ static void evolve_jc69_recursive(gnode_t * node,
   memcpy(x,xparent,opt_locus_simlen * sizeof(char));
     
   /* generate number of mutations */
-  long mut_count = legacy_rndpoisson(node->length * opt_locus_simlen);
+  long mut_count = legacy_rndpoisson(thread_index_zero,
+                                     node->length * opt_locus_simlen);
 
   for (i = 0; i < mut_count; ++i)
   {
     /* get a position for the mutation */
     if (locus_siterate_alpha == 0)
-      k = (int)(legacy_rndu() * opt_locus_simlen);
+      k = (int)(legacy_rndu(thread_index_zero) * opt_locus_simlen);
     else
-      for (k = 0, r = legacy_rndu(); k < opt_locus_simlen; ++k)
+      for (k = 0, r = legacy_rndu(thread_index_zero); k < opt_locus_simlen; ++k)
         if (r < site_rates[k])
           break;
 
     /* generate new state */
-    int state = (int)(legacy_rndu() * 3);
+    int state = (int)(legacy_rndu(thread_index_zero) * 3);
     if (state >= inverse[(int)x[k]])
       state++;
 
@@ -591,7 +597,7 @@ static void evolve_gtr_recursive(gnode_t * node,
           pmatrix[j*states+k] += pmatrix[j*states+k-1];
     }
     
-    double r = legacy_rndu();
+    double r = legacy_rndu(thread_index_zero);
     for (j = 0; j < states-1; j++)
       if (r < pmatrix[inverse[(int)x[i]]*states+j])
         break;
@@ -625,7 +631,7 @@ static void make_root_seq(gnode_t * root, double * freqs)
   if (opt_model == BPP_SUBST_MODEL_JC69)
   {
     for (i = 0; i < opt_locus_simlen; ++i)
-      x[i] = pll_map_nt_tcag[(int)dna[(int)(legacy_rndu()*4)]];
+      x[i] = pll_map_nt_tcag[(int)dna[(int)(legacy_rndu(thread_index_zero)*4)]];
   }
   else
   {
@@ -634,7 +640,7 @@ static void make_root_seq(gnode_t * root, double * freqs)
 
     for (i = 0; i < opt_locus_simlen; ++i)
     {
-      for (j = 0, r = legacy_rndu(); j < 4-1; ++j)
+      for (j = 0, r = legacy_rndu(thread_index_zero); j < 4-1; ++j)
         if (r < p[j]) break;
       x[i] = pll_map_nt_tcag[(int)dna[j]];
     }
@@ -670,7 +676,7 @@ static void compute_relaxed_rates_recursive(snode_t * node)
   if (node->parent->tau == 0)
     node->rate = node->parent->rate;
   else
-    node->rate = legacy_rndgamma(opt_clock_alpha) /
+    node->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
                  opt_clock_alpha * node->parent->rate;
 
   compute_relaxed_rates_recursive(node->left);
@@ -691,11 +697,13 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
   if (opt_clock == BPP_CLOCK_IND)
   {
     for (i = 0; i < total_nodes; ++i)
-      stree->nodes[i]->rate = legacy_rndgamma(opt_clock_alpha) / opt_clock_alpha;
+      stree->nodes[i]->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
+                              opt_clock_alpha;
   }
   else
   {
-    stree->root->rate = legacy_rndgamma(opt_clock_alpha) / opt_clock_alpha;
+    stree->root->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
+                        opt_clock_alpha;
     compute_relaxed_rates_recursive(stree->root->left);
     compute_relaxed_rates_recursive(stree->root->right);
 
@@ -752,7 +760,7 @@ static void randomize_order(long * order, long n)
 
   for (i = 0; i < n; ++i)
   {
-    k = (long)((n-i)*legacy_rndu());
+    k = (long)((n-i)*legacy_rndu(thread_index_zero));
     order[i] = g_order[i+k];
     g_order[i+k] = g_order[i];
   }
@@ -927,7 +935,7 @@ static void write_diploid_rand_seqs(FILE * fp_seqrand,
         for (k = 0; k < msa->length; ++k)
 
         /* randomly resolve */
-        if (sequence[j][k] != sequence[j+1][k] && legacy_rndu() < 0.5)
+        if (sequence[j][k] != sequence[j+1][k] && legacy_rndu(thread_index_zero)<0.5)
           SWAP(sequence[j][k],sequence[j+1][k]);
       }
     }
@@ -1180,7 +1188,7 @@ static void simulate(stree_t * stree)
     {
       if (!opt_qrates_fixed)
       {
-        legacy_rnddirichlet(qrates,opt_qrates_params,6);
+        legacy_rnddirichlet(thread_index_zero,qrates,opt_qrates_params,6);
         for (j = 0; j < 6; ++j)
           qrates[j] /= qrates[5];
       }
@@ -1188,7 +1196,7 @@ static void simulate(stree_t * stree)
         memcpy(qrates,opt_qrates_params,6*sizeof(double));
 
       if (!opt_basefreqs_fixed)
-        legacy_rnddirichlet(freqs,opt_basefreqs_params,4);
+        legacy_rnddirichlet(thread_index_zero,freqs,opt_basefreqs_params,4);
       else
         memcpy(freqs,opt_basefreqs_params,4*sizeof(double));
 
@@ -1204,7 +1212,7 @@ static void simulate(stree_t * stree)
 
     if (!opt_siterate_fixed)
     {
-      locus_siterate_alpha = legacy_rndgamma(opt_siterate_alpha) /
+      locus_siterate_alpha = legacy_rndgamma(thread_index_zero,opt_siterate_alpha) /
                              opt_siterate_beta;
       if (opt_modelparafile)
         fprintf(fp_param, " %9.6f", locus_siterate_alpha);
@@ -1212,7 +1220,8 @@ static void simulate(stree_t * stree)
     if (opt_locusrate_alpha)
     {
       /* generate locus rate from Gamma(a,a) */
-      locus_rate = legacy_rndgamma(opt_locusrate_alpha) / opt_locusrate_alpha;
+      locus_rate = legacy_rndgamma(thread_index_zero,opt_locusrate_alpha) / 
+                   opt_locusrate_alpha;
       if (opt_modelparafile)
         fprintf(fp_param, " %9.6f", locus_rate);
     }

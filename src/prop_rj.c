@@ -397,6 +397,8 @@ long prop_split(gtree_t ** gtree,
   double qbetatau = 8;
   double thetafactor = 1;
 
+  const long thread_index = 0;
+
   /* 1. Initialize lnacceptance */
   double lnacceptance = log((1-pr_split)/pr_split);
 
@@ -425,7 +427,7 @@ long prop_split(gtree_t ** gtree,
 //  printf("roottau = %f\n", stree->root_age);
     
   /* 3. Randomly select a feasible node to split, and compute an upper age */
-  double r = legacy_rndu();
+  double r = legacy_rndu(thread_index);
 //  printf("random: %f\n", r);
   snode_t * node = stree->nodes[feasible[(int)(fsplit_count*r)]];
   if (node == stree->root)
@@ -435,7 +437,7 @@ long prop_split(gtree_t ** gtree,
 
   /* 4. Change the age of the node, and update lnacceptance */
   node->old_tau = node->tau;
-  node->tau = tau_new = tau_upper * legacy_rndbeta(pbetatau,qbetatau);
+  node->tau = tau_new = tau_upper * legacy_rndbeta(thread_index,pbetatau,qbetatau);
   lnacceptance -= log_pdfbeta(tau_new,pbetatau,qbetatau,tau_upper);
 
   /* save old logpr contributions for rollback if proposal is rejected */
@@ -454,12 +456,12 @@ long prop_split(gtree_t ** gtree,
       if (!opt_rjmcmc_method)
       {
         node->left->theta = node->theta *
-                            exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+                            exp(opt_rjmcmc_epsilon*(legacy_rndu(thread_index) - 0.5));
         thetafactor *= opt_rjmcmc_epsilon * node->left->theta;
       }
       else
       {
-        node->left->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+        node->left->theta = legacy_rndgamma(thread_index,opt_rjmcmc_alpha) /
                             (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
         thetafactor /= pdf_gamma(node->left->theta,
                                  opt_rjmcmc_alpha,
@@ -478,12 +480,12 @@ long prop_split(gtree_t ** gtree,
       if (!opt_rjmcmc_method)
       {
         node->right->theta = node->theta *
-                             exp(opt_rjmcmc_epsilon*(legacy_rndu() - 0.5));
+                             exp(opt_rjmcmc_epsilon*(legacy_rndu(thread_index) - 0.5));
         thetafactor *= opt_rjmcmc_epsilon * node->right->theta;
       }
       else
       {
-        node->right->theta = legacy_rndgamma(opt_rjmcmc_alpha) /
+        node->right->theta = legacy_rndgamma(thread_index,opt_rjmcmc_alpha) /
                              (opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
         thetafactor /= pdf_gamma(node->right->theta,
                                  opt_rjmcmc_alpha,
@@ -582,21 +584,30 @@ long prop_split(gtree_t ** gtree,
     else
       logpr -= node->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 
     if (opt_est_theta)
       logpr -= node->left->logpr_contrib[i];
     else
       logpr -= node->left->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node->left,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 
     if (opt_est_theta)
       logpr -= node->right->logpr_contrib[i];
     else
       logpr -= node->right->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node->right,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 #else
     logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
     assert(0);
@@ -619,7 +630,7 @@ long prop_split(gtree_t ** gtree,
   if (opt_debug)
     printf("[Debug] (split) lnacceptance = %f\n", lnacceptance);
 
-  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     /* accept */
 
@@ -784,6 +795,8 @@ long prop_join(gtree_t ** gtree,
   unsigned int i,k;
   double thetafactor = 1;
 
+  long thread_index = 0;
+
   /* 1. Initialize lnacceptance */
   double lnacceptance = log((1-pr_split)/pr_split);
 
@@ -809,7 +822,7 @@ long prop_join(gtree_t ** gtree,
     return 2;
 
   /* 3. Randomly select a feasible node to join, and compute an upper age */
-  double r = legacy_rndu();
+  double r = legacy_rndu(thread_index);
   snode_t * node = stree->nodes[feasible[(int)(fjoin_count*r)]];
   if (node == stree->root)
     tau_upper = stree->root_age * 0.6;
@@ -972,21 +985,30 @@ long prop_join(gtree_t ** gtree,
     else
       logpr -= node->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 
     if (opt_est_theta)
       logpr -= node->left->logpr_contrib[i];
     else
       logpr -= node->left->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node->left,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node->left,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 
     if (opt_est_theta)
       logpr -= node->right->logpr_contrib[i];
     else
       logpr -= node->right->notheta_logpr_contrib;
 
-    logpr += gtree_update_logprob_contrib(node->right,locus[i]->heredity[0],i);
+    logpr += gtree_update_logprob_contrib(node->right,
+                                          locus[i]->heredity[0],
+                                          i,
+                                          thread_index);
 #else
     logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
     assert(0);
@@ -1009,7 +1031,7 @@ long prop_join(gtree_t ** gtree,
   if (opt_debug)
     printf("[Debug] (join) lnacceptance = %f\n", lnacceptance);
 
-  if (lnacceptance >= -1e-10 || legacy_rndu() < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     /* accepted */
 

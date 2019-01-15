@@ -29,6 +29,7 @@
 #define MAX_TAU_OUTPUT          3
 
 const static int rate_matrices = 1;
+const static long thread_index_zero = 0;
 
 static double pj_optimum = 0.3;
 
@@ -465,7 +466,10 @@ static FILE * resume(stree_t ** ptr_stree,
   if (opt_est_theta)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      gtree[i]->logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+      gtree[i]->logpr = gtree_logprob(stree,
+                                      locus[i]->heredity[0],
+                                      i,
+                                      thread_index_zero);
   }
   else
   {
@@ -478,7 +482,8 @@ static FILE * resume(stree_t ** ptr_stree,
       gtree[i]->nodes[j]->old_pop = NULL;
 
   for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-    stree->nodes[j]->mark = 0;
+    for (i = 0; i < opt_threads; ++i)
+      stree->nodes[j]->mark[i] = 0;
 
 
   /* set method */
@@ -756,6 +761,11 @@ static FILE * init(stree_t ** ptr_stree,
 
   }
 
+  /* allocate TLS mark variables on stree as they are used in delimitations_init
+     TODO: Move this allocation somewhere else */
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+    stree->nodes[i]->mark = (int *)xcalloc((size_t)opt_threads,sizeof(int));
+
   if (opt_method == METHOD_10)          /* species delimitation */
   {
     assert(opt_network == 0);
@@ -790,7 +800,7 @@ static FILE * init(stree_t ** ptr_stree,
   {
     for (i = 0; i < opt_locus_count; ++i)
       heredity[i] = opt_heredity_alpha /
-                    opt_heredity_beta*(0.8 + 0.4*legacy_rndu());
+                    opt_heredity_beta*(0.8 + 0.4*legacy_rndu(0));
 
     /* TODO: Perhaps we can avoid the check every 100-th term by using the log
        of heredity scaler from the beginning. E.g. if this loop is replaced by
@@ -845,7 +855,7 @@ static FILE * init(stree_t ** ptr_stree,
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
     {
-      locusrate[i] = 0.8 + 0.4*legacy_rndu();
+      locusrate[i] = 0.8 + 0.4*legacy_rndu(thread_index_zero);
       mean += locusrate[i];
     }
 
@@ -1028,14 +1038,17 @@ static FILE * init(stree_t ** ptr_stree,
     gtree[i]->logl = logl;
     if (opt_est_theta)
     {
-      logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index_zero);
       gtree[i]->logpr = logpr;
       logpr_sum += logpr;
     }
     else
     {
       for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-        logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i);
+        logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],
+                                                  locus[i]->heredity[0],
+                                                  i,
+                                                  thread_index_zero);
     }
   }
   if (!opt_est_theta)
@@ -1298,6 +1311,9 @@ void cmd_run()
   printf("rndu status: %d\n", get_legacy_rndu_status());
 #endif
 
+  if (opt_threads > 1)
+    threads_init();
+
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -1361,7 +1377,7 @@ void cmd_run()
     /* propose delimitation through merging/splitting of nodes */
     if (opt_est_delimit)        /* species delimitation */
     {
-      if (legacy_rndu() < 0.5)
+      if (legacy_rndu(thread_index_zero) < 0.5)
         j = prop_split(gtree,stree,locus,0.5,&dparam_count,&ndspecies);
       else
         j = prop_join(gtree,stree,locus,0.5,&dparam_count,&ndspecies);
@@ -1376,7 +1392,7 @@ void cmd_run()
     /* propose species tree topology using SPR */
     if (ndspecies > 2 && (opt_est_stree))
     {
-      if (legacy_rndu() > 0)   /* bpp4 compatible results (RNG to next state) */
+      if (legacy_rndu(thread_index_zero) > 0)   /* bpp4 compatible results (RNG to next state) */
       {
         long ret;
         ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
@@ -1397,11 +1413,17 @@ void cmd_run()
     /* perform proposals sequentially */   
 
     /* propose gene tree ages */
-    ratio = gtree_propose_ages(locus, gtree, stree);
+    if (opt_threads == 1)
+      ratio = gtree_propose_ages_serial(locus, gtree, stree);
+    else
+      threads_wakeup(THREAD_WORK_GTAGE,locus,gtree,stree,&ratio);
     pjump[0] = (pjump[0]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* propose gene tree topologies using SPR */
-    ratio = gtree_propose_spr(locus,gtree,stree);
+    if (opt_threads == 1)
+      ratio = gtree_propose_spr_serial(locus,gtree,stree);
+    else
+      threads_wakeup(THREAD_WORK_GTSPR,locus,gtree,stree,&ratio);
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
 
 /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
@@ -1597,7 +1619,7 @@ void cmd_run()
 
     if (opt_est_locusrate || opt_est_heredity)
     {
-      ratio = prop_locusrate_and_heredity(gtree,stree,locus);
+      ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
       pjump[5] = (pjump[5]*(ft_round-1) + ratio) / (double)ft_round;
     }
 
@@ -1850,6 +1872,9 @@ void cmd_run()
   progress_done();
 
   free(pjump);
+
+  if (opt_threads > 1)
+    threads_exit();
 
   if (opt_bfbeta != 1 && !opt_onlysummary)
   {

@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include <pthread.h>
 
 #ifdef _MSC_VER
 #include <pmmintrin.h>
@@ -76,8 +77,15 @@
 #define strcasecmp _stricmp
 #endif
 
+/* debugging switches */
+
 #if 0
 #define DEBUG_MSCi 1
+#endif
+
+#if 0
+#define DEBUG_THREADS
+#define DEBUG_THREADS_COUNT 4
 #endif
 
 /* constants */
@@ -171,6 +179,9 @@
 #define BPP_CLOCK_IND                   2
 #define BPP_CLOCK_AC                    3
 
+#define THREAD_WORK_GTAGE               1
+#define THREAD_WORK_GTSPR               2
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -255,7 +266,7 @@ typedef struct snode_s
   struct snode_s * parent;
   unsigned int leaves;
   unsigned int * gene_leaves;
-  int mark;
+  int * mark;
 
   void * data;
 
@@ -302,7 +313,7 @@ typedef struct snode_s
   double hgamma;                    /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
   struct snode_s * hybrid;          /* linked hybridization node */
-  long hx;                          /* sum of events count and seqin_count */
+  long * hx;                        /* sum of events count and seqin_count (per msa) */
 } snode_t;
 
 typedef struct stree_s
@@ -554,7 +565,7 @@ typedef struct pair_s
 #define xtruncate ftruncate
 #endif
 
-#define legacy_rndexp(mean) (-(mean)*log(legacy_rndu()))
+#define legacy_rndexp(index,mean) (-(mean)*log(legacy_rndu(index)))
 
 #define FLAG_AGE_UPDATE                 1 
 #define FLAG_POP_UPDATE                 2
@@ -607,6 +618,7 @@ extern long opt_scaling;
 extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
+extern long opt_threads;
 extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
@@ -895,15 +907,18 @@ int cb_cmp_pairlabel(void * a, void * b);
 
 /* functions in random.c */
 
-double legacy_rndu(void);
-double legacy_rnd_symmetrical(void);
+double legacy_rndu(long index);
+double legacy_rnd_symmetrical(long index);
 void legacy_init(void);
-double legacy_rndbeta (double p, double q);
-double legacy_rndgamma (double a);
-unsigned int get_legacy_rndu_status(void);
-void set_legacy_rndu_status(unsigned int x);
-void legacy_rnddirichlet(double * output, double * alpha, long k);
-long legacy_rndpoisson(double m);
+void legacy_fini(void);
+double legacy_rndbeta(long index, double p, double q);
+double legacy_rndgamma(long index, double a);
+unsigned int get_legacy_rndu_status(long index);
+void set_legacy_rndu_status(long index, unsigned int x);
+void legacy_rnddirichlet(long index, double * output, double * alpha, long k);
+long legacy_rndpoisson(long index, double m);
+unsigned int * get_legacy_rndu_array(void);
+void set_legacy_rndu_array(unsigned int * x);
 
 
 /* functions in gtree.c */
@@ -930,25 +945,58 @@ int gtree_traverse(gnode_t * root,
 
 void gtree_update_branch_lengths(gtree_t ** gtree_list, int msa_count);
 
-double gtree_propose_ages(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
+double gtree_propose_ages_serial(locus_t ** locus,
+                                 gtree_t ** gtree,
+                                 stree_t * stree);
+
+void gtree_propose_ages_parallel(locus_t ** locus,
+                                 gtree_t ** gtree,
+                                 stree_t * stree,
+                                 long locus_start,
+                                 long locus_count,
+                                 long thread_index,
+                                 long * p_proposal_count,
+                                 long * p_accepted);
+
+void gtree_propose_spr_parallel(locus_t ** locus,
+                                gtree_t ** gtree,
+                                stree_t * stree,
+                                long locus_start,
+                                long locus_count,
+                                long thread_index,
+                                long * p_proposal_count,
+                                long * p_accepted);
 
 void gtree_reset_leaves(gnode_t * node);
 
 void gtree_fini(int msa_count);
 
-double gtree_logprob(stree_t * stree, double heredity, long msa_index);
+double gtree_logprob(stree_t * stree,
+                     double heredity,
+                     long msa_index,
+                     long thread_index);
+
 //double gtree_logprob_notheta(stree_t * stree);
-double gtree_update_logprob_contrib(snode_t * snode, double heredity, long msa_index);
+double gtree_update_logprob_contrib(snode_t * snode,
+                                    double heredity,
+                                    long msa_index,
+                                    long thread_index);
 //double gtree_update_logprob_contrib_notheta(snode_t * snode, double heredity, long msa_index);
 void logprob_revert_notheta(snode_t * snode, long msa_index);
-double gtree_propose_spr(locus_t ** locus, gtree_t ** gtree, stree_t * stree);
-double reflect(double t, double minage, double maxage);
+double gtree_propose_spr_serial(locus_t ** locus,
+                                gtree_t ** gtree,
+                                stree_t * stree);
+
+double reflect(double t, double minage, double maxage, long thread_index);
 gnode_t ** gtree_return_partials(gnode_t * root,
                                  unsigned int msa_index,
                                  unsigned int * trav_size);
 void unlink_event(gnode_t * node, int msa_index);
 
-double prop_locusrate_and_heredity(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+double prop_locusrate_and_heredity(gtree_t ** gtree,
+                                   stree_t * stree,
+                                   locus_t ** locus,
+                                   long thread_index);
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 
@@ -1704,4 +1752,9 @@ void load_cfile_sim(void);
 /* functions in simulate.c */
 
 void cmd_simulate(void);
+
+/* functions in threads.c */
+void threads_init(void);
+void threads_wakeup(int work_type, locus_t ** locus, gtree_t ** gtree, stree_t * stree, double * rc);
+void threads_exit();
 #endif
