@@ -1744,6 +1744,7 @@ void pll_core_root_likelihood_vec_avx2(unsigned int states,
                                        const unsigned int * pattern_weights,
                                        const unsigned int * freqs_indices,
                                        double * persite_lh);
+#endif
 
 /* functions in cfile_sim.c */
 
@@ -1754,7 +1755,7 @@ void load_cfile_sim(void);
 void cmd_simulate(void);
 
 /* functions in threads.c */
+
 void threads_init(void);
 void threads_wakeup(int work_type, locus_t ** locus, gtree_t ** gtree, stree_t * stree, double * rc);
 void threads_exit();
-#endif
