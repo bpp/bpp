@@ -33,10 +33,29 @@
 #define NODE_SQUARE     64
 #define NODE_MOVED      256
 
+/* the variables below are used in the propose_tau move. They are allocated only
+   once in stree_alloc_internals() before MCMC starts, and deallocate after MCMC
+   finishes at stree_fini().
+   This is to avoid reallocation at every call of the propose_tau move. 
+
+   '__gt_nodes' is an array to hold the gene tree nodes across all gene trees,
+   which were affected by the tau change.
+
+   '__aux' is to hold the old branches (prior changing them based on the new tau)
+   of the nodes in '__gt_nodes' such that in case of rejection we can revert back
+
+   '__mark_count[i]' holds how many gene tree nodes were affected for locus i'
+
+   '__extra_count[i]' holds how many extra gene tree nodes were affected as a result
+   that they are the children of nodes in __gt_nodes, but themselves did not appear
+   in __gt_nodes. Those nodes will get different branch lengths, but their age will
+   not change
+*/
 static gnode_t ** __gt_nodes = NULL;
 static double * __aux = NULL;
 static int * __mark_count = NULL;
 static int * __extra_count = NULL;
+static long * __gt_nodes_index = NULL;
 
 static double * target_weight = NULL;
 static snode_t ** target = NULL;
@@ -46,7 +65,6 @@ static gnode_t ** moved_space;
 static unsigned int * moved_count;
 static gnode_t ** gtarget_temp_space;
 static gnode_t ** gtarget_space;
-static unsigned int * target_count;
 
 static snode_t ** snode_contrib_space;
 static unsigned int * snode_contrib_count;
@@ -1628,8 +1646,9 @@ void stree_reset_pptable(stree_t * stree)
     stree_reset_pptable_tree(stree);
 }
 
-void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long msa_count)
+void stree_alloc_internals(stree_t * stree, long * locus_seqcount, unsigned int gtree_inner_sum, long msa_count)
 {
+  long i;
    /* allocate traversal buffer to be the size of all nodes for all loci */
  //  unsigned int sum_count = 0;
    unsigned long sum_nodes = 2 * gtree_inner_sum + msa_count;
@@ -1652,6 +1671,14 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
    __mark_count = (int *)xmalloc(msa_count * sizeof(int));
    __extra_count = (int *)xmalloc(msa_count * sizeof(int));
 
+   __gt_nodes_index = (long *)xmalloc((size_t)msa_count * sizeof(long));
+   __gt_nodes_index[0] = 0;
+   for (i = 1; i < msa_count; ++i)
+   {
+     __gt_nodes_index[i] = __gt_nodes_index[i-1] + (2*locus_seqcount[i-1]-1);
+   }
+   assert(sum_nodes == (unsigned long)(__gt_nodes_index[msa_count-1] + 2*locus_seqcount[msa_count-1]-1));
+
    /* species tree inference */
    if (opt_est_stree)
    {
@@ -1663,7 +1690,6 @@ void stree_alloc_internals(stree_t * stree, unsigned int gtree_inner_sum, long m
 
       /* TODO: memory is allocated for all loci to aid parallelization */
       moved_count = (unsigned int *)xcalloc(msa_count, sizeof(unsigned int));
-      target_count = (unsigned int *)xcalloc(msa_count, sizeof(unsigned int));
       //    unsigned int sum_inner = 0;
       //    for (i = 0; i < (unsigned int)msa_count; ++i)
       //      sum_inner += msa[i]->count-1;
@@ -1817,9 +1843,15 @@ void stree_init(stree_t * stree,
   }
 
   unsigned int sum_inner = 0;
+  long * locus_seqcount = (long *)xmalloc((size_t)(msa_count) * sizeof(long));
+  for (i = 0; i < (unsigned int)msa_count; ++i)
+    locus_seqcount[i] = msa[i]->count;
+
   for (i = 0; i < (unsigned int)msa_count; ++i)
     sum_inner += msa[i]->count - 1;
-  stree_alloc_internals(stree, sum_inner, msa_count);
+  stree_alloc_internals(stree, locus_seqcount, sum_inner, msa_count);
+
+  free(locus_seqcount);
 }
 
 void stree_fini()
@@ -1828,13 +1860,13 @@ void stree_fini()
   free(__aux);
   free(__mark_count);
   free(__extra_count);
+  free(__gt_nodes_index);
 
   if (opt_est_stree)
   {
     free(target_weight);
     free(target);
     free(moved_count);
-    free(target_count);
     free(moved_space);
     free(gtarget_temp_space);
     free(gtarget_space);
@@ -1923,6 +1955,210 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
    return ((double)accepted / theta_count);
 }
 
+#if 1
+void propose_tau_update_gtrees(locus_t ** loci,
+                               gtree_t ** gtree,
+                               stree_t * stree,
+                               snode_t * snode,
+                               double oldage,
+                               double minage,
+                               double maxage,
+                               double minfactor,
+                               double maxfactor,
+                               long locus_start,
+                               long locus_count,
+                               snode_t ** affected,
+                               unsigned int paffected_count,
+                               unsigned int * ret_count_above,
+                               unsigned int * ret_count_below,
+                               double * ret_logl_diff,
+                               double * ret_logpr_diff,
+                               long thread_index)
+{
+  long i;
+  unsigned int j,k;
+  unsigned int locus_count_above;
+  unsigned int locus_count_below;
+  unsigned int count_above = 0;
+  unsigned int count_below = 0;
+  double logl_diff = 0;
+  double logpr_diff = 0;
+  double logpr = 0;
+
+  for (i = locus_start; i < locus_start+locus_count; ++i)
+  {
+     k = 0;
+     locus_count_above = locus_count_below = 0;
+
+     if (opt_est_theta)
+        logpr = gtree[i]->logpr;
+
+     #ifdef OLD_CODE
+     gnode_t ** gt_nodesptr = __gt_nodes + offset;
+     double * oldbranches = __aux + offset;
+     #else
+     gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
+     double * oldbranches = __aux + __gt_nodes_index[i];
+     #endif
+
+     /* traverse the gene tree nodes of the three populations, find the ones
+        whose ages fall within the new age interval, update their age and mark
+        them. Also, count how many of them are above the old species node age,
+        and how many are below. Finally, update the gene tree probabilities */
+     for (j = 0; j < paffected_count; ++j)
+     {
+        /* process events for current population */
+        if (affected[j]->event_count)
+        {
+           dlist_item_t * event;
+           for (event = affected[j]->event[i]->head; event; event = event->next)
+           {
+              gnode_t * node = (gnode_t *)(event->data);
+              //if (node->time < minage) continue;
+              if ((node->time < minage) || (node->time > maxage)) continue;
+
+              gt_nodesptr[k] = node;
+              node->mark = FLAG_PARTIAL_UPDATE;
+              oldbranches[k++] = node->time;
+
+              if (node->time >= oldage && snode != stree->root)
+              {
+                 node->time = maxage + maxfactor*(node->time - maxage);
+                 locus_count_above++;
+              }
+              else
+              {
+                 node->time = minage + minfactor*(node->time - minage);
+                 locus_count_below++;
+              }
+           }
+
+           if (opt_est_theta)
+              logpr -= affected[j]->logpr_contrib[i];
+
+           double xtmp = gtree_update_logprob_contrib(affected[j],
+                                                      loci[i]->heredity[0],
+                                                      i,
+                                                      thread_index);
+
+           if (opt_est_theta)
+              logpr += xtmp;
+        }
+     }
+
+     /* entry i of __mark_count holds the number of marked nodes for locus i */
+     __mark_count[i] = k;
+     #ifdef OLD_CODE
+     offset += k;
+     #endif
+
+     if (opt_est_theta)
+        logpr_diff += logpr - gtree[i]->logpr;
+
+     if (opt_est_theta)
+     {
+        gtree[i]->old_logpr = gtree[i]->logpr;
+        gtree[i]->logpr = logpr;
+     }
+
+     count_above += locus_count_above;
+     count_below += locus_count_below;
+
+     unsigned int branch_count = k;
+     gnode_t ** branchptr = gt_nodesptr;
+
+     /* go through the list of marked nodes, and append at the end of the list
+        their children (only if they are unmarked to avoid duplicates). The final
+        list represents the nodes for which branch lengths must be updated */
+     int extra = 0;
+     for (j = 0; j < k; ++j)
+     {
+        gnode_t * node = gt_nodesptr[j];
+
+        /* if root is one of the marked nodes, we must not update its branch
+           length as we will receive a segfaul. Therefore, move the root to the
+           beginning of the list, incremenent the pointer to the next element and
+           decrease branch count */
+           //if (!node->parent && j > 0)
+        if (!node->parent)
+        {
+           if (j)
+           {
+              SWAP(gt_nodesptr[0], gt_nodesptr[j]);
+              SWAP(oldbranches[0], oldbranches[j]);
+           }
+           branchptr = &(gt_nodesptr[1]);
+           --branch_count;
+        }
+
+        assert(node->left);
+        assert(node->right);
+
+        if (!node->left->mark)
+        {
+           branchptr[branch_count++] = node->left;
+           extra++;
+        }
+        if (!node->right->mark)
+        {
+           branchptr[branch_count++] = node->right;
+           extra++;
+        }
+     }
+
+     __extra_count[i] = extra;
+     #ifdef OLD_CODE
+     offset += extra;
+     #endif
+
+     /* if at least one gene tree node age was changed, we need to recompute the
+        log-likelihood */
+     gtree[i]->old_logl = gtree[i]->logl;
+     if (k)
+     {
+        locus_update_matrices_jc69(loci[i], branchptr, branch_count);
+
+        /* get list of nodes for which partials must be recomputed */
+        unsigned int partials_count;
+        gnode_t ** partials = gtree_return_partials(gtree[i]->root,
+                                                    i,
+                                                    &partials_count);
+
+        for (j = 0; j < partials_count; ++j)
+        {
+           partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                   partials[j]->clv_index);
+           if (opt_scaling)
+             partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                   partials[j]->scaler_index);
+        }
+
+        /* update partials */
+        locus_update_partials(loci[i], partials, partials_count);
+
+        /* evaluate log-likelihood */
+        unsigned int param_indices[1] = { 0 };
+        double logl = locus_root_loglikelihood(loci[i],
+           gtree[i]->root,
+           param_indices,
+           NULL);
+
+        logl_diff += logl - gtree[i]->logl;
+        gtree[i]->logl = logl;
+     }
+
+     /* Test for checking whether all gene tree nodes can be marked. It seems to
+        hold */
+        //if (__mark_count[i] + __extra_count[i] >= 2*loci[i]->tips-1)
+        //  assert(0);
+  }
+  *ret_logpr_diff = logpr_diff;
+  *ret_logl_diff = logl_diff;
+  *ret_count_above = count_above;
+  *ret_count_below = count_below;
+}
+#endif
+
 static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
@@ -1931,7 +2167,9 @@ static long propose_tau(locus_t ** loci,
                         long thread_index)
 {
    unsigned int i, j, k;
+   #ifdef OLD_CODE
    unsigned int offset = 0;
+   #endif
    int theta_method = 2;   /* how we change theta */
    long accepted = 0;
    double oldage, newage;
@@ -1945,8 +2183,6 @@ static long propose_tau(locus_t ** loci,
 
    unsigned int count_above = 0;
    unsigned int count_below = 0;
-   unsigned int locus_count_above;
-   unsigned int locus_count_below;
 
    unsigned int paffected_count;        /* number of affected populations */
 
@@ -2226,166 +2462,46 @@ static long propose_tau(locus_t ** loci,
       for (j = 0; j < paffected_count; ++j)
          logpr -= affected[j]->notheta_logpr_contrib;
    }
-
-   for (i = 0; i < stree->locus_count; ++i)
+   if (opt_threads > 1)
    {
-      k = 0;
-      locus_count_above = locus_count_below = 0;
+     thread_data_t tp;
+     tp.locus = loci; tp.gtree = gtree; tp.stree = stree;
+     tp.snode = snode;
+     tp.oldage = oldage;
+     tp.minage = minage;
+     tp.maxage = maxage;
+     tp.minfactor = minfactor;
+     tp.maxfactor = maxfactor;
+     tp.affected = affected;
+     tp.paffected_count = paffected_count;
+     tp.logl_diff = logl_diff;
+     tp.logpr_diff = logpr_diff;
+     threads_wakeup(THREAD_WORK_TAU,&tp);
 
-      if (opt_est_theta)
-         logpr = gtree[i]->logpr;
-
-      gnode_t ** gt_nodesptr = __gt_nodes + offset;
-      double * oldbranches = __aux + offset;
-
-      /* traverse the gene tree nodes of the three populations, find the ones
-         whose ages fall within the new age interval, update their age and mark
-         them. Also, count how many of them are above the old species node age,
-         and how many are below. Finally, update the gene tree probabilities */
-      for (j = 0; j < paffected_count; ++j)
-      {
-         /* process events for current population */
-         if (affected[j]->event_count)
-         {
-            dlist_item_t * event;
-            for (event = affected[j]->event[i]->head; event; event = event->next)
-            {
-               gnode_t * node = (gnode_t *)(event->data);
-               //if (node->time < minage) continue;
-               if ((node->time < minage) || (node->time > maxage)) continue;
-
-               gt_nodesptr[k] = node;
-               node->mark = FLAG_PARTIAL_UPDATE;
-               oldbranches[k++] = node->time;
-
-               if (node->time >= oldage && snode != stree->root)
-               {
-                  node->time = maxage + maxfactor*(node->time - maxage);
-                  locus_count_above++;
-               }
-               else
-               {
-                  node->time = minage + minfactor*(node->time - minage);
-                  locus_count_below++;
-               }
-            }
-
-            if (opt_est_theta)
-               logpr -= affected[j]->logpr_contrib[i];
-
-            double xtmp = gtree_update_logprob_contrib(affected[j],
-                                                       loci[i]->heredity[0],
-                                                       i,
-                                                       thread_index);
-
-            if (opt_est_theta)
-               logpr += xtmp;
-         }
-      }
-
-      /* entry i of __mark_count holds the number of marked nodes for locus i */
-      __mark_count[i] = k;
-      offset += k;
-
-      if (opt_est_theta)
-         logpr_diff += logpr - gtree[i]->logpr;
-
-      if (opt_est_theta)
-      {
-         gtree[i]->old_logpr = gtree[i]->logpr;
-         gtree[i]->logpr = logpr;
-      }
-
-      count_above += locus_count_above;
-      count_below += locus_count_below;
-
-      unsigned int branch_count = k;
-      gnode_t ** branchptr = gt_nodesptr;
-
-      /* go through the list of marked nodes, and append at the end of the list
-         their children (only if they are unmarked to avoid duplicates). The final
-         list represents the nodes for which branch lengths must be updated */
-      int extra = 0;
-      for (j = 0; j < k; ++j)
-      {
-         gnode_t * node = gt_nodesptr[j];
-
-         /* if root is one of the marked nodes, we must not update its branch
-            length as we will receive a segfaul. Therefore, move the root to the
-            beginning of the list, incremenent the pointer to the next element and
-            decrease branch count */
-            //if (!node->parent && j > 0)
-         if (!node->parent)
-         {
-            if (j)
-            {
-               SWAP(gt_nodesptr[0], gt_nodesptr[j]);
-               SWAP(oldbranches[0], oldbranches[j]);
-            }
-            branchptr = &(gt_nodesptr[1]);
-            --branch_count;
-         }
-
-         assert(node->left);
-         assert(node->right);
-
-         if (!node->left->mark)
-         {
-            branchptr[branch_count++] = node->left;
-            extra++;
-         }
-         if (!node->right->mark)
-         {
-            branchptr[branch_count++] = node->right;
-            extra++;
-         }
-      }
-
-      __extra_count[i] = extra;
-      offset += extra;
-
-      /* if at least one gene tree node age was changed, we need to recompute the
-         log-likelihood */
-      gtree[i]->old_logl = gtree[i]->logl;
-      if (k)
-      {
-         locus_update_matrices_jc69(loci[i], branchptr, branch_count);
-
-         /* get list of nodes for which partials must be recomputed */
-         unsigned int partials_count;
-         gnode_t ** partials = gtree_return_partials(gtree[i]->root,
-                                                     i,
-                                                     &partials_count);
-
-         for (j = 0; j < partials_count; ++j)
-         {
-            partials[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                    partials[j]->clv_index);
-            if (opt_scaling)
-              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                    partials[j]->scaler_index);
-         }
-
-         /* update partials */
-         locus_update_partials(loci[i], partials, partials_count);
-
-         /* evaluate log-likelihood */
-         unsigned int param_indices[1] = { 0 };
-         double logl = locus_root_loglikelihood(loci[i],
-            gtree[i]->root,
-            param_indices,
-            NULL);
-
-         logl_diff += logl - gtree[i]->logl;
-         gtree[i]->logl = logl;
-      }
-
-      /* Test for checking whether all gene tree nodes can be marked. It seems to
-         hold */
-         //if (__mark_count[i] + __extra_count[i] >= 2*loci[i]->tips-1)
-         //  assert(0);
+     count_above = tp.count_above;
+     count_below = tp.count_below;
+     logl_diff = tp.logl_diff;
+     logpr_diff = tp.logpr_diff;
    }
-
+   else
+     propose_tau_update_gtrees(loci,
+                               gtree,
+                               stree,
+                               snode,
+                               oldage,
+                               minage,
+                               maxage,
+                               minfactor,
+                               maxfactor,
+                               0,
+                               stree->locus_count,
+                               affected,
+                               paffected_count,
+                               &count_above,
+                               &count_below,
+                               &logl_diff,
+                               &logpr_diff,
+                               0);
 
    if (!opt_est_theta)
    {
@@ -2408,23 +2524,19 @@ static long propose_tau(locus_t ** loci,
       /* accepted */
       accepted++;
 
-      offset = 0;
       for (i = 0; i < stree->locus_count; ++i)
       {
          k = __mark_count[i];
-         gnode_t ** gt_nodesptr = __gt_nodes + offset;
+         gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
 
          for (j = 0; j < k; ++j)
             gt_nodesptr[j]->mark = 0;
-
-         offset += __mark_count[i] + __extra_count[i];
       }
 
    }
    else
    {
       /* rejected */
-      offset = 0;
       snode->tau = oldage;
       if (opt_network && snode->hybrid)
       {
@@ -2464,8 +2576,8 @@ static long propose_tau(locus_t ** loci,
       for (i = 0; i < stree->locus_count; ++i)
       {
          k = __mark_count[i];
-         gnode_t ** gt_nodesptr = __gt_nodes + offset;
-         double * old_ageptr = __aux + offset;
+         gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
+         double * old_ageptr = __aux + __gt_nodes_index[i];
 
          /* restore gene tree node ages */
          for (j = 0; j < k; ++j)
@@ -2525,9 +2637,6 @@ static long propose_tau(locus_t ** loci,
          /* restore gene tree log probability */
          if (opt_est_theta)
             gtree[i]->logpr = gtree[i]->old_logpr;
-
-         /* move offset to the batch of nodes for the next locus */
-         offset += __mark_count[i] + __extra_count[i];
       }
       if (!opt_est_theta)
       {

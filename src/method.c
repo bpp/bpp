@@ -32,6 +32,7 @@ const static int rate_matrices = 1;
 const static long thread_index_zero = 0;
 
 static double pj_optimum = 0.3;
+static thread_data_t td;
 
 static stree_t * load_tree_or_network(void)
 {
@@ -939,10 +940,9 @@ static FILE * init(stree_t ** ptr_stree,
     unsigned int scale_buffers = opt_scaling ?
                                    2*gtree[i]->inner_count : 0;
 
-    /* if species tree inference or locusrate enabled, activate twice as many
-       transition probability matrices */
-    if (opt_est_stree || opt_est_locusrate || opt_est_heredity)
-      pmatrix_count *= 2;               /* double to account for cloned */
+    /* activate twice as many transition probability matrices (for reverting in
+       locusrate, species tree SPR and mixing proposals)  */
+    pmatrix_count *= 2;               /* double to account for cloned */
 
     /* TODO: In the future we can allocate double amount of p-matrices
        for the other methods as well in order to speedup rollback when
@@ -1312,7 +1312,10 @@ void cmd_run()
 #endif
 
   if (opt_threads > 1)
+  {
     threads_init();
+    memset(&td,0,sizeof(td));
+  }
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
@@ -1416,14 +1419,23 @@ void cmd_run()
     if (opt_threads == 1)
       ratio = gtree_propose_ages_serial(locus, gtree, stree);
     else
-      threads_wakeup(THREAD_WORK_GTAGE,locus,gtree,stree,&ratio);
+    {
+      td.locus = locus; td.gtree = gtree; td.stree = stree;
+      threads_wakeup(THREAD_WORK_GTAGE,&td);
+      ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+
+    }
     pjump[0] = (pjump[0]*(ft_round-1) + ratio) / (double)ft_round;
 
     /* propose gene tree topologies using SPR */
     if (opt_threads == 1)
       ratio = gtree_propose_spr_serial(locus,gtree,stree);
     else
-      threads_wakeup(THREAD_WORK_GTSPR,locus,gtree,stree,&ratio);
+    {
+      td.locus = locus; td.gtree = gtree; td.stree = stree;
+      threads_wakeup(THREAD_WORK_GTSPR,&td);
+      ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+    }
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
 
 /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */

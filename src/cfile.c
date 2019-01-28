@@ -1008,6 +1008,10 @@ static void check_validity()
         (opt_delimit_prior == BPP_SPECIES_PRIOR_SUNIFORM))
       fatal("Invalid 'speciesmodelprior' value");
   }
+
+  if (opt_threads > 1 && !opt_est_theta)
+    fatal("Cannot use multiple threads when *not* estimating theta parameters."
+          " Please either estimate theta or set threads=1");
 }
 
 void load_cfile()

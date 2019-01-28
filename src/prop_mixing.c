@@ -23,6 +23,7 @@
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
+#define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
 
 static void all_partials_recursive(gnode_t * node,
                                    unsigned int * trav_size,
@@ -46,6 +47,108 @@ static void gtree_all_partials(gnode_t * root,
   if (!root->left) return;
 
   all_partials_recursive(root, trav_size, travbuffer);
+}
+
+void prop_mixing_update_gtrees(locus_t ** locus,
+                               gtree_t ** gtree,
+                               stree_t * stree,
+                               long locus_start,
+                               long locus_count,
+                               double c,
+                               long thread_index,
+                               double * ret_lnacceptance,
+                               double * ret_logpr)
+{
+  long i;
+  unsigned int j,k;
+  double lnacceptance = 0;
+  double logpr = 0;
+  size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
+
+  for (i = locus_start; i < locus_start+locus_count; ++i)
+  {
+    gtree_t * gt = gtree[i];
+
+    /* go through all gene nodes */
+    for (j = gt->tip_count; j < gt->tip_count + gt->inner_count; ++j)
+    {
+      gt->nodes[j]->old_time = gt->nodes[j]->time;
+      gt->nodes[j]->time *= c;
+    }
+
+    /* update branch lengths */
+    for (j = 0; j < gt->tip_count+gt->inner_count; ++j)
+    {
+      if (gt->nodes[j]->parent)
+      {
+        /* TODO: 28.1.2019 */
+        gt->nodes[j]->pmatrix_index = SWAP_PMAT_INDEX(gt->edge_count,gt->nodes[j]->pmatrix_index);
+        gt->nodes[j]->length = gt->nodes[j]->parent->time - gt->nodes[j]->time;
+      }
+    }
+
+    /* update pmatrices */
+    /* TODO: Remove this allocation */
+    gnode_t ** gt_nodes = (gnode_t **)xmalloc((gt->tip_count + gt->inner_count)*
+                                              sizeof(gnode_t *));
+    k=0;
+    for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
+      if (gt->nodes[j]->parent)
+        gt_nodes[k++] = gt->nodes[j];
+    locus_update_matrices_jc69(locus[i],gt_nodes,k);
+
+    gtree_all_partials(gt->root,gt_nodes,&k);
+    for (j = 0; j < k; ++j)
+    {
+      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
+      if (opt_scaling)
+        gt_nodes[j]->scaler_index = SWAP_SCALER_INDEX(gt->tip_count,
+                                                      gt_nodes[j]->scaler_index);
+    }
+
+    locus_update_partials(locus[i],gt_nodes,k);
+
+    /* compute log-likelihood */
+    unsigned int param_indices[1] = {0};
+    double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
+
+
+    if (opt_est_theta)
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+    else
+    {
+      for (j = 0; j < nodes_count; ++j)
+      {
+        logpr -= stree->nodes[j]->notheta_logpr_contrib;
+        logpr += gtree_update_logprob_contrib(stree->nodes[j],
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+    }
+        
+
+    if (opt_est_theta)
+      lnacceptance += logl - gt->logl + logpr - gt->logpr;
+    else
+      lnacceptance += logl - gt->logl;
+
+    if (opt_est_theta)
+    {
+      gt->old_logpr = gt->logpr;
+      gt->logpr = logpr;
+    }
+
+    gt->old_logl = gt->logl;
+    gt->logl = logl;
+
+    free(gt_nodes);
+
+  }
+  /* return values */
+  *ret_lnacceptance = lnacceptance;
+  if (!opt_est_theta)
+    *ret_logpr = logpr;
 }
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
@@ -187,80 +290,32 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (!opt_est_theta)
     logpr = stree->notheta_logpr;
 
-  for (i = 0; i < stree->locus_count; ++i)
+  /* update gene trees with either parallel or serial code */
+  if (opt_threads > 1)
   {
-    gtree_t * gt = gtree[i];
-
-    /* go through all gene nodes */
-    for (j = gt->tip_count; j < gt->tip_count + gt->inner_count; ++j)
-    {
-      gt->nodes[j]->old_time = gt->nodes[j]->time;
-      gt->nodes[j]->time *= c;
-    }
-
-    /* update branch lengths */
-    for (j = 0; j < gt->tip_count+gt->inner_count; ++j)
-    {
-      if (gt->nodes[j]->parent)
-        gt->nodes[j]->length = gt->nodes[j]->parent->time - gt->nodes[j]->time;
-    }
-
-    /* update pmatrices */
-    /* TODO: Remove this allocation */
-    gnode_t ** gt_nodes = (gnode_t **)xmalloc((gt->tip_count + gt->inner_count)*
-                                              sizeof(gnode_t *));
-    k=0;
-    for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
-      if (gt->nodes[j]->parent)
-        gt_nodes[k++] = gt->nodes[j];
-    locus_update_matrices_jc69(locus[i],gt_nodes,k);
-
-    gtree_all_partials(gt->root,gt_nodes,&k);
-    for (j = 0; j < k; ++j)
-    {
-      gt_nodes[j]->clv_index = SWAP_CLV_INDEX(gt->tip_count,gt_nodes[j]->clv_index);
-      if (opt_scaling)
-        gt_nodes[j]->scaler_index = SWAP_SCALER_INDEX(gt->tip_count,
-                                                      gt_nodes[j]->scaler_index);
-    }
-
-    locus_update_partials(locus[i],gt_nodes,k);
-
-    /* compute log-likelihood */
-    unsigned int param_indices[1] = {0};
-    double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
-
-
-    if (opt_est_theta)
-      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
-    else
-    {
-      for (j = 0; j < nodes_count; ++j)
-      {
-        logpr -= stree->nodes[j]->notheta_logpr_contrib;
-        logpr += gtree_update_logprob_contrib(stree->nodes[j],
-                                              locus[i]->heredity[0],
-                                              i,
-                                              thread_index);
-      }
-    }
-        
-
-    if (opt_est_theta)
-      lnacceptance += logl - gt->logl + logpr - gt->logpr;
-    else
-      lnacceptance += logl - gt->logl;
-
-    if (opt_est_theta)
-    {
-      gt->old_logpr = gt->logpr;
-      gt->logpr = logpr;
-    }
-
-    gt->old_logl = gt->logl;
-    gt->logl = logl;
-
-    free(gt_nodes);
+    thread_data_t td;
+    td.locus = locus; td.gtree = gtree; td.stree = stree;
+    td.c = c;
+    threads_wakeup(THREAD_WORK_MIXING,&td);
+    lnacceptance += td.lnacceptance;
+  }
+  else
+  {
+    double lnacc_contrib = 0;
+    double logpr_change = 0;
+    prop_mixing_update_gtrees(locus,
+                              gtree,
+                              stree,
+                              0,
+                              stree->locus_count,
+                              c,
+                              0,
+                              &lnacc_contrib,
+                              &logpr_change);
+    lnacceptance += lnacc_contrib;
+    if (!opt_est_theta)
+      logpr += logpr_change;
+                              
   }
 
   if (!opt_est_theta)
@@ -376,20 +431,11 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         gnodeptr[j]->time = gnodeptr[j]->old_time;
       }
 
-      
-      gnode_t ** gt_nodes = (gnode_t **)xmalloc((gtree[i]->tip_count +
-                                                gtree[i]->inner_count) * 
-                                                sizeof(gnode_t *));
-
-      /* revert branch lengths and p-matrices */
-      k=0;
+      /* revert trans prob matrices */
       for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
         if (gtree[i]->nodes[j]->parent)
-          gt_nodes[k++] = gtree[i]->nodes[j];
-      locus_update_matrices_jc69(locus[i],gt_nodes,k);
-
-      free(gt_nodes);
-      
+          gtree[i]->nodes[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                              gtree[i]->nodes[j]->pmatrix_index);
     }
   }
   free(snodes);

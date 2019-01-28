@@ -181,6 +181,8 @@
 
 #define THREAD_WORK_GTAGE               1
 #define THREAD_WORK_GTSPR               2
+#define THREAD_WORK_TAU                 3
+#define THREAD_WORK_MIXING              4
 
 /* libpll related definitions */
 
@@ -531,6 +533,46 @@ typedef struct pair_s
   void * data;
 } pair_t;
 
+typedef struct thread_data_s
+{
+  /* contains common data that are passed to all threads, and variables that
+     are filled with return values upon work completion (all threads finish) as
+     part of a 'threads reduce' operation */
+
+  /* arguments for all proposals */
+  locus_t ** locus;
+  gtree_t ** gtree;
+  stree_t * stree;
+
+  /* arguments for tau proposal */
+  snode_t * snode;
+  double oldage;
+  double minage;
+  double maxage;
+  double minfactor;
+  double maxfactor;
+  snode_t ** affected;
+  unsigned int paffected_count;
+
+  /* arguments for mixing proposal */
+  double c;
+
+  /* return values for gene tree age/spr moves */
+  long proposals;
+  long accepted;
+
+  /* return values for tau proposal */
+  unsigned int count_above;
+  unsigned int count_below;
+  double logl_diff;
+  double logpr_diff;
+
+  /* return values for mixing proposal */
+  double lnacceptance;
+
+} thread_data_t;
+
+
 /* macros */
 
 #ifndef MIN
@@ -815,6 +857,7 @@ void stree_init(stree_t * stree,
 void stree_init_pptable(stree_t * stree);
 
 void stree_alloc_internals(stree_t * stree,
+                           long * locus_seqcount,
                            unsigned int gtree_inner_sum,
                            long msa_count);
 
@@ -824,6 +867,25 @@ int node_is_hybridization(snode_t * node);
 
 void print_network_table(stree_t * stree);
 void debug_print_network_node_attribs(stree_t * stree);
+
+void propose_tau_update_gtrees(locus_t ** loci,
+                               gtree_t ** gtree,
+                               stree_t * stree,
+                               snode_t * snode,
+                               double oldage,
+                               double minage,
+                               double maxage,
+                               double minfactor,
+                               double maxfactor,
+                               long locus_start,
+                               long locus_count,
+                               snode_t ** affected,
+                               unsigned int paffected_count,
+                               unsigned int * ret_count_above,
+                               unsigned int * ret_count_below,
+                               double * ret_logl_diff,
+                               double * ret_logpr_diff,
+                               long thread_index);
 
 /* functions in arch.c */
 
@@ -1003,6 +1065,15 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 /* functions in prop_mixing.c */
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
+void prop_mixing_update_gtrees(locus_t ** locus,
+                               gtree_t ** gtree,
+                               stree_t * stree,
+                               long locus_start,
+                               long locus_count,
+                               double c,
+                               long thread_index,
+                               double * ret_lnacceptance,
+                               double * ret_logpr);
 
 /* functions in prop_rj.c */
 
@@ -1757,5 +1828,5 @@ void cmd_simulate(void);
 /* functions in threads.c */
 
 void threads_init(void);
-void threads_wakeup(int work_type, locus_t ** locus, gtree_t ** gtree, stree_t * stree, double * rc);
+void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit();

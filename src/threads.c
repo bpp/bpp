@@ -28,18 +28,14 @@ typedef struct thread_info_s
   pthread_cond_t cond;
   
   /* type of work (0 no work) */
-  int work;
+  volatile int work;
 
   /* thread parameters */
-  locus_t ** locus;
-  gtree_t ** gtree;
-  stree_t * stree;
   long locus_first;
   long locus_count;
 
-  /* return values */
-  long proposals;
-  long accepted;
+  thread_data_t td;
+
 } thread_info_t;
 
 static thread_info_t * ti;
@@ -52,9 +48,6 @@ static void * threads_worker(void * vp)
 
   pthread_mutex_lock(&tip->mutex);
 
-  tip->proposals = 0;
-  tip->accepted  = 0;
-
   /* loop until signalled to quit */
   while (tip->work >= 0)
   {
@@ -64,28 +57,59 @@ static void * threads_worker(void * vp)
 
     if (tip->work > 0)
     {
-      /* TODO: call work */
+      /* work work! */
       switch (tip->work)
       {
         case THREAD_WORK_GTAGE:
-          gtree_propose_ages_parallel(tip->locus,
-                                      tip->gtree,
-                                      tip->stree,
+          gtree_propose_ages_parallel(tip->td.locus,
+                                      tip->td.gtree,
+                                      tip->td.stree,
                                       tip->locus_first,
                                       tip->locus_count,
                                       t,
-                                      &tip->proposals,
-                                      &tip->accepted);
+                                      &tip->td.proposals,
+                                      &tip->td.accepted);
           break;
         case THREAD_WORK_GTSPR:
-          gtree_propose_spr_parallel(tip->locus,
-                                     tip->gtree,
-                                     tip->stree,
+          gtree_propose_spr_parallel(tip->td.locus,
+                                     tip->td.gtree,
+                                     tip->td.stree,
                                      tip->locus_first,
                                      tip->locus_count,
                                      t,
-                                     &tip->proposals,
-                                     &tip->accepted);
+                                     &tip->td.proposals,
+                                     &tip->td.accepted);
+          break;
+        case THREAD_WORK_TAU:
+          propose_tau_update_gtrees(tip->td.locus,
+                                    tip->td.gtree,
+                                    tip->td.stree,
+                                    tip->td.snode,
+                                    tip->td.oldage,
+                                    tip->td.minage,
+                                    tip->td.maxage,
+                                    tip->td.minfactor,
+                                    tip->td.maxfactor,
+                                    tip->locus_first,
+                                    tip->locus_count,
+                                    tip->td.affected,
+                                    tip->td.paffected_count,
+                                    &tip->td.count_above,
+                                    &tip->td.count_below,
+                                    &tip->td.logl_diff,
+                                    &tip->td.logpr_diff,
+                                    t);
+          break;
+        case THREAD_WORK_MIXING:
+          prop_mixing_update_gtrees(tip->td.locus,
+                                    tip->td.gtree,
+                                    tip->td.stree,
+                                    tip->locus_first,
+                                    tip->locus_count,
+                                    tip->td.c,
+                                    t,
+                                    &tip->td.lnacceptance,
+                                    NULL);
           break;
         default:
           fatal("Unknown work function assigned to thread worker %ld", t);
@@ -131,9 +155,9 @@ void threads_init()
   {
     thread_info_t * tip = ti + t;
     tip->work = 0;
-    tip->locus = NULL;
-    tip->gtree = NULL;
-    tip->stree = NULL;
+    tip->td.locus = NULL;
+    tip->td.gtree = NULL;
+    tip->td.stree = NULL;
 
     /* allocate loci for thread t */
     tip->locus_first = loci_start;
@@ -152,11 +176,7 @@ void threads_init()
   }
 }
 
-void threads_wakeup(int work_type,
-                    locus_t ** locus,
-                    gtree_t ** gtree,
-                    stree_t * stree,
-                    double * rc)
+void threads_wakeup(int work_type, thread_data_t * data)
 {
   long t; 
 
@@ -171,20 +191,19 @@ void threads_wakeup(int work_type,
 
     pthread_mutex_lock(&tip->mutex);
 
+    memcpy(&tip->td,data,sizeof(thread_data_t));
+
     tip->work = work_type;
-    tip->locus = locus;
-    tip->gtree = gtree;
-    tip->stree = stree;
 
     pthread_cond_signal(&tip->cond);
     pthread_mutex_unlock(&tip->mutex);
-
   }
 
   /* wait for threads to finish their work */
   for (t = 0; t < opt_threads; ++t)
   {
     thread_info_t * tip = ti+t;
+
     pthread_mutex_lock(&tip->mutex);
     while (tip->work > 0)
       pthread_cond_wait(&tip->cond,&tip->mutex);
@@ -192,20 +211,44 @@ void threads_wakeup(int work_type,
     pthread_mutex_unlock(&tip->mutex);
   }
 
-  if (work_type == 1 || work_type == 2)
+  if (work_type == THREAD_WORK_GTAGE || work_type == THREAD_WORK_GTSPR)
   {
     long proposals = 0;
     long accepted = 0;
     for (t = 0; t < opt_threads; ++t)
     {
       thread_info_t * tip = ti+t;
-      proposals += tip->proposals;
-      accepted  += tip->accepted;
+      proposals += tip->td.proposals;
+      accepted  += tip->td.accepted;
     }
-    if (!accepted)
-      *rc = (double)0;
 
-    *rc = (double)accepted/proposals;
+    data->proposals = proposals;
+    data->accepted = accepted;
+  }
+  else if (work_type == THREAD_WORK_TAU)
+  {
+    data->count_above = 0;
+    data->count_below = 0;
+    data->logl_diff = 0;
+    data->logpr_diff = 0;
+    for (t = 0; t < opt_threads; ++t)
+    {
+      thread_info_t * tip = ti+t;
+
+      data->count_above += tip->td.count_above;
+      data->count_below += tip->td.count_below;
+      data->logl_diff   += tip->td.logl_diff;
+      data->logpr_diff  += tip->td.logpr_diff;
+    }
+  }
+  else if (work_type == THREAD_WORK_MIXING)
+  {
+    data->lnacceptance = 0;
+    for (t = 0; t < opt_threads; ++t)
+    {
+      thread_info_t * tip = ti+t;
+      data->lnacceptance += tip->td.lnacceptance;
+    }
   }
   else
     assert(0);

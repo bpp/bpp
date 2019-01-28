@@ -903,7 +903,13 @@ void load_chk_section_2(FILE * fp)
   unsigned int gtree_inner_sum = 0;
   for (i = 0; i < opt_locus_count; ++i)
     gtree_inner_sum += gtree[i]->inner_count;
-  stree_alloc_internals(stree,gtree_inner_sum,opt_locus_count);
+  
+  
+  long * locus_seqcount = (long *)xmalloc((size_t)(opt_locus_count) * sizeof(long));
+  for (i = 0; i < (unsigned int)opt_locus_count; ++i)
+    locus_seqcount[i] = gtree[i]->tip_count;
+  stree_alloc_internals(stree,locus_seqcount,gtree_inner_sum,opt_locus_count);
+  free(locus_seqcount);
 
   /* read event indices for each node */
   unsigned int * buffer = (unsigned int *)xmalloc((size_t)(max_tips*2-1) *
