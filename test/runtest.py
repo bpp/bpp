@@ -26,7 +26,8 @@ import time
 
 # define path to BPP binary
 
-opt_bpp_bin = "$HOME/GIT/bpp/src/bpp"
+opt_bpp_bin = "$HOME/DEV/bpp/src/bpp"
+# opt_bpp_bin = "$HOME/DELETE/bpp/src/bpp"
 
 # define each testbed and 
 
