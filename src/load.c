@@ -407,9 +407,9 @@ static void load_chk_section_1(FILE * fp,
 
   /* laod gamma prior */
   if (!LOAD(&opt_gamma_alpha,1,fp))
-    fatal("Cannot read alpha of 'gammaprior' tag"); 
+    fatal("Cannot read alpha of 'phiprior' tag"); 
   if (!LOAD(&opt_gamma_beta,1,fp))
-    fatal("Cannot read beta of 'gammaprior' tag"); 
+    fatal("Cannot read beta of 'phiprior' tag"); 
 
 
   /* load locus rate estimation flag */

@@ -543,7 +543,7 @@ l_unwind:
   return ret;
 }
 
-static long parse_gammaprior(const char * line)
+static long parse_phiprior(const char * line)
 {
   long ret = 0;
   char * s = xstrdup(line);
@@ -1228,10 +1228,10 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
-      else if (!strncasecmp(token,"gammaprior",10))
+      else if (!strncasecmp(token,"phiprior",10))
       {
-        if (!parse_gammaprior(value))
-          fatal("Option 'gammaprior' expects two doubles (line %ld)",
+        if (!parse_phiprior(value))
+          fatal("Option 'phiprior' expects two doubles (line %ld)",
                 line_count);
         valid = 1;
       }

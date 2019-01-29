@@ -1157,9 +1157,9 @@ static void stree_init_gamma(stree_t * stree)
   long offset = stree->tip_count + stree->inner_count;
 
   if (opt_gamma_alpha <= 0)
-    fatal("Alpha value for 'gammaprior' must be larger than 0");
+    fatal("Alpha value for 'phiprior' must be larger than 0");
   if (opt_gamma_beta <= 0)
-    fatal("Beta value for 'gammaprior' must be larger than 0");
+    fatal("Beta value for 'phiprior' must be larger than 0");
 
   for (i = 0; i < stree->hybrid_count; ++i)
   {
