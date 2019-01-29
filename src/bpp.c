@@ -60,7 +60,7 @@ long opt_max_species_count;
 long opt_method;
 long opt_migration;
 long opt_model;
-long opt_network;
+long opt_msci;
 long opt_onlysummary;
 long opt_print_genetrees;
 long opt_print_hscalars;
@@ -245,7 +245,7 @@ void args_init(int argc, char ** argv)
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_msafile = NULL;
-  opt_network = 0;
+  opt_msci = 0;
   opt_onlysummary = 0;
   opt_outfile = NULL;
   opt_print_genetrees = 0;

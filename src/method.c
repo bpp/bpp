@@ -81,7 +81,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
 
   for (i = 0; i < PROP_COUNT + extra; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
-  if (opt_network)
+  if (opt_msci)
     fprintf(stdout, " %8.5f", *pjump_gamma);
   fprintf(stdout, "\n");
 
@@ -93,7 +93,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   fprintf(stdout, " %8.5f", opt_finetune_mix);
   if (extra)
     fprintf(stdout, " %8.5f", opt_finetune_locusrate);
-  if (opt_network)
+  if (opt_msci)
     fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
   else
     fprintf(stdout, "\n");
@@ -107,7 +107,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
 
   if (extra)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
-  if (opt_network)
+  if (opt_msci)
     reset_finetune_onestep(pjump_gamma, &opt_finetune_gamma);
 
   fprintf(stdout, "New finetune:     ");
@@ -118,7 +118,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   fprintf(stdout, " %8.5f", opt_finetune_mix);
   if (extra)
     fprintf(stdout, " %8.5f", opt_finetune_locusrate);
-  if (opt_network)
+  if (opt_msci)
     fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
   else
     fprintf(stdout, "\n");
@@ -176,7 +176,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   unsigned int i;
   unsigned int snodes_total;
   
-  if (opt_network)
+  if (opt_msci)
     snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
   else
     snodes_total = stree->tip_count + stree->inner_count;
@@ -219,7 +219,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     }
   }
 
-  if (opt_network)
+  if (opt_msci)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
@@ -265,7 +265,7 @@ static void mcmc_logsample(FILE * fp,
   unsigned int i;
   unsigned int snodes_total;
   
-  if (opt_network)
+  if (opt_msci)
     snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
   else
     snodes_total = stree->tip_count + stree->inner_count;
@@ -321,7 +321,7 @@ static void mcmc_logsample(FILE * fp,
       fprintf(fp, "\t%.5g", stree->nodes[i]->tau);
 
   /* 2a. Print gamma for hybridization nodes */
-  if (opt_network)
+  if (opt_msci)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
@@ -614,7 +614,7 @@ static FILE * init(stree_t ** ptr_stree,
   printf(" Done\n");
 
   /* Show network */
-  if (opt_network)
+  if (opt_msci)
   {
     if (opt_finetune_gamma == -1)
       fatal("Missing finetune value for gamma parameter");
@@ -769,7 +769,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_method == METHOD_10)          /* species delimitation */
   {
-    assert(opt_network == 0);
+    assert(opt_msci == 0);
 
     long dmodels_count = delimitations_init(stree);
     printf("Number of delimitation models: %ld\n", dmodels_count);
@@ -784,7 +784,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_method == METHOD_11)
   {
-    assert(opt_network == 0);
+    assert(opt_msci == 0);
     partition_fast(stree->tip_count);
   }
 
@@ -898,7 +898,7 @@ static FILE * init(stree_t ** ptr_stree,
   /* We must first link tip sequences (gene tips) to populations */
   if (opt_est_delimit)          /* species delimitation */
   {
-    assert(opt_network == 0);
+    assert(opt_msci == 0);
     stree_rootdist(stree,map_list,msa_list,weights);
   }
 
@@ -908,7 +908,7 @@ static FILE * init(stree_t ** ptr_stree,
      space for cloning the species and gene trees */
   if (opt_est_stree)            /* species tree inference */
   {
-    assert(opt_network == 0);
+    assert(opt_msci == 0);
     sclone = stree_clone_init(stree);
     gclones = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
     for (i = 0; i < msa_count; ++i)
@@ -1357,7 +1357,7 @@ void cmd_run()
       ft_round = 0;
       memset(pjump, 0, pjump_size * sizeof(double));
 
-      if (opt_network)
+      if (opt_msci)
         pjump_gamma = 0;
 
       if (opt_est_delimit)
@@ -1637,8 +1637,8 @@ void cmd_run()
       pjump[5] = (pjump[5]*(ft_round-1) + ratio) / (double)ft_round;
     }
 
-    /* gamma proposal */
-    if (opt_network)
+    /* phi proposal */
+    if (opt_msci)
     {
       ratio = stree_propose_gamma(stree,gtree);
       pjump_gamma = (pjump_gamma*(ft_round-1) + ratio) / (double)ft_round;
@@ -1740,7 +1740,7 @@ void cmd_run()
       printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
       for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
         printf(" %4.2f", pjump[j]);
-      if (opt_network)
+      if (opt_msci)
         printf(" %4.2f", pjump_gamma);
       printf(" ");
 

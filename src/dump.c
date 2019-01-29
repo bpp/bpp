@@ -212,7 +212,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_checkpoint_step,1,fp);
 
   /* write network info */
-  DUMP(&opt_network,1,fp);
+  DUMP(&opt_msci,1,fp);
 
   /* write method info */
   DUMP(&opt_method,1,fp);

@@ -186,7 +186,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   else
     theta_count = 0;
 
-  if (opt_network)
+  if (opt_msci)
   {
     for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     {
@@ -234,7 +234,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   }
 
   /* change the taus */
-  if (opt_network)
+  if (opt_msci)
   {
     for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
@@ -366,7 +366,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
 
     /* revert taus */
-    if (opt_network)
+    if (opt_msci)
     {
       for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
       {

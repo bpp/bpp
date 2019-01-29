@@ -155,7 +155,7 @@ void stree_destroy(stree_t * tree,
   }
 
   /* safety check */
-  assert(opt_network == !!tree->hybrid_count);
+  assert(opt_msci == !!tree->hybrid_count);
 
   if (tree->pptable)
   {
@@ -1104,7 +1104,7 @@ stree_t * stree_wraptree(snode_t * root)
 
   resolve_network(stree);
   if (stree->hybrid_count)
-    opt_network = 1;
+    opt_msci = 1;
 
   /* reorder tip nodes if specified */
   if (opt_reorder)
@@ -1123,7 +1123,7 @@ stree_t * stree_wraptree(snode_t * root)
       stree->nodes[i]->diploid = opt_diploid[i];
   }
 
-  if (opt_network)
+  if (opt_msci)
   {
     /* for all nodes that are not hybridization events set htau to 1 */
     for (i = 0; i < stree->inner_count; ++i)
@@ -1165,7 +1165,7 @@ stree_t * stree_wraptree(snode_t * root)
     }
   }
 
-  if (opt_network && stree->root->htau == 0)
+  if (opt_msci && stree->root->htau == 0)
     fatal("Error: species tree root requires a tau parameter [tau-parent=yes]");
 
   return stree;

@@ -412,7 +412,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   FILE * fp;
   unsigned int snodes_total;
   
-  if (opt_network)
+  if (opt_msci)
     snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
   else
     snodes_total = stree->tip_count + stree->inner_count;
@@ -441,7 +441,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       col_count++;
 
   /* compute number of gamma parameters */
-  if (opt_network)
+  if (opt_msci)
     col_count += stree->hybrid_count;
 
   if (opt_est_locusrate && opt_print_locusrate)
@@ -701,7 +701,7 @@ l_unwind:
   if (rc && stree->tip_count > 1)
   {
     /* write figtree file */
-    if (!opt_network)
+    if (!opt_msci)
     {
       write_figtree(stree,mean,hpd025,hpd975);
       fprintf(stdout, "FigTree tree is in FigTree.tre\n");

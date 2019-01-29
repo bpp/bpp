@@ -96,7 +96,7 @@ static void print_settings(stree_t * stree)
     fprintf(stdout, " %s (%ld)", stree->nodes[i]->label, opt_sp_seqcount[i]);
   }
   fprintf(stdout,"\n");
-  if (opt_network)
+  if (opt_msci)
   {
     printf("  NETWORK\n");
     print_network_table(stree);
@@ -963,7 +963,7 @@ static void set_migration_rates(stree_t * stree)
 
   assert(opt_migration_labels);
 
-  assert(!opt_network);
+  assert(!opt_msci);
 
   assert(opt_migration == stree->tip_count + stree->inner_count);
 
@@ -1468,7 +1468,7 @@ static void simulate(stree_t * stree)
 static void assign_thetas(stree_t * stree)
 {
   long i;
-  assert(opt_network);
+  assert(opt_msci);
   /* this is copied from stree_init_theta(...) */
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -1487,7 +1487,7 @@ static void assign_thetas(stree_t * stree)
   {
     snode_t * node = stree->nodes[i];
 
-    if (opt_network && node->hybrid)
+    if (opt_msci && node->hybrid)
     {
       if (!node_is_bidirection(node))
       {
@@ -1657,7 +1657,7 @@ void cmd_simulate()
 
   stree = stree_parse_newick_string(opt_streenewick);
 
-  assert(opt_network == !!stree->hybrid_count);
+  assert(opt_msci == !!stree->hybrid_count);
 
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
     stree->nodes[i]->tau = stree->nodes[i]->length;
@@ -1666,7 +1666,7 @@ void cmd_simulate()
   stree_init_pptable(stree);
   stree_label(stree);
 
-  if (opt_network)
+  if (opt_msci)
   {
     long hoffset = stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)

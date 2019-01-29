@@ -646,7 +646,7 @@ extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
 extern long opt_model;
-extern long opt_network;
+extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;

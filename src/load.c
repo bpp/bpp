@@ -274,7 +274,7 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'checkpoint' tag step value");
 
   /* read network info */
-  if (!LOAD(&opt_network,1,fp))
+  if (!LOAD(&opt_msci,1,fp))
     fatal("Cannot read species network flag");
 
   /* read method info */
@@ -651,7 +651,7 @@ static void load_chk_section_1(FILE * fp,
   }
 
   /* allocate hx */
-  if (opt_network)
+  if (opt_msci)
   {
     for (i = 0; i < total_nodes; ++i)
     {

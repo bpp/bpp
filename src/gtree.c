@@ -605,7 +605,7 @@ static void replace_hybrid(stree_t * stree,
   /* this function does the same thing as replace(...) (see comments there)
      but adapted to hybridization/bidirectional introgression nodes on networks.
      The main difference is that such nodes do not necessarily have two children */
-  assert(opt_network && epoch->hybrid);
+  assert(opt_msci && epoch->hybrid);
 
   /* check if its the mirrored node (i.e. no children) */
   if (node_is_mirror(epoch))
@@ -971,7 +971,7 @@ static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
   snode_t * lnode = node->left;
   snode_t * rnode = node->right;
 
-  if (opt_network)
+  if (opt_msci)
   {
     if (node->hybrid)
     {
@@ -1046,13 +1046,13 @@ static void fill_seqin_counts_recursive(snode_t * node, int msa_index)
 
 void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
 {
-  if (opt_network) 
+  if (opt_msci) 
     fill_hybrid_seqin_counts(stree, gtree, msa_index);
 
   fill_seqin_counts_recursive(stree->root,msa_index);
 
   /* TODO: This is only an optional check, delete */
-  if (opt_network)
+  if (opt_msci)
   {
     long i;
     for (i = 0; i < stree->hybrid_count; ++i)
@@ -1193,7 +1193,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   /* get a list of inner nodes (epochs) */
   epoch_count = stree->inner_count;
-  if (opt_network)
+  if (opt_msci)
     epoch_count = stree->inner_count + stree->hybrid_count;
 
   epoch = (snode_t **)xmalloc((size_t)epoch_count*sizeof(snode_t *));
@@ -1202,7 +1202,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
          (epoch_count) * sizeof(snode_t *));
 
   /* sort epochs in ascending order of speciation times */
-  if (opt_network)
+  if (opt_msci)
   {
     memcpy(epoch,
            stree->nodes + stree->tip_count,
@@ -1237,7 +1237,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   sortptr += j;
   qsort(&(sortptr[0]), epoch_count-j, sizeof(snode_t *), cb_cmp_spectime);
 
-  if (opt_network)
+  if (opt_msci)
   {
     /* if we have a hybridization event, composed of nodes H,S,T, e.g.
 
@@ -1313,7 +1313,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     gtips[i]->scaler_index = PLL_SCALE_BUFFER_NONE;
     gtips[i]->leaves = 1;
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* TODO: Allocating hpath for tips is unnecessary, as they never pass
          through a hybridization event. However, if we don't allocate hpath
@@ -1389,7 +1389,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
       if (opt_migration)
       {
-        assert(!opt_network);
+        assert(!opt_msci);
         msum = 0;
         long matrix_span = stree->tip_count + stree->inner_count;
         for (j = 0; j < pop_count; ++j)
@@ -1481,7 +1481,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         inner->leaves = inner->left->leaves + inner->right->leaves;
         clv_index++;
 
-        if (opt_network)
+        if (opt_msci)
         {
           inner->hpath = (int*)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
           for (i = 0; i < stree->hybrid_count; ++i)
@@ -1558,7 +1558,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
     /* place current epoch in the list of populations, remove its two children
        and add up the lineages of the two descendants */
-    if (opt_network && epoch[e]->hybrid)
+    if (opt_msci && epoch[e]->hybrid)
       replace_hybrid(stree,pop,&pop_count,epoch[e],thread_index);
     else
       replace(pop,pop_count,epoch[e]);
@@ -1583,7 +1583,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   /* set path flags for gene tree root lineage if root coalesces before root
      population */
-  if (opt_network)
+  if (opt_msci)
   {
     snode_t * father = gtree->root->pop->parent;
     while (father)
@@ -1740,7 +1740,7 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
   if (node->right)
     reset_gene_leaves_count_recursive(node->right,locus_count);
 
-  if (opt_network && node->hybrid)
+  if (opt_msci && node->hybrid)
   {
     /* TODO: The below if block is only for testing correctness - it is not
        necessary and should be removed, but the 'return' statement must be
@@ -1785,8 +1785,8 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 {
   unsigned int i,j;
 
-  /* gtree is only necessary when opt_network */
-  if (opt_network)
+  /* gtree is only necessary when opt_msci */
+  if (opt_msci)
   {
     assert(gtree);
     for (i = 0; i < stree->locus_count; ++i)
@@ -2025,7 +2025,7 @@ double gtree_update_logprob_contrib(snode_t * snode,
       T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
     }
 
-    if (opt_network && snode->hybrid)
+    if (opt_msci && snode->hybrid)
     {
       if (node_is_bidirection(snode) && !node_is_mirror(snode))
         logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hgamma);
@@ -2726,7 +2726,7 @@ static long propose_ages(locus_t * locus,
   {
     gnode_t * node = gtree->nodes[i];
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* store sum of incoming lineages and coalescent events for detecting
          for which populations we need to recompute the MSC density */
@@ -2756,7 +2756,7 @@ static long propose_ages(locus_t * locus,
     /* constraint min bound of proposed age by maximum age between children */
     minage = MAX(node->left->time,node->right->time);
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* if the children are in different populations then further constraint
          minage by the tau of their most recent common ancestor population */
@@ -2800,7 +2800,7 @@ static long propose_ages(locus_t * locus,
     /* find the first ancestral pop with age higher than the proposed tnew */
     /* TODO: Improvement: probably this can start from lpop/rpop (LCA of
         populations of two daughter nodes) */
-    if (opt_network)
+    if (opt_msci)
     {
       /* allocate temporary storage */
       long cand_count = 0;
@@ -2864,7 +2864,7 @@ static long propose_ages(locus_t * locus,
           break;
     }
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* Save old flags for the three nodes, to be used for rollback */
       old_hpath_x  = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
@@ -2921,7 +2921,7 @@ static long propose_ages(locus_t * locus,
       {
         /* increase the number of incoming lineages to all populations in the
            path from old population (excluding) to the new population */
-        if (!opt_network)
+        if (!opt_msci)
         {
           for (pop = oldpop; pop != node->pop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]++;
@@ -2931,7 +2931,7 @@ static long propose_ages(locus_t * locus,
       {
         /* decrease the number of incoming lineages to all populations in the
            path from new population (excluding) to the old population */
-        if (!opt_network)
+        if (!opt_msci)
         {
           for (pop = node->pop; pop != oldpop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]--;
@@ -2939,7 +2939,7 @@ static long propose_ages(locus_t * locus,
       }
     }
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* reset and sample new flags */
       hgamma_contrib += sample_hpath(stree,node,thread_index);
@@ -2984,7 +2984,7 @@ static long propose_ages(locus_t * locus,
     if (oldpop == node->pop)
     {
       /*TODO: BUG: separate to network and non-network case */
-      if (!opt_network)
+      if (!opt_msci)
       {
         if (opt_est_theta)
           logpr -= node->pop->logpr_contrib[msa_index];
@@ -3069,7 +3069,7 @@ static long propose_ages(locus_t * locus,
         end   = oldpop->parent;
       }
 
-      if (opt_network)
+      if (opt_msci)
       {
         /* have a separate loop for hybrid mirror nodes to correct the problem
            of detecting populations that need MSC recomputation for
@@ -3142,7 +3142,7 @@ static long propose_ages(locus_t * locus,
       }
     }
     #else
-      assert(!opt_network);
+      assert(!opt_msci);
       if (opt_est_theta)
         logpr = gtree_logprob(stree,locus->heredity[0],msa_index,thread_index);
       else
@@ -3183,7 +3183,7 @@ static long propose_ages(locus_t * locus,
     unsigned int param_indices[1] = {0};
     logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
-    if (opt_network)
+    if (opt_msci)
     {
       lnacceptance = - (hgamma_contrib - hgamma_contrib_reverse);
       lnacceptance = lnacceptance - hpop_contrib + hpop_contrib_reverse;
@@ -3232,7 +3232,7 @@ static long propose_ages(locus_t * locus,
         travbuffer[msa_index][k++] = node;
       locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
 
-      if (opt_network)
+      if (opt_msci)
       {
         /* Subtract seqin_count (nin) for the three branches */
         decrease_seqin_count(stree,node->left,msa_index);
@@ -3248,7 +3248,7 @@ static long propose_ages(locus_t * locus,
          contributes for each modified species tree node */
       if (node->pop == oldpop)
       {
-        if (opt_network)
+        if (opt_msci)
         {
           memcpy(node->hpath, old_hpath_x,  stree->hybrid_count * sizeof(int));
           memcpy(node->left->hpath, old_hpath_c1, stree->hybrid_count * sizeof(int));
@@ -3264,7 +3264,7 @@ static long propose_ages(locus_t * locus,
           increase_gene_leaves_count(stree,node->right,msa_index);
         }
 
-        if (opt_network)
+        if (opt_msci)
         {
           for (j = 0; j < stree_total_nodes; ++j)
           {
@@ -3301,7 +3301,7 @@ static long propose_ages(locus_t * locus,
         /* change population for the current gene tree node */
         SWAP(node->pop,oldpop);
 
-        if (opt_network)
+        if (opt_msci)
         {
           memcpy(node->hpath, old_hpath_x,  stree->hybrid_count * sizeof(int));
           memcpy(node->left->hpath, old_hpath_c1, stree->hybrid_count * sizeof(int));
@@ -3331,7 +3331,7 @@ static long propose_ages(locus_t * locus,
         {
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
-          if (!opt_network)
+          if (!opt_msci)
           {
             /* note that a few lines above we swapped the populations already
                ( SWAP(node->pop,oldpop) ) and so, oldpop is actually the new
@@ -3345,7 +3345,7 @@ static long propose_ages(locus_t * locus,
         {
           /* decrease the number of incoming lineages to all populations in the
              path from new population (excluding) to the old population */
-          if (!opt_network)
+          if (!opt_msci)
           {
             for (pop = node->pop; pop != oldpop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]--;
@@ -3358,7 +3358,7 @@ static long propose_ages(locus_t * locus,
         snode_t * start = (tnew > oldage) ? node->pop :  oldpop;
         snode_t * end   = (tnew > oldage) ? oldpop->parent : node->pop->parent;
 
-        if (opt_network)
+        if (opt_msci)
         {
           for (j = 0; j < stree_total_nodes; ++j)
           {
@@ -3384,7 +3384,7 @@ static long propose_ages(locus_t * locus,
         }
       }
     }
-    if (opt_network)
+    if (opt_msci)
     {
       free(old_hpath_x);
       free(old_hpath_c1);
@@ -3566,7 +3566,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
     SWAP(gtree->root->time,oldroot->time);
 
     #if 1
-    if (opt_network)
+    if (opt_msci)
       SWAP(gtree->root->hpath, oldroot->hpath);
     #endif
     
@@ -3944,7 +3944,7 @@ static long propose_spr(locus_t * locus,
     
     assert(curnode->parent);
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* store sum of incoming lineages and coalescent events for detecting
          for which populations we need to recompute the MSC density */
@@ -3969,7 +3969,7 @@ static long propose_spr(locus_t * locus,
     }
 
     /* find youngest population with subtree lineages more than current node subtree lineages */
-    if (opt_network)
+    if (opt_msci)
     {
       pop = stree->root;
 
@@ -4002,7 +4002,7 @@ static long propose_spr(locus_t * locus,
     tnew = father->time+opt_finetune_gtspr*legacy_rnd_symmetrical(thread_index);
     tnew = reflect(tnew,minage,maxage,thread_index);
 
-    if (!opt_network)
+    if (!opt_msci)
     {
       for (pop = curnode->pop; pop->parent; pop = pop->parent)
         if (pop->parent->tau > tnew) break;
@@ -4015,7 +4015,7 @@ static long propose_spr(locus_t * locus,
        old bpp results */
 
     gnode_t * target;
-    if (opt_network)
+    if (opt_msci)
     {
       target = network_fill_targets(stree,
                                     gtree,
@@ -4075,7 +4075,7 @@ static long propose_spr(locus_t * locus,
                                            legacy_rndu(thread_index))];
     }
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* Save old flags for the three nodes, to be used for rollback */
       old_hpath_y = (int *)xmalloc((size_t)(stree->hybrid_count)*sizeof(int));
@@ -4136,7 +4136,7 @@ static long propose_spr(locus_t * locus,
       {
         /* increase the number of incoming lineages to all populations in the
            path from old population (excluding) to the new population */
-        if (!opt_network)
+        if (!opt_msci)
         {
           for (pop = oldpop; pop != father->pop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]++;
@@ -4146,7 +4146,7 @@ static long propose_spr(locus_t * locus,
       {
         /* decrease the number of incoming lineages to all populations in the
            path from new population (excluding) to the old population */
-        if (!opt_network)
+        if (!opt_msci)
         {
           for (pop = father->pop; pop != oldpop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]--;
@@ -4177,7 +4177,7 @@ static long propose_spr(locus_t * locus,
        assert(father == target);
     }
 
-    if (opt_network)
+    if (opt_msci)
     {
       /* reset and sample new flags */
       hgamma_contrib += sample_hpath(stree,curnode,thread_index);
@@ -4241,7 +4241,7 @@ static long propose_spr(locus_t * locus,
 
     if (oldpop == father->pop)
     {
-      if (opt_network)
+      if (opt_msci)
       {
         /* have a separate loop for hybrid mirror nodes to correct the problem
            of detecting populations that need MSC recomputation for
@@ -4328,7 +4328,7 @@ static long propose_spr(locus_t * locus,
 
       /* TODO: The following code is identical to propose_ages(), with the
          exception that 'node' is 'father' here. Perhaps make it a function */
-      if (opt_network)
+      if (opt_msci)
       {
         /* have a separate loop for hybrid mirror nodes to correct the problem
            of detecting populations that need MSC recomputation for
@@ -4475,7 +4475,7 @@ static long propose_spr(locus_t * locus,
     unsigned int param_indices[1] = {0};
     double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
-    if (opt_network)
+    if (opt_msci)
       lnacceptance = hgamma_contrib_reverse - hgamma_contrib;
     else
       lnacceptance = 0;
@@ -4531,7 +4531,7 @@ static long propose_spr(locus_t * locus,
       travbuffer[msa_index][k++] = father->left;
       travbuffer[msa_index][k++] = father->right;  /* target or sibling */
 
-      if (opt_network)
+      if (opt_msci)
       {
         assert(dbg_msci_a == curnode);
         
@@ -4579,7 +4579,7 @@ static long propose_spr(locus_t * locus,
 
       locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
 
-      if (opt_network)
+      if (opt_msci)
       {
         assert(dbg_msci_a == curnode);
         assert(dbg_msci_y == father);
@@ -4589,7 +4589,7 @@ static long propose_spr(locus_t * locus,
 
       if (father->pop == oldpop)
       {
-        if (opt_network)
+        if (opt_msci)
         {
           memcpy(father->hpath,  old_hpath_y, stree->hybrid_count*sizeof(int));
           memcpy(curnode->hpath, old_hpath_a, stree->hybrid_count*sizeof(int));
@@ -4603,7 +4603,7 @@ static long propose_spr(locus_t * locus,
           increase_gene_leaves_count(stree,curnode,msa_index);
         }
 
-        if (opt_network)
+        if (opt_msci)
         {
           for (j = 0; j < stree_total_nodes; ++j)
           {
@@ -4646,7 +4646,7 @@ static long propose_spr(locus_t * locus,
         /* change population for the current gene tree node */
         SWAP(father->pop,oldpop);
 
-        if (opt_network)
+        if (opt_msci)
         {
           memcpy(father->hpath,  old_hpath_y, stree->hybrid_count*sizeof(int));
           memcpy(curnode->hpath, old_hpath_a, stree->hybrid_count*sizeof(int));
@@ -4675,7 +4675,7 @@ static long propose_spr(locus_t * locus,
 
           /* increase the number of incoming lineages to all populations in the
              path from old population (excluding) to the new population */
-          if (!opt_network)
+          if (!opt_msci)
           {
             for (pop=oldpop; pop != father->pop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]++;
@@ -4685,7 +4685,7 @@ static long propose_spr(locus_t * locus,
         {
           /* decrease the number of incoming lineages to all populations in the
              path from new population (excluding) to the old population */
-          if (!opt_network)
+          if (!opt_msci)
           {
             for (pop = father->pop; pop != oldpop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]--;
@@ -4698,7 +4698,7 @@ static long propose_spr(locus_t * locus,
         snode_t * start = (tnew > oldage) ? father->pop :  oldpop;
         snode_t * end   = (tnew > oldage) ? oldpop->parent : father->pop->parent;
 
-        if (opt_network)
+        if (opt_msci)
         {
           for (j = 0; j < stree_total_nodes; ++j)
           {
@@ -4724,7 +4724,7 @@ static long propose_spr(locus_t * locus,
         }
       }
 
-      if (opt_network)
+      if (opt_msci)
       {
         assert(dbg_msci_y == father);
         assert(curnode->hpath[0] == old_hpath_a[0]);
@@ -4735,7 +4735,7 @@ static long propose_spr(locus_t * locus,
     }
 
     /* delete rollback */
-    if (opt_network)
+    if (opt_msci)
     {
       free(old_hpath_y);
       free(old_hpath_a);

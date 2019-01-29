@@ -628,7 +628,7 @@ static void stree_label_network_recursive(snode_t * node)
 
 void stree_label(stree_t * stree)
 {
-  if  (opt_network)
+  if  (opt_msci)
     stree_label_network_recursive(stree->root);
   else
     stree_label_recursive(stree->root);
@@ -741,7 +741,7 @@ static void network_init_tau_iterative(stree_t * stree,
   long run = 1;
   long i;
 
-  assert(opt_network);
+  assert(opt_msci);
   assert(stree->root->tau && stree->root->tau != 1);
 
   while (run)
@@ -887,7 +887,7 @@ static void stree_init_tau_recursive(snode_t * node,
                                      double prop,
                                      long thread_index)
 {
-  assert(!opt_network);
+  assert(!opt_msci);
 
   /* end recursion if node is a tip */
   if (!node->left && !node->right)
@@ -922,7 +922,7 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 
    if (opt_method == METHOD_10)    /* method A10 */
    {
-     if (opt_network)
+     if (opt_msci)
        fatal("Method A10 with hybridizations not implemented yet");
 
      double r = legacy_rndu(thread_index);
@@ -934,7 +934,7 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    }
    else if (opt_method == METHOD_11)
    {
-     if (opt_network)
+     if (opt_msci)
        fatal("Method A11 with hybridizations not implemented yet");
 
      double r = (long)(stree->tip_count*legacy_rndu(thread_index));
@@ -953,7 +953,7 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 
    /* recursively set the speciation time for the remaining inner nodes. For
       networks it is not necessary to check if root has both left and right */
-   if (opt_network)
+   if (opt_msci)
      network_init_tau_iterative(stree, prop, thread_index);
    else
    {
@@ -1000,7 +1000,7 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 #endif
 
    /* check to see if everything is OK */
-   if (opt_network)
+   if (opt_msci)
    {
      for (i = 0; i < stree->hybrid_count; ++i)
      {
@@ -1386,7 +1386,7 @@ static void stree_init_theta(stree_t * stree,
   {
     snode_t * node = stree->nodes[i];
 
-    if (opt_network && node->hybrid)
+    if (opt_msci && node->hybrid)
     {
       node->theta = node->hybrid->theta = -1;
       node->has_theta = node->hybrid->has_theta = 0;
@@ -1640,7 +1640,7 @@ static void stree_reset_pptable_network(stree_t * stree)
 
 void stree_reset_pptable(stree_t * stree)
 {
-  if (opt_network)
+  if (opt_msci)
     stree_reset_pptable_network(stree);
   else
     stree_reset_pptable_tree(stree);
@@ -1717,7 +1717,7 @@ void stree_init_pptable(stree_t * stree)
    snode_t * curnode;
    snode_t * ancnode;
 #endif
-  assert(opt_network == !!stree->hybrid_count);
+  assert(opt_msci == !!stree->hybrid_count);
 
   pptable_size = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
@@ -1782,7 +1782,7 @@ void stree_init(stree_t * stree,
 
   /* safety check */
   assert(msa_count > 0);
-  assert(opt_network == !!stree->hybrid_count);
+  assert(opt_msci == !!stree->hybrid_count);
 
   stree_init_pptable(stree);
 
@@ -1793,7 +1793,7 @@ void stree_init(stree_t * stree,
   /* Initialize population sizes */
   stree_init_theta(stree, msa, maplist, msa_count, fp_out, thread_index);
 
-  if (stree->tip_count > 1 || opt_network)
+  if (stree->tip_count > 1 || opt_msci)
   {
     /* Initialize speciation times and create extinct species groups */
     stree_init_tau(stree, thread_index);
@@ -1803,13 +1803,13 @@ void stree_init(stree_t * stree,
     stree->nodes[0]->tau = 0;
   }
 
-  if (opt_network)
+  if (opt_msci)
     stree_init_gamma(stree);
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
      species tree cloning functions do not call wraptree and that would require
      duplicate code */
-  if (opt_network)
+  if (opt_msci)
     network_init_hx(stree);
 
   /* allocate space for keeping track of coalescent events at each species tree
@@ -2189,7 +2189,7 @@ static long propose_tau(locus_t ** loci,
    oldage = snode->tau;
 
    /* compute minage and maxage bounds */
-   if (opt_network && snode->hybrid)
+   if (opt_msci && snode->hybrid)
    {
      if (node_is_hybridization(snode))
      {
@@ -2232,7 +2232,7 @@ static long propose_tau(locus_t ** loci,
        minage = MAX(snode->left->tau, snode->right->tau);
    }
 
-   if (opt_network && snode->hybrid)
+   if (opt_msci && snode->hybrid)
    {
      if (node_is_hybridization(snode))
      {
@@ -2269,7 +2269,7 @@ static long propose_tau(locus_t ** loci,
    newage = reflect(newage, minage, maxage, thread_index);
    snode->tau = newage;
 
-   if (opt_network && snode->hybrid)
+   if (opt_msci && snode->hybrid)
    {
      if (node_is_hybridization(snode))
      {
@@ -2320,7 +2320,7 @@ static long propose_tau(locus_t ** loci,
            no tau, then snode has no theta */
         if (snode->theta != -1)
           snode->theta = oldtheta / thetafactor;
-        if (opt_network && snode->hybrid)
+        if (opt_msci && snode->hybrid)
         {
           /* TODO : Need to update the hybrid as well */
           //snode->hybrid->theta = 
@@ -2335,7 +2335,7 @@ static long propose_tau(locus_t ** loci,
    snode_t * affected[7];
    double old_logpr_contrib[7] = {0,0,0,0,0,0,0};
 
-   if (opt_network && snode->hybrid)
+   if (opt_msci && snode->hybrid)
    {
      if (node_is_hybridization(snode))
      {
@@ -2538,7 +2538,7 @@ static long propose_tau(locus_t ** loci,
    {
       /* rejected */
       snode->tau = oldage;
-      if (opt_network && snode->hybrid)
+      if (opt_msci && snode->hybrid)
       {
         if (node_is_hybridization(snode))
         {
@@ -2566,7 +2566,7 @@ static long propose_tau(locus_t ** loci,
         if (snode->theta != -1)
         {
           snode->theta = oldtheta;
-          if (opt_network && snode->hybrid)
+          if (opt_msci && snode->hybrid)
           {
             /* TODO: Need to update hybrid theta */
           }
@@ -2659,13 +2659,13 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 
    /* compute number of nodes with tau > 0 */
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
+      if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->htau))
          candidate_count++;
 
 
    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
    {
-      if (stree->nodes[i]->tau > 0 && (!opt_network || stree->nodes[i]->htau))
+      if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->htau))
          accepted += propose_tau(loci,
                                  stree->nodes[i],
                                  gtree,
@@ -3547,13 +3547,13 @@ long stree_propose_spr(stree_t ** streeptr,
    else
       y->left = c;
 
-   assert(!opt_network);
+   assert(!opt_msci);
    for (i = 0; i < stree->locus_count; ++i)
       fill_seqin_counts(stree, NULL, i);
 
    /* TODO: Check whether reset_gene_leaves_count must operate on the whole gtree_list, or whether
       we can separate the 'reset_hybrid_gene_leaves_count() call inside the function */
-   assert(!opt_network);
+   assert(!opt_msci);
    reset_gene_leaves_count(stree,gtree_list);
    stree_reset_pptable(stree);
 
