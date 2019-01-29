@@ -553,13 +553,13 @@ static long parse_phiprior(const char * line)
 
   long count;
 
-  count = get_double(p, &opt_gamma_alpha);
+  count = get_double(p, &opt_phi_alpha);
   if (!count) goto l_unwind;
 
   p += count;
 
   /* now read second token */
-  count = get_double(p, &opt_gamma_beta);
+  count = get_double(p, &opt_phi_beta);
   if (!count) goto l_unwind;
 
   p += count;
@@ -701,15 +701,15 @@ static long parse_finetune(const char * line)
 
   p += count;
 
-  opt_finetune_gamma = -1;
+  opt_finetune_phi = -1;
   if (is_emptyline(p))
   {
     ret = 1;
   }
   else
   {
-    /* 8. gamma finetune */
-    count = get_double(p, &opt_finetune_gamma);
+    /* 8. phi finetune */
+    count = get_double(p, &opt_finetune_phi);
     if (!count) goto l_unwind;
     p += count;
   }

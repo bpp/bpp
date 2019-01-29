@@ -620,7 +620,7 @@ static void replace_hybrid(stree_t * stree,
 
     /* samples gene tree nodes (lineages) and distribute them to pop[i].snode
        and pop[i].snode->hybrid (ie left and right populations of hybridization)
-       according to probability gamma */
+       according to probability phi */
     int * temp = (int *)xmalloc((size_t)(hpop->seq_count) * sizeof(int));
 
 
@@ -631,7 +631,7 @@ static void replace_hybrid(stree_t * stree,
     /* Sample lineages: Fill temp with 0 if lineage goes to epoch (mirror node)
        or 1 if epoch->hybrid (hybridization) */
     for (j = 0; j < hpop->seq_count; ++j)
-      temp[j] = (legacy_rndu(thread_index) <= hpop->snode->hgamma) ? 1 : 0;
+      temp[j] = (legacy_rndu(thread_index) <= hpop->snode->hphi) ? 1 : 0;
 
     /* count how many lineages ended up in hybridization node */
     unsigned int hpop_seqcount = 0;
@@ -1595,7 +1595,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         unsigned int hindex = GET_HINDEX(stree, father);
         assert(hindex >= 0 && hindex < stree->hybrid_count);
 
-        if (legacy_rndu(thread_index) <= father->hgamma)
+        if (legacy_rndu(thread_index) <= father->hphi)
            gtree->root->hpath[hindex] = BPP_HPATH_LEFT;
         else
         {
@@ -2028,9 +2028,9 @@ double gtree_update_logprob_contrib(snode_t * snode,
     if (opt_msci && snode->hybrid)
     {
       if (node_is_bidirection(snode) && !node_is_mirror(snode))
-        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hgamma);
+        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
       else
-        logpr += snode->seqin_count[msa_index] * log(snode->hgamma);
+        logpr += snode->seqin_count[msa_index] * log(snode->hphi);
     }
 
     /* now distinguish between estimating theta and analytical computation */
@@ -2380,10 +2380,10 @@ static double sample_hpath(stree_t * stree, gnode_t * x, long thread_index)
       if (stree->pptable[pop->node_index][end->node_index] &&
           stree->pptable[pop->hybrid->node_index][end->node_index])
       {
-        if (legacy_rndu(thread_index) <= pop->hgamma)
+        if (legacy_rndu(thread_index) <= pop->hphi)
         {
           x->hpath[hindex] = BPP_HPATH_LEFT;
-          contrib += log(pop->hgamma);
+          contrib += log(pop->hphi);
         }
         else
         {
@@ -2393,7 +2393,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x, long thread_index)
             /* do two steps (nodes) in one go */
 
             /* count contribution for first part of bidirection */
-            contrib += log(pop->hybrid->hgamma);
+            contrib += log(pop->hybrid->hphi);
 
             /* move to opposite node, set flag, and set visited */
             pop = pop->hybrid->parent;
@@ -2404,7 +2404,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x, long thread_index)
           else
           {
             pop = pop->hybrid;
-            contrib += log(pop->hgamma);
+            contrib += log(pop->hphi);
           }
 
         }
@@ -2483,19 +2483,19 @@ static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath
       {
         if (old_hpath[hindex] == BPP_HPATH_LEFT)
         {
-          contrib += log(pop->hgamma);
+          contrib += log(pop->hphi);
         }
         else
         {
           if (bidir)
           {
-            contrib += log(pop->hybrid->hgamma);
+            contrib += log(pop->hybrid->hphi);
             pop = pop->hybrid->parent;
           }
           else
           {
             pop = pop->hybrid;
-            contrib += log(pop->hgamma);
+            contrib += log(pop->hphi);
           }
         }
       }
@@ -2710,8 +2710,8 @@ static long propose_ages(locus_t * locus,
   int * old_hpath_x = NULL;
   int * old_hpath_c1 = NULL;
   int * old_hpath_c2 = NULL;
-  double hgamma_contrib = 0;
-  double hgamma_contrib_reverse = 0;
+  double hphi_contrib = 0;
+  double hphi_contrib_reverse = 0;
   double hpop_contrib = 0;
   double hpop_contrib_reverse = 0;
 
@@ -2747,8 +2747,8 @@ static long propose_ages(locus_t * locus,
           snode->parent->hx[thread_index] -= snode->seqin_count[msa_index];
         }
       }
-      hgamma_contrib = 0;
-      hgamma_contrib_reverse = 0;
+      hphi_contrib = 0;
+      hphi_contrib_reverse = 0;
       hpop_contrib = 0;
       hpop_contrib_reverse = 0;
     }
@@ -2942,16 +2942,16 @@ static long propose_ages(locus_t * locus,
     if (opt_msci)
     {
       /* reset and sample new flags */
-      hgamma_contrib += sample_hpath(stree,node,thread_index);
-      hgamma_contrib += sample_hpath(stree,node->left, thread_index);
-      hgamma_contrib += sample_hpath(stree,node->right, thread_index);
+      hphi_contrib += sample_hpath(stree,node,thread_index);
+      hphi_contrib += sample_hpath(stree,node->left, thread_index);
+      hphi_contrib += sample_hpath(stree,node->right, thread_index);
 
       snode_t * newpop = node->pop;
       node->pop = oldpop;
 
-      hgamma_contrib_reverse += sample_hpath_reverse(stree,node,old_hpath_x);
-      hgamma_contrib_reverse += sample_hpath_reverse(stree,node->left,old_hpath_c1);
-      hgamma_contrib_reverse += sample_hpath_reverse(stree,node->right,old_hpath_c2);
+      hphi_contrib_reverse += sample_hpath_reverse(stree,node,old_hpath_x);
+      hphi_contrib_reverse += sample_hpath_reverse(stree,node->left,old_hpath_c1);
+      hphi_contrib_reverse += sample_hpath_reverse(stree,node->right,old_hpath_c2);
 
       node->pop = newpop;
 
@@ -3185,7 +3185,7 @@ static long propose_ages(locus_t * locus,
 
     if (opt_msci)
     {
-      lnacceptance = - (hgamma_contrib - hgamma_contrib_reverse);
+      lnacceptance = - (hphi_contrib - hphi_contrib_reverse);
       lnacceptance = lnacceptance - hpop_contrib + hpop_contrib_reverse;
     }
     else
@@ -3893,8 +3893,8 @@ static long propose_spr(locus_t * locus,
   int * old_hpath_a = NULL;
   int * old_hpath_s = NULL;
   int * old_hpath_t = NULL;
-  double hgamma_contrib = 0;
-  double hgamma_contrib_reverse = 0;
+  double hphi_contrib = 0;
+  double hphi_contrib_reverse = 0;
 
   unsigned int * indices = NULL;
 
@@ -3964,8 +3964,8 @@ static long propose_spr(locus_t * locus,
           snode->parent->hx[thread_index] -= snode->seqin_count[msa_index];
         }
       }
-      hgamma_contrib = 0;
-      hgamma_contrib_reverse = 0;
+      hphi_contrib = 0;
+      hphi_contrib_reverse = 0;
     }
 
     /* find youngest population with subtree lineages more than current node subtree lineages */
@@ -4180,7 +4180,7 @@ static long propose_spr(locus_t * locus,
     if (opt_msci)
     {
       /* reset and sample new flags */
-      hgamma_contrib += sample_hpath(stree,curnode,thread_index);
+      hphi_contrib += sample_hpath(stree,curnode,thread_index);
 
       if (spr_required)
       {
@@ -4219,7 +4219,7 @@ static long propose_spr(locus_t * locus,
       snode_t * newpop = father->pop;
       father->pop = oldpop;
 
-      hgamma_contrib_reverse += sample_hpath_reverse(stree,curnode,old_hpath_a);
+      hphi_contrib_reverse += sample_hpath_reverse(stree,curnode,old_hpath_a);
 
       father->pop = newpop;
 
@@ -4476,7 +4476,7 @@ static long propose_spr(locus_t * locus,
     double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
     if (opt_msci)
-      lnacceptance = hgamma_contrib_reverse - hgamma_contrib;
+      lnacceptance = hphi_contrib_reverse - hphi_contrib;
     else
       lnacceptance = 0;
 

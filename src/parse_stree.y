@@ -222,17 +222,17 @@ static void parse_annotation(snode_t * snode, const char * annotation)
     }
     s[optlen] = 0;
 
-    if (!strcasecmp(s,"gamma"))
+    if (!strcasecmp(s,"phi"))
     {
       if (!get_double(s+optlen+1,&val))
         fatal("Cannot parse value (%s) for token (%s) in annotation (%s) - "
               "value must be of type float", s+optlen, s, annotation);
       
       if (val < 0 || val > 1)
-        fatal("Parameter gamma in annotations must be greater than 0 and "
+        fatal("Parameter phi in annotations must be greater than 0 and "
               "smaller than 1");
       
-      snode->hgamma = val;
+      snode->hphi = val;
     }
     else if (!strcasecmp(s,"tau-parent"))
     {
@@ -313,43 +313,43 @@ static void annotate_bd_introgression(snode_t * xtip,
           "annotations for these two nodes.",
           xtip->label, y->label);
 
-  if (xtip->hgamma && xinner->hgamma)
+  if (xtip->hphi && xinner->hphi)
   {
-    if (xtip->hgamma + xinner->hgamma != 1)
+    if (xtip->hphi + xinner->hphi != 1)
       fatal("Gamma parameter annotations for bidirectional introgression event "
             "on node (%s) do not sum to 1",  xtip->label);
   }
-  else if (xtip->hgamma)
+  else if (xtip->hphi)
   {
-    /* gamma on edge Y->X */
+    /* phi on edge Y->X */
 
-    xinner->hybrid->hgamma = xtip->hgamma;
-    xinner->hgamma = 1 - xtip->hgamma;
+    xinner->hybrid->hphi = xtip->hphi;
+    xinner->hphi = 1 - xtip->hphi;
 
   }
-  else if (xinner->hgamma)
-    xinner->hybrid->hgamma = 1 - xinner->hgamma;
+  else if (xinner->hphi)
+    xinner->hybrid->hphi = 1 - xinner->hphi;
   else
-    fatal("Missing gamma parameter annotation for bidirectional introgression "
+    fatal("Missing phi parameter annotation for bidirectional introgression "
           "event on node (%s)", xtip->label);
 
-  if (y->hgamma && ylink->hgamma)
+  if (y->hphi && ylink->hphi)
   {
-    if (y->hgamma + ylink->hgamma != 1)
+    if (y->hphi + ylink->hphi != 1)
       fatal("Gamma parameter annotations for bidirectional introgression event "
             "on node (%s) do not sum to 1",  y->label);
   }
-  else if (y->hgamma)
+  else if (y->hphi)
   {
-    y->hybrid->hgamma = 1 - y->hgamma;
+    y->hybrid->hphi = 1 - y->hphi;
   }
-  else if (ylink->hgamma)
+  else if (ylink->hphi)
   {
-    y->hgamma = 1 - ylink->hgamma;
-    y->hybrid->hgamma = ylink->hgamma;
+    y->hphi = 1 - ylink->hphi;
+    y->hybrid->hphi = ylink->hphi;
   }
   else
-    fatal("Missing gamma parameter annotation for bidirectional introgression "
+    fatal("Missing phi parameter annotation for bidirectional introgression "
           "event on node (%s)", y->label);
 }
 static void annotate_hybridization(snode_t * hinner, snode_t * htip)
@@ -391,27 +391,27 @@ static void annotate_hybridization(snode_t * hinner, snode_t * htip)
    
   }
 
-  if (hinner->hgamma && hinner->hybrid->hgamma)
+  if (hinner->hphi && hinner->hybrid->hphi)
   {
-    if (hinner->hgamma + hinner->hybrid->hgamma != 1)
+    if (hinner->hphi + hinner->hybrid->hphi != 1)
       fatal("Gamma parameter annotations for hybridization event (%s) do not "
             "sum to 1", hinner->label);
   }
-  else if (hinner->hgamma)
+  else if (hinner->hphi)
   {
-    hinner->hybrid->hgamma = 1 - hinner->hgamma;
-    hinner->parent->hgamma = hinner->hgamma;
-    hinner->hybrid->parent->hgamma = hinner->hybrid->hgamma;
+    hinner->hybrid->hphi = 1 - hinner->hphi;
+    hinner->parent->hphi = hinner->hphi;
+    hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
   }
-  else if (hinner->hybrid->hgamma)
+  else if (hinner->hybrid->hphi)
   {
-    hinner->hgamma = 1 - hinner->hybrid->hgamma;
-    hinner->parent->hgamma = hinner->hgamma;
-    hinner->hybrid->parent->hgamma = hinner->hybrid->hgamma;
+    hinner->hphi = 1 - hinner->hybrid->hphi;
+    hinner->parent->hphi = hinner->hphi;
+    hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
   }
   else
   {
-    fatal("Missing gamma parameter annotation for hybridization event (%s)",
+    fatal("Missing phi parameter annotation for hybridization event (%s)",
           hinner->label);
   }
 

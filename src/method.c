@@ -70,7 +70,7 @@ static void reset_finetune_onestep(double * pjump, double * param)
   
 }
 
-static void reset_finetune(double * pjump, double * pjump_gamma)
+static void reset_finetune(double * pjump, double * pjump_phi)
 {
   int i;
   int extra;
@@ -82,7 +82,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   for (i = 0; i < PROP_COUNT + extra; ++i)
     fprintf(stdout, " %8.5f", pjump[i]);
   if (opt_msci)
-    fprintf(stdout, " %8.5f", *pjump_gamma);
+    fprintf(stdout, " %8.5f", *pjump_phi);
   fprintf(stdout, "\n");
 
   fprintf(stdout, "Current finetune: ");
@@ -94,7 +94,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   if (extra)
     fprintf(stdout, " %8.5f", opt_finetune_locusrate);
   if (opt_msci)
-    fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
+    fprintf(stdout, " %8.5f\n", opt_finetune_phi);
   else
     fprintf(stdout, "\n");
 
@@ -108,7 +108,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   if (extra)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
   if (opt_msci)
-    reset_finetune_onestep(pjump_gamma, &opt_finetune_gamma);
+    reset_finetune_onestep(pjump_phi, &opt_finetune_phi);
 
   fprintf(stdout, "New finetune:     ");
   fprintf(stdout, " %8.5f", opt_finetune_gtage);
@@ -119,7 +119,7 @@ static void reset_finetune(double * pjump, double * pjump_gamma)
   if (extra)
     fprintf(stdout, " %8.5f", opt_finetune_locusrate);
   if (opt_msci)
-    fprintf(stdout, " %8.5f\n", opt_finetune_gamma);
+    fprintf(stdout, " %8.5f\n", opt_finetune_phi);
   else
     fprintf(stdout, "\n");
 }
@@ -223,7 +223,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "\tgamma_%s", stree->nodes[offset+i]->hybrid->label);
+      fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->hybrid->label);
   }
 
   /* 3. Print mutation rate for each locus */
@@ -320,12 +320,12 @@ static void mcmc_logsample(FILE * fp,
     if (stree->nodes[i]->tau)
       fprintf(fp, "\t%.5g", stree->nodes[i]->tau);
 
-  /* 2a. Print gamma for hybridization nodes */
+  /* 2a. Print phi for hybridization nodes */
   if (opt_msci)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "\t%.5g", stree->nodes[offset+i]->hybrid->hgamma);
+      fprintf(fp, "\t%.5g", stree->nodes[offset+i]->hybrid->hphi);
   }
 
   /* 3. Print mutation rate for each locus */
@@ -616,8 +616,8 @@ static FILE * init(stree_t ** ptr_stree,
   /* Show network */
   if (opt_msci)
   {
-    if (opt_finetune_gamma == -1)
-      fatal("Missing finetune value for gamma parameter");
+    if (opt_finetune_phi == -1)
+      fatal("Missing finetune value for phi parameter");
 
     print_network_table(stree);
   }
@@ -1190,7 +1190,7 @@ void cmd_run()
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
 
-  double pjump_gamma = 0;
+  double pjump_phi = 0;
 
   double * mean_tau = NULL;
   double * mean_theta = NULL;
@@ -1349,7 +1349,7 @@ void cmd_run()
 #endif      
 
       if (opt_finetune_reset && opt_burnin >= 200)
-        reset_finetune(pjump,&pjump_gamma);
+        reset_finetune(pjump,&pjump_phi);
       for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
@@ -1358,7 +1358,7 @@ void cmd_run()
       memset(pjump, 0, pjump_size * sizeof(double));
 
       if (opt_msci)
-        pjump_gamma = 0;
+        pjump_phi = 0;
 
       if (opt_est_delimit)
       {
@@ -1640,8 +1640,8 @@ void cmd_run()
     /* phi proposal */
     if (opt_msci)
     {
-      ratio = stree_propose_gamma(stree,gtree);
-      pjump_gamma = (pjump_gamma*(ft_round-1) + ratio) / (double)ft_round;
+      ratio = stree_propose_phi(stree,gtree);
+      pjump_phi = (pjump_phi*(ft_round-1) + ratio) / (double)ft_round;
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -1741,7 +1741,7 @@ void cmd_run()
       for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
         printf(" %4.2f", pjump[j]);
       if (opt_msci)
-        printf(" %4.2f", pjump_gamma);
+        printf(" %4.2f", pjump_phi);
       printf(" ");
 
       if (opt_method == METHOD_01)

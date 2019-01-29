@@ -312,7 +312,7 @@ typedef struct snode_s
   double notheta_old_logpr_contrib; /* storage space for rollback */
 
   /* introgression */
-  double hgamma;                    /* genetic contribution */
+  double hphi;                      /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
   struct snode_s * hybrid;          /* linked hybridization node */
   long * hx;                        /* sum of events count and seqin_count (per msa) */
@@ -636,8 +636,6 @@ extern long opt_est_locusrate;
 extern long opt_est_stree;
 extern long opt_est_theta;
 extern long opt_exp_randomize;
-extern long opt_revolutionary_spr_method;
-extern long opt_revolutionary_spr_debug;
 extern long opt_finetune_reset;
 extern long opt_help;
 extern long opt_locus_count;
@@ -654,6 +652,8 @@ extern long opt_print_locusrate;
 extern long opt_print_samples;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
+extern long opt_revolutionary_spr_method;
+extern long opt_revolutionary_spr_debug;
 extern long opt_rjmcmc_method;
 extern long opt_samplefreq;
 extern long opt_samples;
@@ -666,18 +666,18 @@ extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
 extern double opt_clock_alpha;
-extern double opt_finetune_gamma;
+extern double opt_finetune_phi;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
-extern double opt_gamma_alpha;
-extern double opt_gamma_beta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_locusrate_alpha;
+extern double opt_phi_alpha;
+extern double opt_phi_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
@@ -820,7 +820,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 
-double stree_propose_gamma(stree_t * stree, gtree_t ** gtree);
+double stree_propose_phi(stree_t * stree, gtree_t ** gtree);
 
 void stree_fini(void);
 

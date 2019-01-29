@@ -440,7 +440,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     if (stree->nodes[stree->tip_count+i]->tau)
       col_count++;
 
-  /* compute number of gamma parameters */
+  /* compute number of phi parameters */
   if (opt_msci)
     col_count += stree->hybrid_count;
 

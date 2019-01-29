@@ -156,7 +156,7 @@ void print_network_table(stree_t * stree)
     }
 
     if (stree->nodes[i]->hybrid)
-      printf("   [tau = %ld, gamma = %f]", stree->nodes[i]->htau, stree->nodes[i]->hgamma);
+      printf("   [tau = %ld, phi = %f]", stree->nodes[i]->htau, stree->nodes[i]->hphi);
 
     printf("\n");
   }
@@ -1022,24 +1022,24 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    }
 }
 
-static int propose_gamma(stree_t * stree,
-                         gtree_t ** gtree,
-                         snode_t * snode,
-                         long thread_index)
+static int propose_phi(stree_t * stree,
+                       gtree_t ** gtree,
+                       snode_t * snode,
+                       long thread_index)
 {
   int accepted;
   long i;
-  double gammanew;
-  double gammaold;
+  double phinew;
+  double phiold;
   double new_logpr;
   double old_logpr;
   double lnacceptance;
 
   assert(!node_is_mirror(snode));
 
-  gammaold = snode->hgamma;
-  gammanew = gammaold + opt_finetune_gamma*legacy_rnd_symmetrical(thread_index);
-  gammanew = reflect(gammanew,0,1,thread_index);
+  phiold = snode->hphi;
+  phinew = phiold + opt_finetune_phi*legacy_rnd_symmetrical(thread_index);
+  phinew = reflect(phinew,0,1,thread_index);
 
   if (opt_est_theta)
   {
@@ -1049,8 +1049,8 @@ static int propose_gamma(stree_t * stree,
     {
       old_logpr += gtree[i]->logpr;
       new_logpr += gtree[i]->logpr +
-                   snode->seqin_count[i]*(log(gammanew) - log(gammaold)) +
-                   snode->hybrid->seqin_count[i]*(log(1-gammanew) - log(1-gammaold));
+                   snode->seqin_count[i]*(log(phinew) - log(phiold)) +
+                   snode->hybrid->seqin_count[i]*(log(1-phinew) - log(1-phiold));
     }
   }
   else
@@ -1059,13 +1059,13 @@ static int propose_gamma(stree_t * stree,
     new_logpr = stree->notheta_logpr;
     for (i = 0; i < stree->locus_count; ++i)
     {
-      new_logpr += snode->seqin_count[i]*(log(gammanew) - log(gammaold)) +
-                   snode->hybrid->seqin_count[i]*(log(1-gammanew) - log(1-gammaold));
+      new_logpr += snode->seqin_count[i]*(log(phinew) - log(phiold)) +
+                   snode->hybrid->seqin_count[i]*(log(1-phinew) - log(1-phiold));
     }
   }
 
-  lnacceptance = (opt_gamma_alpha-1) * (log(gammanew) - log(gammaold)) +
-                 (opt_gamma_beta-1) * (log(1-gammanew) - log(1-gammaold)) +
+  lnacceptance = (opt_phi_alpha-1) * (log(phinew) - log(phiold)) +
+                 (opt_phi_beta-1) * (log(1-phinew) - log(1-phiold)) +
                  new_logpr - old_logpr;
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -1073,26 +1073,26 @@ static int propose_gamma(stree_t * stree,
     /* accepted */
 
     accepted = 1;
-    snode->hgamma = gammanew;
-    snode->hybrid->hgamma = 1-gammanew;
+    snode->hphi = phinew;
+    snode->hybrid->hphi = 1-phinew;
 
     /* update logpr */
     if (opt_est_theta)
     {
       for (i = 0; i < stree->locus_count; ++i)
       {
-        /* subtract from gene tree log-density the old gamma contributions */
+        /* subtract from gene tree log-density the old phi contributions */
         gtree[i]->logpr = gtree[i]->logpr -
                           snode->logpr_contrib[i] -
                           snode->hybrid->logpr_contrib[i];
 
         /* update log-density contributions for the two populations */
         snode->logpr_contrib[i] += snode->seqin_count[i] *
-                                   (log(gammanew) - log(gammaold));
+                                   (log(phinew) - log(phiold));
         snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] *
-                                           (log(1-gammanew) - log(1-gammaold));
+                                           (log(1-phinew) - log(1-phiold));
 
-        /* add to the gene tree log-density the new gamma contributions */
+        /* add to the gene tree log-density the new phi contributions */
         gtree[i]->logpr = gtree[i]->logpr +
                           snode->logpr_contrib[i] +
                           snode->hybrid->logpr_contrib[i];
@@ -1101,7 +1101,7 @@ static int propose_gamma(stree_t * stree,
     else
     {
       /* subtract from total density (sum of densities of all gene trees) the
-         old gamma contributions from the two populations */
+         old phi contributions from the two populations */
       stree->notheta_logpr -= snode->notheta_logpr_contrib;
       stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
 
@@ -1110,10 +1110,10 @@ static int propose_gamma(stree_t * stree,
       {
         snode->notheta_logpr_contrib = snode->notheta_logpr_contrib +
                                        snode->seqin_count[i] * 
-                                       (log(gammanew) - log(gammaold));
+                                       (log(phinew) - log(phiold));
         snode->hybrid->notheta_logpr_contrib = snode->hybrid->notheta_logpr_contrib +
                                                snode->hybrid->seqin_count[i] * 
-                                               (log(1-gammanew)-log(1-gammaold));
+                                               (log(1-phinew)-log(1-phiold));
         
       }
 
@@ -1130,7 +1130,7 @@ static int propose_gamma(stree_t * stree,
   return accepted;
 }
 
-double stree_propose_gamma(stree_t * stree, gtree_t ** gtree)
+double stree_propose_phi(stree_t * stree, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -1142,23 +1142,23 @@ double stree_propose_gamma(stree_t * stree, gtree_t ** gtree)
 
   /* go through hybridization nodes */
   for (i = 0; i < stree->hybrid_count; ++i)
-    accepted += propose_gamma(stree,
-                              gtree,
-                              stree->nodes[offset+i]->hybrid,
-                              thread_index);
+    accepted += propose_phi(stree,
+                            gtree,
+                            stree->nodes[offset+i]->hybrid,
+                            thread_index);
 
   return ((double)accepted / stree->hybrid_count);
 }
 
-static void stree_init_gamma(stree_t * stree)
+static void stree_init_phi(stree_t * stree)
 {
   long i;
 
   long offset = stree->tip_count + stree->inner_count;
 
-  if (opt_gamma_alpha <= 0)
+  if (opt_phi_alpha <= 0)
     fatal("Alpha value for 'phiprior' must be larger than 0");
-  if (opt_gamma_beta <= 0)
+  if (opt_phi_beta <= 0)
     fatal("Beta value for 'phiprior' must be larger than 0");
 
   for (i = 0; i < stree->hybrid_count; ++i)
@@ -1167,35 +1167,35 @@ static void stree_init_gamma(stree_t * stree)
 
     assert(node_is_bidirection(mnode) || node_is_mirror(mnode));
 
-    /* set gamma parameter to the mean */
-    mnode->hybrid->hgamma = (opt_gamma_alpha / (opt_gamma_alpha + opt_gamma_beta));
-    mnode->hgamma = 1 - mnode->hybrid->hgamma;
+    /* set phi parameter to the mean */
+    mnode->hybrid->hphi = (opt_phi_alpha / (opt_phi_alpha + opt_phi_beta));
+    mnode->hphi = 1 - mnode->hybrid->hphi;
   }
 
     /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
 #if (defined DEBUG_MSCi)
    /* two bidirectional introgressions */
-  stree->nodes[3]->hgamma  = 0.3;                         /* Sl */
-  stree->nodes[4]->hgamma  = 0.4;                         /* Xl */
-  stree->nodes[5]->hgamma  = 0.5;                         /* Yl */
-  stree->nodes[6]->hgamma  = 0.8;                         /* Tl */
-  stree->nodes[7]->hgamma  = 1-stree->nodes[3]->hgamma;   /* Sr */
-  stree->nodes[8]->hgamma  = 1-stree->nodes[4]->hgamma;   /* Xr */
-  stree->nodes[9]->hgamma  = 1-stree->nodes[5]->hgamma;   /* Yr */
-  stree->nodes[10]->hgamma = 1-stree->nodes[6]->hgamma;   /* Tr */
+  stree->nodes[3]->hphi = 0.3;                         /* Sl */
+  stree->nodes[4]->hphi = 0.4;                         /* Xl */
+  stree->nodes[5]->hphi = 0.5;                         /* Yl */
+  stree->nodes[6]->hphi = 0.8;                         /* Tl */
+  stree->nodes[7]->hphi = 1-stree->nodes[3]->hphi;     /* Sr */
+  stree->nodes[8]->hphi = 1-stree->nodes[4]->hphi;     /* Xr */
+  stree->nodes[9]->hphi = 1-stree->nodes[5]->hphi;     /* Yr */
+  stree->nodes[10]->hphi = 1-stree->nodes[6]->hphi;    /* Tr */
 #endif
 #if (0)
    /* one bidirectional introgression */
-  stree->nodes[3]->hgamma = 0.3;
-  stree->nodes[4]->hgamma = 0.4;
-  stree->nodes[5]->hgamma = 1-stree->nodes[3]->hgamma;
-  stree->nodes[6]->hgamma = 1-stree->nodes[4]->hgamma;
+  stree->nodes[3]->hphi = 0.3;
+  stree->nodes[4]->hphi = 0.4;
+  stree->nodes[5]->hphi = 1-stree->nodes[3]->hphi;
+  stree->nodes[6]->hphi = 1-stree->nodes[4]->hphi;
 #endif
 #if (0)
-  stree->nodes[6]->hgamma = 0.3;
-  stree->nodes[7]->hgamma = 0.4;
-  stree->nodes[9]->hgamma = 1 - stree->nodes[6]->hgamma;
-  stree->nodes[10]->hgamma = 1 - stree->nodes[7]->hgamma;
+  stree->nodes[6]->hphi  = 0.3;
+  stree->nodes[7]->hphi  = 0.4;
+  stree->nodes[9]->hphi  = 1 - stree->nodes[6]->hphi;
+  stree->nodes[10]->hphi = 1 - stree->nodes[7]->hphi;
 #endif
 }
 
@@ -1804,7 +1804,7 @@ void stree_init(stree_t * stree,
   }
 
   if (opt_msci)
-    stree_init_gamma(stree);
+    stree_init_phi(stree);
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
      species tree cloning functions do not call wraptree and that would require

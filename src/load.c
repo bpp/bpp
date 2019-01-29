@@ -405,10 +405,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read beta 'theta' tag");
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
 
-  /* laod gamma prior */
-  if (!LOAD(&opt_gamma_alpha,1,fp))
+  /* laod phi prior */
+  if (!LOAD(&opt_phi_alpha,1,fp))
     fatal("Cannot read alpha of 'phiprior' tag"); 
-  if (!LOAD(&opt_gamma_beta,1,fp))
+  if (!LOAD(&opt_phi_beta,1,fp))
     fatal("Cannot read beta of 'phiprior' tag"); 
 
 
@@ -435,8 +435,8 @@ static void load_chk_section_1(FILE * fp,
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
-  if (!LOAD(&opt_finetune_gamma,1,fp))
-    fatal("Cannot read gene tree gamma finetune parameter");
+  if (!LOAD(&opt_finetune_phi,1,fp))
+    fatal("Cannot read gene tree phi finetune parameter");
   if (!LOAD(&opt_finetune_gtage,1,fp))
     fatal("Cannot read gene tree age finetune parameter");
   if (!LOAD(&opt_finetune_gtspr,1,fp))
@@ -806,10 +806,10 @@ void load_chk_section_2(FILE * fp)
 
   for (i = 0; i < stree->hybrid_count; ++i)
   {
-    if (!LOAD(&(stree->nodes[hoffset+i]->hybrid->hgamma),1,fp))
-      fatal("Cannot read genetic contribution (gamma) for node %ld", i);
+    if (!LOAD(&(stree->nodes[hoffset+i]->hybrid->hphi),1,fp))
+      fatal("Cannot read genetic contribution (phi) for node %ld", i);
 
-    stree->nodes[hoffset+i]->hgamma = 1 - stree->nodes[hoffset+i]->hybrid->hgamma;
+    stree->nodes[hoffset+i]->hphi = 1 - stree->nodes[hoffset+i]->hybrid->hphi;
   }
 
   for (i = 0; i < total_nodes; ++i)

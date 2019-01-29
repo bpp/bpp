@@ -274,8 +274,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_tau_alpha,1,fp);
   DUMP(&opt_tau_beta,1,fp);
 
-  DUMP(&opt_gamma_alpha,1,fp);
-  DUMP(&opt_gamma_beta,1,fp);
+  DUMP(&opt_phi_alpha,1,fp);
+  DUMP(&opt_phi_beta,1,fp);
 
   /* whether locus mutation rate is estimated */
   DUMP(&opt_est_locusrate,1,fp);
@@ -288,7 +288,7 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
-  DUMP(&opt_finetune_gamma,1,fp);
+  DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
   DUMP(&opt_finetune_theta,1,fp);
@@ -385,7 +385,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   }
 
   for (i = 0; i < stree->hybrid_count; ++i)
-    DUMP(&(stree->nodes[hoffset+i]->hybrid->hgamma),1,fp);
+    DUMP(&(stree->nodes[hoffset+i]->hybrid->hphi),1,fp);
 
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->htau),1,fp);
