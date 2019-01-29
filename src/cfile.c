@@ -1201,6 +1201,13 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"phiprior",8))
+      {
+        if (!parse_phiprior(value))
+          fatal("Option 'phiprior' expects two doubles (line %ld)",
+                line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 9)
     {
@@ -1225,13 +1232,6 @@ void load_cfile()
       {
         if (!parse_thetaprior(value))
           fatal("Option 'thetaprior' expects two doubles (line %ld)",
-                line_count);
-        valid = 1;
-      }
-      else if (!strncasecmp(token,"phiprior",10))
-      {
-        if (!parse_phiprior(value))
-          fatal("Option 'phiprior' expects two doubles (line %ld)",
                 line_count);
         valid = 1;
       }
