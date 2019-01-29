@@ -1269,6 +1269,8 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+  if (opt_exp_randomize)
+    fprintf(stdout, "[EXPERIMENTAL] - Randomize nodes order on gtree SPR\n");
 
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);

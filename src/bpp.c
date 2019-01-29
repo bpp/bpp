@@ -51,6 +51,7 @@ long opt_est_heredity;
 long opt_est_locusrate;
 long opt_est_stree;
 long opt_est_theta;
+long opt_exp_randomize;
 long opt_finetune_reset;
 long opt_help;
 long opt_locus_count;
@@ -147,6 +148,7 @@ static struct option long_options[] =
   {"exp_debug",  no_argument,       0, 0 },  /* 6 */
   {"resume",     required_argument, 0, 0 },  /* 7 */
   {"simulate",   required_argument, 0, 0 },  /* 8 */
+  {"exp_random", no_argument,       0, 0 },  /* 9 */
   { 0, 0, 0, 0 }
 };
 
@@ -206,6 +208,7 @@ void args_init(int argc, char ** argv)
   opt_est_locusrate = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
+  opt_exp_randomize = 0;
 #if(0)
   opt_revolutionary_spr_method = 1;
   opt_revolutionary_spr_debug = 2;
@@ -324,6 +327,10 @@ void args_init(int argc, char ** argv)
 
       case 8:
         opt_simulate = optarg;
+        break;
+
+      case 9:
+        opt_exp_randomize = 1;
         break;
 
       default:

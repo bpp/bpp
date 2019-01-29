@@ -635,6 +635,7 @@ extern long opt_est_delimit;
 extern long opt_est_locusrate;
 extern long opt_est_stree;
 extern long opt_est_theta;
+extern long opt_exp_randomize;
 extern long opt_revolutionary_spr_method;
 extern long opt_revolutionary_spr_debug;
 extern long opt_finetune_reset;

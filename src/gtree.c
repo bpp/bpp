@@ -3850,13 +3850,33 @@ static gnode_t * network_fill_targets(stree_t * stree,
   return target;
 }
 
+/* Fisher-Yates shuffle */
+static void shuffle(unsigned int * x, unsigned int n, long thread_index)
+{
+  unsigned int i,j;
+
+  if (n > 1)
+  {
+    i = n-1;
+    while (1)
+    {
+      double r = legacy_rndu(thread_index);
+      j = (unsigned int)(r*(i+1));
+      SWAP(x[i],x[j]);
+
+      if (i == 0) break;
+      --i;
+    }
+  }
+}
+
 static long propose_spr(locus_t * locus,
                         gtree_t * gtree,
                         stree_t * stree,
                         int msa_index,
                         long thread_index)
 {
-  unsigned int i,j,k,m,n;
+  unsigned int i,j,k,m,n,q;
   unsigned int source_count, target_count;
   unsigned int stree_total_nodes;
   long accepted = 0;
@@ -3876,6 +3896,8 @@ static long propose_spr(locus_t * locus,
   double hgamma_contrib = 0;
   double hgamma_contrib_reverse = 0;
 
+  unsigned int * indices = NULL;
+
   /*          
 
                                  *
@@ -3893,8 +3915,26 @@ static long propose_spr(locus_t * locus,
 
   stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
-  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  /* randomize order of nodes to traverse for SPR */
+  if (opt_exp_randomize)
   {
+    indices = (unsigned int *)xmalloc((size_t)(gtree->tip_count+gtree->inner_count) *
+                              sizeof(unsigned int));
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+      indices[i] = i;
+    shuffle(indices,gtree->tip_count+gtree->inner_count,thread_index); 
+  }
+
+  for (q = 0; q < gtree->tip_count + gtree->inner_count; ++q)
+  {
+    /* randomize order or keep original order of nodes to traverse for spr */
+    if (opt_exp_randomize)
+    {
+      i = indices[q];
+    }
+    else
+      i = q;
+
     curnode = gtree->nodes[i];
     if (curnode == gtree->root) continue;
 
@@ -4703,6 +4743,8 @@ static long propose_spr(locus_t * locus,
       free(old_hpath_t);
     }
   }
+  if (opt_exp_randomize)
+    free(indices);
   return accepted;
 }
 
