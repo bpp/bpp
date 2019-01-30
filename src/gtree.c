@@ -3696,6 +3696,7 @@ static int branch_compat(stree_t * stree,
 
 static gnode_t * network_fill_targets(stree_t * stree,
                                       gtree_t * gtree,
+                                      locus_t * locus,
                                       int msa_index,
                                       gnode_t * curnode,
                                       gnode_t * father,
@@ -3704,7 +3705,9 @@ static gnode_t * network_fill_targets(stree_t * stree,
                                       unsigned int * target_count,
                                       unsigned int * source_count,
                                       snode_t ** pop_target,
-                                      long thread_index)
+                                      long thread_index,
+                                      double * twgt,
+                                      double * swgt)
 {
   unsigned int j,k,n,m;
   unsigned int ptarget_count = 0;
@@ -3783,19 +3786,69 @@ static gnode_t * network_fill_targets(stree_t * stree,
 
   /* source count */
   *source_count = 1;
-  if (father != gtree->root)
+  if (opt_rev_gspr)
   {
-      
-    n = curnode->pop->node_index;
-    for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+    /* REVOLUTIONARY SPR MOVE */
+    gnode_t ** sources = (gnode_t **)xmalloc((size_t)gtree->edge_count *
+                                             sizeof(gnode_t *));
+    sources[0] = sibling;
+    if (father != gtree->root)
     {
-      p = gtree->nodes[j];
-      m = p->parent ? p->parent->pop->node_index : stree->root->node_index;
+        
+      n = curnode->pop->node_index;
+      for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+      {
+        p = gtree->nodes[j];
+        m = p->parent ? p->parent->pop->node_index : stree->root->node_index;
 
-      if (p != curnode && p != gtree->root && p != sibling && p != father &&
-          p->time <= father->time && p->parent->time > father->time &&
-          stree->pptable[n][m] && branch_compat(stree,curnode,p,father->time))
-        *source_count = *source_count + 1;
+        if (p != curnode && p != gtree->root && p != sibling && p != father &&
+            p->time <= father->time && p->parent->time > father->time &&
+            stree->pptable[n][m] && branch_compat(stree,curnode,p,father->time))
+        {
+          sources[*source_count] = p;
+          *source_count = *source_count + 1;
+        }
+      }
+    }
+
+    /* get weights (log-L) for each source */
+    double * sweight = (double *)xmalloc(*source_count * sizeof(double));
+    rev_spr_tselect(curnode, father->time, sources, *source_count, locus, sweight);
+
+    /* turn log-L weights into probabilities */
+    double maxw = sweight[0];
+    double sum = 0;
+    for (j = 1; j < *source_count; ++j)
+      if (maxw < sweight[j])
+        maxw = sweight[j];
+    for (j = 0; j < *source_count; ++j)
+    {
+      sweight[j] = exp(sweight[j] - maxw);
+      sum += sweight[j];
+    }
+
+    *swgt = sweight[0] / sum;
+
+    free(sources);
+    free(sweight);
+  }
+  else
+  {
+    /* old humble spr move */
+    if (father != gtree->root)
+    {
+        
+      n = curnode->pop->node_index;
+      for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+      {
+        p = gtree->nodes[j];
+        m = p->parent ? p->parent->pop->node_index : stree->root->node_index;
+
+        if (p != curnode && p != gtree->root && p != sibling && p != father &&
+            p->time <= father->time && p->parent->time > father->time &&
+            stree->pptable[n][m] && branch_compat(stree,curnode,p,father->time))
+          *source_count = *source_count + 1;
+      }
     }
   }
 
@@ -3803,8 +3856,41 @@ static gnode_t * network_fill_targets(stree_t * stree,
   assert(*source_count);
 
   /* randomly select a target node */
-  gnode_t * target = travbuffer[msa_index][(int)(*target_count *
-                                                 legacy_rndu(thread_index))];
+  gnode_t * target = NULL;
+  if (opt_rev_gspr)
+  {
+    /* REVOLUTIONARY SPR MOVE */
+    double * tweight = (double *)xmalloc(*target_count * sizeof(double));
+    rev_spr_tselect(curnode, tnew, travbuffer[msa_index], *target_count, locus, tweight);
+    double maxw = tweight[0];
+    for (j = 1; j < *target_count; ++j)
+      if (maxw < tweight[j])
+        maxw = tweight[j];
+    double sum = 0;
+    for (j = 0; j < *target_count; ++j)
+    {
+      tweight[j] = exp(tweight[j] - maxw);
+      sum += tweight[j];
+    }
+
+    /* randomly select a target node according to weights */
+    double r = legacy_rndu(thread_index) * sum;
+    double rsum = 0;
+    for (j = 0; j < *target_count - 1; ++j)
+    {
+      rsum += tweight[j];
+      if (r < tweight[j]) break;
+    }
+    target = travbuffer[msa_index][j];
+
+    /* proposal distribution */
+    *twgt = tweight[j] / sum;
+
+    free(tweight);
+  }
+  else
+    target = travbuffer[msa_index][(int)(*target_count *
+                                   legacy_rndu(thread_index))];
   assert(target);
 
   /* decide on the pop_target */
@@ -3897,6 +3983,8 @@ static long propose_spr(locus_t * locus,
   double hphi_contrib_reverse = 0;
 
   unsigned int * indices = NULL;
+  double twgt = 0;
+  double swgt = 0;
 
   /*          
 
@@ -4019,6 +4107,7 @@ static long propose_spr(locus_t * locus,
     {
       target = network_fill_targets(stree,
                                     gtree,
+                                    locus,
                                     msa_index,
                                     curnode,
                                     father,
@@ -4027,12 +4116,15 @@ static long propose_spr(locus_t * locus,
                                     &target_count,
                                     &source_count,
                                     &pop_target,
-                                    thread_index);
+                                    thread_index,
+                                    &twgt,
+                                    &swgt);
 
       dbg_msci_t = target;
     }
     else
     {
+      /* find targets */
       n = pop_target->node_index;
       target_count = 0;
       if (tnew >= gtree->root->time)
@@ -4051,28 +4143,103 @@ static long propose_spr(locus_t * locus,
         }
       }
 
+      /* calculate number of source branches */
       source_count = 1;
-      if (father != gtree->root)
+      if (opt_rev_gspr)
       {
-        n = father->pop->node_index;
-        for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+        /* REVOLUTIONARY SPR MOVE */
+        gnode_t ** sources = (gnode_t **)xmalloc((size_t)gtree->edge_count *
+                                                 sizeof(gnode_t *));
+        sources[0] = sibling;
+        if (father != gtree->root)
         {
-          p = gtree->nodes[j];
-          m = p->pop->node_index;
-          if (p != curnode && p != gtree->root && p != sibling && p != father &&
-              p->time <= father->time && p->parent->time > father->time &&
-              stree->pptable[m][n])
-            source_count++;
+          n = father->pop->node_index;
+          for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+          {
+            p = gtree->nodes[j];
+            m = p->pop->node_index;
+            if (p != curnode && p != gtree->root && p != sibling && p != father &&
+                p->time <= father->time && p->parent->time > father->time &&
+                stree->pptable[m][n])
+              sources[source_count++] = p;
+          }
+        }
+        /* get weights (log-L) for each source */
+        double * sweight = (double *)xmalloc(source_count * sizeof(double));
+        rev_spr_tselect(curnode, father->time, sources, source_count, locus, sweight);
+
+        /* turn log-L weights into probabilities */
+        double maxw = sweight[0];
+        double sum = 0;
+        for (j = 1; j < source_count; ++j)
+          if (maxw < sweight[j])
+            maxw = sweight[j];
+        for (j = 0; j < source_count; ++j)
+        {
+          sweight[j] = exp(sweight[j] - maxw);
+          sum += sweight[j];
+        }
+
+        swgt = sweight[0] / sum;
+
+        free(sources);
+        free(sweight);
+      }
+      else
+      {
+        /* old humble spr move */
+        if (father != gtree->root)
+        {
+          n = father->pop->node_index;
+          for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+          {
+            p = gtree->nodes[j];
+            m = p->pop->node_index;
+            if (p != curnode && p != gtree->root && p != sibling && p != father &&
+                p->time <= father->time && p->parent->time > father->time &&
+                stree->pptable[m][n])
+              source_count++;
+          }
         }
       }
 
       assert(target_count);
       assert(source_count);
       
-
       /* randomly select a target node */
-      target = travbuffer[msa_index][(int)(target_count *
-                                           legacy_rndu(thread_index))];
+      if (opt_rev_gspr)
+      {
+        double * tweight = (double *)xmalloc(target_count * sizeof(double));
+        rev_spr_tselect(curnode, tnew, travbuffer[msa_index], target_count, locus, tweight);
+        double maxw = tweight[0];
+        for (j = 1; j < target_count; ++j)
+          if (maxw < tweight[j])
+            maxw = tweight[j];
+        double sum = 0;
+        for (j = 0; j < target_count; ++j)
+        {
+          tweight[j] = exp(tweight[j] - maxw);
+          sum += tweight[j];
+        }
+
+        /* randomly select a target node according to weights */
+        double r = legacy_rndu(thread_index) * sum;
+        double rsum = 0;
+        for (j = 0; j < target_count - 1; ++j)
+        {
+          rsum += tweight[j];
+          if (r < rsum) break;
+        }
+        target = travbuffer[msa_index][j];
+
+        /* proposal distribution */
+        twgt = tweight[j] / sum;
+
+        free(tweight);
+      }
+      else
+        target = travbuffer[msa_index][(int)(target_count *
+                                             legacy_rndu(thread_index))];
     }
 
     if (opt_msci)
@@ -4475,20 +4642,21 @@ static long propose_spr(locus_t * locus,
     unsigned int param_indices[1] = {0};
     double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
+    /* acceptance ratio */
     if (opt_msci)
       lnacceptance = hphi_contrib_reverse - hphi_contrib;
     else
       lnacceptance = 0;
 
-    /* acceptance ratio */
     if (opt_est_theta)
-      lnacceptance += log((double)target_count / source_count) +
-                      logpr - gtree->logpr + logl - gtree->logl;
+      lnacceptance += logpr - gtree->logpr + logl - gtree->logl;
     else
-    {
-      lnacceptance += log((double)target_count / source_count) +
-                      logpr - stree->notheta_logpr + logl - gtree->logl;
-    }
+      lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
+
+    if (opt_rev_gspr)
+      lnacceptance += log(swgt/twgt);
+    else
+      lnacceptance += log((double)target_count / source_count);
 
     if (opt_debug)
       printf("[Debug] (spr) lnacceptance = %f\n", lnacceptance);

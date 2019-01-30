@@ -654,6 +654,7 @@ extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_revolutionary_spr_method;
 extern long opt_revolutionary_spr_debug;
+extern long opt_rev_gspr;
 extern long opt_rjmcmc_method;
 extern long opt_samplefreq;
 extern long opt_samples;
@@ -1396,13 +1397,20 @@ void pll_show_clv(const locus_t * locus,
                              int scaler_index,
                              unsigned int float_precision);
 
-/* functions in experimental.c */
+/* functions in revolutionary.c */
 
 void revolutionary_spr_tselect_logl(gnode_t * mnode,
                                gnode_t ** target_list,
                                long target_count,
                                locus_t * locus,
                                double * weights);
+
+void rev_spr_tselect(gnode_t * mnode,
+                     double t,
+                     gnode_t ** targets,
+                     unsigned int target_count,
+                     locus_t * locus,
+                     double * weights);
 
 
 /* functions in method.c */

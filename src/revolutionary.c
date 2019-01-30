@@ -136,3 +136,116 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
   pll_aligned_free(ntclv);
   pll_aligned_free(tmat);
 }
+
+void rev_spr_tselect(gnode_t * mnode,
+                     double t,
+                     gnode_t ** targets,
+                     unsigned int target_count,
+                     locus_t * locus,
+                     double * weights)
+{
+  unsigned int i,j,k;
+  size_t matsize;
+  size_t clvsize;
+  double * mmat;
+  double * tmat;
+  unsigned int matrix_indices[2] = {0,1};
+  unsigned int param_indices[1] = {0};
+  double length[1];
+  double * matrices[1];
+
+  matsize = locus->states*locus->states_padded*locus->rate_cats*sizeof(double);
+  clvsize = locus->sites*locus->states_padded*locus->rate_cats*sizeof(double);
+
+  /* allocate space for normalized CLV vectors and for subtree root */
+  double * ntclv = pll_aligned_alloc(clvsize,locus->alignment);
+  double * clv = pll_aligned_alloc(clvsize,locus->alignment);
+
+  /* allocate memory for the two p-matrices (moved node and target) */
+  mmat = pll_aligned_alloc(matsize,locus->alignment);
+  tmat = pll_aligned_alloc(matsize,locus->alignment);
+
+  /* TODO: we assume scaling for numerical underflow is disabled */
+  assert(opt_scaling == 0);
+
+  /* compute p-matrix for moved node for new branch length */
+  matrices[0] = mmat;  length[0] = t - mnode->time;
+  pll_core_update_pmatrix_4x4_jc69(matrices,
+                                   locus->states,
+                                   locus->rate_cats,
+                                   NULL,
+                                   length,
+                                   matrix_indices,
+                                   param_indices,
+                                   1,
+                                   locus->attributes);
+
+  for (i = 0; i < target_count; ++i)
+  {
+    gnode_t * tnode = targets[i];
+
+    /* compute p-matrices for target node from new branch length */
+    matrices[0] = tmat;  length[0] = t - tnode->time;
+    pll_core_update_pmatrix_4x4_jc69(matrices,
+                                     locus->states,
+                                     locus->rate_cats,
+                                     NULL,
+                                     length,
+                                     matrix_indices,
+                                     param_indices,
+                                     1,
+                                     locus->attributes);
+
+    /* get CLV vectors for moved (mclv) and target (tclv) node */
+    const double * mclv = locus->clv[mnode->clv_index];
+    const double * tclv = locus->clv[tnode->clv_index];
+
+    /* construct normalized CLVs */
+    double * tptr = ntclv;
+    for (j = 0; j < locus->sites; ++j)
+    {
+      double tsum = 0;
+      for (k=0; k < locus->states; ++k)
+        tsum += tclv[k];
+      for (k = 0; k < locus->states; ++k)
+        tptr[k] = tclv[k]/tsum;
+
+      tclv += locus->states;
+      tptr += locus->states;
+    }
+
+    /* update conditional probabilities vector clv using vectors mclv and ntclv
+     * and matrices mmat and tmat. Numerical scaling is assumed disabled */
+    pll_core_update_partial_ii(locus->states,
+                               locus->sites,
+                               locus->rate_cats,
+                               clv,
+                               NULL,
+                               mclv,
+                               ntclv,
+                               mmat,
+                               tmat,
+                               NULL,
+                               NULL,
+                               locus->attributes);
+    
+    /* compute log-likelihood of tree with clv as root node clv */
+    weights[i] = pll_core_root_loglikelihood(locus->states,
+                                             locus->sites,
+                                             locus->rate_cats,
+                                             clv,
+                                             NULL,
+                                             locus->frequencies,
+                                             locus->rate_weights,
+                                             locus->pattern_weights,
+                                             param_indices,
+                                             NULL,
+                                             locus->attributes);
+  }
+
+  /* deallocate */
+  pll_aligned_free(clv);
+  pll_aligned_free(ntclv);
+  pll_aligned_free(mmat);
+  pll_aligned_free(tmat);
+}

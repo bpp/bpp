@@ -1106,8 +1106,10 @@ static FILE * init(stree_t ** ptr_stree,
     }
   }
 
+  #if 0
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
+  #endif
 
   /* TODO: This is only for species delimitation */
   if (opt_est_delimit)          /* species delimitation */
@@ -1271,6 +1273,16 @@ void cmd_run()
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_exp_randomize)
     fprintf(stdout, "[EXPERIMENTAL] - Randomize nodes order on gtree SPR\n");
+  if (opt_rev_gspr)
+    fprintf(stdout, "[EXPERIMENTAL] - Revolutionary gene tree SPR algorithm\n");
+  if (opt_revolutionary_spr_method)
+    fprintf(stdout, "[EXPERIMENTAL] - Revolutionary species tree SPR algorithm\n");
+
+  if (opt_threads > 1)
+  {
+    threads_init();
+    memset(&td,0,sizeof(td));
+  }
 
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
@@ -1312,12 +1324,6 @@ void cmd_run()
   double dbg_ppop[11] = { 0 };
   printf("rndu status: %d\n", get_legacy_rndu_status());
 #endif
-
-  if (opt_threads > 1)
-  {
-    threads_init();
-    memset(&td,0,sizeof(td));
-  }
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)

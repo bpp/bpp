@@ -54,7 +54,7 @@ OBJ_BPP = \
   stree.obj \
   summary.obj \
   util.obj \
-  experimental.obj \
+  revolutionary.obj \
   diploid.obj \
   summary11.obj \
   simulate.obj \

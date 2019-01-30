@@ -70,6 +70,7 @@ long opt_qrates_fixed;
 long opt_quiet;
 long opt_revolutionary_spr_method;
 long opt_revolutionary_spr_debug;
+long opt_rev_gspr;
 long opt_rjmcmc_method;
 long opt_samplefreq;
 long opt_samples;
@@ -139,16 +140,17 @@ long altivec_present;
 
 static struct option long_options[] =
 {
-  {"help",       no_argument,       0, 0 },  /* 0 */
-  {"version",    no_argument,       0, 0 },  /* 1 */
-  {"quiet",      no_argument,       0, 0 },  /* 2 */
-  {"cfile",      required_argument, 0, 0 },  /* 3 */
-  {"arch",       required_argument, 0, 0 },  /* 4 */
-  {"exp_method", required_argument, 0, 0 },  /* 5 */
-  {"exp_debug",  no_argument,       0, 0 },  /* 6 */
-  {"resume",     required_argument, 0, 0 },  /* 7 */
-  {"simulate",   required_argument, 0, 0 },  /* 8 */
-  {"exp_random", no_argument,       0, 0 },  /* 9 */
+  {"help",       no_argument,       0, 0 },  /*  0 */
+  {"version",    no_argument,       0, 0 },  /*  1 */
+  {"quiet",      no_argument,       0, 0 },  /*  2 */
+  {"cfile",      required_argument, 0, 0 },  /*  3 */
+  {"arch",       required_argument, 0, 0 },  /*  4 */
+  {"exp_method", required_argument, 0, 0 },  /*  5 */
+  {"exp_debug",  no_argument,       0, 0 },  /*  6 */
+  {"resume",     required_argument, 0, 0 },  /*  7 */
+  {"simulate",   required_argument, 0, 0 },  /*  8 */
+  {"exp_random", no_argument,       0, 0 },  /*  9 */
+  {"rev_gspr",   no_argument,       0, 0 },  /* 10 */
   { 0, 0, 0, 0 }
 };
 
@@ -256,6 +258,7 @@ void args_init(int argc, char ** argv)
   opt_qrates_params = NULL;
   opt_quiet = 0;
   opt_resume = NULL;
+  opt_rev_gspr = 0;
   opt_rjmcmc_alpha = -1;
   opt_rjmcmc_epsilon = -1;
   opt_rjmcmc_mean = -1;
@@ -331,6 +334,10 @@ void args_init(int argc, char ** argv)
 
       case 9:
         opt_exp_randomize = 1;
+        break;
+
+      case 10:
+        opt_rev_gspr = 1;
         break;
 
       default:
