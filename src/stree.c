@@ -3140,8 +3140,12 @@ long stree_propose_spr(stree_t ** streeptr,
  
                /* randomly select a target node according to weights */
                r = legacy_rndu(thread_index) * sum;
+               double rsum = 0;
                for (n = 0; n < target_count - 1; ++n)  /* Z: no need for last comparison and rndu may be 1. */
-                 if (r < tweight[n]) break;
+               {
+                 rsum += tweight[n];
+                 if (r < rsum) break;
+               }
                gtarget_nodes[moved_count[i] - 1] = gtarget_list[n];
 
                twgt = tweight[n]/sum;
