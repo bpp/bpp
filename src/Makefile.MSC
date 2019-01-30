@@ -58,7 +58,8 @@ OBJ_BPP = \
   diploid.obj \
   summary11.obj \
   simulate.obj \
-  cfile_sim.obj
+  cfile_sim.obj \
+  threads.obj
 
 all: $(PROG)
 
