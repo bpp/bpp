@@ -3879,7 +3879,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
     for (j = 0; j < *target_count - 1; ++j)
     {
       rsum += tweight[j];
-      if (r < tweight[j]) break;
+      if (r < rsum) break;
     }
     target = travbuffer[msa_index][j];
 
