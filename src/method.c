@@ -1325,6 +1325,9 @@ void cmd_run()
   printf("rndu status: %d\n", get_legacy_rndu_status());
 #endif
 
+  /* flush all open files */
+  fflush(NULL);
+
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
   {
