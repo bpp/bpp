@@ -194,7 +194,7 @@ static void process_subst_model()
 {
   long i;
 
-  if (opt_model == BPP_SUBST_MODEL_JC69)
+  if (opt_model == BPP_DNA_MODEL_JC69)
   {
     fprintf(stdout, "Substitution model: JC69\n");
     opt_qrates_fixed = 1;
@@ -233,7 +233,7 @@ static void process_basefreqs()
   long i;
   char dna[4] = "TCAG";
 
-  if (opt_model == BPP_SUBST_MODEL_GTR)
+  if (opt_model == BPP_DNA_MODEL_GTR)
   {
     if (opt_basefreqs_fixed)
     {
@@ -628,7 +628,7 @@ static void make_root_seq(gnode_t * root, double * freqs)
      I use the dna[4] array to convert from 0,1,2,3 -> characters and then
      characters as indices to pll_map_nt_tcag such that t = 1, c=2, g=4, t=8 */
 
-  if (opt_model == BPP_SUBST_MODEL_JC69)
+  if (opt_model == BPP_DNA_MODEL_JC69)
   {
     for (i = 0; i < opt_locus_simlen; ++i)
       x[i] = pll_map_nt_tcag[(int)dna[(int)(legacy_rndu(thread_index_zero)*4)]];
@@ -1101,12 +1101,12 @@ static void simulate(stree_t * stree)
   /* print model parameter file header */
   if (opt_modelparafile)
   {
-    if (opt_model == BPP_SUBST_MODEL_JC69)
+    if (opt_model == BPP_DNA_MODEL_JC69)
     {
       if (opt_locusrate_alpha > 0)
         fprintf(fp_param, "locus\tlocusrate\n");
     }
-    else if (opt_model == BPP_SUBST_MODEL_GTR)
+    else if (opt_model == BPP_DNA_MODEL_GTR)
       fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha\tlocusrate\n");
     else
       assert(0);
@@ -1170,7 +1170,7 @@ static void simulate(stree_t * stree)
   free(maplist);
 
   /* allocate eigendecomposition structures */
-  if (opt_model == BPP_SUBST_MODEL_GTR)
+  if (opt_model == BPP_DNA_MODEL_GTR)
   {
     eigenvecs = (double *)xmalloc(16*sizeof(double));
     inv_eigenvecs = (double *)xmalloc(16*sizeof(double));
@@ -1184,7 +1184,7 @@ static void simulate(stree_t * stree)
       fprintf(fp_param, "%ld", i+1);
 
 
-    if (opt_model == BPP_SUBST_MODEL_GTR)
+    if (opt_model == BPP_DNA_MODEL_GTR)
     {
       if (!opt_qrates_fixed)
       {
@@ -1311,7 +1311,7 @@ static void simulate(stree_t * stree)
       /* calculate rates for each site */
       if (locus_siterate_alpha)
         siterates = rates4sites(locus_siterate_alpha,
-                                (opt_model == BPP_SUBST_MODEL_JC69));
+                                (opt_model == BPP_DNA_MODEL_JC69));
 
       /* allocate space for sequences and map each to a gene tree node */
       char ** x = (char**)xmalloc((size_t)(gtree[i]->tip_count+gtree[i]->inner_count)*
@@ -1332,7 +1332,7 @@ static void simulate(stree_t * stree)
       make_root_seq(gtree[i]->root, freqs);
 
       /* recursively generate ancestral sequences and tip sequences */
-      if (opt_model == BPP_SUBST_MODEL_JC69)
+      if (opt_model == BPP_DNA_MODEL_JC69)
       {
         evolve_jc69_recursive(gtree[i]->root->left, locus_siterate_alpha, siterates);
         evolve_jc69_recursive(gtree[i]->root->right, locus_siterate_alpha, siterates);
@@ -1434,7 +1434,7 @@ static void simulate(stree_t * stree)
 
 
   /* deallocate eigendecomposition structures */
-  if (opt_model == BPP_SUBST_MODEL_GTR)
+  if (opt_model == BPP_DNA_MODEL_GTR)
   {
     free(eigenvecs);
     free(inv_eigenvecs);

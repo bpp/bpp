@@ -510,6 +510,12 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   long i;
 
+  /* write data type */
+  DUMP(&(locus->dtype),1,fp);
+
+  /* write substitution model */
+  DUMP(&(locus->model),1,fp);
+
   /* write number of sites */
   DUMP(&(locus->sites),1,fp);
 

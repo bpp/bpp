@@ -21,6 +21,36 @@
 
 #include "bpp.h"
 
+#define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
+
+/* TODO: The below two functions are duplicated several times. Move them as
+   public functions in gtree.c */
+static void all_partials_recursive(gnode_t * node,
+                                   unsigned int * trav_size,
+                                   gnode_t ** outbuffer)
+{
+  if (!node->left)
+    return;
+
+  all_partials_recursive(node->left,  trav_size, outbuffer);
+  all_partials_recursive(node->right, trav_size, outbuffer);
+
+  outbuffer[*trav_size] = node;
+  *trav_size = *trav_size + 1;
+}
+
+static void gtree_all_partials(gnode_t * root,
+                               gnode_t ** travbuffer,
+                               unsigned int * trav_size)
+{
+  *trav_size = 0;
+  if (!root->left) return;
+
+  all_partials_recursive(root, trav_size, travbuffer);
+}
+
 static void dealloc_locus_data(locus_t * locus)
 {
   unsigned int i;
@@ -580,7 +610,9 @@ int pll_set_tip_clv(locus_t * locus,
 }
 
 
-locus_t * locus_create(unsigned int tips,
+locus_t * locus_create(unsigned int dtype,
+                       unsigned int model,
+                       unsigned int tips,
                        unsigned int clv_buffers,
                        unsigned int states,
                        unsigned int sites,
@@ -634,6 +666,9 @@ locus_t * locus_create(unsigned int tips,
   unsigned int states_padded = locus->states_padded;
 
   /* initialize properties */
+
+  locus->dtype = dtype;
+  locus->model = model;
 
   locus->tips = tips;
   locus->clv_buffers = clv_buffers;
@@ -899,6 +934,14 @@ void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
   locus_update_all_matrices_jc69_recursive(locus,gtree->root->left);
   locus_update_all_matrices_jc69_recursive(locus,gtree->root->right);
 }
+
+#if 0
+void locus_update_matrices(locus_t * locus,
+                           gnode_t ** traversal,
+                           unsigned int count)
+{
+}
+#endif
 
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,

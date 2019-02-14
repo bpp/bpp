@@ -21,12 +21,48 @@
 
 #include "bpp.h"
 
+static char errmsg[512];
+
 static char buffer[LINEALLOC];
 static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
 
 static long species_count = 0;
+
+static const long dna_model_count =  8;
+static const long aa_model_count  = 19;
+
+/* Important: CUSTOM *MUST* be last in the list */
+static const char * dna_model_name[] = 
+ {
+   "JC69", "K80", "F81", "HKY", "T92", "TN93", "GTR", "CUSTOM"
+ };
+
+static const char * aa_model_name[] =
+ {
+   "DAYHOFF", "LG",    "DCMUT", "JTT",      "MTREV",    "WAG",
+   "RTREV",   "CPREV", "VT",    "BLOSUM62", "MTMAM",    "MTART",
+   "MTZOA",   "PMB",   "HIVB",  "HIVW",     "JTTDCMUT", "FLU", "STMTREV"
+ };
+
+static const long dna_model_index[] =
+ {
+   BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_K80,    BPP_DNA_MODEL_F81, 
+   BPP_DNA_MODEL_HKY,  BPP_DNA_MODEL_T92,    BPP_DNA_MODEL_TN93,
+   BPP_DNA_MODEL_GTR,  BPP_DNA_MODEL_CUSTOM
+ };
+
+static const long aa_model_index[] =
+ {
+   BPP_AA_MODEL_DAYHOFF,  BPP_AA_MODEL_LG,       BPP_AA_MODEL_DCMUT, 
+   BPP_AA_MODEL_JTT,      BPP_AA_MODEL_MTREV,    BPP_AA_MODEL_WAG,
+   BPP_AA_MODEL_RTREV,    BPP_AA_MODEL_CPREV,    BPP_AA_MODEL_VT,
+   BPP_AA_MODEL_BLOSUM62, BPP_AA_MODEL_MTMAM,    BPP_AA_MODEL_MTART,
+   BPP_AA_MODEL_MTZOA,    BPP_AA_MODEL_PMB,      BPP_AA_MODEL_HIVB,
+   BPP_AA_MODEL_HIVW,     BPP_AA_MODEL_JTTDCMUT, BPP_AA_MODEL_FLU,
+   BPP_AA_MODEL_STMTREV
+ };
 
 static void reallocline(size_t newmaxsize)
 {
@@ -120,6 +156,44 @@ static long starts_with_opar(const char * line)
   return 1;
 }
 
+/* get string from current position pointed by line until a delimiter. Create
+   new string with result, store it in value, and return number of characters
+   read */
+static long get_delstring(const char * line, const char * del, char ** value)
+{
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters until a delimiter is found */
+  char * end = start + strcspn(start, del);
+
+  *end = 0;
+
+  if (start==end)
+  {
+    free(s);
+    return 0;
+  }
+
+  *value = xstrdup(start);
+
+  free(s);
+  return ws + end - start;
+}
 
 static long get_string(const char * line, char ** value)
 {
@@ -460,6 +534,282 @@ static long parse_locusrate(const char * line)
     goto l_unwind;
 
   p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
+static long parse_partition_line(const char * line, partition_t * part)
+{
+  long i;
+  long ret = 0;
+  long count;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+  char * tmp = NULL;
+
+  char * datatype = NULL;
+  char * model = NULL;
+
+  count = get_delstring(p," \t\r\n*#,-",&tmp);
+  if (!count) goto l_unwind;
+  p += count;
+
+  count = get_long(tmp,&part->start);
+  if (!count) goto l_unwind;
+  part->end = part->start;
+  free(tmp);
+  tmp=NULL;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+  p += ws;
+
+  if (is_emptyline(p))
+    goto l_unwind;
+
+  if (*p == '-')
+  {
+    /* parse another number (end) */
+    p += 1;
+
+    count = get_delstring(p," \t\r\n*#,-",&tmp);
+    if (!count) goto l_unwind;
+    p += count;
+
+    count = get_long(tmp,&part->end);
+    if (!count) goto l_unwind;
+    free(tmp);
+    tmp=NULL;
+
+    /* skip all white-space */
+    ws = strspn(p, " \t\r\n");
+    p += ws;
+  }
+
+  if (part->end < part->start)
+    goto l_unwind;
+
+  /* skip comma */
+  if (*p != ',')
+    goto l_unwind;
+  p += 1;
+
+  /* skip white-space */
+  ws = strspn(p, " \t\r\n");
+  p += ws;
+
+  if (is_emptyline(p))
+    goto l_unwind;
+
+  count = get_delstring(p," \t\r\n*#,",&datatype);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!strcasecmp(datatype,"DNA"))
+    part->dtype = BPP_DATA_DNA;
+  else if (!strcasecmp(datatype,"AA"))
+    part->dtype = BPP_DATA_AA;
+  else
+    goto l_unwind;
+
+  /* skip white-space */
+  ws = strspn(p, " \t\r\n");
+  p += ws;
+
+  if (is_emptyline(p))
+    goto l_unwind;
+
+  /* skip comma */
+  if (*p != ',')
+    goto l_unwind;
+  p += 1;
+  
+  /* read model */
+  count = get_delstring(p," \t\r\n*#",&model);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (part->dtype == BPP_DATA_DNA)
+  {
+    /* parse dna model (skip last entry which is CUSTOM) */
+    for (i = 0; i < dna_model_count-1; ++i)
+      if (!strcasecmp(model,dna_model_name[i]))
+        break;
+    if (i == dna_model_count-1)
+      goto l_unwind;
+    part->model = dna_model_index[i];
+  }
+  else if (part->dtype == BPP_DATA_AA)
+  {
+    /* parse aa model */
+    for (i = 0; i < aa_model_count; ++i)
+      if (!strcasecmp(model,aa_model_name[i]))
+        break;
+    if (i == aa_model_count)
+      goto l_unwind;
+    part->model = aa_model_index[i];
+  }
+  else
+    assert(0);
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  if (datatype) free(datatype);
+  if (tmp) free(tmp);
+  if (model) free(model);
+  return ret;
+}
+
+static void validate_partitions(list_t * list)
+{
+  long i,line_count = 0;
+  long start = 0;
+  long end = 0;
+  assert(list);
+
+  list_item_t * item;
+
+  /* find minimum and maximum partition */
+  item = list->head;
+  while (item)
+  {
+    partition_t * part = (partition_t *)(item->data);
+    assert(part->model >= 0);
+    assert((part->dtype == BPP_DATA_DNA && part->model < dna_model_count) ||
+           (part->dtype == BPP_DATA_AA && part->model < aa_model_count));
+
+    assert(part->end >= part->start);
+
+    if (start == 0 || part->start < start)
+      start = part->start;
+    if (part->end > end)
+      end = part->end;
+
+    item = item->next;
+  }
+
+  if (start != 1)
+    fatal("Partitions in partition file %s must start from locus 1",
+          opt_partition_file);
+  if (end < start)
+    fatal("Invalid partition format in file %s", opt_partition_file);
+
+  /* now check that (a) we have a continuous range of loci in the partitions and
+     (b) no two partitions overlap */
+
+  long * tmp = (long *)xcalloc((size_t)(end-start+1),sizeof(long));
+  item = list->head;
+  while (item)
+  {
+    partition_t * part = (partition_t *)(item->data);
+    assert(part);
+    line_count++;
+
+    /* check condition (b) */
+    for (i = part->start; i <= part->end; ++i)
+    {
+      if (tmp[i-1])
+        fatal("Partition on line %ld contains locus %ld which is already in "
+              "partition on line %ld (file %s)",
+              line_count, i, tmp[i-1], opt_partition_file);
+      tmp[i-1] = line_count;
+    }
+
+    item = item->next;
+  }
+
+  /* check condition (a) */
+  for (i = 0; i < end; ++i)
+    if (!tmp[i])
+      fatal("Locus %ld not contained in any partition (file %s)",
+            i+1, opt_partition_file);
+
+  /* dealloc */
+  free(tmp);
+}
+
+static list_t * parse_partition_file()
+{
+  long line_count = 0;
+  long ret = 0;
+  FILE * fp;
+  list_t * list;
+
+  fp = xopen(opt_partition_file, "r");
+
+  list = (list_t *)xcalloc(1,sizeof(list_t));
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    partition_t * part = (partition_t *)xmalloc(sizeof(partition_t));
+    if (!parse_partition_line(line,part))
+    {
+      sprintf(errmsg,"Invalid entry on line %ld", line_count);
+      goto l_unwind;
+    }
+
+    list_append(list,(void *)part);
+  }
+  ret = 1;
+
+l_unwind:
+  fclose(fp);
+  if (ret == 0)
+  {
+    list_clear(list,free);
+    free(list);
+    list = NULL;
+  }
+
+  return list;
+}
+
+static long parse_model(const char * line)
+{
+  long i;
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  char * model;
+
+  long count;
+
+  count = get_delstring(p," \t\r\n*#",&model);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* parse model */
+  for (i = 0; i < dna_model_count; ++i)
+  {
+    printf("model: |%s| vs |%s|\n", model,dna_model_name[i]);
+    if (!strcasecmp(model,dna_model_name[i]))
+      break;
+  }
+  if (i == dna_model_count)
+    goto l_unwind;
+  opt_model = dna_model_index[i];
+
+  /* if model is set to CUSTOM, parse partition file */
+  if (opt_model == BPP_DNA_MODEL_CUSTOM)
+  {
+    count = get_delstring(p," \t\r\n*#",&opt_partition_file);
+    if (!count) goto l_unwind;
+
+    p += count;
+  }
 
   if (is_emptyline(p)) ret = 1;
 
@@ -944,6 +1294,34 @@ static void update_sp_seqcount()
       opt_sp_seqcount[i] *= 2;
  
 }
+
+/* transform list of partitions into an array for easier access */
+static partition_t ** linearize_plist(list_t * plist, long * records)
+{
+  long i = 0;
+  list_item_t * item;
+  partition_t ** pa;
+
+  *records = plist->count;
+
+  /* allocate array */
+  pa = (partition_t **)xmalloc((size_t)plist->count *
+                               sizeof(partition_t *));
+
+  /* go through all items and place in list */
+  item = plist->head;
+  while (item)
+  {
+    partition_t * part = (partition_t *)(item->data);
+
+    pa[i++] = part;
+
+    item = item->next;
+  }
+
+  return pa;
+}
+
 static void check_validity()
 {
   if (!opt_streenewick)
@@ -1012,6 +1390,34 @@ static void check_validity()
   if (opt_threads > 1 && !opt_est_theta)
     fatal("Cannot use multiple threads when *not* estimating theta parameters."
           " Please either estimate theta or set threads=1");
+
+  if (opt_model == BPP_DNA_MODEL_CUSTOM)
+  {
+    assert(opt_partition_file);
+
+    list_t * partition_list = parse_partition_file();
+    if (!partition_list)
+      fatal("Error when reading partition file %s:\n  %s",
+            opt_partition_file, errmsg);
+
+    
+    validate_partitions(partition_list);
+
+    /* transform partition_list into an array for easier access */
+    opt_partition_list = linearize_plist(partition_list,&opt_partition_count);
+
+    /* now clear list but do not delete list items as they were placed in
+       opt_partition_list */
+    list_clear(partition_list,NULL);
+    free(partition_list);
+
+
+  }
+
+  if (opt_model)
+  {
+    assert(0);
+  }
 }
 
 void load_cfile()
@@ -1097,6 +1503,12 @@ void load_cfile()
         if (opt_print_samples == -1)
           opt_onlysummary = 1;
 
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"model",5))
+      {
+        if (!parse_model(value))
+          fatal("Erroneous format of 'model' option (line %ld)", line_count);
         valid = 1;
       }
     }
@@ -1368,6 +1780,8 @@ void load_cfile()
             opt_cfile, line_count);
   }
 
+  fclose(fp);
+
   /* set method */
   if (!opt_est_stree && !opt_est_delimit)
     opt_method = METHOD_00;
@@ -1385,8 +1799,6 @@ void load_cfile()
 
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
-
-  fclose(fp);
 }
 
 int parsefile_doubles(const char * filename,

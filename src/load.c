@@ -1112,9 +1112,17 @@ static void load_locus(FILE * fp, long index)
   unsigned int prob_matrices;
   unsigned int scale_buffers;
   unsigned int attributes;
+  unsigned int dtype;
+  unsigned int model;
   size_t span;
 
   gtree_t * gt = gtree[index];
+
+  if (!LOAD(&dtype,1,fp))
+    fatal("Cannot read data type");
+
+  if (!LOAD(&model,1,fp))
+    fatal("Cannot read substitution model");
 
   if (!LOAD(&sites,1,fp))
     fatal("Cannot read number of sites");
@@ -1147,7 +1155,9 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&attributes,1,fp))
     fatal("Cannot read attributes");
 
-  locus[index] = locus_create(gt->tip_count,
+  locus[index] = locus_create(dtype,
+                              model,
+                              gt->tip_count,
                               2*gt->inner_count,
                               states,
                               sites,

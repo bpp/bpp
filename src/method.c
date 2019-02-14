@@ -931,11 +931,22 @@ static FILE * init(stree_t ** ptr_stree,
 
   gtree_update_branch_lengths(gtree, msa_count);
 
+  if (opt_partition_list)
+  {
+    assert(opt_partition_count > 0);
+    if (opt_partition_count != msa_count)
+      fatal("Partition file %s differs in number of partitions (%ld) "
+            "to the specified number of loci (%ld)",
+            opt_partition_file, opt_partition_count, msa_count);
+  }
+
   for (i = 0; i < msa_count; ++i)
   {
     msa_t * msa = msa_list[i];
     double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
     unsigned int pmatrix_count = gtree[i]->edge_count;
+    unsigned int dtype;
+    unsigned int model;
 
     unsigned int scale_buffers = opt_scaling ?
                                    2*gtree[i]->inner_count : 0;
@@ -948,8 +959,29 @@ static FILE * init(stree_t ** ptr_stree,
        for the other methods as well in order to speedup rollback when
        rejecting proposals */
 
+    if (opt_partition_file)
+    {
+      assert(opt_model == BPP_DNA_MODEL_CUSTOM);
+      assert(opt_partition_file);
+      assert(opt_partition_list);
+
+      dtype = opt_partition_list[i]->dtype;
+      model = opt_partition_list[i]->model;
+
+
+    }
+    else
+    {
+      assert(opt_model != BPP_DNA_MODEL_CUSTOM);
+
+      dtype = BPP_DATA_DNA;
+      model = opt_model;
+    }
+
     /* create the locus structure */
-    locus[i] = locus_create(gtree[i]->tip_count,        /* # tip sequence */
+    locus[i] = locus_create((unsigned int)dtype,        /* data type */
+                            (unsigned int)model,        /* subst model */
+                            gtree[i]->tip_count,        /* # tip sequence */
                             2*gtree[i]->inner_count,    /* # CLV vectors */
                             4,                          /* # states */
                             msa->length,                /* sequence length */

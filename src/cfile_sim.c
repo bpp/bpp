@@ -829,18 +829,18 @@ static void check_validity()
   if (opt_model == -1)
   {
     fprintf(stdout, "Substitution model not specified, assuming JC69\n");
-    opt_model = BPP_SUBST_MODEL_JC69;
+    opt_model = BPP_DNA_MODEL_JC69;
   }
-  assert(opt_model == BPP_SUBST_MODEL_JC69 || opt_model == BPP_SUBST_MODEL_GTR);
+  assert(opt_model == BPP_DNA_MODEL_JC69 || opt_model == BPP_DNA_MODEL_GTR);
 
   if (opt_locusrate_alpha < 0)
     fatal("Option 'alpha_locusrate' requires a positive number or 0");
 
-  if (opt_model == BPP_SUBST_MODEL_GTR && !opt_modelparafile)
+  if (opt_model == BPP_DNA_MODEL_GTR && !opt_modelparafile)
     fatal("Usage of 'GTR' model requires the specification of an output file "
           "with the option 'modelparafile'");
 
-  if (opt_model == BPP_SUBST_MODEL_GTR)
+  if (opt_model == BPP_DNA_MODEL_GTR)
   {
     if (opt_basefreqs_fixed == -1)
       fatal("Usage of 'GTR' model requires specifying base frequencies with "
@@ -971,7 +971,7 @@ void load_cfile_sim()
       {
         if (!get_long(value,&opt_model) || opt_model < 0)
           fatal("Option 'model' expects value '%d' or '%d' (line %ld)",
-                BPP_SUBST_MODEL_JC69, BPP_SUBST_MODEL_GTR, line_count);
+                BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_GTR, line_count);
         valid = 1;
       }
     }

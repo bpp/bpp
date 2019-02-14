@@ -172,8 +172,38 @@
 #define BPP_HPATH_LEFT                  1
 #define BPP_HPATH_RIGHT                 2
 
-#define BPP_SUBST_MODEL_JC69            0
-#define BPP_SUBST_MODEL_GTR             7
+#define BPP_DATA_DNA                    0
+#define BPP_DATA_AA                     1
+
+#define BPP_DNA_MODEL_JC69              0
+#define BPP_DNA_MODEL_K80               1
+#define BPP_DNA_MODEL_F81               2
+#define BPP_DNA_MODEL_HKY               3
+#define BPP_DNA_MODEL_T92               4
+#define BPP_DNA_MODEL_TN93              5
+#define BPP_DNA_MODEL_F84               6
+#define BPP_DNA_MODEL_GTR               7
+#define BPP_DNA_MODEL_CUSTOM            8
+
+#define BPP_AA_MODEL_DAYHOFF            0
+#define BPP_AA_MODEL_LG                 1
+#define BPP_AA_MODEL_DCMUT              2
+#define BPP_AA_MODEL_JTT                3
+#define BPP_AA_MODEL_MTREV              4
+#define BPP_AA_MODEL_WAG                5
+#define BPP_AA_MODEL_RTREV              6
+#define BPP_AA_MODEL_CPREV              7
+#define BPP_AA_MODEL_VT                 8
+#define BPP_AA_MODEL_BLOSUM62           9
+#define BPP_AA_MODEL_MTMAM             10
+#define BPP_AA_MODEL_MTART             11
+#define BPP_AA_MODEL_MTZOA             12
+#define BPP_AA_MODEL_PMB               13
+#define BPP_AA_MODEL_HIVB              14
+#define BPP_AA_MODEL_HIVW              15
+#define BPP_AA_MODEL_JTTDCMUT          16
+#define BPP_AA_MODEL_FLU               17
+#define BPP_AA_MODEL_STMTREV           18
 
 #define BPP_CLOCK_GLOBAL                1
 #define BPP_CLOCK_IND                   2
@@ -412,6 +442,14 @@ typedef struct msa_s
 
 } msa_t;
 
+typedef struct partition_s
+{
+  long start;
+  long end;
+  long dtype;
+  long model;
+} partition_t;
+
 typedef struct locus_s
 {
   unsigned int tips;
@@ -423,6 +461,8 @@ typedef struct locus_s
   unsigned int rate_cats;
   unsigned int scale_buffers;
   unsigned int attributes;
+  unsigned int model;
+  unsigned int dtype;
 
   /* vectorization parameters */
   size_t alignment;
@@ -646,6 +686,7 @@ extern long opt_migration;
 extern long opt_model;
 extern long opt_msci;
 extern long opt_onlysummary;
+extern long opt_partition_count;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;
 extern long opt_print_locusrate;
@@ -667,11 +708,12 @@ extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
 extern double opt_clock_alpha;
-extern double opt_finetune_phi;
+extern double opt_finetune_freqs;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
+extern double opt_finetune_phi;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
@@ -690,10 +732,6 @@ extern double opt_theta_alpha;
 extern double opt_theta_beta;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
-extern double * opt_basefreqs_params;
-extern double * opt_migration_matrix;
-extern double * opt_migration_events;
-extern double * opt_qrates_params;
 extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
@@ -704,12 +742,18 @@ extern char * opt_modelparafile;
 extern char * opt_msafile;
 extern char * opt_locusrate_filename;
 extern char * opt_outfile;
+extern char * opt_partition_file;
 extern char * opt_reorder;
 extern char * opt_resume;
 extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
+extern double * opt_basefreqs_params;
+extern double * opt_migration_matrix;
+extern double * opt_migration_events;
+extern double * opt_qrates_params;
 extern char ** opt_migration_labels;
+extern partition_t ** opt_partition_list;
 
 /* common data */
 
@@ -1099,7 +1143,9 @@ void rj_fini();
 
 /* functions in locus.c */
 
-locus_t * locus_create(unsigned int tips,
+locus_t * locus_create(unsigned int dtype,
+                       unsigned int model,
+                       unsigned int tips,
                        unsigned int clv_buffers,
                        unsigned int states,
                        unsigned int sites,
