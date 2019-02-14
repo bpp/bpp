@@ -935,13 +935,12 @@ void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
   locus_update_all_matrices_jc69_recursive(locus,gtree->root->right);
 }
 
-#if 0
 void locus_update_matrices(locus_t * locus,
                            gnode_t ** traversal,
                            unsigned int count)
 {
+  assert(0);
 }
-#endif
 
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,
@@ -1166,4 +1165,140 @@ double locus_root_loglikelihood(locus_t * locus,
                                        locus->attributes);
   }
   return opt_bfbeta * logl;
+}
+
+static long propose_freqs(locus_t * locus,
+                          gtree_t * gtree,
+                          const unsigned int * param_indices,
+                          unsigned int count,
+                          long thread_index)
+{
+  unsigned int i,j,k,m,n;
+  long accepted = 0;
+  double lnacceptance;
+  double logl;
+  double old_freqj, old_freqk;
+  double sum;
+  double x,y;
+  gnode_t ** gt_nodes;
+
+  /* allocate temporary space for gene tree traversal */
+  gt_nodes = (gnode_t **)xmalloc((gtree->tip_count+gtree->inner_count) *
+                                 sizeof(gnode_t *));
+    
+  for (i = 0; i < count; ++i)
+  {
+    double * freqs = locus->frequencies[param_indices[i]];
+
+    /* select two base frequencies j and k at random and save them */
+    j = (unsigned int)(legacy_rndu(thread_index) * locus->states);
+    k = (unsigned int)(legacy_rndu(thread_index) * (locus->states-1));
+    if (j == k)
+      k = locus->states-1;
+    old_freqj = freqs[j];
+    old_freqk = freqs[k];
+
+    sum = freqs[j] + freqs[k];
+
+    /* compute ratio */
+    x = freqs[j] / sum;
+
+    /* min/max bounds for proposed value */
+    double minv = PLL_MISC_EPSILON / sum;
+    double maxv = 1 - minv;
+
+    /* propose new ratio */
+    y = x + opt_finetune_freqs*legacy_rnd_symmetrical(thread_index);
+    y = reflect(y,minv,maxv,thread_index);
+
+    /* set new proposed frequencies */
+    freqs[j] = y*sum;
+    freqs[k] = sum - freqs[j];
+    
+    /* swap pmatrix indices to new buffers, and update pmatrices */
+    for (m=0,n=0; m < gtree->tip_count+gtree->inner_count; ++m)
+    {
+      gnode_t * p = gtree->nodes[m];
+      if (p->parent)
+      {
+        SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+        gt_nodes[n++] = p;
+      }
+    }
+    locus_update_matrices(locus,gt_nodes,n);
+
+    /* get postorder traversal of inner nodes, swap CLV indidces to point to new
+       buffer, and update partials */
+    gtree_all_partials(gtree->root,gt_nodes,&n);
+    for (m = 0; m < n; ++m)
+    {
+      gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                              gt_nodes[m]->clv_index);
+      if (opt_scaling)
+        gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                      gt_nodes[m]->scaler_index);
+    }
+    locus_update_partials(locus,gt_nodes,n);
+
+    /* compute log-likelihood */
+    logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
+
+    lnacceptance = logl - gtree->logl;
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted = 1;
+      gtree->logl = logl;
+    }
+    else
+    {
+      /* rejected */
+
+      /* revert pmatrices */
+      for (m = 0; m < gtree->tip_count + gtree->inner_count; ++m)
+      {
+        gnode_t * p = gtree->nodes[m];
+        if (p->parent)
+          SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+      }
+
+      /* revert CLV */
+      for (m = 0; m < n; ++m)
+      {
+        gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                                gt_nodes[m]->clv_index);
+        if (opt_scaling)
+          gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                        gt_nodes[m]->scaler_index);
+      }
+
+      /* revert old frequencies */
+      freqs[j] = old_freqj;
+      freqs[k] = old_freqk;
+    }
+  }
+  free(gt_nodes);
+  return accepted;
+}
+
+double locus_propose_freqs(locus_t ** locus,
+                           gtree_t ** gtree,
+                           long locus_count)
+{
+  long i;
+  long accepted = 0;
+
+  /* currently we have only one set of frequencies */
+  unsigned int param_indices[1] = {0};
+
+  for (i = 0; i < locus_count; ++i)
+  {
+    accepted += propose_freqs(locus[i],gtree[i],param_indices,1,0);
+  }
+
+  if (!accepted)
+    return 0;
+
+  return ((double)accepted/locus_count);
 }
