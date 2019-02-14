@@ -292,6 +292,294 @@ void pll_update_eigen(double * eigenvecs,
   free(a);
 }
 
+int pll_core_update_pmatrix_4x4_f81(double ** pmatrix,
+                                    unsigned int states,
+                                    unsigned int rate_cats,
+                                    const double * rates,
+                                    const double * branch_lengths,
+                                    const double ** frequencies,
+                                    const unsigned int * matrix_indices,
+                                    const unsigned int * params_indices,
+                                    unsigned int count,
+                                    unsigned int attrib)
+{
+  unsigned int i,j,k,n,m;
+  unsigned int states_padded = states;
+  double t;
+
+  double * pmat;
+  const double * freqs;
+  double beta;
+
+  for (i = 0; i < count; ++i)
+  {
+    assert(branch_lengths[i] >= 0);
+
+    /* compute effective pmatrix location */
+    for (n = 0; n < rate_cats; ++n)
+    {
+      pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
+      freqs = frequencies[params_indices[n]];
+      t = branch_lengths[i]*rates[n];
+
+      /* compute beta */
+      for (beta=1,j = 0; j < 4; ++j)
+        beta -= freqs[j]*freqs[j];
+      beta = 1./beta;
+      
+      double e = exp(-beta*t);
+      double em1 = expm1(-beta*t);
+
+      /* fill pmatrix */
+      for (m=0,j = 0; j < 4; ++j)
+        for (k = 0; k < 4; ++k)
+          if (j==k)
+            pmat[m++]  = e - freqs[k]*em1;
+          else
+            pmat[m++]  = -freqs[k]*em1;
+    }
+  }
+  return BPP_SUCCESS;
+}
+
+int pll_core_update_pmatrix_4x4_k80(double ** pmatrix,
+                                    unsigned int states,
+                                    unsigned int rate_cats,
+                                    double kappa,
+                                    const double * rates,
+                                    const double * branch_lengths,
+                                    const unsigned int * matrix_indices,
+                                    const unsigned int * params_indices,
+                                    unsigned int count,
+                                    unsigned int attrib)
+{
+  unsigned int i,j,k,n,m;
+  unsigned int states_padded = states;
+  double t;
+  double e1,e2;
+
+  double * pmat;
+
+  for (i = 0; i < count; ++i)
+  {
+    assert(branch_lengths[i] >= 0);
+
+    /* compute effective pmatrix location */
+    for (n = 0; n < rate_cats; ++n)
+    {
+      pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
+      t = branch_lengths[i]*rates[n];
+      e1 = expm1(-4*t / (kappa+2));
+
+      if (fabs(kappa-1) < 1e-20)
+      {
+        for (m=0, j = 0; j < 4; ++j)
+          for (k = 0; k < 4; ++k)
+            if (j == k)
+              pmat[m++] = 1. + 3/4.*e1;
+            else
+              pmat[m++] = -e1/4;
+      }
+      else
+      {
+        e2 = expm1(-2 * t*(kappa+1)/(kappa+2));
+
+        pmat[0]  = 1 + (e1 + 2*e2)/4;       /* AA */
+        pmat[1]  = -e1/4;                   /* AC */
+        pmat[2]  = (e1 - 2*e2)/4;           /* AG */
+        pmat[3]  = -e1/4;                   /* AT */
+
+        pmat[4]  = -e1/4;                   /* CA */ 
+        pmat[5]  = 1 + (e1 + 2*e2)/4;       /* CC */ 
+        pmat[6]  = -e1/4;                   /* CG */ 
+        pmat[7]  = (e1 - 2*e2)/4;           /* CT */ 
+        
+        pmat[8]  = (e1 - 2*e2)/4;           /* GA */
+        pmat[9]  = -e1/4;                   /* GC */
+        pmat[10] = 1 + (e1 + 2*e2)/4;       /* GG */
+        pmat[11] = -e1/4;                   /* GT */
+
+        pmat[12] = -e1/4;                   /* TA */
+        pmat[13] = (e1 - 2*e2)/4;           /* TC */
+        pmat[14] = -e1/4;                   /* TG */
+        pmat[15] = 1 + (e1 + 2*e2)/4;       /* TT */
+      }
+    }
+  }
+  return BPP_SUCCESS;
+}
+
+int pll_core_update_pmatrix_4x4_tn93(double ** pmatrix,
+                                     unsigned int states,
+                                     unsigned int rate_cats,
+                                     double a1t,
+                                     double a2t,
+                                     const double * rates,
+                                     const double * branch_lengths,
+                                     const double ** frequencies,
+                                     const unsigned int * matrix_indices,
+                                     const unsigned int * params_indices,
+                                     unsigned int count,
+                                     unsigned int attrib)
+{
+  unsigned int i,n;
+  unsigned int states_padded = states;
+  double beta;
+  double bt;
+  double e1,e2,e3;
+
+  double * pmat;
+  const double * freqs;
+
+
+  for (i = 0; i < count; ++i)
+  {
+    assert(branch_lengths[i] >= 0);
+
+    /* compute effective pmatrix location */
+    for (n = 0; n < rate_cats; ++n)
+    {
+      pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
+      freqs = frequencies[params_indices[n]];
+
+      double A = freqs[0];
+      double C = freqs[1];
+      double G = freqs[2];
+      double T = freqs[3];
+      double Y = T + C;
+      double R = A + G;
+
+      beta = 0.5 / (Y*R + a1t*T*C + a2t*A*G);
+      bt = branch_lengths[i]*rates[n]*beta;
+
+      e1 = expm1(-bt);
+      e2 = expm1(-(R*a2t + Y*bt));
+      e3 = expm1(-(Y*a1t + R*bt));
+
+      pmat[0]  = 1 + Y*A / R*e1 + G / R*e2;
+      pmat[1]  = -C*e1;
+      pmat[2]  = Y*G / R*e1 - G / R*e2;
+      pmat[3]  = -T*e1;
+
+      pmat[4]  = -A*e1;
+      pmat[5]  = 1 + (R*C*e1 + T*e3) / Y;
+      pmat[6]  = -G*e1;
+      pmat[7]  = (R*e1 - e3)*T / Y;
+
+      pmat[8]  = Y*A / R*e1 - A / R*e2;
+      pmat[9]  = -C*e1;
+      pmat[10] = 1 + Y*G / R*e1 + A / R*e2;
+      pmat[11] = -T*e1;
+
+      pmat[12] = -A*e1;
+      pmat[13] = (R*e1 - e3)*C / Y;
+      pmat[14] = -G*e1;
+      pmat[15] = 1 + (R*T*e1 + C*e3) / Y;
+    }
+  }
+
+  return BPP_SUCCESS;
+}
+int pll_core_update_pmatrix_4x4_hky(double ** pmatrix,
+                                     unsigned int states,
+                                     unsigned int rate_cats,
+                                     const double * rates,
+                                     const double * kappa,
+                                     const double * branch_lengths,
+                                     const double ** frequencies,
+                                     const unsigned int * matrix_indices,
+                                     const unsigned int * params_indices,
+                                     unsigned int count,
+                                     unsigned int attrib)
+{
+  unsigned int i,j,k,n,m;
+  unsigned int states_padded = states;
+  double u,w,x,y,z;
+  double beta;
+  double pijk[4];
+
+  double * pmat;
+  const double * freqs;
+
+
+  for (i = 0; i < count; ++i)
+  {
+    assert(branch_lengths[i] >= 0);
+
+    /* compute effective pmatrix location */
+    for (n = 0; n < rate_cats; ++n)
+    {
+      pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
+      freqs = frequencies[params_indices[n]];
+
+
+      double t = branch_lengths[i];
+      if (rate_cats > 1)
+        t *= rates[n];
+
+      double pi_ag_sum  = freqs[0] + freqs[2];
+      double pi_ct_sum  = freqs[1] + freqs[3];
+      double pi_ag_prod = freqs[0] * freqs[2];
+      double pi_ct_prod = freqs[1] * freqs[3];
+
+      pijk[0] = freqs[0] + freqs[2];
+      pijk[1] = freqs[1] + freqs[3];
+      pijk[2] = freqs[0] + freqs[2];
+      pijk[3] = freqs[1] + freqs[3];
+
+      beta = 0.5 / (pi_ag_sum*pi_ct_sum + kappa[n]*(pi_ag_prod + pi_ct_prod));
+
+      if (t < 1e-100)
+      {
+        pmat[0]  = 1;
+        pmat[1]  = 0;
+        pmat[2]  = 0;
+        pmat[3]  = 0;
+
+        pmat[4]  = 0;
+        pmat[5]  = 1;
+        pmat[6]  = 0;
+        pmat[7]  = 0;
+
+        pmat[8]  = 0;
+        pmat[9]  = 0;
+        pmat[10] = 1;
+        pmat[11] = 0;
+
+        pmat[12] = 0;
+        pmat[13] = 0;
+        pmat[14] = 0;
+        pmat[15] = 1;
+      }
+      else
+      {
+        m=0;
+        for (j = 0; j < 4; ++j)
+        {
+          for (k = 0; k < 4; ++j)
+          {
+            u = 1.0/pijk[k] - 1;
+            w = -beta * (1+pijk[k]*(kappa[n]-1));
+            x = exp(-beta*t);
+            y = exp(w*t);
+            z = (pijk[k] - freqs[k]) / pijk[k];
+
+            if (j == k)
+              pmat[m++] = freqs[k] + freqs[k]*u*x + z*y;
+            else if ((j == 0 && k == 2) || (j == 2 && k == 0) ||
+                     (j == 1 && k == 3) || (j == 3 && k == 1))
+              pmat[m++] = freqs[k] + freqs[k]*u*x - (freqs[k]/pijk[k])*y;
+            else
+              pmat[m++] = freqs[k]*(1-x);
+          }
+        }
+      }
+    }
+  }
+
+  return BPP_SUCCESS;
+}
+
 int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
                                      unsigned int states,
                                      unsigned int rate_cats,
