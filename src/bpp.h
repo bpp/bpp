@@ -175,6 +175,7 @@
 #define BPP_DATA_DNA                    0
 #define BPP_DATA_AA                     1
 
+#define BPP_DNA_MODEL_DEFAULT           0
 #define BPP_DNA_MODEL_JC69              0
 #define BPP_DNA_MODEL_K80               1
 #define BPP_DNA_MODEL_F81               2

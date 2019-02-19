@@ -692,6 +692,8 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
   snode_t * start;
   snode_t * end;
 
+  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_AC);
+
   long total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
   if (opt_clock == BPP_CLOCK_IND)

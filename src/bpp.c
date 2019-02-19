@@ -359,7 +359,10 @@ void args_init(int argc, char ** argv)
   int commands  = 0;
 
   if (opt_cfile)
+  {
+    opt_model = BPP_DNA_MODEL_DEFAULT;
     load_cfile();
+  }
   if (opt_simulate)
     load_cfile_sim();
 

@@ -1416,6 +1416,7 @@ static void check_validity()
 
   if (opt_model)
   {
+    printf("Model: %ld\n", opt_model);
     assert(0);
   }
 }
