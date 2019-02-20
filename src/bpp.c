@@ -90,6 +90,7 @@ double opt_finetune_gtspr;
 double opt_finetune_locusrate;
 double opt_finetune_mix;
 double opt_finetune_phi;
+double opt_finetune_rates;
 double opt_finetune_tau;
 double opt_finetune_theta;
 double opt_heredity_alpha;
@@ -228,6 +229,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
   opt_finetune_phi = 0.001;
+  opt_finetune_rates = 0.3;
   opt_finetune_reset = 0;
   opt_finetune_tau = 0.001;
   opt_finetune_theta = 0.001;

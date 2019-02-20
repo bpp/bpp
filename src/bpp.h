@@ -715,6 +715,7 @@ extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
 extern double opt_finetune_phi;
+extern double opt_finetune_rates;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
