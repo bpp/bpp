@@ -80,10 +80,6 @@
 /* debugging switches */
 
 #if 0
-#define DEBUG_MSCi 1
-#endif
-
-#if 0
 #define DEBUG_THREADS
 #define DEBUG_THREADS_COUNT 4
 #endif

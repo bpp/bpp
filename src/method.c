@@ -1328,35 +1328,6 @@ void cmd_run()
   else
     i = curstep - opt_burnin;
 
-
-  /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-  /* two bidirections */
-  int dbg_locus = 0;
-  double dbg_left[4] = {0};
-  double dbg_right[4] = {0};
-  double dbg_tmean = 0;
-  double dbg_ppop[11] = { 0 };
-  printf("rndu status: %d\n", get_legacy_rndu_status());
-#endif
-#if (0)
-  /* one bidirection */
-  int dbg_locus = 0;
-  double dbg_left[2] = {0};
-  double dbg_right[2] = {0};
-  double dbg_tmean = 0;
-  double dbg_ppop[11] = { 0 };
-  printf("rndu status: %d\n", get_legacy_rndu_status());
-#endif
-#if (0)
-  int dbg_locus = 1;
-  double dbg_left[2] = {0};
-  double dbg_right[2] = {0};
-  double dbg_tmean = 0;
-  double dbg_ppop[11] = { 0 };
-  printf("rndu status: %d\n", get_legacy_rndu_status());
-#endif
-
   /* flush all open files */
   fflush(NULL);
 
@@ -1372,22 +1343,6 @@ void cmd_run()
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
-
-/* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-      /* two bidirections */
-      dbg_tmean = 0;
-      memset(dbg_left, 0, 4 * sizeof(double));
-      memset(dbg_right, 0, 4 * sizeof(double));
-      memset(dbg_ppop, 0, 11 * sizeof(double));
-#endif      
-#if (0)
-      /* one bidirection */
-      dbg_tmean = 0;
-      memset(dbg_left, 0, 2 * sizeof(double));
-      memset(dbg_right, 0, 2 * sizeof(double));
-      memset(dbg_ppop, 0, 11 * sizeof(double));
-#endif      
 
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(pjump,&pjump_phi);
@@ -1480,179 +1435,6 @@ void cmd_run()
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
     pjump[1] = (pjump[1]*(ft_round-1) + ratio) / (double)ft_round;
-
-/* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-    /* two bidirections */
-    int aindex = 0, cindex = gtree[dbg_locus]->tip_count - 1;
-    int dbg_lca = 0, dbg_lcapop = 0;
-
-    /* safety check */
-    for (j = 0; j < gtree[dbg_locus]->tip_count + gtree[dbg_locus]->inner_count; ++j)
-      assert(gtree[dbg_locus]->nodes[j]->mark == 0);
-
-    /* mark all nodes on the path from a to root */
-    gnode_t * dbg_tmp = gtree[dbg_locus]->nodes[aindex];
-    while (dbg_tmp)
-    {
-       dbg_tmp->mark = 1;
-       dbg_tmp = dbg_tmp->parent;
-    }
-    /* find first marked node on the path from c to root */
-    dbg_tmp = gtree[dbg_locus]->nodes[cindex];
-    while (!dbg_tmp->mark)
-       dbg_tmp = dbg_tmp->parent;
-
-    /* clear marks */
-    for (j = 0; j < gtree[dbg_locus]->inner_count; ++j)
-       gtree[dbg_locus]->nodes[gtree[dbg_locus]->tip_count + j]->mark = 0;
-    gtree[dbg_locus]->nodes[aindex]->mark = gtree[dbg_locus]->nodes[cindex]->mark = 0;
-
-    dbg_lca = dbg_tmp->node_index;
-    assert(dbg_lca == 2);
-    dbg_lcapop = gtree[dbg_locus]->nodes[dbg_lca]->pop->node_index;
-    dbg_tmean = (dbg_tmean*(ft_round - 1) + gtree[dbg_locus]->nodes[dbg_lca]->time) / ft_round;
-    dbg_ppop[dbg_lcapop]++;
-
-    /* count X */
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[1] == BPP_HPATH_LEFT)
-       dbg_left[1]++;
-    else if (gtree[dbg_locus]->nodes[aindex]->hpath[1] == BPP_HPATH_RIGHT)
-       dbg_right[1]++;
-    /* count Y */
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[2] == BPP_HPATH_LEFT)
-       dbg_left[2]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[2] == BPP_HPATH_RIGHT)
-       dbg_right[2]++;
-
-    /* count S */
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_LEFT || gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_LEFT)
-       dbg_left[0]++;
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_RIGHT || gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_RIGHT)
-       dbg_right[0]++;
-    if (gtree[dbg_locus]->nodes[2]->hpath[0] == BPP_HPATH_LEFT)
-    {
-      assert(gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_NONE);
-      assert(gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_NONE);
-      dbg_left[0]++;
-    }
-    else if (gtree[dbg_locus]->nodes[2]->hpath[0] == BPP_HPATH_RIGHT)
-    {
-      assert(gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_NONE);
-      assert(gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_NONE);
-      dbg_right[0]++;
-    }
-    #if 0
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_LEFT)
-       dbg_left[0]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_RIGHT)
-       dbg_right[0]++;
-    #endif
-
-    /* count T */
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[3] == BPP_HPATH_LEFT || gtree[dbg_locus]->nodes[cindex]->hpath[3] == BPP_HPATH_LEFT)
-       dbg_left[3]++;
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[3] == BPP_HPATH_RIGHT || gtree[dbg_locus]->nodes[cindex]->hpath[3] == BPP_HPATH_RIGHT)
-       dbg_right[3]++;
-    if (gtree[dbg_locus]->nodes[2]->hpath[3] == BPP_HPATH_LEFT)
-    {
-      assert(gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_NONE);
-      assert(gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_NONE);
-      dbg_left[3]++;
-    }
-    else if (gtree[dbg_locus]->nodes[2]->hpath[3] == BPP_HPATH_RIGHT)
-    {
-      assert(gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_NONE);
-      assert(gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_NONE);
-      dbg_right[3]++;
-    }
-    #if 0
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[3] == BPP_HPATH_LEFT)
-       dbg_left[3]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[3] == BPP_HPATH_RIGHT)
-       dbg_right[3]++;
-    #endif
-#endif
-#if (0)
-    /* one bidirection */
-    int aindex = 0, cindex = gtree[dbg_locus]->tip_count - 1;
-    int dbg_lca = 0, dbg_lcapop = 0;
-
-    /* safety check */
-    for (j = 0; j < gtree[dbg_locus]->tip_count + gtree[dbg_locus]->inner_count; ++j)
-      assert(gtree[dbg_locus]->nodes[j]->mark == 0);
-
-    /* mark all nodes on the path from a to root */
-    gnode_t * dbg_tmp = gtree[dbg_locus]->nodes[aindex];
-    while (dbg_tmp)
-    {
-       dbg_tmp->mark = 1;
-       dbg_tmp = dbg_tmp->parent;
-    }
-    /* find first marked node on the path from c to root */
-    dbg_tmp = gtree[dbg_locus]->nodes[cindex];
-    while (!dbg_tmp->mark)
-       dbg_tmp = dbg_tmp->parent;
-
-    /* clear marks */
-    for (j = 0; j < gtree[dbg_locus]->inner_count; ++j)
-       gtree[dbg_locus]->nodes[gtree[dbg_locus]->tip_count + j]->mark = 0;
-    gtree[dbg_locus]->nodes[aindex]->mark = gtree[dbg_locus]->nodes[cindex]->mark = 0;
-
-    dbg_lca = dbg_tmp->node_index;
-    assert(dbg_lca == 2);
-    dbg_lcapop = gtree[dbg_locus]->nodes[dbg_lca]->pop->node_index;
-    dbg_tmean = (dbg_tmean*(ft_round - 1) + gtree[dbg_locus]->nodes[dbg_lca]->time) / ft_round;
-    dbg_ppop[dbg_lcapop]++;
-
-    if (gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_LEFT)
-       dbg_left[0]++;
-    else if (gtree[dbg_locus]->nodes[aindex]->hpath[0] == BPP_HPATH_RIGHT)
-       dbg_right[0]++;
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[1] == BPP_HPATH_LEFT)
-       dbg_left[1]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[1] == BPP_HPATH_RIGHT)
-       dbg_right[1]++;
-#endif
-#if (0)
-    int aindex = 0, cindex = gtree[dbg_locus]->tip_count - 1;
-    int dbg_lca = 0, dbg_lcapop = 0;
-
-    /* safety check */
-    for (j = 0; j < gtree[dbg_locus]->tip_count + gtree[dbg_locus]->inner_count; ++j)
-      assert(gtree[dbg_locus]->nodes[j]->mark == 0);
-
-    /* mark all nodes on the path from a to root */
-    gnode_t * dbg_tmp = gtree[dbg_locus]->nodes[aindex];
-    while (dbg_tmp)
-    {
-       dbg_tmp->mark = 1;
-       dbg_tmp = dbg_tmp->parent;
-    }
-    /* find first marked node on the path from c to root */
-    dbg_tmp = gtree[dbg_locus]->nodes[cindex];
-    while (!dbg_tmp->mark)
-       dbg_tmp = dbg_tmp->parent;
-
-    /* clear marks */
-    for (j = 0; j < gtree[dbg_locus]->inner_count; ++j)
-       gtree[dbg_locus]->nodes[gtree[dbg_locus]->tip_count + j]->mark = 0;
-    gtree[dbg_locus]->nodes[aindex]->mark = gtree[dbg_locus]->nodes[cindex]->mark = 0;
-
-    dbg_lca = dbg_tmp->node_index;
-    dbg_lcapop = gtree[dbg_locus]->nodes[dbg_lca]->pop->node_index;
-    dbg_tmean = (dbg_tmean*(ft_round - 1) + gtree[dbg_locus]->nodes[dbg_lca]->time) / ft_round;
-    dbg_ppop[dbg_lcapop]++;
-
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_LEFT)
-       dbg_left[0]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[0] == BPP_HPATH_RIGHT)
-       dbg_right[0]++;
-    if (gtree[dbg_locus]->nodes[cindex]->hpath[1] == BPP_HPATH_LEFT)
-       dbg_left[1]++;
-    else if (gtree[dbg_locus]->nodes[cindex]->hpath[1] == BPP_HPATH_RIGHT)
-       dbg_right[1]++;
-#endif
 
     /* propose population sizes on species tree */
     if (opt_est_theta)
@@ -1847,35 +1629,6 @@ void cmd_run()
       if (opt_usedata)
         printf(" %8.5f", mean_logl);
 
-/* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-      /* two bidirections */
-      printf(" %8.5f ", dbg_tmean);
-      for (j = 0; j < 11; ++j)
-         printf(" %6.4f (%s) ", dbg_ppop[j] / ft_round, stree->nodes[j]->label);
-      /* 9.10.2018 - *********************/
-      printf("gam(X,Y) : %.6f %.6f ", dbg_left[1] / (dbg_left[1] + dbg_right[1]), 
-                                    dbg_left[2] / (dbg_left[2] + dbg_right[2]));
-      printf("gam(S,T) : %.6f %.6f ", dbg_left[0] / (dbg_left[0] + dbg_right[0]), 
-                                    dbg_left[3] / (dbg_left[3] + dbg_right[3]));
-#endif
-#if (0)
-      /* one bidirection */
-      printf(" %8.5f ", dbg_tmean);
-      for (j = 0; j < 7; ++j)
-         printf(" %6.4f (%s) ", dbg_ppop[j] / ft_round, stree->nodes[j]->label);
-      /* 9.10.2018 - *********************/
-      printf("c1 left: %.6f %.6f ", dbg_left[0] / (dbg_left[0] + dbg_right[0]), 
-                                    dbg_left[1] / (dbg_left[1] + dbg_right[1]));
-#endif
-#if (0)
-      printf(" %8.5f ", dbg_tmean);
-      for (j = 2; j < 11; ++j)
-         printf(" %6.4f (%s) ", dbg_ppop[j] / ft_round, stree->nodes[j]->label);
-      /* 9.10.2018 - *********************/
-      printf("c1 left: %.6f %.6f ", dbg_left[0] / (dbg_left[0] + dbg_right[0]), 
-                                    dbg_left[1] / (dbg_left[1] + dbg_right[1]));
-#endif
       if (printk >= 50 && (i+1) % (printk / 20) == 0)
         printf("\n");
     }

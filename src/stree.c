@@ -961,44 +961,6 @@ static void stree_init_tau(stree_t * stree, long thread_index)
      stree_init_tau_recursive(stree->root->right, prop, thread_index);
    }
 
-/* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-   /* two bidirectional introgressions */
-   stree->nodes[2]->tau  = 0.6;   /* R */
-   stree->nodes[3]->tau  = 0.35;  /* Sl */
-   stree->nodes[4]->tau  = 0.15;  /* Xl */
-   stree->nodes[5]->tau  = 0.15;  /* Yl */
-   stree->nodes[6]->tau  = 0.35;  /* Tl */
-   stree->nodes[7]->tau  = 0.35;  /* Sr */
-   stree->nodes[8]->tau  = 0.15;  /* Xr */
-   stree->nodes[9]->tau  = 0.15;  /* Yr */
-   stree->nodes[10]->tau = 0.35;  /* Tr */
-#endif
-#if (0)
-   /* one bidirectional introgression */
-   stree->nodes[2]->tau = 0.5;  /* R */
-   stree->nodes[3]->tau = 0.3;  /* Xl */
-   stree->nodes[4]->tau = 0.3;  /* Yl */
-   stree->nodes[5]->tau = 0.3;  /* Xr */
-   stree->nodes[6]->tau = 0.3;  /* Yr */
-#endif
-#if (0)
-   stree->nodes[3]->tau = 0.5;
-   stree->nodes[4]->tau = 0.3;
-   stree->nodes[5]->tau = 0.2;
-   stree->nodes[6]->tau = stree->nodes[9]->tau = 0.1;
-   stree->nodes[7]->tau = stree->nodes[10]->tau = 0.2;
-   stree->nodes[8]->tau = 0.4;
-#endif
-#if 0
-   /********************/
-   stree->root->tau = 0.4;
-   stree->root->left->tau = 0.2;
-   stree->root->right->tau = 0.3;
-   stree->nodes[stree->tip_count + stree->inner_count]->tau = .1;
-   stree->nodes[stree->tip_count + stree->inner_count]->hybrid->tau = .1;
-#endif
-
    /* check to see if everything is OK */
    if (opt_msci)
    {
@@ -1171,32 +1133,6 @@ static void stree_init_phi(stree_t * stree)
     mnode->hybrid->hphi = (opt_phi_alpha / (opt_phi_alpha + opt_phi_beta));
     mnode->hphi = 1 - mnode->hybrid->hphi;
   }
-
-    /* 9.10.2018 - Testing gene tree node age proposal for MSCi **************** */
-#if (defined DEBUG_MSCi)
-   /* two bidirectional introgressions */
-  stree->nodes[3]->hphi = 0.3;                         /* Sl */
-  stree->nodes[4]->hphi = 0.4;                         /* Xl */
-  stree->nodes[5]->hphi = 0.5;                         /* Yl */
-  stree->nodes[6]->hphi = 0.8;                         /* Tl */
-  stree->nodes[7]->hphi = 1-stree->nodes[3]->hphi;     /* Sr */
-  stree->nodes[8]->hphi = 1-stree->nodes[4]->hphi;     /* Xr */
-  stree->nodes[9]->hphi = 1-stree->nodes[5]->hphi;     /* Yr */
-  stree->nodes[10]->hphi = 1-stree->nodes[6]->hphi;    /* Tr */
-#endif
-#if (0)
-   /* one bidirectional introgression */
-  stree->nodes[3]->hphi = 0.3;
-  stree->nodes[4]->hphi = 0.4;
-  stree->nodes[5]->hphi = 1-stree->nodes[3]->hphi;
-  stree->nodes[6]->hphi = 1-stree->nodes[4]->hphi;
-#endif
-#if (0)
-  stree->nodes[6]->hphi  = 0.3;
-  stree->nodes[7]->hphi  = 0.4;
-  stree->nodes[9]->hphi  = 1 - stree->nodes[6]->hphi;
-  stree->nodes[10]->hphi = 1 - stree->nodes[7]->hphi;
-#endif
 }
 
 static void stree_init_theta(stree_t * stree,
@@ -1448,56 +1384,6 @@ static void stree_init_theta(stree_t * stree,
   for (i = 0; i < stree->tip_count; ++i)
     free(seqcount[i]);
   free(seqcount);
-
-/* 22.6.2018 - Testing gene tree node age proposal for MSCi */
-#if (defined DEBUG_MSCi)
-   /* two bidirectional introgressions */
-  stree->nodes[0]->theta  = 0.1;    /*  A */
-  stree->nodes[1]->theta  = 0.2;    /*  B */
-  stree->nodes[2]->theta  = 0.2;    /*  R */
-  stree->nodes[3]->theta  = 0.15;   /* Sl */
-  stree->nodes[4]->theta  = 0.25;   /* Xl */
-  stree->nodes[5]->theta  = 0.15;   /* Yl */
-  stree->nodes[6]->theta  = 0.25;   /* Tl */
-  stree->nodes[7]->theta  = 0.15;   /* Sr */
-  stree->nodes[8]->theta  = 0.25;   /* Xr */
-  stree->nodes[9]->theta  = 0.15;   /* Yr */
-  stree->nodes[10]->theta = 0.25;   /* Tr */
-#endif
-#if (0)
-   /* one bidirectional introgression */
-  stree->nodes[0]->theta = 0.1;   /* A */
-  stree->nodes[1]->theta = 0.2;   /* B */
-  stree->nodes[2]->theta = 0.2;   /* R */
-  stree->nodes[3]->theta = 0.15;   /* Xl */
-  stree->nodes[4]->theta = 0.25;   /* Yl */
-  stree->nodes[5]->theta = 0.15;   /* Xr */
-  stree->nodes[6]->theta = 0.25;   /* Yr */
-#endif
-#if (0)
-  stree->nodes[0]->theta = 0.1;   /* A */
-  stree->nodes[1]->theta = 0.2;   /* B */
-  stree->nodes[2]->theta = 0.3;   /* C */
-  stree->nodes[3]->theta = 0.2;   /* R */
-  stree->nodes[4]->theta = 0.15;   /* S */
-  stree->nodes[5]->theta = 0.25;   /* U */
-  stree->nodes[6]->theta = 0.05;   /* Xl */
-  stree->nodes[7]->theta = 0.25;   /* Yl */
-  stree->nodes[8]->theta = 0.15;   /* T */
-  stree->nodes[9]->theta = 0.5;   /* Xr */
-  stree->nodes[10]->theta = 0.35;   /* Yr */
-#endif
-#if 0
-  /******************************/
-  stree->root->theta = 0.2;  /* R */
-  stree->root->left->theta = 0.15;               /* S */
-  stree->root->right->theta = 0.15;              /* T */
-  stree->nodes[stree->tip_count + stree->inner_count]->theta = 0.05;  /* Hr */
-  stree->nodes[stree->tip_count + stree->inner_count]->hybrid->theta = 0.25;  /* Hl */
-  stree->nodes[0]->theta = 0.1;  /* A */
-  stree->nodes[1]->theta = 0.2;  /* B */
-  stree->nodes[2]->theta = 0.3;  /* C */
-#endif
 }
 
 /* bottom up filling of pptable */
