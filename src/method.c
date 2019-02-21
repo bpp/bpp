@@ -33,6 +33,29 @@ const static long thread_index_zero = 0;
 
 static double pj_optimum = 0.3;
 static thread_data_t td;
+static time_t time_start;
+
+static void timer_start()
+{
+  time_start = time(NULL);
+}
+
+static void timer_print(const char * prefix)
+{
+  time_t t;
+  long h,m,s;
+  
+  t = time(NULL) - time_start;
+
+  h = (long)t / 3600;
+  m = (long)(t % 3600) / 60;
+  s = (long)(t - (t/60)*60);
+  if (h)
+    fprintf(stdout, "%s%ld:%02ld:%02ld\n", prefix, h, m, s);
+  else
+    fprintf(stdout, "%s%ld:%02ld\n", prefix, m, s);
+
+}
 
 static stree_t * load_tree_or_network(void)
 {
@@ -1330,6 +1353,7 @@ void cmd_run()
 
   /* flush all open files */
   fflush(NULL);
+  timer_start();
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
@@ -1630,7 +1654,7 @@ void cmd_run()
         printf(" %8.5f", mean_logl);
 
       if (printk >= 50 && (i+1) % (printk / 20) == 0)
-        printf("\n");
+        timer_print("  ");
     }
 
     curstep++;
