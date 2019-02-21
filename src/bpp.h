@@ -1920,6 +1920,6 @@ void cmd_simulate(void);
 
 /* functions in threads.c */
 
-void threads_init(void);
+void threads_init(locus_t ** locus);
 void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit();

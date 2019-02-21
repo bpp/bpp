@@ -1312,7 +1312,7 @@ void cmd_run()
 
   if (opt_threads > 1)
   {
-    threads_init();
+    threads_init(locus);
     memset(&td,0,sizeof(td));
   }
 

@@ -125,9 +125,11 @@ static void * threads_worker(void * vp)
   pthread_exit(NULL);
 }
 
-void threads_init()
+void threads_init(locus_t ** locus)
 {
+  long i;
   long t;
+  long patterns;
 
   assert(opt_threads <= opt_locus_count);
 
@@ -167,7 +169,13 @@ void threads_init()
       --loci_remaining;
     loci_start += tip->locus_count;
 
-    printf("Starting thread %ld (loci %ld-%ld)\n", t, tip->locus_first, tip->locus_first+tip->locus_count);
+    /* calculate number of site patterns send to current thread */
+    patterns = 0;
+    for (i = 0; i < tip->locus_count; ++i)
+      patterns += locus[tip->locus_first+i]->sites;
+      
+    printf("Starting thread %ld : loci [%ld-%ld), %ld patterns\n",
+           t, tip->locus_first, tip->locus_first+tip->locus_count, patterns);
     
     pthread_mutex_init(&tip->mutex, NULL);
     pthread_cond_init(&tip->cond, NULL);
