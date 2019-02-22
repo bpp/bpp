@@ -2,6 +2,10 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.1.2] - 2019-02-22
+### Added
+ - Pinning threads to cores on linux systems. Improved multithread performance
+
 ## [4.1.1] - 2019-01-30
 ### Added
  - Parallelized mixing and tau proposals

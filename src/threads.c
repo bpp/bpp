@@ -41,10 +41,28 @@ typedef struct thread_info_s
 static thread_info_t * ti;
 static pthread_attr_t attr;
 
+#if (defined(__linux__) && !defined(DISABLE_COREPIN))
+static void pin_to_core(long t)
+{
+  cpu_set_t cpuset;
+
+  CPU_ZERO(&cpuset);
+  CPU_SET(t,&cpuset);
+
+  if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset))
+    fatal("Error while pinning thread to core. "
+          "Probably used more threads than available cores?");
+}
+#endif
+
 static void * threads_worker(void * vp)
 {
   long t = (long)vp;
   thread_info_t * tip = ti + t;
+
+#if (defined(__linux__) && !defined(DISABLE_COREPIN))
+  pin_to_core(t);
+#endif
 
   pthread_mutex_lock(&tip->mutex);
 
@@ -132,6 +150,10 @@ void threads_init(locus_t ** locus)
   long patterns;
 
   assert(opt_threads <= opt_locus_count);
+
+#if (defined(__linux__) && !defined(DISABLE_COREPIN))
+  pin_to_core(0);
+#endif
 
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
