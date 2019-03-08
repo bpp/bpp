@@ -981,7 +981,10 @@ long arch_get_cores(void);
 
 /* functions in msa.c */
 
-void msa_print_phylip(FILE * fp, msa_t ** msa, long count);
+void msa_print_phylip(FILE * fp,
+                      msa_t ** msa,
+                      long count,
+                      unsigned int ** weights);
 
 void msa_destroy(msa_t * msa);
 
@@ -1242,6 +1245,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                const unsigned int * map,
                                                int count,
                                                int * length,
+                                               unsigned int ** wptr,
                                                int attrib);
 /* functions in allfixed.c */
 

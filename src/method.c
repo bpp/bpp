@@ -720,7 +720,7 @@ static FILE * init(stree_t ** ptr_stree,
   fprintf(fp_out, "COMPRESSED ALIGNMENTS\n\n");
 
   /* print the alignments */
-  msa_print_phylip(fp_out,msa_list,msa_count);
+  msa_print_phylip(fp_out,msa_list,msa_count, weights);
 
   *ptr_fp_gtree = NULL;
 
@@ -771,6 +771,9 @@ static FILE * init(stree_t ** ptr_stree,
     mapping = (unsigned long **)xmalloc((size_t)msa_count *
                                         sizeof(unsigned long *));
 
+    /* allocate temporary array for storing pattern weights for alignment A3 */
+    unsigned int ** tmpwgt = (unsigned int **)xmalloc((size_t)(msa_count) *
+                                                      sizeof(unsigned int *));
     for (i = 0; i < msa_count; ++i)
     {
       /* compress again for JC69 and get mappings */
@@ -778,10 +781,16 @@ static FILE * init(stree_t ** ptr_stree,
                                                   pll_map_nt,
                                                   msa_list[i]->count,
                                                   &(msa_list[i]->length),
+                                                  tmpwgt+i,
                                                   COMPRESS_JC69);
     }
     fprintf(fp_out, "COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES\n\n");
-    msa_print_phylip(fp_out,msa_list,msa_count);
+    msa_print_phylip(fp_out,msa_list,msa_count,tmpwgt);
+
+    /* deallocate temporary pattern weights */
+    for (i = 0; i < msa_count; ++i)
+      free(tmpwgt[i]);
+    free(tmpwgt);
 
   }
 

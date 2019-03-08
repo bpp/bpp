@@ -21,24 +21,59 @@
 
 #include "bpp.h"
 
-static void print_phylip(FILE * fp, msa_t * msa)
+static void print_pretty_phylip(FILE * fp,
+                                msa_t * msa,
+                                int pad,
+                                int every,
+                                unsigned int * weights)
 {
+  long i,j;
   if (!msa) return;
 
-  int i;
-
-  fprintf(fp, "%d %d\n", msa->count, msa->length);
+  fprintf(fp, "%d %d P\n", msa->count, msa->length);
   for (i = 0; i < msa->count; ++i)
-    fprintf(fp, "%s %s\n", msa->label[i], msa->sequence[i]);
+  {
+    fprintf(fp, "%-*s", pad, msa->label[i]);
+    for (j = 0; j < (long)(msa->length); ++j)
+    {
+      /* note: prints an extra space before the sequence */
+      if (j % every == 0)
+        fprintf(fp, " ");
+      fprintf(fp, "%c", msa->sequence[i][j]);
+    }
+    fprintf(fp, "\n");
+  }
+  assert(weights);
+  fprintf(fp, "%d", weights[0]);
+  for (i = 1; i < msa->length; ++i)
+    fprintf(fp, " %d", weights[i]);
+  fprintf(fp, "\n");
 }
 
-void msa_print_phylip(FILE * fp, msa_t ** msa, long count)
+void msa_print_phylip(FILE * fp,
+                      msa_t ** msa,
+                      long count,
+                      unsigned int ** weights)
 {
-  long i;
+  int every = 10;  /* separate data in sequence every 10 bases */
+  int pad = 4;
+  int maxlen = 0;
+  long i,j,k;
+
+  /* find length of longest sequence label */
+  for (i = 0; i < count; ++i)
+  {
+    for (j = 0; j < msa[i]->count; ++j)
+    {
+      k = strlen(msa[i]->label[j]);
+      if (k > maxlen)
+        maxlen = k;
+    }
+  }
 
   for (i = 0; i < count; ++i)
   {
-    print_phylip(fp, msa[i]);
+    print_pretty_phylip(fp, msa[i], maxlen+pad, every, weights[i]);
     fprintf(fp,"\n");
   }
 }

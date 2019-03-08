@@ -466,6 +466,9 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
       newlabel[k] = xstrdup(msa->label[i]);
     }
   }
+  #if 0
+  printf("npatt in A2 after expansion = %ld\n", patterns);
+  #endif
 
   /* 4c. loop through sites in heterogenous alignment A1 to generate resolved
      site patterns for alignment A2 */

@@ -379,11 +379,13 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                const unsigned int * map,
                                                int count,
                                                int * length,
+                                               unsigned int ** wptr,
                                                int attrib)
 {
   int i,j;
   char * memptr;
   char ** column;
+  unsigned int * weight;
   unsigned long * mapping;
   unsigned char ** jc69_invmaps = NULL;
 
@@ -434,6 +436,9 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
   for (i = 1; i < *length; ++i)
     column[i] = column[i-1] + (count+1);
 
+  /* allocate space for weight vector */
+  weight = (unsigned int *)xmalloc((size_t)(*length)*sizeof(unsigned int));
+
   /* allocate space for mapping vector */
   mapping = (unsigned long *)xmalloc((size_t)(*length)*sizeof(unsigned long));
 
@@ -461,6 +466,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
   int compressed_length = 1;
   size_t ref = 0;
   mapping[0] = 0;
+  weight[ref] = 1;
 
   /* find all unique columns and set their mappings A2->A3 */
   int * compressed_oi = (int *)xmalloc(*length * sizeof(int));
@@ -474,7 +480,10 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
       compressed_oi[ref+1] = oi[i];
       ++ref;
       ++compressed_length;
+      weight[ref] = 1;
     }
+    else
+      weight[ref]++;
 
     /* map original index i in uncompressed alignment to index in compressed */
     mapping[oi[i]] = ref;
@@ -508,6 +517,22 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
   /* deallocate memory */
   free(memptr);
   free(column);
+
+
+  /* adjust weight vector size to compressed length */
+  unsigned int * mem = (unsigned int *)xmalloc((size_t)compressed_length *
+                                               sizeof(unsigned int));
+  if (mem)
+  {
+    /* copy weights */
+    for (i = 0; i < compressed_length; ++i)
+      mem[i] = weight[i];
+
+    /* free and re-point */
+    free(weight);
+    weight = mem;
+  }
+  *wptr = weight;
 
   /* update length */
   *length = compressed_length;
