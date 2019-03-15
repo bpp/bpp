@@ -69,7 +69,7 @@ Or if you are using Windows, download and extract (unzip) the contents of this f
 https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-win-x86_64.zip
 ```
 
-Linux and Mac: You will no whave the binary distribution in a folder called `bpp-4.1.3-linux-x86_64` or `bpp-4.1.3-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.1.3-linux-x86_64` or `bpp-4.1.3-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
 Windows: You will now have the binary distribution in a folder called `bpp-4.1.3-win-x86_64`. The bpp executable is called `bpp.exe`.
 
