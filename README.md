@@ -33,9 +33,48 @@ BPP can also accommodate variable mutation rates among loci (Burgess and Yang,
 2008) and heredity multipliers (Hey and Nielsen, 2004).  Finally, BPP supports
 diploid data. Phasing is done analytically as described by Gronau et al, 2011.
 
-## Compilation instructions
+BPP now also implements the Multispecies-coalescent-with-introgression (MSci) model,
+an extension of the multispecies coalescent model to incorporate introgression/hybridization.
+For more information on usage please see the [wiki documentation](https://github.com/bpp/bpp/wiki).
 
-Currently, BPP requires that [GNU Bison](http://www.gnu.org/software/bison/)
+## Download and install
+
+**Binary distribution** Starting with version 4.1.3, binary distribution files
+containing pre-compiled binaries will be available as part of each
+[release](https://github.com/bpp/bpp/releases). The included executables are
+statically compiled whenever possible such that no library dependencies are
+necessary.
+
+Binary distributions are provided for x86-64 systems running GNU/Linux, macOS
+(version 10.13 or higher) and Windows (64-bit, version 7 or higher).
+
+Download the appropriate executable for your system using the following
+commands if you are using a Linux x86_64 system:
+
+```bash
+wget https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-linux-x86_64.tar.gz
+tar zxvf bpp-4.1.3-linux-x86_64.tar.gz
+```
+
+Or these commands if you using a Mac:
+
+```bash
+wget https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-macos-x86_64.tar.gz
+tar zxvf bpp-4.1.3-macos-x86_64.tar.gz
+```
+
+Or if you are using Windows, download and extract (unzip) the contents of this file:
+
+```
+https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-win-x86_64.zip
+```
+
+Linux and Mac: You will no whave the binary distribution in a folder called `bpp-4.1.3-linux-x86_64` or `bpp-4.1.3-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+
+Windows: You will now have the binary distribution in a folder called `bpp-4.1.3-win-x86_64`. The bpp executable is called `bpp.exe`.
+
+
+**Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository* (see below). In both cases, you will need several packages installed on your system. Currently, BPP requires that [GNU Bison](http://www.gnu.org/software/bison/)
 and [Flex](http://flex.sourceforge.net/) are installed on the target system.
 On a Debian-based Linux system, the two packages can be installed using the
 command
@@ -44,9 +83,20 @@ command
 apt-get install flex bison
 ```
 
-BPP can then be compiled using the provided `Makefile`
+**Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
-```bash
+```
+wget https://github.com/bpp/bpp/archive/v4.1.3.tar.gz
+tar zxvf v4.1.3.tar.gz
+cd bpp-4.1.3/src
+make
+```
+
+**Cloning the repo** Instead of downloading the source distribution as a compressed archive, you could clone the repo and build it as shown below.
+
+```
+git clone https://github.com/bpp/bpp.git
+cd bpp
 make
 ```
 
@@ -98,6 +148,12 @@ If you would like to resume a checkpoint file, please run:
 
 ```bash
 bpp --resume [CHECKPOINT-FILE]
+```
+
+If you would like to run the simulator (previously MCcoal), please run:
+
+```bash
+bpp --simulate [CONTROL-FILE]
 ```
 
 More documentation regarding control files, will be available soon on the [wiki](https://github.com/bpp/bpp/wiki).
