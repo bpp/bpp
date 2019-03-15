@@ -40,7 +40,7 @@ static void timer_start()
   time_start = time(NULL);
 }
 
-static void timer_print(const char * prefix)
+static void timer_print(const char * prefix, const char * suffix)
 {
   time_t t;
   long h,m,s;
@@ -51,9 +51,9 @@ static void timer_print(const char * prefix)
   m = (long)(t % 3600) / 60;
   s = (long)(t - (t/60)*60);
   if (h)
-    fprintf(stdout, "%s%ld:%02ld:%02ld\n", prefix, h, m, s);
+    fprintf(stdout, "%s%ld:%02ld:%02ld%s", prefix, h, m, s, suffix);
   else
-    fprintf(stdout, "%s%ld:%02ld\n", prefix, m, s);
+    fprintf(stdout, "%s%ld:%02ld%s", prefix, m, s, suffix);
 
 }
 
@@ -1289,6 +1289,8 @@ void cmd_run()
 
   unsigned long curstep = 0;
 
+  printf("\nStarting timer..\n");
+  timer_start();
 
   if (opt_resume)
     fp_mcmc = resume(&stree,
@@ -1368,6 +1370,12 @@ void cmd_run()
     memset(&td,0,sizeof(td));
   }
 
+  /* flush all open files */
+  fflush(NULL);
+  timer_print("", " taken to read and process data..\nRestarting time...\n");
+  timer_start();
+
+
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
 
@@ -1379,10 +1387,6 @@ void cmd_run()
     i = opt_samples*opt_samplefreq;
   else
     i = curstep - opt_burnin;
-
-  /* flush all open files */
-  fflush(NULL);
-  timer_start();
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
@@ -1683,7 +1687,7 @@ void cmd_run()
         printf(" %8.5f", mean_logl);
 
       if (printk >= 50 && (i+1) % (printk / 20) == 0)
-        timer_print("  ");
+        timer_print("  ","\n");
     }
 
     curstep++;
@@ -1729,6 +1733,7 @@ void cmd_run()
     }
 
   }
+  timer_print("", " in MCMC\n");
 
   progress_done();
 
