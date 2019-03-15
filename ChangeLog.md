@@ -2,6 +2,13 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.1.3] - 2019-03-15
+### Added
+ - Printing starting time/date of analysis, BPP version and command-line
+   arguments at the beginning of the output file
+ - Printing pattern weights for compressed alignments in output file, and
+   sequneces are now printed in aligned form
+
 ## [4.1.2] - 2019-02-22
 ### Added
  - Pinning threads to cores on linux systems. Improved multithread performance
