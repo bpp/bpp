@@ -1390,6 +1390,18 @@ static void check_validity()
   if (opt_threads > 1 && !opt_est_theta)
     fatal("Cannot use multiple threads when *not* estimating theta parameters."
           " Please either estimate theta or set threads=1");
+  
+  double gammamean;
+  gammamean = opt_theta_beta / (opt_theta_alpha - 1);
+  if (gammamean > 1)
+    fatal("Inverse gamma prior mean for thetas is > 1. Please make sure you "
+          "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
+          "<= 3.3)");
+  gammamean = opt_tau_beta / (opt_tau_alpha - 1);
+  if (gammamean > 1)
+    fatal("Inverse gamma prior mean for taus is > 1. Please make sure you "
+          "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
+          "<= 3.3)");
 
   if (opt_model == BPP_DNA_MODEL_CUSTOM)
   {

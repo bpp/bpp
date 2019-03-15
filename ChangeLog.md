@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
    arguments at the beginning of the output file
  - Printing pattern weights for compressed alignments in output file, and
    sequneces are now printed in aligned form
+ - Added check that Inverse-Gamma priors are indeed used. If prior mean is
+   greater than 1 then BPP complains.
 
 ## [4.1.2] - 2019-02-22
 ### Added
