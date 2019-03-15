@@ -57,6 +57,25 @@ static void timer_print(const char * prefix)
 
 }
 
+static void init_outfile(FILE * fp)
+{
+  struct tm * lt = NULL;
+  char buffer[256];
+
+  time_t t = time(NULL);  
+  lt = localtime(&t);
+  assert(lt);
+
+  /* strftime(buffer, 256, "%a %b %d %T %Y", lt); */
+  strftime(buffer, 256, "%c", lt);
+
+  fprintf(fp, "Analysis started at: %s\n", buffer);
+  fprintf(fp, "Using BPP version: %d.%d.%d\n",
+          VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+  fprintf(fp, "Command: %s\n\n", cmdline);
+
+}
+
 static stree_t * load_tree_or_network(void)
 {
   stree_t * stree;
@@ -715,6 +734,7 @@ static FILE * init(stree_t ** ptr_stree,
   if (!(fp_out = fopen(opt_outfile, "w")))
     fatal("Cannot open file %s for writing...");
   *ptr_fp_out = fp_out;
+  init_outfile(fp_out);
 
   /* print compressed alignmens in output file */
   fprintf(fp_out, "COMPRESSED ALIGNMENTS\n\n");
