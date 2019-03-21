@@ -28,8 +28,9 @@ the node after the closing parenthesis matching the opening parenthesis before
 respect to parent node **e**) and **h** (with respect to node **d**).
 
 For more information and a step-by-step guide on creating newick strings for
-networks, please see section 'Newick tree format definition for hybridization
-events' in the [BPP wiki](https://github.com/bpp/bpp/wiki).
+networks, please see section
+[Specification of hybridization events with the MSci model](https://github.com/bpp/bpp/wiki/Specification-of-hybridization-events-with-the-MSci-model)
+in the [BPP wiki](https://github.com/bpp/bpp/wiki).
 
 ### Running the dataset
 
