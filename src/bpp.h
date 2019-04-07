@@ -164,6 +164,12 @@
 #define BPP_SPECIES_PRIOR_SUNIFORM      3
 #define BPP_SPECIES_PRIOR_MAX           3
 
+#define BPP_CLOCK_MIN                   1
+#define BPP_CLOCK_GLOBAL                1
+#define BPP_CLOCK_IND                   2
+#define BPP_CLOCK_CORR                  3
+#define BPP_CLOCK_MAX                   3
+
 #define BPP_HPATH_NONE                  0
 #define BPP_HPATH_LEFT                  1
 #define BPP_HPATH_RIGHT                 2
@@ -285,7 +291,7 @@ typedef struct snode_s
 {
   char * label;
   double length;
-  double rate;
+  double rate;          /* used for simulations (MCcoal) */
   double theta;
   double tau;
   double old_tau;
@@ -309,6 +315,9 @@ typedef struct snode_s
   dlist_t ** event;
 
   int * event_count;
+
+  /* branch rate (per locus)*/
+  double * brate;
 
   /* number of lineages coming in the population */
   int * seqin_count;

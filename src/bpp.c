@@ -197,7 +197,7 @@ void args_init(int argc, char ** argv)
   opt_bfbeta = 1;
   opt_burnin = 100;
   opt_cfile = NULL;
-  opt_clock = 1;
+  opt_clock = BPP_CLOCK_GLOBAL;
   opt_clock_alpha = 0;
 
   opt_checkpoint = 0;

@@ -1524,6 +1524,14 @@ void load_cfile()
           fatal("Erroneous format of 'model' option (line %ld)", line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"clock",5))
+      {
+        if (!parse_long(value,&opt_clock) ||
+            (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX))
+          fatal("Option 'clock' expects positive integer between %d and %d (line %ld)",
+                 BPP_CLOCK_MIN, BPP_CLOCK_MAX, line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 6)
     {

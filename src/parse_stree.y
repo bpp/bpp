@@ -148,6 +148,9 @@ void stree_destroy(stree_t * tree,
     if (node->hx)
       free(node->hx);
 
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+      free(node->brate);
+
     if (node->mark)
       free(node->mark);
 

@@ -1728,6 +1728,14 @@ void stree_init(stree_t * stree,
       snode->event[j] = dlist_create();
   }
 
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    /* TODO: Implement branch rates for MSci */
+    assert(!opt_msci);
+    for (i=0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+      stree->nodes[i]->brate = (double *)xmalloc((size_t)msa_count*sizeof(double));
+  }
+
   unsigned int sum_inner = 0;
   long * locus_seqcount = (long *)xmalloc((size_t)(msa_count) * sizeof(long));
   for (i = 0; i < (unsigned int)msa_count; ++i)
