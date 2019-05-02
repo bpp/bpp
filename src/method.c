@@ -1440,8 +1440,10 @@ void cmd_run()
   timer_start();
 
 
+  #if 0
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
+  #endif
 
   printk = opt_samplefreq * opt_samples;
 
@@ -1455,9 +1457,11 @@ void cmd_run()
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
   {
+    #if 0
     /* update progress bar */
     if (!opt_quiet)
       progress_update(curstep);
+    #endif
 
     /* reset finetune parameters */
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
@@ -1799,7 +1803,9 @@ void cmd_run()
   }
   timer_print("", " in MCMC\n");
 
+  #if 0
   progress_done();
+  #endif
 
   free(pjump);
 
