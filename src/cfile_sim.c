@@ -931,9 +931,6 @@ void load_cfile_sim()
         if (!get_long(value,&opt_seed))
           fatal("Option 'seed' expects one integer (line %ld)", line_count);
 
-        if (opt_seed == -1)
-          opt_seed = (long)time(NULL);
-
         valid = 1;
       }
       else if (!strncasecmp(token,"arch",4))
