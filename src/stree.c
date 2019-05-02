@@ -990,6 +990,7 @@ static int propose_phi(stree_t * stree,
                        long thread_index)
 {
   int accepted;
+  int sequp_count;
   long i;
   double phinew;
   double phiold;
@@ -1009,10 +1010,16 @@ static int propose_phi(stree_t * stree,
     new_logpr = 0;
     for (i = 0; i < stree->locus_count; ++i)
     {
+      /* For bidirectional introgression we need to subtract the lineages
+         coming from right. See issue #97 */
+      sequp_count = snode->seqin_count[i];
+      if (node_is_bidirection(snode))
+        sequp_count -= snode->right->seqin_count[i];
+
       old_logpr += gtree[i]->logpr;
       new_logpr += gtree[i]->logpr +
-                   snode->seqin_count[i]*(log(phinew) - log(phiold)) +
-                   snode->hybrid->seqin_count[i]*(log(1-phinew) - log(1-phiold));
+                   sequp_count*log(phinew/phiold) +
+                   snode->hybrid->seqin_count[i]*log((1-phinew)/(1-phiold));
     }
   }
   else
@@ -1021,8 +1028,14 @@ static int propose_phi(stree_t * stree,
     new_logpr = stree->notheta_logpr;
     for (i = 0; i < stree->locus_count; ++i)
     {
-      new_logpr += snode->seqin_count[i]*(log(phinew) - log(phiold)) +
-                   snode->hybrid->seqin_count[i]*(log(1-phinew) - log(1-phiold));
+      /* For bidirectional introgression we need to subtract the lineages
+         coming from right. See issue #97 */
+      sequp_count = snode->seqin_count[i];
+      if (node_is_bidirection(snode))
+        sequp_count -= snode->right->seqin_count[i];
+
+      new_logpr += sequp_count*log(phinew/phiold) +
+                   snode->hybrid->seqin_count[i]*log((1-phinew)/(1-phiold));
     }
   }
 
@@ -1043,21 +1056,24 @@ static int propose_phi(stree_t * stree,
     {
       for (i = 0; i < stree->locus_count; ++i)
       {
-        /* subtract from gene tree log-density the old phi contributions */
-        gtree[i]->logpr = gtree[i]->logpr -
-                          snode->logpr_contrib[i] -
-                          snode->hybrid->logpr_contrib[i];
+        /* subtract from gene tree log-density the old MSCi contributions */
+        gtree[i]->logpr -= snode->logpr_contrib[i] + 
+                           snode->hybrid->logpr_contrib[i];
+
+        /* For bidirectional introgression we need to subtract the lineages
+           coming from right. See issue #97 */
+        sequp_count = snode->seqin_count[i];
+        if (node_is_bidirection(snode))
+          sequp_count -= snode->right->seqin_count[i];
 
         /* update log-density contributions for the two populations */
-        snode->logpr_contrib[i] += snode->seqin_count[i] *
-                                   (log(phinew) - log(phiold));
+        snode->logpr_contrib[i] += sequp_count*log(phinew/phiold);
         snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] *
-                                           (log(1-phinew) - log(1-phiold));
+                                           log((1-phinew)/(1-phiold));
 
         /* add to the gene tree log-density the new phi contributions */
-        gtree[i]->logpr = gtree[i]->logpr +
-                          snode->logpr_contrib[i] +
-                          snode->hybrid->logpr_contrib[i];
+        gtree[i]->logpr += snode->logpr_contrib[i] +
+                           snode->hybrid->logpr_contrib[i];
       }
     }
     else
@@ -1070,12 +1086,15 @@ static int propose_phi(stree_t * stree,
       /* compute new contributions */
       for (i = 0; i < stree->locus_count; ++i)
       {
-        snode->notheta_logpr_contrib = snode->notheta_logpr_contrib +
-                                       snode->seqin_count[i] * 
-                                       (log(phinew) - log(phiold));
-        snode->hybrid->notheta_logpr_contrib = snode->hybrid->notheta_logpr_contrib +
-                                               snode->hybrid->seqin_count[i] * 
-                                               (log(1-phinew)-log(1-phiold));
+        /* For bidirectional introgression we need to subtract the lineages
+           coming from right. See issue #97 */
+        sequp_count = snode->seqin_count[i];
+        if (node_is_bidirection(snode))
+          sequp_count -= snode->right->seqin_count[i];
+
+        snode->notheta_logpr_contrib += sequp_count*log(phinew/phiold);
+        snode->hybrid->notheta_logpr_contrib += snode->hybrid->seqin_count[i] * 
+                                                log((1-phinew)/(1-phiold));
         
       }
 
