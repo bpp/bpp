@@ -3160,7 +3160,7 @@ static long propose_ages(locus_t * locus,
     travbuffer[msa_index][k++] = node->right;
     if (node->parent)
       travbuffer[msa_index][k++] = node;
-    locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
+    locus_update_matrices(locus,travbuffer[msa_index],k);
       
 
     /* fill traversal buffer with root-path starting from current node */
@@ -3230,7 +3230,7 @@ static long propose_ages(locus_t * locus,
       travbuffer[msa_index][k++] = node->right;
       if (node->parent)
         travbuffer[msa_index][k++] = node;
-      locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
+      locus_update_matrices(locus,travbuffer[msa_index],k);
 
       if (opt_msci)
       {
@@ -4575,7 +4575,7 @@ static long propose_spr(locus_t * locus,
       travbuffer[msa_index][k++] = father;
     if (spr_required)
       travbuffer[msa_index][k++] = sibling;
-    locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
+    locus_update_matrices(locus,travbuffer[msa_index],k);
 
     /* locate all nodes  whose CLV need to be updated */
     k = 0;
@@ -4745,7 +4745,7 @@ static long propose_spr(locus_t * locus,
         travbuffer[msa_index][k++] = sibling;
       }
 
-      locus_update_matrices_jc69(locus,travbuffer[msa_index],k);
+      locus_update_matrices(locus,travbuffer[msa_index],k);
 
       if (opt_msci)
       {
@@ -5045,7 +5045,7 @@ static long prop_locusrate(gtree_t ** gtree,
                    log((new_locrate*new_refrate) / (old_locrate*old_refrate));
 
     /* update selected locus */
-    locus_update_all_matrices_jc69(locus[i],gtree[i]);
+    locus_update_all_matrices(locus[i],gtree[i]);
 
     gnode_t ** gnodeptr = gtree[i]->nodes;
     for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
@@ -5060,7 +5060,7 @@ static long prop_locusrate(gtree_t ** gtree,
     locus_update_all_partials(locus[i],gtree[i]);
 
     /* update reference locus */
-    locus_update_all_matrices_jc69(locus[ref],gtree[ref]);
+    locus_update_all_matrices(locus[ref],gtree[ref]);
 
     gnodeptr = gtree[ref]->nodes;
     for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)

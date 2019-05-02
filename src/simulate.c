@@ -1209,7 +1209,7 @@ static void simulate(stree_t * stree)
       for (j = 0; j < 4; ++j)
         fprintf(fp_param," %8.6f", freqs[j]);
 
-      pll_update_eigen(eigenvecs,inv_eigenvecs,eigenvals,freqs,qrates);
+      pll_update_eigen(eigenvecs,inv_eigenvecs,eigenvals,freqs,qrates,4,4);
     }
 
     if (!opt_siterate_fixed)

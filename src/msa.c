@@ -85,6 +85,9 @@ void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map)
 
   msa->amb_sites_count = 0;
 
+  if (msa->dtype == BPP_DATA_AA) return;
+  assert(msa->dtype == BPP_DATA_DNA);
+
   for (i = 0; i < msa->length; ++i)
   {
     amb = 0;

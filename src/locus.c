@@ -837,6 +837,18 @@ void locus_destroy(locus_t * locus)
   dealloc_locus_data(locus);
 }
 
+void pll_set_subst_params(locus_t * locus,
+                          unsigned int params_index,
+                          const double * params)
+{
+  unsigned int count = (locus->states * (locus->states-1)) / 2;
+
+  memcpy(locus->subst_params[params_index], params, count*sizeof(double));
+  locus->eigen_decomp_valid[params_index] = 0;
+
+  /* NOTE: For protein models PLL/RAxML do a rate scaling by 10.0/max_rate */
+}
+
 void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies)
@@ -845,6 +857,135 @@ void pll_set_frequencies(locus_t * locus,
          frequencies,
          locus->states*sizeof(double));
   locus->eigen_decomp_valid[freqs_index] = 0;
+}
+
+void locus_set_frequencies_and_rates(locus_t * locus)
+{
+  double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
+  double jcrates[6] = {1,1,1,1,1,1};
+  const double * freqs;
+  const double * rates;
+
+  if (locus->dtype == BPP_DATA_DNA)
+  {
+    assert(locus->model == BPP_DNA_MODEL_JC69);
+    assert(locus->states == 4);
+
+    freqs = frequencies;
+    rates = jcrates;
+
+  }
+  else
+  {
+    assert(locus->dtype == BPP_DATA_AA);
+    assert(locus->states == 20);
+
+    switch (locus->model)
+    {
+      case BPP_AA_MODEL_DAYHOFF:
+        freqs = pll_aa_freqs_dayhoff;
+        rates = pll_aa_rates_dayhoff;
+        break;
+
+      case BPP_AA_MODEL_LG:
+        freqs = pll_aa_freqs_lg;
+        rates = pll_aa_rates_lg;
+        break;
+
+      case BPP_AA_MODEL_DCMUT:
+        freqs = pll_aa_freqs_dcmut;
+        rates = pll_aa_rates_dcmut;
+        break;
+
+      case BPP_AA_MODEL_JTT:
+        freqs = pll_aa_freqs_jtt;
+        rates = pll_aa_rates_jtt;
+        break;
+
+      case BPP_AA_MODEL_MTREV:
+        freqs = pll_aa_freqs_mtrev;
+        rates = pll_aa_rates_mtrev;
+        break;
+
+      case BPP_AA_MODEL_WAG:
+        freqs = pll_aa_freqs_wag;
+        rates = pll_aa_rates_wag;
+        break;
+
+      case BPP_AA_MODEL_RTREV:
+        freqs = pll_aa_freqs_rtrev;
+        rates = pll_aa_rates_rtrev;
+        break;
+
+      case BPP_AA_MODEL_CPREV:
+        freqs = pll_aa_freqs_cprev;
+        rates = pll_aa_rates_cprev;
+        break;
+
+      case BPP_AA_MODEL_VT:
+        freqs = pll_aa_freqs_vt;
+        rates = pll_aa_rates_vt;
+        break;
+
+      case BPP_AA_MODEL_BLOSUM62:
+        freqs = pll_aa_freqs_blosum62;
+        rates = pll_aa_rates_blosum62;
+        break;
+
+      case BPP_AA_MODEL_MTMAM:
+        freqs = pll_aa_freqs_mtmam;
+        rates = pll_aa_rates_mtmam;
+        break;
+
+      case BPP_AA_MODEL_MTART:
+        freqs = pll_aa_freqs_mtart;
+        rates = pll_aa_rates_mtart;
+        break;
+
+      case BPP_AA_MODEL_MTZOA:
+        freqs = pll_aa_freqs_mtzoa;
+        rates = pll_aa_rates_mtzoa;
+        break;
+
+      case BPP_AA_MODEL_PMB:
+        freqs = pll_aa_freqs_pmb;
+        rates = pll_aa_rates_pmb;
+        break;
+
+      case BPP_AA_MODEL_HIVB:
+        freqs = pll_aa_freqs_hivb;
+        rates = pll_aa_rates_hivb;
+        break;
+
+      case BPP_AA_MODEL_HIVW:
+        freqs = pll_aa_freqs_hivw;
+        rates = pll_aa_rates_hivw;
+        break;
+
+      case BPP_AA_MODEL_JTTDCMUT:
+        freqs = pll_aa_freqs_jttdcmut;
+        rates = pll_aa_rates_jttdcmut;
+        break;
+
+      case BPP_AA_MODEL_FLU:
+        freqs = pll_aa_freqs_flu;
+        rates = pll_aa_rates_flu;
+        break;
+
+      case BPP_AA_MODEL_STMTREV:
+        freqs = pll_aa_freqs_stmtrev;
+        rates = pll_aa_rates_stmtrev;
+        break;
+
+      default:
+        fatal("Internal error while selecting protein substitution model");
+    }
+  }
+  
+  assert(locus->rate_matrices == 1);
+
+  pll_set_frequencies(locus,0,freqs);
+  pll_set_subst_params(locus,0,rates);
 }
 
 void locus_set_mut_rates(locus_t * locus, const double * mut_rates)
@@ -857,6 +998,138 @@ void locus_set_heredity_scalers(locus_t * locus, const double * heredity)
 {
   /* one mutation rate per substitution matrix available */
   memcpy(locus->heredity, heredity, locus->rate_matrices*sizeof(double));
+}
+
+static void locus_update_all_matrices_generic_recursive(locus_t * locus,
+                                                        gnode_t * node,
+                                                        double * memexpd,
+                                                        double * memtemp)
+{
+  unsigned int n,j,k,m;
+  unsigned int states = locus->states;
+  unsigned int states_padded = states;
+  unsigned int rate_cats = locus->rate_cats;
+  unsigned int attrib = locus->attributes;
+  double t;
+  const double * rates = locus->rates;
+  double * const * eigenvals = locus->eigenvals;
+  double * const * eigenvecs = locus->eigenvecs;
+  double * const * inv_eigenvecs = locus->inv_eigenvecs;
+  double * expd;
+  double * temp;
+
+  double * evecs;
+  double * inv_evecs;
+  double * evals;
+  double * pmat;
+
+  expd = memexpd;
+  temp = memtemp;
+
+  /* TODO: Implement params_indices for mixture models */
+  assert(rate_cats <= 4);
+  unsigned int params_indices[4] = {0,0,0,0};
+
+  t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+
+  assert(t >= 0);
+
+  /* compute effective pmatrix location */
+  for (n = 0; n < rate_cats; ++n)
+  {
+    pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+
+    evecs = eigenvecs[params_indices[n]];
+    inv_evecs = inv_eigenvecs[params_indices[n]];
+    evals = eigenvals[params_indices[n]];
+
+    /* if branch length is zero then set the p-matrix to identity matrix */
+    if (t < 1e-100)
+    {
+      for (j = 0; j < states; ++j)
+        for (k = 0; k < states; ++k)
+          pmat[j*states_padded + k] = (j == k) ? 1 : 0;
+    }
+    else
+    {
+      /* NOTE: in order to deal with numerical issues in cases when Qt -> 0, we
+       * use a trick suggested by Ben Redelings and explained here:
+       * https://github.com/xflouris/libpll/issues/129#issuecomment-304004005
+       * In short, we use expm1() to compute (exp(Qt) - I), and then correct
+       * for this by adding an identity matrix I in the very end */
+
+      /* exponentiate eigenvalues */
+      for (j = 0; j < states; ++j)
+        expd[j] = expm1(evals[j] * rates[n] * t);
+
+      for (j = 0; j < states; ++j)
+        for (k = 0; k < states; ++k)
+          temp[j*states+k] = inv_evecs[j*states_padded+k] * expd[k];
+
+      for (j = 0; j < states; ++j)
+      {
+        for (k = 0; k < states; ++k)
+        {
+          pmat[j*states_padded+k] = (j==k) ? 1.0 : 0;
+          for (m = 0; m < states; ++m)
+          {
+            pmat[j*states_padded+k] +=
+                temp[j*states+m] * evecs[m*states_padded+k];
+          }
+        }
+      }
+    }
+    #ifdef DEBUG
+    for (j = 0; j < states; ++j)
+      for (k = 0; k < states; ++k)
+        assert(pmat[j*states_padded+k] >= 0);
+    #endif
+  }
+
+  if (!(node->left)) return;
+
+  locus_update_all_matrices_generic_recursive(locus,node->left,memexpd,memtemp);
+  locus_update_all_matrices_generic_recursive(locus,node->right,memexpd,memtemp);
+
+}
+
+static void locus_update_all_matrices_generic(locus_t * locus, gtree_t * gtree)
+{
+  unsigned int n;
+  double * expd;
+  double * temp;
+
+  /* TODO: Assume here all rate categories use same substitution rates and
+     same base frequencies */
+  unsigned int params_indices[4] = {0,0,0,0};
+  assert(locus->rate_cats <= 4);
+
+  for (n = 0; n < locus->rate_cats; ++n)
+  {
+    unsigned int param_index = params_indices[n];
+
+    if (!locus->eigen_decomp_valid[param_index])
+    {
+      pll_update_eigen(locus->eigenvecs[param_index],
+                       locus->inv_eigenvecs[param_index],
+                       locus->eigenvals[param_index],
+                       locus->frequencies[param_index],
+                       locus->subst_params[param_index],
+                       locus->states,
+                       locus->states_padded);
+      locus->eigen_decomp_valid[param_index] = 1;
+    }
+
+  }
+
+  expd = (double *)xmalloc(locus->states * sizeof(double));
+  temp = (double *)xmalloc(locus->states*locus->states*sizeof(double));
+
+  locus_update_all_matrices_generic_recursive(locus,gtree->root->left,expd,temp);
+  locus_update_all_matrices_generic_recursive(locus,gtree->root->right,expd,temp);
+
+  free(expd);
+  free(temp);
 }
 
 static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
@@ -929,22 +1202,27 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
   locus_update_all_matrices_jc69_recursive(locus,root->right);
 }
 
-void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
+static void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
 {
   locus_update_all_matrices_jc69_recursive(locus,gtree->root->left);
   locus_update_all_matrices_jc69_recursive(locus,gtree->root->right);
 }
 
-void locus_update_matrices(locus_t * locus,
-                           gnode_t ** traversal,
-                           unsigned int count)
+void locus_update_all_matrices(locus_t * locus, gtree_t * gtree)
 {
-  assert(0);
+  if (locus->dtype == BPP_DATA_DNA && locus->model == BPP_DNA_MODEL_JC69)
+  {
+    locus_update_all_matrices_jc69(locus,gtree);
+    return;
+  }
+
+  locus_update_all_matrices_generic(locus, gtree);
+
 }
 
-void locus_update_matrices_jc69(locus_t * locus,
-                                gnode_t ** traversal,
-                                unsigned int count)
+static void locus_update_matrices_jc69(locus_t * locus,
+                                       gnode_t ** traversal,
+                                       unsigned int count)
 {
   unsigned int i,n;
   double t;
@@ -1016,6 +1294,43 @@ void locus_update_matrices_jc69(locus_t * locus,
     }
   }
 }
+
+void locus_update_matrices(locus_t * locus,
+                           gnode_t ** traversal,
+                           unsigned int count)
+{
+  if (locus->dtype == BPP_DATA_DNA && locus->model == BPP_DNA_MODEL_JC69)
+  {
+    locus_update_matrices_jc69(locus,traversal,count);
+    return;
+  }
+
+  unsigned int n;
+  
+  /* TODO: Assume here all rate categories use same substitution rates and
+     same base frequencies */
+  unsigned int params_indices[4] = {0,0,0,0};
+  assert(locus->rate_cats <= 4);
+
+  for (n = 0; n < locus->rate_cats; ++n)
+  {
+    unsigned int param_index = params_indices[n];
+    if (!locus->eigen_decomp_valid[0])
+    {
+      pll_update_eigen(locus->eigenvecs[param_index],
+                       locus->inv_eigenvecs[param_index],
+                       locus->eigenvals[param_index],
+                       locus->frequencies[param_index],
+                       locus->subst_params[param_index],
+                       locus->states,
+                       locus->states_padded);
+      locus->eigen_decomp_valid[param_index] = 1;
+    }
+  }
+
+  bpp_core_update_pmatrix(locus,traversal,count);
+}
+
 
 static void locus_update_all_partials_recursive(locus_t * locus, gnode_t * root)
 {

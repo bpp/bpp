@@ -177,6 +177,7 @@
 #define BPP_DATA_DNA                    0
 #define BPP_DATA_AA                     1
 
+#define BPP_DNA_MODEL_MIN               0
 #define BPP_DNA_MODEL_DEFAULT           0
 #define BPP_DNA_MODEL_JC69              0
 #define BPP_DNA_MODEL_K80               1
@@ -186,27 +187,31 @@
 #define BPP_DNA_MODEL_TN93              5
 #define BPP_DNA_MODEL_F84               6
 #define BPP_DNA_MODEL_GTR               7
+#define BPP_DNA_MODEL_MAX               7
+
 #define BPP_DNA_MODEL_CUSTOM            8
 
-#define BPP_AA_MODEL_DAYHOFF            0
-#define BPP_AA_MODEL_LG                 1
-#define BPP_AA_MODEL_DCMUT              2
-#define BPP_AA_MODEL_JTT                3
-#define BPP_AA_MODEL_MTREV              4
-#define BPP_AA_MODEL_WAG                5
-#define BPP_AA_MODEL_RTREV              6
-#define BPP_AA_MODEL_CPREV              7
-#define BPP_AA_MODEL_VT                 8
-#define BPP_AA_MODEL_BLOSUM62           9
-#define BPP_AA_MODEL_MTMAM             10
-#define BPP_AA_MODEL_MTART             11
-#define BPP_AA_MODEL_MTZOA             12
-#define BPP_AA_MODEL_PMB               13
-#define BPP_AA_MODEL_HIVB              14
-#define BPP_AA_MODEL_HIVW              15
-#define BPP_AA_MODEL_JTTDCMUT          16
-#define BPP_AA_MODEL_FLU               17
-#define BPP_AA_MODEL_STMTREV           18
+#define BPP_AA_MODEL_MIN                9
+#define BPP_AA_MODEL_DAYHOFF            9
+#define BPP_AA_MODEL_LG                10
+#define BPP_AA_MODEL_DCMUT             11
+#define BPP_AA_MODEL_JTT               12
+#define BPP_AA_MODEL_MTREV             13
+#define BPP_AA_MODEL_WAG               14
+#define BPP_AA_MODEL_RTREV             15
+#define BPP_AA_MODEL_CPREV             16
+#define BPP_AA_MODEL_VT                17
+#define BPP_AA_MODEL_BLOSUM62          18
+#define BPP_AA_MODEL_MTMAM             19
+#define BPP_AA_MODEL_MTART             20
+#define BPP_AA_MODEL_MTZOA             21
+#define BPP_AA_MODEL_PMB               22
+#define BPP_AA_MODEL_HIVB              23
+#define BPP_AA_MODEL_HIVW              24
+#define BPP_AA_MODEL_JTTDCMUT          25
+#define BPP_AA_MODEL_FLU               26
+#define BPP_AA_MODEL_STMTREV           27
+#define BPP_AA_MODEL_MAX               27
 
 #define BPP_CLOCK_GLOBAL                1
 #define BPP_CLOCK_IND                   2
@@ -445,6 +450,9 @@ typedef struct msa_s
 
   int amb_sites_count;
   int original_length;
+
+  int dtype;
+  int model;
 
 } msa_t;
 
@@ -769,6 +777,7 @@ extern __THREAD char bpp_errmsg[200];
 
 extern const unsigned int pll_map_nt[256];
 extern const unsigned int pll_map_nt_tcag[256];
+extern const unsigned int pll_map_aa[256];
 extern const unsigned int pll_map_fasta[256];
 extern const unsigned int pll_map_amb[256];
 extern const unsigned int pll_map_validjc69[16];
@@ -1217,10 +1226,15 @@ int pll_set_tip_clv(locus_t * locus,
                     const double * clv,
                     int padding);
 
+void pll_set_subst_params(locus_t * locus,
+                          unsigned int params_index,
+                          const double * params);
+
 void pll_set_frequencies(locus_t * locus,
                          unsigned int freqs_index,
                          const double * frequencies);
 
+void locus_set_frequencies_and_rates(locus_t * locus);
 void locus_set_mut_rates(locus_t * locus, const double * mut_rates);
 void locus_set_heredity_scalers(locus_t * locus, const double * heredity);
 
@@ -1231,11 +1245,15 @@ void locus_update_all_partials(locus_t * locus, gtree_t * gtree);
 void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights);
 
+void locus_update_matrices(locus_t * locus,
+                           gnode_t ** traversal,
+                           unsigned int count);
+/*
 void locus_update_matrices_jc69(locus_t * locus,
                                 gnode_t ** traversal,
                                 unsigned int count);
-
-void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree);
+*/
+void locus_update_all_matrices(locus_t * locus, gtree_t * gtree);
 
 double locus_root_loglikelihood(locus_t * locus,
                                 gnode_t * root,
@@ -1429,6 +1447,10 @@ void pll_core_create_lookup(unsigned int states,
 
 /* functions in core_pmatrix.c */
 
+void bpp_core_update_pmatrix(locus_t * locus,
+                             gnode_t ** traversal,
+                             unsigned int count);
+
 int pll_core_update_pmatrix(double ** pmatrix,
                             unsigned int states,
                             unsigned int rate_cats,
@@ -1456,7 +1478,9 @@ void pll_update_eigen(double * eigenvecs,
                       double * inv_eigenvecs,
                       double * eigenvals,
                       double * freqs,
-                      double * subst_params);
+                      double * subst_params,
+                      long states,
+                      long states_padded);
 
 /* functions in core_likelihood.c */
 
@@ -1493,6 +1517,8 @@ void pll_show_clv(const locus_t * locus,
                              unsigned int clv_index,
                              int scaler_index,
                              unsigned int float_precision);
+
+void pll_show_eigendecomp(const locus_t * locus, unsigned int float_precision);
 
 /* functions in revolutionary.c */
 

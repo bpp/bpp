@@ -236,11 +236,11 @@ void pll_update_eigen(double * eigenvecs,
                       double * inv_eigenvecs,
                       double * eigenvals,
                       double * freqs,
-                      double * subst_params)
+                      double * subst_params,
+                      long states,
+                      long states_padded)
 {
   long i,j,k;
-  long states = 4;
-  long states_padded = 4;
   double *e, *d;
   double ** a;
 
@@ -665,6 +665,103 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
   }
 
   return BPP_SUCCESS;
+}
+
+void bpp_core_update_pmatrix(locus_t * locus,
+                             gnode_t ** traversal,
+                             unsigned int count)
+{
+  unsigned int i,n,j,k,m;
+  unsigned int states = locus->states;
+  unsigned int states_padded = states;
+  unsigned int rate_cats = locus->rate_cats;
+  unsigned int attrib = locus->attributes;
+  double t;
+  const double * rates = locus->rates;
+  double * const * eigenvals = locus->eigenvals;
+  double * const * eigenvecs = locus->eigenvecs;
+  double * const * inv_eigenvecs = locus->inv_eigenvecs;
+  double * expd;
+  double * temp;
+
+  double * evecs;
+  double * inv_evecs;
+  double * evals;
+  double * pmat;
+
+  gnode_t * node;
+
+
+  expd = (double *)xmalloc(states * sizeof(double));
+  temp = (double *)xmalloc(states*states*sizeof(double));
+
+  /* TODO: Implement params_indices for mixture models */
+  assert(rate_cats <= 4);
+  unsigned int params_indices[4] = {0,0,0,0};
+
+  for (i = 0; i < count; ++i)
+  {
+    node = traversal[i];
+
+    t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+
+    assert(t >= 0);
+
+    /* compute effective pmatrix location */
+    for (n = 0; n < rate_cats; ++n)
+    {
+      pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+
+      evecs = eigenvecs[params_indices[n]];
+      inv_evecs = inv_eigenvecs[params_indices[n]];
+      evals = eigenvals[params_indices[n]];
+
+      /* if branch length is zero then set the p-matrix to identity matrix */
+      if (t < 1e-100)
+      {
+        for (j = 0; j < states; ++j)
+          for (k = 0; k < states; ++k)
+            pmat[j*states_padded + k] = (j == k) ? 1 : 0;
+      }
+      else
+      {
+        /* NOTE: in order to deal with numerical issues in cases when Qt -> 0, we
+         * use a trick suggested by Ben Redelings and explained here:
+         * https://github.com/xflouris/libpll/issues/129#issuecomment-304004005
+         * In short, we use expm1() to compute (exp(Qt) - I), and then correct
+         * for this by adding an identity matrix I in the very end */
+
+        /* exponentiate eigenvalues */
+        for (j = 0; j < states; ++j)
+          expd[j] = expm1(evals[j] * rates[n] * t);
+
+        for (j = 0; j < states; ++j)
+          for (k = 0; k < states; ++k)
+            temp[j*states+k] = inv_evecs[j*states_padded+k] * expd[k];
+
+        for (j = 0; j < states; ++j)
+        {
+          for (k = 0; k < states; ++k)
+          {
+            pmat[j*states_padded+k] = (j==k) ? 1.0 : 0;
+            for (m = 0; m < states; ++m)
+            {
+              pmat[j*states_padded+k] +=
+                  temp[j*states+m] * evecs[m*states_padded+k];
+            }
+          }
+        }
+      }
+      #ifdef DEBUG
+      for (j = 0; j < states; ++j)
+        for (k = 0; k < states; ++k)
+          assert(pmat[j*states_padded+k] >= 0);
+      #endif
+    }
+  }
+
+  free(expd);
+  free(temp);
 }
 
 int pll_core_update_pmatrix(double ** pmatrix,

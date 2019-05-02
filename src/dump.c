@@ -365,7 +365,6 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   hoffset = stree->tip_count + stree->inner_count;
   for (i = 0; i < stree->hybrid_count; ++i)
   {
-    assert(!node_is_bidirection(stree->nodes[hoffset+i]));
     assert(node_is_mirror(stree->nodes[hoffset+i]));
     DUMP(&(stree->nodes[hoffset+i]->hybrid->node_index),1,fp);
   }
@@ -376,11 +375,19 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
 
   /* write right child node indices */
+  unsigned int valid;
   for (i = 0; i < stree->inner_count; ++i)
   {
-    if (!stree->nodes[stree->tip_count+i]->hybrid)
+    if (stree->nodes[stree->tip_count+i]->right)
     {
+      valid = 1;
+      DUMP(&valid,1,fp);
       DUMP(&(stree->nodes[stree->tip_count+i]->right->node_index),1,fp);
+    }
+    else
+    {
+      valid = 0;
+      DUMP(&valid,1,fp);
     }
   }
 

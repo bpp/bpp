@@ -728,27 +728,20 @@ void load_chk_section_2(FILE * fp)
     stree->nodes[left_child_index]->parent = stree->nodes[stree->tip_count+i];
   }
 
-  /* set right child for each inner node according to checkpoint data 
-
-     TODO: Update for bidirections */
-  unsigned int remaining_hindices = stree->hybrid_count;
+  /* set right child for each inner node according to checkpoint data */
   for (i = 0; i < stree->inner_count; ++i)
   {
+    unsigned int valid;
     unsigned int right_child_index;
 
-    /* skip reading right child if hybridization node */
-    if (remaining_hindices &&
-        hindices[stree->hybrid_count-remaining_hindices] == stree->tip_count+i)
-    {
-      --remaining_hindices;
-      continue;
-    }
-    printf("Loading i = %ld\n", i);
+    if (!LOAD(&valid,1,fp))
+      fatal("Cannot read species tree topology");
+
+    if (!valid) continue;
 
     if (!LOAD(&right_child_index,1,fp))
       fatal("Cannot read species tree topology");
 
-    printf("rightchildindex: %d\n", right_child_index);
     stree->nodes[stree->tip_count+i]->right = stree->nodes[right_child_index];
     stree->nodes[right_child_index]->parent = stree->nodes[stree->tip_count+i];
   }
@@ -781,24 +774,27 @@ void load_chk_section_2(FILE * fp)
     assert((stree->nodes[i]->left == stree->nodes[i]->right) &&
            (stree->nodes[i]->left == NULL));
 
+  /* a lot of assertions */
   for (i = 0; i < stree->inner_count; ++i)
   {
     unsigned int index = stree->tip_count + i;
 
-    if (stree->nodes[index]->hybrid)
-    {
-      assert(!node_is_bidirection(stree->nodes[index]));
-    }
+    if (stree->nodes[index]->left && stree->nodes[index]->right)
+      assert(stree->nodes[index]->left != stree->nodes[index]->right);
 
-    /* TODO: For parallel hybridization edges, the below assertion does not hold */
-    assert(stree->nodes[index]->left != stree->nodes[index]->right);
     if (stree->nodes[index]->parent)
-      assert(stree->nodes[index]->left != stree->nodes[index]->parent);
-    assert(stree->nodes[index]->left != stree->nodes[index]);
+    {
+      assert(stree->nodes[index]->left  != stree->nodes[index]->parent);
+      assert(stree->nodes[index]->right != stree->nodes[index]->parent);
+    }
+    assert(stree->nodes[index]->left  != stree->nodes[index]);
+    assert(stree->nodes[index]->right != stree->nodes[index]);
 
-    assert(stree->nodes[index]->left->parent == stree->nodes[index]);
-    if (!stree->nodes[index]->hybrid)
+    if (stree->nodes[index]->left)
+      assert(stree->nodes[index]->left->parent == stree->nodes[index]);
+    if (stree->nodes[index]->right)
       assert(stree->nodes[index]->right->parent == stree->nodes[index]);
+
   }
 
   for (i = 0; i < total_nodes; ++i)
@@ -962,19 +958,10 @@ static void load_gene_tree(FILE * fp, long index)
     if (!load_string(fp,labels+i))
       fatal("Cannot read gene tree %ld labels", index);
   }
-  #if 0
-  printf(" Gene tree %ld: %u sequences (", index, gtree_tip_count);
-  #endif
   for (i = 0; i < gtree_tip_count; ++i)
   {
-    #if 0
-    printf(" %s", labels[i]);
-    #endif
     gt->nodes[i]->label = labels[i];
   }
-  #if 0
-  printf(")\n");
-  #endif
 
   free(labels);
 
@@ -1167,10 +1154,12 @@ static void load_locus(FILE * fp, long index)
                               scale_buffers,
                               attributes);
   
-  double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
-
   /* set frequencies for model with index 0 */
-  pll_set_frequencies(locus[index],0,frequencies);
+  locus_set_frequencies_and_rates(locus[index]);
+
+  /* TODO DEBUG */
+  assert(rate_cats == 1);
+  locus[index]->rates[0] = 1;
 
   /* load pattern weights sum */
   if (!LOAD(&(locus[index]->pattern_weights_sum),1,fp))
@@ -1188,6 +1177,10 @@ static void load_locus(FILE * fp, long index)
   if (!LOAD(&(locus[index]->diploid),1,fp))
     fatal("Cannot read locus %ld diploid", index);
   
+  /* TODO with more complex mixture models where rate_matrices > 1 we need
+       to revisit this */
+  assert(rate_matrices == 1);
+
   if (locus[index]->diploid)
   {
     size_t sites_a2 = 0;
@@ -1334,7 +1327,7 @@ int checkpoint_load(gtree_t *** gtreep,
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree_reset_leaves(gtree[i]->root);
-    locus_update_matrices_jc69(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
+    locus_update_matrices(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
     locus_update_all_partials(locus[i],gtree[i]);
 
     unsigned int param_indices[1] = {0};

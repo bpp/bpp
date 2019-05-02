@@ -94,3 +94,54 @@ void pll_show_clv(const locus_t * locus,
   }
   printf ("]\n");
 }
+
+void pll_show_eigendecomp(const locus_t * locus, unsigned int float_precision)
+{
+  unsigned int i,j,k;
+  double * ev;
+  unsigned int states = locus->states;
+  unsigned int states_padded = locus->states_padded;
+
+  /* eigenvals */
+  printf("Eigenvalues\n");
+  printf("[");
+  for (i = 0; i < locus->rate_matrices; ++i)
+  {
+    printf("(");
+    for (j = 0; j < locus->states-1; ++j)
+    {
+      printf("%.*f,", float_precision, locus->eigenvals[i][j]);
+    }
+    printf("%.*f,", float_precision, locus->eigenvals[i][j]);
+    printf(")");
+    if (i < locus->rate_matrices - 1) printf(",");
+  }
+  printf("]\n");
+
+  /* eigen vectors */
+  printf("Eigenvectors\n");
+  for (k = 0; k < locus->rate_matrices; ++k)
+  {
+    ev = locus->eigenvecs[k] + k*states*states_padded;
+    for (i = 0; i < states; ++i)
+    {
+      for (j = 0; j < states; ++j)
+        printf("%+2.*f   ", float_precision, ev[i*states_padded+j]);
+      printf("\n");
+    }
+    printf("\n");
+  }
+
+  printf("Inverse eigenvectors\n");
+  for (k = 0; k < locus->rate_matrices; ++k)
+  {
+    ev = locus->inv_eigenvecs[k] + k*states*states_padded;
+    for (i = 0; i < states; ++i)
+    {
+      for (j = 0; j < states; ++j)
+        printf("%+2.*f   ", float_precision, ev[i*states_padded+j]);
+      printf("\n");
+    }
+    printf("\n");
+  }
+}

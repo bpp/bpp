@@ -245,7 +245,7 @@ unsigned int * compress_site_patterns(char ** sequence,
     remap_range(map,charmap);
 
     /* for now only DNA with pll_map_nt */
-    assert(0);
+    //assert(0);
   }
   else
   {

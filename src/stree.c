@@ -2010,7 +2010,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
      gtree[i]->old_logl = gtree[i]->logl;
      if (k)
      {
-        locus_update_matrices_jc69(loci[i], branchptr, branch_count);
+        locus_update_matrices(loci[i], branchptr, branch_count);
 
         /* get list of nodes for which partials must be recomputed */
         unsigned int partials_count;
@@ -2522,7 +2522,7 @@ static long propose_tau(locus_t ** loci,
                gt_nodesptr++;
             }
             if (matrix_updates)
-               locus_update_matrices_jc69(loci[i], gt_nodesptr, matrix_updates);
+               locus_update_matrices(loci[i], gt_nodesptr, matrix_updates);
          }
 
          /* restore gene tree log-likelihood */
@@ -3517,7 +3517,7 @@ long stree_propose_spr(stree_t ** streeptr,
                bl_list[j]->pmatrix_index);
          }
 
-         locus_update_matrices_jc69(loci[i], bl_list, __mark_count[i]);
+         locus_update_matrices(loci[i], bl_list, __mark_count[i]);
 
          /* retrieve all nodes whose partials must be updates */
          unsigned int partials_count;

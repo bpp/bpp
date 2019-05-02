@@ -631,14 +631,16 @@ static FILE * init(stree_t ** ptr_stree,
 {
   long i,j;
   long msa_count;
+  long pindex;
   double logl,logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
   double * pjump;
-  FILE * fp_mcmc = NULL;
-  FILE * fp_out;
   list_t * map_list = NULL;
   stree_t * stree;
+  const unsigned int * pll_map;
+  FILE * fp_mcmc = NULL;
+  FILE * fp_out;
   FILE ** fp_gtree;
   msa_t ** msa_list;
   gtree_t ** gtree;
@@ -685,13 +687,77 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_locus_count == 1 && opt_est_locusrate)
     fatal("Cannot use option 'locusrate' with only one locus");
 
+  /* set the data type for each multiple sequence alignment */
+  if (opt_partition_list)
+  {
+    assert(opt_partition_count > 0);
+    if (opt_partition_list[opt_partition_count-1]->end != msa_count)
+      fatal("Partition file %s differs in number of partitions (%ld) "
+            "to the specified number of loci (%ld)",
+            opt_partition_file, opt_partition_list[opt_partition_count-1]->end,
+            msa_count);
+  }
+
+  assert(BPP_DNA_MODEL_CUSTOM > BPP_DNA_MODEL_MAX &&
+         BPP_DNA_MODEL_CUSTOM < BPP_AA_MODEL_MIN);
+  assert (BPP_DNA_MODEL_MAX < BPP_AA_MODEL_MIN);
+
+
+  if (opt_partition_file)
+  {
+    /* we have a partition file that specifies the substitution model for
+       each locus */
+    assert(opt_model == BPP_DNA_MODEL_CUSTOM);
+    assert(opt_partition_list);
+
+    pindex = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      assert((i+1) >= opt_partition_list[pindex]->start);
+      if ((i+1) > opt_partition_list[pindex]->end)
+        ++pindex;
+      assert((i+1) >= opt_partition_list[pindex]->start &&
+             (i+1) <= opt_partition_list[pindex]->end);
+
+      msa_list[i]->dtype = opt_partition_list[pindex]->dtype;
+      msa_list[i]->model = opt_partition_list[pindex]->model;
+    }
+  }
+  else
+  {
+    /* all loci have the same substitution model */
+
+    int dtype,model;
+
+    assert(opt_model != BPP_DNA_MODEL_CUSTOM);
+
+    if ((opt_model >= BPP_DNA_MODEL_MIN) && (opt_model <= BPP_DNA_MODEL_MAX))
+      dtype = BPP_DATA_DNA;
+    else if ((opt_model >= BPP_AA_MODEL_MIN) && (opt_model <= BPP_AA_MODEL_MAX))
+      dtype = BPP_DATA_AA;
+    else
+      fatal("Internal error when selecting substitution model for all loci");
+
+    model = opt_model;
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      msa_list[i]->dtype = dtype;
+      msa_list[i]->model = model;
+    }
+  }
+
   /* remove ambiguous sites */
   if (opt_cleandata)
   {
     printf("Removing sites containing ambiguous characters...");
     for (i = 0; i < msa_count; ++i)
+    {
+      if (msa_list[i]->dtype == BPP_DATA_AA)
+        continue;
+
       if (!msa_remove_ambiguous(msa_list[i]))
         fatal("All sites in locus %d contain ambiguous characters",i);
+    }
     printf(" Done\n");
   }
   else
@@ -705,12 +771,27 @@ static FILE * init(stree_t ** ptr_stree,
                                                      sizeof(unsigned int *));
   for (i = 0; i < msa_count; ++i)
   {
+    int compress_method;
+
+    if (msa_list[i]->dtype == BPP_DATA_DNA)
+    {
+      pll_map = pll_map_nt;
+      compress_method = COMPRESS_JC69;
+    }
+    else if (msa_list[i]->dtype == BPP_DATA_AA)
+    {
+      pll_map = pll_map_aa;
+      compress_method = COMPRESS_GENERAL;
+    }
+    else
+      assert(0);
+
     msa_list[i]->original_length = msa_list[i]->length;
     weights[i] = compress_site_patterns(msa_list[i]->sequence,
-                                        pll_map_nt,
+                                        pll_map,
                                         msa_list[i]->count,
                                         &(msa_list[i]->length),
-                                        COMPRESS_JC69);
+                                        compress_method);
   }
   msa_summary(msa_list,msa_count);
 
@@ -796,6 +877,7 @@ static FILE * init(stree_t ** ptr_stree,
                                                       sizeof(unsigned int *));
     for (i = 0; i < msa_count; ++i)
     {
+      assert(msa_list[i]->dtype == BPP_DATA_DNA);
       /* compress again for JC69 and get mappings */
       mapping[i] = compress_site_patterns_diploid(msa_list[i]->sequence,
                                                   pll_map_nt,
@@ -983,23 +1065,12 @@ static FILE * init(stree_t ** ptr_stree,
 
   gtree_update_branch_lengths(gtree, msa_count);
 
-  if (opt_partition_list)
+  for (i = 0, pindex=0; i < msa_count; ++i)
   {
-    assert(opt_partition_count > 0);
-    if (opt_partition_count != msa_count)
-      fatal("Partition file %s differs in number of partitions (%ld) "
-            "to the specified number of loci (%ld)",
-            opt_partition_file, opt_partition_count, msa_count);
-  }
-
-  for (i = 0; i < msa_count; ++i)
-  {
-    msa_t * msa = msa_list[i];
-    double frequencies[4] = {0.25, 0.25, 0.25, 0.25};
+    int states = 0;
+    unsigned int rate_cats = 1;
     unsigned int pmatrix_count = gtree[i]->edge_count;
-    unsigned int dtype;
-    unsigned int model;
-
+    msa_t * msa = msa_list[i];
     unsigned int scale_buffers = opt_scaling ?
                                    2*gtree[i]->inner_count : 0;
 
@@ -1011,40 +1082,39 @@ static FILE * init(stree_t ** ptr_stree,
        for the other methods as well in order to speedup rollback when
        rejecting proposals */
 
-    if (opt_partition_file)
+    if (msa_list[i]->dtype == BPP_DATA_DNA)
     {
-      assert(opt_model == BPP_DNA_MODEL_CUSTOM);
-      assert(opt_partition_file);
-      assert(opt_partition_list);
-
-      dtype = opt_partition_list[i]->dtype;
-      model = opt_partition_list[i]->model;
-
-
+      assert(msa_list[i]->model == BPP_DNA_MODEL_JC69);
+      states = 4;
+      pll_map = pll_map_nt;
+    }
+    else if (msa_list[i]->dtype == BPP_DATA_AA)
+    {
+      states = 20;
+      pll_map = pll_map_aa;
     }
     else
-    {
-      assert(opt_model != BPP_DNA_MODEL_CUSTOM);
-
-      dtype = BPP_DATA_DNA;
-      model = opt_model;
-    }
+      fatal("Internal error when setting states for locus %ld", i);
 
     /* create the locus structure */
-    locus[i] = locus_create((unsigned int)dtype,        /* data type */
-                            (unsigned int)model,        /* subst model */
+    locus[i] = locus_create((unsigned int)(msa_list[i]->dtype),        /* data type */
+                            (unsigned int)(msa_list[i]->model),        /* subst model */
                             gtree[i]->tip_count,        /* # tip sequence */
                             2*gtree[i]->inner_count,    /* # CLV vectors */
-                            4,                          /* # states */
+                            states,                     /* # states */
                             msa->length,                /* sequence length */
                             rate_matrices,              /* subst matrices (1) */
                             pmatrix_count,              /* # prob matrices */
-                            1,                          /* # rate categories */
+                            rate_cats,                  /* # rate categories */
                             scale_buffers,              /* # scale buffers */
                             (unsigned int)opt_arch);    /* attributes */
 
-    /* set frequencies for model with index 0 */
-    pll_set_frequencies(locus[i],0,frequencies);
+    /* set frequencies and substitution rates */
+    locus_set_frequencies_and_rates(locus[i]);
+
+    /*TODO DEBUG */
+    assert(rate_cats == 1);
+    locus[i]->rates[0] = 1;
 
     if (opt_diploid)
     {
@@ -1095,19 +1165,13 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* set tip sequences */
     for (j = 0; j < (int)(gtree[i]->tip_count); ++j)
-      pll_set_tip_states(locus[i], j, pll_map_nt, msa_list[i]->sequence[j]);
+      pll_set_tip_states(locus[i], j, pll_map, msa_list[i]->sequence[j]);
 
     /* compute the conditional probabilities for each inner node */
-    locus_update_matrices_jc69(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
+    locus_update_matrices(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
     locus_update_partials(locus[i],
                           gtree[i]->nodes+gtree[i]->tip_count,
                           gtree[i]->inner_count);
-
-    /* optionally, show root CLV 
-
-    pll_show_clv(locus[i], gtree[i]->root->clv_index, PLL_SCALE_BUFFER_NONE, 9);
-
-    */
 
     /* now that we computed the CLVs, calculate the log-likelihood for the
        current gene tree */

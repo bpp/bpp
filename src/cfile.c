@@ -794,13 +794,25 @@ static long parse_model(const char * line)
   /* parse model */
   for (i = 0; i < dna_model_count; ++i)
   {
-    printf("model: |%s| vs |%s|\n", model,dna_model_name[i]);
     if (!strcasecmp(model,dna_model_name[i]))
       break;
   }
   if (i == dna_model_count)
-    goto l_unwind;
-  opt_model = dna_model_index[i];
+  {
+    for (i = 0; i < aa_model_count; ++i)
+    {
+      if (!strcasecmp(model,aa_model_name[i]))
+        break;
+    }
+    if (i == aa_model_count)
+      goto l_unwind;
+
+    opt_model = aa_model_index[i];
+  }
+  else
+  {
+    opt_model = dna_model_index[i];
+  }
 
   /* if model is set to CUSTOM, parse partition file */
   if (opt_model == BPP_DNA_MODEL_CUSTOM)
@@ -1295,6 +1307,17 @@ static void update_sp_seqcount()
  
 }
 
+static int cb_partitioncmp(const void * a, const void * b)
+{
+  const partition_t * pa = *((const partition_t **)a);
+  const partition_t * pb = *((const partition_t **)b);
+
+  if (pa->start < pb->start) return -1;
+  else if (pa->start > pb->start) return 1;
+
+  return 0;
+}
+
 /* transform list of partitions into an array for easier access */
 static partition_t ** linearize_plist(list_t * plist, long * records)
 {
@@ -1308,7 +1331,6 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
   pa = (partition_t **)xmalloc((size_t)plist->count *
                                sizeof(partition_t *));
 
-  /* go through all items and place in list */
   item = plist->head;
   while (item)
   {
@@ -1318,6 +1340,20 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
 
     item = item->next;
   }
+
+  /* Sort partition by 'start' and check if complete range */
+  qsort(pa,plist->count,sizeof(partition_t *), cb_partitioncmp);
+  if (pa[0]->start != 1)
+    fatal("File %s does not specify model for locus 1", opt_partition_file);
+  for (i = 1; i < plist->count; ++i)
+  {
+    if (pa[i]->start != pa[i-1]->end+1)
+    {
+      fatal("File %s does not specify model(s) for loci %ld-%ld\n",
+            opt_partition_file, pa[i-1]->end+1, pa[i]->start-1);
+    }
+  }
+
 
   return pa;
 }
@@ -1422,14 +1458,10 @@ static void check_validity()
        opt_partition_list */
     list_clear(partition_list,NULL);
     free(partition_list);
-
-
   }
-
-  if (opt_model)
+  else
   {
-    printf("Model: %ld\n", opt_model);
-    assert(0);
+    assert(!opt_partition_file);
   }
 }
 

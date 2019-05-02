@@ -56,6 +56,7 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
   double tlength[1] = { mnode->parent->time * 0.314 }; /* if(opt_revolutionary_spr_method == 2) */
   unsigned int matrix_indices[1] = { 0 };
   double * matrices[1] = { tmat };
+  assert(locus->states == 4);
 
   /* go through the list of target nodes (edge from target node to its parent is the target branch) */
   /* Ziheng: get CLV of moved node.  This is scaled outside the loop for target branches.  */
@@ -153,6 +154,8 @@ void rev_spr_tselect(gnode_t * mnode,
   unsigned int param_indices[1] = {0};
   double length[1];
   double * matrices[1];
+
+  assert(locus->states == 4);
 
   matsize = locus->states*locus->states_padded*locus->rate_cats*sizeof(double);
   clvsize = locus->sites*locus->states_padded*locus->rate_cats*sizeof(double);

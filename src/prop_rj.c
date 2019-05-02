@@ -539,9 +539,9 @@ long prop_split(gtree_t ** gtree,
     gtree[i]->old_logl = gtree[i]->logl;
     if (j)
     {
-      locus_update_matrices_jc69(locus[i],
-                                 nodevec+nodevec_offset[i],
-                                 nodevec_count[i]);
+      locus_update_matrices(locus[i],
+                            nodevec+nodevec_offset[i],
+                            nodevec_count[i]);
 
       /* TODO: Never call functions like propose_age that change travbuffer
          from gtree.c */
@@ -696,9 +696,9 @@ long prop_split(gtree_t ** gtree,
           
       if (gtree[i]->logl != gtree[i]->old_logl)
       {
-        locus_update_matrices_jc69(locus[i],
-                                   nodevec+nodevec_offset[i],
-                                   nodevec_count[i]);
+        locus_update_matrices(locus[i],
+                              nodevec+nodevec_offset[i],
+                              nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)
         {
@@ -749,7 +749,7 @@ long prop_split(gtree_t ** gtree,
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
       if (gt->nodes[j]->parent)
         gt_nodes[k++] = gt->nodes[j];
-    locus_update_matrices_jc69(locus[i],gt_nodes,k);
+    locus_update_matrices(locus[i],gt_nodes,k);
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
@@ -938,9 +938,9 @@ long prop_join(gtree_t ** gtree,
     gtree[i]->old_logl = gtree[i]->logl;
     if (j)
     {
-      locus_update_matrices_jc69(locus[i],
-                                 nodevec+nodevec_offset[i],
-                                 nodevec_count[i]);
+      locus_update_matrices(locus[i],
+                            nodevec+nodevec_offset[i],
+                            nodevec_count[i]);
 
       /* TODO: Never call functions like propose_age that change travbuffer
          from gtree.c */
@@ -1099,9 +1099,9 @@ long prop_join(gtree_t ** gtree,
       /* restore logl and logpr for each gene tree */
       if (gtree[i]->logl != gtree[i]->old_logl)
       {
-        locus_update_matrices_jc69(locus[i],
-                                   nodevec+nodevec_offset[i],
-                                   nodevec_count[i]);
+        locus_update_matrices(locus[i],
+                              nodevec+nodevec_offset[i],
+                              nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)
         {
