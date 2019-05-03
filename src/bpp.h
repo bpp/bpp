@@ -718,6 +718,8 @@ extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_threads;
+extern long opt_threads_start;
+extern long opt_threads_step;
 extern long opt_usedata;
 extern long opt_version;
 extern double opt_bfbeta;
@@ -1961,4 +1963,5 @@ void cmd_simulate(void);
 
 void threads_init(locus_t ** locus);
 void threads_wakeup(int work_type, thread_data_t * tp);
-void threads_exit();
+void threads_exit(void);
+void threads_pin_master(void);

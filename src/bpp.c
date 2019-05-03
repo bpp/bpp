@@ -80,6 +80,8 @@ long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_threads;
+long opt_threads_start;
+long opt_threads_step;
 long opt_usedata;
 long opt_version;
 double opt_bfbeta;
@@ -289,6 +291,8 @@ void args_init(int argc, char ** argv)
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
   opt_threads = 1;
+  opt_threads_start = 1;
+  opt_threads_step = 1;
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;

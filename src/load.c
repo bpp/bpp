@@ -148,6 +148,15 @@ void load_chk_header(FILE * fp)
 
   if (!LOAD(&opt_threads,1,fp))
     fatal("Cannot read number of threads");
+  if (!LOAD(&opt_threads_start,1,fp))
+    fatal("Cannot read first thread slot");
+  if (!LOAD(&opt_threads_step,1,fp))
+    fatal("Cannot read thread stepping");
+
+  /* Pin master thread for NUMA first touch policy */
+  if (opt_threads > 1)
+    threads_pin_master();
+
   
   unsigned int * rng = (unsigned int *)xmalloc((size_t)opt_threads *
                                                sizeof(unsigned int));

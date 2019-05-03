@@ -863,6 +863,57 @@ l_unwind:
   return ret;
 }
 
+static long parse_threads(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  /* read number of threads */
+  count = get_long(p, &opt_threads);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (opt_threads < 1) goto l_unwind;
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* read starting thread index */
+  count = get_long(p, &opt_threads_start);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (opt_threads_start < 1) goto l_unwind;
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* read thread step */
+  count = get_long(p, &opt_threads_step);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (opt_threads_step < 1) goto l_unwind;
+  if (is_emptyline(p))
+    ret = 1;
+
+
+l_unwind:
+  free(s);
+  return ret;
+
+}
+
 static long parse_tauprior(const char * line)
 {
   long ret = 0;
@@ -1620,8 +1671,14 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"threads",7))
       {
+        #if 0
         if (!parse_long(value,&opt_threads) || (opt_threads <= 0))
           fatal("Option 'threads' requires a positive integer (line %ld)",
+                line_count);
+        valid = 1;
+        #endif
+        if (!parse_threads(value))
+          fatal("Option 'threads' expects an integer (line %ld)",
                 line_count);
         valid = 1;
       }

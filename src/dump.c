@@ -84,6 +84,8 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
 
   /* write RNG value */
   DUMP(&opt_threads,1,fp);
+  DUMP(&opt_threads_start,1,fp);
+  DUMP(&opt_threads_step,1,fp);
   unsigned int * rng = get_legacy_rndu_array();
   DUMP(rng,opt_threads,fp);
 

@@ -896,6 +896,12 @@ static FILE * init(stree_t ** ptr_stree,
 
   }
 
+  /* Pin master thread for NUMA first policy touch
+     TODO: Perhaps move this to an earlier point */
+  if (opt_threads > 1)
+    threads_pin_master();
+
+
   /* allocate TLS mark variables on stree as they are used in delimitations_init
      TODO: Move this allocation somewhere else */
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
