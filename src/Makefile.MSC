@@ -15,7 +15,7 @@ OBJ_LIBPLL = \
   core_likelihood.obj \
   core_partials.obj \
   core_pmatrix.obj \
-  hardware.obj
+  hardware.obj \
 
 SRC_LIBPLL = \
   core_likelihood.c \
@@ -75,8 +75,8 @@ parse_stree.c: parse_stree.y
 lex_stree.c: lex_stree.l
 	$(DIR_FLEXBISON)\win_flex -P stree_ -o lex_stree.c lex_stree.l
 
-$(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP)
-	link /out:$@ $**
+$(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP) 
+	link /out:$@ $** libpthreadvc3.lib
 
 .c.obj::
 	@echo Compiling $<
