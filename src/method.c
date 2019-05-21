@@ -169,6 +169,7 @@ static void reset_finetune(FILE *fp_out, double * pjump, double * pjump_phi)
     else
       fprintf(fout, "\n");
   }
+  fprintf(fout, "\n");
 }
 
 static char * cb_serialize_branch(const snode_t * node)
@@ -229,9 +230,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     snodes_total = stree->tip_count + stree->inner_count;
 
   if (opt_method == METHOD_10)          /* species delimitation */
-    fprintf(fp, "Gen   np       tree     ");
+    fprintf(fp, "Gen\tnp\ttree\t");
   else
-    fprintf(fp, "Gen  ");
+    fprintf(fp, "Gen\t");
 
   /* TODO: If number of species > 10 do not print labels */
 
@@ -247,9 +248,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       if (stree->nodes[i]->theta >= 0)
       {
         if (print_labels)
-          fprintf(fp, "theta_%d%s ", i + 1, stree->nodes[i]->label);
+          fprintf(fp, "theta_%d%s\t", i + 1, stree->nodes[i]->label);
         else
-          fprintf(fp, "theta_%d  ", i + 1);
+          fprintf(fp, "theta_%d\t", i + 1);
       }
     }
   }
@@ -260,9 +261,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     if (stree->nodes[i]->tau)
     {
       if (print_labels)
-        fprintf(fp, "tau_%d%s ", i + 1, stree->nodes[i]->label);
+        fprintf(fp, "tau_%d%s\t", i + 1, stree->nodes[i]->label);
       else
-        fprintf(fp, "tau_%d   ", i + 1);
+        fprintf(fp, "tau_%d\t", i + 1);
     }
   }
 
@@ -270,21 +271,21 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   {
     unsigned int offset = stree->tip_count + stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "phi_%s    ", stree->nodes[offset + i]->hybrid->label);
+      fprintf(fp, "phi_%s\t", stree->nodes[offset + i]->hybrid->label);
   }
 
   /* 3. Print mutation rate for each locus */
   if (opt_est_locusrate && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "rate_L%d  ", i + 1);
+      fprintf(fp, "rate_L%d\t", i + 1);
   }
 
   /* 4. Print mutation rate for each locus */
   if (opt_est_heredity && opt_print_hscalars)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "heredity_L%d ", i + 1);
+      fprintf(fp, "heredity_L%d\t", i + 1);
   }
 
   /* 5. Print log likelihood */
@@ -350,7 +351,7 @@ static void mcmc_logsample(FILE * fp,
   {
     for (i = 0; i < stree->tip_count; ++i)
       if (stree->nodes[i]->theta >= 0)
-        fprintf(fp, " %8.6f", stree->nodes[i]->theta);
+        fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
   }
 
   /* then for inner nodes */
@@ -359,34 +360,34 @@ static void mcmc_logsample(FILE * fp,
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0)
-        fprintf(fp, " %8.6f", stree->nodes[i]->theta);
+        fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
   }
 
   /* 2. Print taus for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau)
-      fprintf(fp, " %8.6f", stree->nodes[i]->tau);
+      fprintf(fp, "\t%.6f", stree->nodes[i]->tau);
 
   /* 2a. Print phi for hybridization nodes */
   if (opt_msci)
   {
     unsigned int offset = stree->tip_count + stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, " %8.6f", stree->nodes[offset + i]->hybrid->hphi);
+      fprintf(fp, "\t%.6f", stree->nodes[offset + i]->hybrid->hphi);
   }
 
   /* 3. Print mutation rate for each locus */
   if (opt_est_locusrate && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, " %8.6f", locus[i]->mut_rates[0]);
+      fprintf(fp, "\t%.6f", locus[i]->mut_rates[0]);
   }
 
   /* 4. Print mutation rate for each locus */
   if (opt_est_heredity && opt_print_hscalars)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, " %8.6f", locus[i]->heredity[0]);
+      fprintf(fp, "\t%.6f", locus[i]->heredity[0]);
   }
 
   /* 22.6.2018 - Testing gene tree node age proposal for MSCi */
@@ -820,43 +821,6 @@ static FILE * init(stree_t ** ptr_stree,
   if (!(fp_out = fopen(opt_outfile, "w")))
     fatal("Cannot open file %s for writing...");
   *ptr_fp_out = fp_out;
-
-
-
-#if(0)
-/*************************/
-/*** Ziheng 2019.5.10  ***/
-fp_out = stdout;
-
-char b[3];
-int l, seq, site, patt[5];
-double P[4] = {0};  /* Probs for gene trees.  P[3] is for ties */
-
-printf("\nsite patterns: xxx, xxy, yxx, xyx, xyz\n");
-
-if (msa_list[0]->count != 3) fatal("wrong number of sequences");
-for (l = 0; l < msa_count; ++l) {
-  patt[0] = patt[1] = patt[2] = patt[3] = patt[4] = 0;
-  for (site = 0; site < msa_list[l]->length; ++site) {
-    b[0] = msa_list[l]->sequence[0][site];
-    b[1] = msa_list[l]->sequence[1][site];
-    b[2] = msa_list[l]->sequence[2][site];
-    if      (b[0] == b[1] && b[0] == b[2])   patt[0] = weights[l][site];  /* xxx */
-    else if (b[0] == b[1] && b[0] != b[2])   patt[1] = weights[l][site];  /* xxy */
-    else if (b[1] == b[2] && b[0] != b[1])   patt[2] = weights[l][site];  /* yxx */
-    else if (b[0] == b[2] && b[0] != b[1])   patt[3] = weights[l][site];  /* xyx */
-    else                                     patt[4] = weights[l][site];  /* xyz */
-  }
-
-  printf("locus %6d: %4d %4d %4d %4d %4d\n", l+1, patt[0], patt[1], patt[2], patt[3], patt[4]);
-}
-
-exit(0);
-
-#endif
-
-
-
 
   init_outfile(fp_out);
 
