@@ -3,6 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
+[![Version](https://img.shields.io/badge/version-4.1.4-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.1.4)
 
 ## Introduction
 
@@ -52,26 +53,26 @@ Download the appropriate executable for your system using the following
 commands if you are using a Linux x86_64 system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-linux-x86_64.tar.gz
-tar zxvf bpp-4.1.3-linux-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.1.4/bpp-4.1.4-linux-x86_64.tar.gz
+tar zxvf bpp-4.1.4-linux-x86_64.tar.gz
 ```
 
 Or these commands if you using a Mac:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-macos-x86_64.tar.gz
-tar zxvf bpp-4.1.3-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.1.4/bpp-4.1.4-macos-x86_64.tar.gz
+tar zxvf bpp-4.1.4-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
 
 ```
-https://github.com/bpp/bpp/releases/download/v4.1.3/bpp-4.1.3-win-x86_64.zip
+https://github.com/bpp/bpp/releases/download/v4.1.4/bpp-4.1.4-win-x86_64.zip
 ```
 
-Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.1.3-linux-x86_64` or `bpp-4.1.3-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.1.4-linux-x86_64` or `bpp-4.1.4-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
-Windows: You will now have the binary distribution in a folder called `bpp-4.1.3-win-x86_64`. The bpp executable is called `bpp.exe`.
+Windows: You will now have the binary distribution in a folder called `bpp-4.1.4-win-x86_64`. The bpp executable is called `bpp.exe`.
 
 
 **Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository* (see below). In both cases, you will need several packages installed on your system. Currently, BPP requires that [GNU Bison](http://www.gnu.org/software/bison/)
@@ -86,9 +87,9 @@ apt-get install flex bison
 **Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
 ```
-wget https://github.com/bpp/bpp/archive/v4.1.3.tar.gz
-tar zxvf v4.1.3.tar.gz
-cd bpp-4.1.3/src
+wget https://github.com/bpp/bpp/archive/v4.1.4.tar.gz
+tar zxvf v4.1.4.tar.gz
+cd bpp-4.1.4/src
 make
 ```
 
