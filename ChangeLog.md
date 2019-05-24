@@ -2,6 +2,20 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.1.4] - 2019-05-22
+### Added
+ - All protein models are now activated and can be used with the 'model' option
+ - Option to set a different model for each locus by using model = custom
+### Changed
+ - MCMC output file columns are now aligned
+ - 'threads' option can take two optional arguments indicating a) starting core
+   index to pin threads to, and b) a stride.
+ - Removed progress indicator
+ - Reading seed from /dev/urandom when simulating data
+ - Finetuning results are stored also in output file
+### Fixed
+  - Checkpointing now works when bidirectional introgressions are present
+
 ## [4.1.3] - 2019-03-15
 ### Added
  - Printing starting time/date of analysis, BPP version and command-line
