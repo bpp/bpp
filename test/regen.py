@@ -29,7 +29,7 @@ import urllib
 
 #define hash for stable bpp version
 
-opt_stable_hash = "469eb8a716f5086365f56bc11cc5d683a9702983"
+opt_stable_hash = "6caaa426d0a2641722c6f996d5ccb219d1987542"
 
 #define path to BPP binary
 opt_bpp_bin = ""
