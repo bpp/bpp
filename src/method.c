@@ -1786,13 +1786,13 @@ void cmd_run()
 
     if (enabled_prop_freqs)
     {
-      locus_propose_freqs(locus,gtree);
+      ratio = locus_propose_freqs(locus,gtree);
       pjump_freqs = (pjump_freqs*(ft_round-1) + ratio) / (double)ft_round;
     }
 
     if (enabled_prop_rates)
     {
-      locus_propose_rates(locus,gtree);
+      ratio = locus_propose_rates(locus,gtree);
       pjump_rates = (pjump_rates*(ft_round-1) + ratio) / (double)ft_round;
     }
 
