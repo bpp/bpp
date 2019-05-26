@@ -205,10 +205,13 @@ void msa_destroy(msa_t * msa)
     free(msa->sequence);
   }
 
+  if (msa->freqs)
+    free(msa->freqs);
+
   free(msa);
 }
 
-#define COLUMNS 5
+#define COLUMNS 7
 
 static int longint_len(long x)
 {
@@ -220,10 +223,12 @@ void msa_summary(msa_t ** msa_list, int msa_count)
   long i,j,k;
 
   char * labels[COLUMNS] = {"Locus",
+                            "Model",
                             "Sequences",
                             "Length",
                             "Ambiguous sites",
-                            "JC69 Compressed"};
+                            "Compressed",
+                            "Base freqs"};
 
   int col_len[COLUMNS];
 
@@ -234,29 +239,46 @@ void msa_summary(msa_t ** msa_list, int msa_count)
   /* 'locus count' column length */
   col_len[0] = MAX(col_len[0], longint_len(msa_count)+2);
 
+  /* 'model' column length */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+  {
+    assert(msa_list[i]->model >= BPP_DNA_MODEL_MIN &&
+           msa_list[i]->model <= BPP_AA_MODEL_MAX &&
+           msa_list[i]->model != BPP_DNA_MODEL_CUSTOM);
+    k = MAX(k,(long)strlen(global_model_strings[msa_list[i]->model]));
+  }
+  col_len[1] = MAX(col_len[1], k+2);
+
   /* 'sequences' column length */
   k = 0;
   for (i = 0; i < msa_count; ++i)
     k = MAX(k,msa_list[i]->count);
-  col_len[1] = MAX(col_len[1], longint_len(k)+2);
+  col_len[2] = MAX(col_len[2], longint_len(k)+2);
 
   /* 'length' column length */
   k = 0;
   for (i = 0; i < msa_count; ++i)
     k = MAX(k,msa_list[i]->length);
-  col_len[2] = MAX(col_len[2], longint_len(k)+2);
+  col_len[3] = MAX(col_len[3], longint_len(k)+2);
 
   /* 'Ambiguous sites' column length */
   k = 0;
   for (i = 0; i < msa_count; ++i)
     k = MAX(k,msa_list[i]->amb_sites_count);
-  col_len[3] = MAX(col_len[3], longint_len(k)+2);
+  col_len[4] = MAX(col_len[4], longint_len(k)+2);
 
-  /* 'JC69 compressed length' column length */
+  /* 'Compressed length' column length */
   k = 0;
   for (i = 0; i < msa_count; ++i)
     k = MAX(k,msa_list[i]->length);
-  col_len[4] = MAX(col_len[4], longint_len(k)+2);
+  col_len[5] = MAX(col_len[5], longint_len(k)+2);
+
+  /* 'Base freqs' */
+  k = 0;
+  for (i = 0; i < msa_count; ++i)
+    k = MAX(k,(long)strlen(global_freqs_strings[msa_list[i]->model]));
+  col_len[6] = MAX(col_len[6], k+2);
 
   printf("\n");
 
@@ -290,11 +312,27 @@ void msa_summary(msa_t ** msa_list, int msa_count)
   for (i = 0; i < msa_count; ++i)
   {
     printf("%*ld |", col_len[0]-1, i+1);
-    printf("%*d |", col_len[1]-1, msa_list[i]->count);
-    printf("%*d |", col_len[2]-1, msa_list[i]->original_length);
-    printf("%*d |", col_len[3]-1, msa_list[i]->amb_sites_count);
-    printf("%*d ", col_len[4]-1, msa_list[i]->length);
+    printf("%*s |", col_len[1]-1, global_model_strings[msa_list[i]->model]);
+    printf("%*d |", col_len[2]-1, msa_list[i]->count);
+    printf("%*d |", col_len[3]-1, msa_list[i]->original_length);
+    printf("%*d |", col_len[4]-1, msa_list[i]->amb_sites_count);
+    printf("%*d |", col_len[5]-1, msa_list[i]->length);
+
+    char * freqs;
+    if (msa_list[i]->model == BPP_DNA_MODEL_GTR)
+      xasprintf(&freqs,
+                "Empirical ACGT %.2f %.2f %.2f %.2f",
+                msa_list[i]->freqs[0],
+                msa_list[i]->freqs[1],
+                msa_list[i]->freqs[2],
+                msa_list[i]->freqs[3]);
+    else
+      freqs = xstrdup(global_freqs_strings[msa_list[i]->model]);
+
+
+    printf("%*s ", col_len[6]-1, freqs);
     printf("\n");
+    free(freqs);
   }
   printf("\n");
 }

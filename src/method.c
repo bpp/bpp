@@ -443,6 +443,137 @@ static void print_gtree(FILE ** fp, gtree_t ** gtree)
   }
 }
 
+static void empirical_base_freqs_dna(msa_t * msa,
+                                     unsigned int * weights,
+                                     const unsigned int * pll_map)
+{
+  int i,j,k;
+  int index;
+  unsigned int code;
+  const int states = 4;         /* ACGT */
+
+
+  assert(pll_map == pll_map_nt);
+  assert(pll_map['A'] == 1 &&
+         pll_map['C'] == 2 &&
+         pll_map['G'] == 4 &&
+         pll_map['T'] == 8);
+
+  for (i = 0; i < msa->count; ++i)
+  {
+    for (j = 0; j < msa->length; ++j)
+    {
+      code  = pll_map[(int)msa->sequence[i][j]]; 
+      index = 0;
+
+      for (k = 0; k < states; ++k)
+      {
+        if (code & 1)
+          msa->freqs[index] += weights[j];
+        code >>= 1;
+        index++;
+      }
+    }
+  }
+
+  double sum = 0;
+  for (i = 0; i < states; ++i)
+    sum += msa->freqs[i];
+  for (i = 0; i < states; ++i)
+    msa->freqs[i] /= sum;
+}
+
+static void compute_base_freqs(msa_t * msa, unsigned int * weights, const unsigned int * pll_map)
+{
+  long states;
+
+  if (msa->dtype == BPP_DATA_DNA)
+  {
+    states = 4;
+    msa->freqs = (double *)xcalloc((size_t)states,sizeof(double));
+
+    switch (msa->model)
+    {
+      case BPP_DNA_MODEL_JC69:
+        msa->freqs[0] = msa->freqs[1] = msa->freqs[2] = msa->freqs[3] = 0.25;
+        break;
+      case BPP_DNA_MODEL_GTR:
+        empirical_base_freqs_dna(msa,weights,pll_map);
+        break;
+      default:
+        assert(0);
+    }
+  }
+  else if (msa->dtype == BPP_DATA_AA)
+  {
+    states = 20;
+    msa->freqs = (double *)xcalloc((size_t)states,sizeof(double));
+
+    switch (msa->model)
+    {
+      case BPP_AA_MODEL_DAYHOFF:
+        memcpy(msa->freqs,pll_aa_freqs_dayhoff,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_LG:
+        memcpy(msa->freqs,pll_aa_freqs_lg,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_DCMUT:
+        memcpy(msa->freqs,pll_aa_freqs_dcmut,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_JTT:
+        memcpy(msa->freqs,pll_aa_freqs_jtt,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_MTREV:
+        memcpy(msa->freqs,pll_aa_freqs_mtrev,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_WAG:
+        memcpy(msa->freqs,pll_aa_freqs_wag,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_RTREV:
+        memcpy(msa->freqs,pll_aa_freqs_rtrev,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_CPREV:
+        memcpy(msa->freqs,pll_aa_freqs_cprev,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_VT:
+        memcpy(msa->freqs,pll_aa_freqs_vt,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_BLOSUM62:
+        memcpy(msa->freqs,pll_aa_freqs_blosum62,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_MTMAM:
+        memcpy(msa->freqs,pll_aa_freqs_mtmam,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_MTART:
+        memcpy(msa->freqs,pll_aa_freqs_mtart,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_MTZOA:
+        memcpy(msa->freqs,pll_aa_freqs_mtzoa,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_PMB:
+        memcpy(msa->freqs,pll_aa_freqs_pmb,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_HIVB:
+        memcpy(msa->freqs,pll_aa_freqs_hivb,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_HIVW:
+        memcpy(msa->freqs,pll_aa_freqs_hivw,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_JTTDCMUT:
+        memcpy(msa->freqs,pll_aa_freqs_jttdcmut,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_FLU:
+        memcpy(msa->freqs,pll_aa_freqs_flu,states*sizeof(double));
+        break;
+      case BPP_AA_MODEL_STMTREV:
+        memcpy(msa->freqs,pll_aa_freqs_stmtrev,states*sizeof(double));
+        break;
+      default:
+        assert(0);
+    }
+  }
+}
+
 static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gtree,
                      locus_t *** ptr_locus,
@@ -821,12 +952,18 @@ static FILE * init(stree_t ** ptr_stree,
     else
       assert(0);
 
+    msa_list[i]->freqs = NULL;
+
+    /* NOTE: Original length is the length after opt_cleandata is applied */
     msa_list[i]->original_length = msa_list[i]->length;
     weights[i] = compress_site_patterns(msa_list[i]->sequence,
                                         pll_map,
                                         msa_list[i]->count,
                                         &(msa_list[i]->length),
                                         compress_method);
+
+    /* compute base frequencies */
+    compute_base_freqs(msa_list[i], weights[i], pll_map);
   }
 
   msa_summary(msa_list,msa_count);
