@@ -782,7 +782,7 @@ static long parse_model(const char * line)
   char * s = xstrdup(line);
   char * p = s;
 
-  char * model;
+  char * model = NULL;
 
   long count;
 
@@ -827,6 +827,8 @@ static long parse_model(const char * line)
 
 l_unwind:
   free(s);
+  if (model)
+    free(model);
   return ret;
 }
 

@@ -213,6 +213,10 @@
 #define BPP_AA_MODEL_STMTREV           27
 #define BPP_AA_MODEL_MAX               27
 
+/* update the following table in bpp.c if any of the numbers above change */
+extern const char * global_model_strings[28];
+extern const char * global_freqs_strings[28];
+
 #define BPP_CLOCK_GLOBAL                1
 #define BPP_CLOCK_IND                   2
 #define BPP_CLOCK_AC                    3

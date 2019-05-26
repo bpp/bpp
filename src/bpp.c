@@ -161,6 +161,70 @@ static struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
+const char * global_model_strings[28] =
+ {
+   "JC69",                          /*  0 */
+   "K80",                           /*  1 */
+   "F81",                           /*  2 */
+   "HKY",                           /*  3 */
+   "T92",                           /*  4 */
+   "TN93",                          /*  5 */
+   "F84",                           /*  6 */
+   "GTR",                           /*  7 */
+   "CUSTOM",                        /*  8 */
+   "DAYHOFF",                       /*  9 */
+   "LG",                            /* 10 */
+   "DCMUT",                         /* 11 */
+   "JTT",                           /* 12 */
+   "MTREV",                         /* 13 */
+   "WAG",                           /* 14 */
+   "RTREV",                         /* 15 */
+   "CPREV",                         /* 16 */
+   "VT",                            /* 17 */
+   "BLOSUM62",                      /* 18 */
+   "MTMAM",                         /* 19 */
+   "MTART",                         /* 20 */
+   "MTZOA",                         /* 21 */
+   "PMB",                           /* 22 */
+   "HIVB",                          /* 23 */
+   "HIVW",                          /* 24 */
+   "JTTDCMUT",                      /* 25 */
+   "FLU",                           /* 26 */
+   "STMTREV"                        /* 27 */
+ };
+
+const char * global_freqs_strings[28] =
+ {
+   "Fixed",                                 /*  0 JC69     */
+   "Fixed",                                 /*  1 K80      */
+   "Empirical ACGT X.XX X.XX X.XX X.XX",    /*  2 F81      */
+   "Empirical ACGT X.XX X.XX X.XX X.XX",    /*  3 HKY      */
+   "Empirical GC X.XX",                     /*  4 T92      */
+   "Empirical ACGT X.XX X.XX X.XX X.XX",    /*  5 TN93     */
+   "Empirical ACGT X.XX X.XX X.XX X.XX",    /*  6 F84      */
+   "Empirical ACGT X.XX X.XX X.XX X.XX",    /*  7 GTR      */
+   "CUSTOM",                                /*  8 CUSTOM   */
+   "Fixed",                                 /*  9 DAYHOFF  */
+   "Fixed",                                 /* 10 LG       */
+   "Fixed",                                 /* 11 DCMUT    */
+   "Fixed",                                 /* 12 JTT      */
+   "Fixed",                                 /* 13 MTREV    */
+   "Fixed",                                 /* 14 WAG      */
+   "Fixed",                                 /* 15 RTREV    */
+   "Fixed",                                 /* 16 CPREV    */
+   "Fixed",                                 /* 17 VT       */
+   "Fixed",                                 /* 18 BLOSUM62 */
+   "Fixed",                                 /* 19 MTMAM    */
+   "Fixed",                                 /* 20 MTART    */
+   "Fixed",                                 /* 21 MTZOA    */
+   "Fixed",                                 /* 22 PMB      */
+   "Fixed",                                 /* 23 HIVB     */
+   "Fixed",                                 /* 24 HIVW     */
+   "Fixed",                                 /* 25 JTTDCMUT */
+   "Fixed",                                 /* 26 FLU      */
+   "Fixed"                                  /* 27 STMTREV  */
+ };
+
 static long args_getlong(char * arg)
 {
   int len = 0;
