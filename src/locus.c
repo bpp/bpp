@@ -856,6 +856,16 @@ void pll_set_frequencies(locus_t * locus,
   memcpy(locus->frequencies[freqs_index],
          frequencies,
          locus->states*sizeof(double));
+  #if 0
+  /* TODO: DEBUGGING CODE */
+  if (locus->model == BPP_DNA_MODEL_GTR)
+  {
+    locus->frequencies[0][0] = 0.1;
+    locus->frequencies[0][0] = 0.2;
+    locus->frequencies[0][0] = 0.3;
+    locus->frequencies[0][0] = 0.4;
+  }
+  #endif
   locus->eigen_decomp_valid[freqs_index] = 0;
 }
 
@@ -1299,6 +1309,7 @@ void locus_update_matrices(locus_t * locus,
                            gnode_t ** traversal,
                            unsigned int count)
 {
+  if (!opt_usedata) return;
   if (locus->dtype == BPP_DATA_DNA && locus->model == BPP_DNA_MODEL_JC69)
   {
     locus_update_matrices_jc69(locus,traversal,count);
