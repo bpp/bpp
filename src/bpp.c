@@ -225,7 +225,7 @@ void args_init(int argc, char ** argv)
   opt_revolutionary_spr_method = 0;
   opt_revolutionary_spr_debug = 0;
 #endif
-  opt_finetune_freqs = 0.3;
+  opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_locusrate = 0.33;

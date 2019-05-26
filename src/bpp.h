@@ -451,6 +451,8 @@ typedef struct msa_s
   int amb_sites_count;
   int original_length;
 
+  double * freqs;
+
   int dtype;
   int model;
 
@@ -1261,6 +1263,9 @@ double locus_root_loglikelihood(locus_t * locus,
                                 gnode_t * root,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl);
+
+double locus_propose_rates(locus_t ** locus, gtree_t ** gtree);
+double locus_propose_freqs(locus_t ** locus, gtree_t ** gtree);
 
 /* functions in compress.c */
 

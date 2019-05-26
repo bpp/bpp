@@ -868,7 +868,7 @@ void locus_set_frequencies_and_rates(locus_t * locus)
 
   if (locus->dtype == BPP_DATA_DNA)
   {
-    assert(locus->model == BPP_DNA_MODEL_JC69);
+    //assert(locus->model == BPP_DNA_MODEL_JC69);
     assert(locus->states == 4);
 
     freqs = frequencies;
@@ -1497,6 +1497,9 @@ static long propose_freqs(locus_t * locus,
   double x,y;
   gnode_t ** gt_nodes;
 
+  /* only one set of rates (Q matrix) */
+  assert(count == 1);
+
   /* allocate temporary space for gene tree traversal */
   gt_nodes = (gnode_t **)xmalloc((gtree->tip_count+gtree->inner_count) *
                                  sizeof(gnode_t *));
@@ -1540,6 +1543,7 @@ static long propose_freqs(locus_t * locus,
         gt_nodes[n++] = p;
       }
     }
+    locus->eigen_decomp_valid[i] = 0;
     locus_update_matrices(locus,gt_nodes,n);
 
     /* get postorder traversal of inner nodes, swap CLV indidces to point to new
@@ -1591,33 +1595,45 @@ static long propose_freqs(locus_t * locus,
       /* revert old frequencies */
       freqs[j] = old_freqj;
       freqs[k] = old_freqk;
+
+      /* update eigen decomposition */
+      pll_update_eigen(locus->eigenvecs[param_indices[i]],
+                       locus->inv_eigenvecs[param_indices[i]],
+                       locus->eigenvals[param_indices[i]],
+                       locus->frequencies[param_indices[i]],
+                       locus->subst_params[param_indices[i]],
+                       locus->states,
+                       locus->states_padded);
     }
   }
   free(gt_nodes);
   return accepted;
 }
 
-double locus_propose_freqs(locus_t ** locus,
-                           gtree_t ** gtree,
-                           long locus_count)
+double locus_propose_freqs(locus_t ** locus, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
   long thread_index = 0;
+  long candidates = 0;
 
   /* currently we have only one set of frequencies */
   unsigned int param_indices[1] = {0};
 
   /* TODO: Make parallel move */
-  for (i = 0; i < locus_count; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
   {
-    accepted += propose_freqs(locus[i],gtree[i],param_indices,1,thread_index);
+    if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
+    {
+      ++candidates;
+      accepted += propose_freqs(locus[i],gtree[i],param_indices,1,thread_index);
+    }
   }
 
   if (!accepted)
     return 0;
 
-  return ((double)accepted/locus_count);
+  return ((double)accepted/candidates);
 }
 
 static long propose_rates(locus_t * locus,
@@ -1639,6 +1655,9 @@ static long propose_rates(locus_t * locus,
   /* TODO: Implement amino acids */
   assert(locus->dtype == BPP_DATA_DNA);
   assert(locus->states == 4);
+
+  /* only one set of rates (Q matrix) */
+  assert(count == 1);
 
   switch (locus->model)
   {
@@ -1684,7 +1703,7 @@ static long propose_rates(locus_t * locus,
     j = (unsigned int)(legacy_rndu(thread_index) * rates_count);
     k = (unsigned int)(legacy_rndu(thread_index) * (rates_count-1));
     if (j == k)
-      k = locus->states-1;
+      k = rates_count-1;
     old_ratej = rates[j];
     old_ratek = rates[k];
 
@@ -1696,6 +1715,7 @@ static long propose_rates(locus_t * locus,
     /* min/max bounds for proposed value */
     double minv = PLL_MISC_EPSILON / sum;
     double maxv = 1 - minv;
+    assert(minv < maxv);
 
     /* propose new ratio */
     y = x + opt_finetune_rates*legacy_rnd_symmetrical(thread_index);
@@ -1715,6 +1735,7 @@ static long propose_rates(locus_t * locus,
         gt_nodes[n++] = p;
       }
     }
+    locus->eigen_decomp_valid[i] = 0;
     locus_update_matrices(locus,gt_nodes,n);
 
     /* get postorder traversal of inner nodes, swap CLV indidces to point to new
@@ -1766,31 +1787,44 @@ static long propose_rates(locus_t * locus,
       /* revert old rates */
       rates[j] = old_ratej;
       rates[k] = old_ratek;
+
+      /* update eigen decomposition */
+      pll_update_eigen(locus->eigenvecs[param_indices[i]],
+                       locus->inv_eigenvecs[param_indices[i]],
+                       locus->eigenvals[param_indices[i]],
+                       locus->frequencies[param_indices[i]],
+                       locus->subst_params[param_indices[i]],
+                       locus->states,
+                       locus->states_padded);
     }
   }
   free(gt_nodes);
   return accepted;
 }
 
-double locus_propose_rates(locus_t ** locus,
-                           gtree_t ** gtree,
-                           long locus_count)
+double locus_propose_rates(locus_t ** locus, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
   long thread_index = 0;
+  long candidates = 0;
 
   /* currently we have only one set of frequencies */
   unsigned int param_indices[1] = {0};
 
   /* TODO: Make parallel move */
-  for (i = 0; i < locus_count; ++i)
+  for (i = 0; i < opt_locus_count; ++i)
   {
-    accepted += propose_rates(locus[i],gtree[i],param_indices,1,thread_index);
+    if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
+    {
+      ++candidates;
+      accepted += propose_rates(locus[i],gtree[i],param_indices,1,thread_index);
+    }
   }
 
   if (!accepted)
     return 0;
 
-  return ((double)accepted/locus_count);
+  return ((double)accepted/candidates);
 }
+

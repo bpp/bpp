@@ -35,6 +35,9 @@ static double pj_optimum = 0.3;
 static thread_data_t td;
 static time_t time_start;
 
+static long enabled_prop_rates = 0;
+static long enabled_prop_freqs = 0;
+
 static void timer_start()
 {
   time_start = time(NULL);
@@ -112,7 +115,7 @@ static void reset_finetune_onestep(double * pjump, double * param)
   
 }
 
-static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi)
+static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, double * pjump_freqs, double * pjump_rates)
 {
   int i,j;
   int extra;
@@ -130,6 +133,11 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi)
       fprintf(fp[j], " %8.5f", pjump[i]);
     if (opt_msci)
       fprintf(fp[j], " %8.5f", *pjump_phi);
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", *pjump_freqs);
+    if (enabled_prop_rates)
+      fprintf(fp[j], " %8.5f", *pjump_rates);
+      
     fprintf(fp[j], "\n");
 
     fprintf(fp[j], "Current finetune: ");
@@ -141,7 +149,11 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi)
     if (extra)
       fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
     if (opt_msci)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_phi);
+      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+    if (enabled_prop_rates)
+      fprintf(fp[j], " %8.5f\n", opt_finetune_rates);
     else
       fprintf(fp[j], "\n");
   }
@@ -157,6 +169,10 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi)
     reset_finetune_onestep(pjump+5,&opt_finetune_locusrate);
   if (opt_msci)
     reset_finetune_onestep(pjump_phi, &opt_finetune_phi);
+  if (enabled_prop_freqs)
+    reset_finetune_onestep(pjump_freqs, &opt_finetune_freqs);
+  if (enabled_prop_rates)
+    reset_finetune_onestep(pjump_rates, &opt_finetune_rates);
 
   for (j = 0; j < 2; ++j)
   {
@@ -169,7 +185,11 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi)
     if (extra)
       fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
     if (opt_msci)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_phi);
+      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+    if (enabled_prop_rates)
+      fprintf(fp[j], " %8.5f\n", opt_finetune_rates);
     else
       fprintf(fp[j], "\n");
   }
@@ -786,7 +806,12 @@ static FILE * init(stree_t ** ptr_stree,
     if (msa_list[i]->dtype == BPP_DATA_DNA)
     {
       pll_map = pll_map_nt;
-      compress_method = COMPRESS_JC69;
+      if (msa_list[i]->model == BPP_DNA_MODEL_JC69)
+        compress_method = COMPRESS_JC69;
+      else if (msa_list[i]->model == BPP_DNA_MODEL_GTR)
+        compress_method = COMPRESS_GENERAL;
+      else
+        assert(0);
     }
     else if (msa_list[i]->dtype == BPP_DATA_AA)
     {
@@ -803,6 +828,7 @@ static FILE * init(stree_t ** ptr_stree,
                                         &(msa_list[i]->length),
                                         compress_method);
   }
+
   msa_summary(msa_list,msa_count);
 
   /* parse map file */
@@ -1100,7 +1126,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     if (msa_list[i]->dtype == BPP_DATA_DNA)
     {
-      assert(msa_list[i]->model == BPP_DNA_MODEL_JC69);
+      //assert(msa_list[i]->model == BPP_DNA_MODEL_JC69);
       states = 4;
       pll_map = pll_map_nt;
     }
@@ -1357,6 +1383,8 @@ void cmd_run()
   double mean_phi = 0;
 
   double pjump_phi = 0;
+  double pjump_freqs = 0;
+  double pjump_rates = 0;
 
   double * mean_tau = NULL;
   double * mean_theta = NULL;
@@ -1461,6 +1489,13 @@ void cmd_run()
   progress_init("Running MCMC...", total_steps);
   #endif
 
+  /* enable proposals */
+  if (opt_model != BPP_DNA_MODEL_JC69)
+  {
+    enabled_prop_rates = 1;
+    enabled_prop_freqs = 1;
+  }
+
   printk = opt_samplefreq * opt_samples;
 
   /* check if summary only was requested (no MCMC) and initialize counter
@@ -1486,7 +1521,7 @@ void cmd_run()
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
       if (opt_finetune_reset && opt_burnin >= 200)
-        reset_finetune(fp_out, pjump,&pjump_phi);
+        reset_finetune(fp_out, pjump,&pjump_phi,&pjump_freqs,&pjump_rates);
       for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
@@ -1496,6 +1531,10 @@ void cmd_run()
 
       if (opt_msci)
         pjump_phi = 0;
+      if (enabled_prop_freqs)
+        pjump_freqs = 0;
+      if (enabled_prop_rates)
+        pjump_rates = 0;
 
       if (opt_est_delimit)
       {
@@ -1608,6 +1647,18 @@ void cmd_run()
       pjump_phi = (pjump_phi*(ft_round-1) + ratio) / (double)ft_round;
     }
 
+    if (enabled_prop_freqs)
+    {
+      locus_propose_freqs(locus,gtree);
+      pjump_freqs = (pjump_freqs*(ft_round-1) + ratio) / (double)ft_round;
+    }
+
+    if (enabled_prop_rates)
+    {
+      locus_propose_rates(locus,gtree);
+      pjump_rates = (pjump_rates*(ft_round-1) + ratio) / (double)ft_round;
+    }
+
     /* log sample into file (dparam_count is only used in method 10) */
     if ((i + 1) % (opt_samplefreq*5) == 0)
        fflush(NULL);
@@ -1708,6 +1759,10 @@ void cmd_run()
         printf(" %4.2f", pjump[j]);
       if (opt_msci)
         printf(" %4.2f", pjump_phi);
+      if (enabled_prop_freqs)
+        printf(" %4.2f", pjump_freqs);
+      if (enabled_prop_rates)
+        printf(" %4.2f", pjump_rates);
       printf(" ");
 
       if (opt_method == METHOD_01)
@@ -1823,6 +1878,23 @@ void cmd_run()
 
   }
   timer_print("\n", " spent in MCMC\n\n");
+  #if 0
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    printf("Locus %ld\n", i+1);
+    printf("rates: [ %.6f %.6f %.6f %.6f %.6f %.6f ]\n", locus[i]->subst_params[0][0],
+                                                         locus[i]->subst_params[0][1],
+                                                         locus[i]->subst_params[0][2],
+                                                         locus[i]->subst_params[0][3],
+                                                         locus[i]->subst_params[0][4],
+                                                         locus[i]->subst_params[0][5]);
+    printf("freqs: [ %.6f %.6f %.6f %.6f ]\n", locus[i]->frequencies[0][0],
+                                               locus[i]->frequencies[0][1],
+                                               locus[i]->frequencies[0][2],
+                                               locus[i]->frequencies[0][3]);
+    printf("\n");
+  }
+  #endif
 
   #if 0
   progress_done();
