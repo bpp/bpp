@@ -212,6 +212,7 @@ int load_string(FILE * fp, char ** buffer)
 static void load_chk_section_1(FILE * fp,
                                double ** pjump,
                                double ** pjump_gtr,
+                               double * pjump_phi,
                                unsigned long * curstep,
                                long * ft_round,
                                long * ndspecies,
@@ -520,6 +521,9 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(*pjump_gtr,GTR_PROP_COUNT,fp))
     fatal("Cannot read pjump_gtr");
+
+  if (!LOAD(pjump_phi,1,fp))
+    fatal("Cannot read pjump phi"); 
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC file offset");
@@ -1290,6 +1294,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     stree_t ** streep,
                     double ** pjump,
                     double ** pjump_gtr,
+                    double * pjump_phi,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
@@ -1329,6 +1334,7 @@ int checkpoint_load(gtree_t *** gtreep,
   load_chk_section_1(fp,
                      pjump,
                      pjump_gtr,
+                     pjump_phi,
                      curstep,
                      ft_round,
                      ndspecies,
