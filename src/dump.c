@@ -163,6 +163,7 @@ static void dump_chk_section_1(FILE * fp,
                                stree_t * stree,
                                double * pjump,
                                double * pjump_gtr,
+                               double pjump_phi,
                                long curstep,
                                long ft_round,
                                long ndspecies,
@@ -324,6 +325,7 @@ static void dump_chk_section_1(FILE * fp,
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
   DUMP(pjump_gtr,GTR_PROP_COUNT,fp);
+  DUMP(&pjump_phi,1,fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -641,6 +643,7 @@ int checkpoint_dump(stree_t * stree,
                     locus_t ** locus_list,
                     double * pjump,
                     double * pjump_gtr,
+                    double pjump_phi,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -685,6 +688,7 @@ int checkpoint_dump(stree_t * stree,
                      stree,
                      pjump,
                      pjump_gtr,
+                     pjump_phi,
                      curstep,
                      ft_round,
                      ndspecies,
