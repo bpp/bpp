@@ -562,10 +562,9 @@ long prop_split(gtree_t ** gtree,
 
       
       /* evaluate log-likelihood */
-      unsigned int param_indices[1] = {0};
       double logl = locus_root_loglikelihood(locus[i],
                                              gtree[i]->root,
-                                             param_indices,
+                                             locus[i]->param_indices,
                                              NULL);
       gtree[i]->logl = logl;
     }
@@ -762,8 +761,7 @@ long prop_split(gtree_t ** gtree,
     locus_update_partials(locus[i],gt_nodes,k);
 
     /* compute log-likelihood */
-    unsigned int param_indices[1] = {0};
-    double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
+    double logl = locus_root_loglikelihood(locus[i],gt->root,locus->param_indices,NULL);
 
 
     double logpr = gtree_logprob(stree,locus[i]->heredity[0],i);
@@ -962,10 +960,9 @@ long prop_join(gtree_t ** gtree,
 
       
       /* evaluate log-likelihood */
-      unsigned int param_indices[1] = {0};
       double logl = locus_root_loglikelihood(locus[i],
                                              gtree[i]->root,
-                                             param_indices,
+                                             locus[i]->param_indices,
                                              NULL);
       gtree[i]->logl = logl;
     }

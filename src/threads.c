@@ -20,7 +20,6 @@
 */
 
 #include "bpp.h"
-//#define PERFORMANCE_TEST
 
 typedef struct thread_info_s
 {
@@ -36,12 +35,6 @@ typedef struct thread_info_s
   long locus_count;
 
   thread_data_t td;
-#ifdef PERFORMANCE_TEST
-  struct timeval * tage;
-  struct timeval * tspr;
-  struct timeval * ttau;
-  struct timeval * tmix;
-#endif
 
 } thread_info_t;
 
@@ -66,10 +59,6 @@ static void * threads_worker(void * vp)
 {
   long t = (long)vp;
   thread_info_t * tip = ti + t;
-
-#ifdef PERFORMANCE_TEST
-  long iter = 0;
-#endif
 
 #if (defined(__linux__) && !defined(DISABLE_COREPIN))
   pin_to_core((opt_threads_start-1)+(t*opt_threads_step));
@@ -98,9 +87,6 @@ static void * threads_worker(void * vp)
                                       t,
                                       &tip->td.proposals,
                                       &tip->td.accepted);
-#ifdef PERFORMANCE_TEST
-          gettimeofday(tip->tage+iter++,NULL);
-#endif
           break;
         case THREAD_WORK_GTSPR:
           gtree_propose_spr_parallel(tip->td.locus,
@@ -111,9 +97,6 @@ static void * threads_worker(void * vp)
                                      t,
                                      &tip->td.proposals,
                                      &tip->td.accepted);
-#ifdef PERFORMANCE_TEST
-          gettimeofday(tip->tspr+iter++,NULL);
-#endif
           break;
         case THREAD_WORK_TAU:
           propose_tau_update_gtrees(tip->td.locus,
@@ -134,9 +117,6 @@ static void * threads_worker(void * vp)
                                     &tip->td.logl_diff,
                                     &tip->td.logpr_diff,
                                     t);
-#ifdef PERFORMANCE_TEST
-          gettimeofday(tip->ttau+iter++,NULL);
-#endif
           break;
         case THREAD_WORK_MIXING:
           prop_mixing_update_gtrees(tip->td.locus,
@@ -148,9 +128,33 @@ static void * threads_worker(void * vp)
                                     t,
                                     &tip->td.lnacceptance,
                                     NULL);
-#ifdef PERFORMANCE_TEST
-          gettimeofday(tip->tmix+iter++,NULL);
-#endif
+          break;
+        case THREAD_WORK_ALPHA:
+          locus_propose_alpha_parallel(tip->td.locus,
+                                       tip->td.gtree,
+                                       tip->locus_first,
+                                       tip->locus_count,
+                                       t,
+                                       &tip->td.proposals,
+                                       &tip->td.accepted);
+          break;
+        case THREAD_WORK_RATES:
+          locus_propose_rates_parallel(tip->td.locus,
+                                       tip->td.gtree,
+                                       tip->locus_first,
+                                       tip->locus_count,
+                                       t,
+                                       &tip->td.proposals,
+                                       &tip->td.accepted);
+          break;
+        case THREAD_WORK_FREQS:
+          locus_propose_freqs_parallel(tip->td.locus,
+                                       tip->td.gtree,
+                                       tip->locus_first,
+                                       tip->locus_count,
+                                       t,
+                                       &tip->td.proposals,
+                                       &tip->td.accepted);
           break;
         default:
           fatal("Unknown work function assigned to thread worker %ld", t);
@@ -203,19 +207,6 @@ void threads_init(locus_t ** locus)
   long loci_per_thread = opt_locus_count / opt_threads;
   long loci_remaining = opt_locus_count % opt_threads;
   long loci_start = 0;
-
-#ifdef PERFORMANCE_TEST
-  for (t = 0; t < opt_threads; ++t)
-  {
-    thread_info_t * tip = ti+t;
-    long total = opt_burnin + opt_samplefreq*opt_samples;
-
-    tip->tage = (struct timeval *)xcalloc((size_t)total,sizeof(struct timeval));
-    tip->tspr = (struct timeval *)xcalloc((size_t)total,sizeof(struct timeval));
-    tip->ttau = (struct timeval *)xcalloc((size_t)total,sizeof(struct timeval));
-    tip->tmix = (struct timeval *)xcalloc((size_t)total,sizeof(struct timeval));
-  }
-#endif
 
 
   /* init and create worker threads */
@@ -285,7 +276,11 @@ void threads_wakeup(int work_type, thread_data_t * data)
     pthread_mutex_unlock(&tip->mutex);
   }
 
-  if (work_type == THREAD_WORK_GTAGE || work_type == THREAD_WORK_GTSPR)
+  if (work_type == THREAD_WORK_GTAGE ||
+      work_type == THREAD_WORK_GTSPR ||
+      work_type == THREAD_WORK_ALPHA ||
+      work_type == THREAD_WORK_RATES ||
+      work_type == THREAD_WORK_FREQS)
   {
     long proposals = 0;
     long accepted = 0;
@@ -332,24 +327,6 @@ void threads_exit()
 {
   long t;
 
-#ifdef PERFORMANCE_TEST
-  long i;
-
-  printf("\n\nLoad balancing info\n-------------------\n");
-  for (i = 0; i < opt_burnin+opt_samplefreq*opt_samples; ++i)
-  {
-    printf("Round %ld\n", i);
-    for (t = 0; t < opt_threads; ++t)
-    {
-      thread_info_t * tip = ti+t;
-      printf("  tspr: %ld\n", tip->tspr[i].tv_usec);
-      printf("  tage: %ld\n", tip->tage[i].tv_usec);
-      printf("  ttau: %ld\n", tip->ttau[i].tv_usec);
-      printf("  tmix: %ld\n", tip->tmix[i].tv_usec);
-    }
-  }
-#endif
-
   for (t = 0; t < opt_threads; ++t)
   {
     thread_info_t * tip = ti + t;
@@ -366,12 +343,6 @@ void threads_exit()
 
     pthread_cond_destroy(&tip->cond);
     pthread_mutex_destroy(&tip->mutex);
-#ifdef PERFORMANCE_TEST
-    free(tip->tspr);
-    free(tip->tage);
-    free(tip->ttau);
-    free(tip->tmix);
-#endif
   }
 
   free(ti);

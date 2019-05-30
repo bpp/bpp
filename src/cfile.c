@@ -832,6 +832,42 @@ l_unwind:
   return ret;
 }
 
+static long parse_alphaprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_double(p, &opt_alpha_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_alpha_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* set default categories */
+  opt_alpha_cats = 4;
+
+  if (is_emptyline(p)) ret = 1;
+
+  count = get_long(p, &opt_alpha_cats);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+  
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_thetaprior(const char * line)
 {
   long ret = 0;
@@ -1766,6 +1802,13 @@ void load_cfile()
         opt_checkpoint = 1;
         if (sizeof(BYTE) != 1)
           fatal("Checkpoint does not work on systems with sizeof(char) != 1");
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"alphaprior",10))
+      {
+        if (!parse_alphaprior(value))
+          fatal("Option 'alphaprior' expects two doubles (line %ld)",
+                line_count);
         valid = 1;
       }
     }

@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define PROP_COUNT 5
+#define GTR_PROP_COUNT 3
 
 #define DUMP(x,n,fp) fwrite((void *)(x),sizeof(*(x)),n,fp)
 
@@ -161,6 +162,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
 static void dump_chk_section_1(FILE * fp,
                                stree_t * stree,
                                double * pjump,
+                               double * pjump_gtr,
                                long curstep,
                                long ft_round,
                                long ndspecies,
@@ -321,6 +323,7 @@ static void dump_chk_section_1(FILE * fp,
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
+  DUMP(pjump_gtr,GTR_PROP_COUNT,fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -549,6 +552,23 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   /* write pattern weights sum */
   DUMP(&(locus->pattern_weights_sum),1,fp);
 
+  /* write alpha */
+  DUMP(&(locus->rates_alpha),1,fp);
+
+  /* write category rates */
+  DUMP(&(locus->rates),locus->rate_cats,fp);
+
+  /* dump base frequencies */
+  for (i = 0; i < locus->rate_matrices; ++i)
+    DUMP(&(locus->frequencies[i]),locus->states,fp);
+
+  /* dump qmatrix rates */
+  for (i = 0; i < locus->rate_matrices; ++i)
+    DUMP(&(locus->subst_params[i]),((locus->states-1)*locus->states)/2,fp);
+
+  /* write param indices */
+  DUMP(locus->param_indices,locus->rate_cats,fp);
+
   /* write mutation rates */
   DUMP(locus->mut_rates,locus->rate_matrices,fp);
 
@@ -620,6 +640,7 @@ int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
                     double * pjump,
+                    double * pjump_gtr,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -663,6 +684,7 @@ int checkpoint_dump(stree_t * stree,
   dump_chk_section_1(fp,
                      stree,
                      pjump,
+                     pjump_gtr,
                      curstep,
                      ft_round,
                      ndspecies,

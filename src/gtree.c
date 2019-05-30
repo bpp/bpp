@@ -3180,8 +3180,7 @@ static long propose_ages(locus_t * locus,
     locus_update_partials(locus,travbuffer[msa_index],k);
     
     /* compute log-likelihood */
-    unsigned int param_indices[1] = {0};
-    logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
+    logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
 
     if (opt_msci)
     {
@@ -4639,8 +4638,7 @@ static long propose_spr(locus_t * locus,
     locus_update_partials(locus,travbuffer[msa_index],k);
 
     /* compute log-likelihood */
-    unsigned int param_indices[1] = {0};
-    double logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
+    double logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
 
     /* acceptance ratio */
     if (opt_msci)
@@ -5073,15 +5071,13 @@ static long prop_locusrate(gtree_t ** gtree,
     }
     locus_update_all_partials(locus[ref],gtree[ref]);
 
-    unsigned int param_indices[1] = {0};
-
     double loc_logl = locus_root_loglikelihood(locus[i],
                                                gtree[i]->root,
-                                               param_indices,
+                                               locus[i]->param_indices,
                                                NULL);
     double ref_logl = locus_root_loglikelihood(locus[ref],
                                                gtree[ref]->root,
-                                               param_indices,
+                                               locus[ref]->param_indices,
                                                NULL);
 
     lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;

@@ -299,7 +299,7 @@ int pll_core_update_pmatrix_4x4_f81(double ** pmatrix,
                                     const double * branch_lengths,
                                     const double ** frequencies,
                                     const unsigned int * matrix_indices,
-                                    const unsigned int * params_indices,
+                                    const unsigned int * param_indices,
                                     unsigned int count,
                                     unsigned int attrib)
 {
@@ -319,7 +319,7 @@ int pll_core_update_pmatrix_4x4_f81(double ** pmatrix,
     for (n = 0; n < rate_cats; ++n)
     {
       pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
-      freqs = frequencies[params_indices[n]];
+      freqs = frequencies[param_indices[n]];
       t = branch_lengths[i]*rates[n];
 
       /* compute beta */
@@ -349,7 +349,7 @@ int pll_core_update_pmatrix_4x4_k80(double ** pmatrix,
                                     const double * rates,
                                     const double * branch_lengths,
                                     const unsigned int * matrix_indices,
-                                    const unsigned int * params_indices,
+                                    const unsigned int * param_indices,
                                     unsigned int count,
                                     unsigned int attrib)
 {
@@ -418,7 +418,7 @@ int pll_core_update_pmatrix_4x4_tn93(double ** pmatrix,
                                      const double * branch_lengths,
                                      const double ** frequencies,
                                      const unsigned int * matrix_indices,
-                                     const unsigned int * params_indices,
+                                     const unsigned int * param_indices,
                                      unsigned int count,
                                      unsigned int attrib)
 {
@@ -440,7 +440,7 @@ int pll_core_update_pmatrix_4x4_tn93(double ** pmatrix,
     for (n = 0; n < rate_cats; ++n)
     {
       pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
-      freqs = frequencies[params_indices[n]];
+      freqs = frequencies[param_indices[n]];
 
       double A = freqs[0];
       double C = freqs[1];
@@ -488,7 +488,7 @@ int pll_core_update_pmatrix_4x4_hky(double ** pmatrix,
                                      const double * branch_lengths,
                                      const double ** frequencies,
                                      const unsigned int * matrix_indices,
-                                     const unsigned int * params_indices,
+                                     const unsigned int * param_indices,
                                      unsigned int count,
                                      unsigned int attrib)
 {
@@ -510,7 +510,7 @@ int pll_core_update_pmatrix_4x4_hky(double ** pmatrix,
     for (n = 0; n < rate_cats; ++n)
     {
       pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
-      freqs = frequencies[params_indices[n]];
+      freqs = frequencies[param_indices[n]];
 
 
       double t = branch_lengths[i];
@@ -586,7 +586,7 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
                                      const double * rates,
                                      const double * branch_lengths,
                                      const unsigned int * matrix_indices,
-                                     const unsigned int * params_indices,
+                                     const unsigned int * param_indices,
                                      unsigned int count,
                                      unsigned int attrib)
 {
@@ -695,9 +695,8 @@ void bpp_core_update_pmatrix(locus_t * locus,
   expd = (double *)xmalloc(states * sizeof(double));
   temp = (double *)xmalloc(states*states*sizeof(double));
 
-  /* TODO: Implement params_indices for mixture models */
-  assert(rate_cats <= 4);
-  unsigned int params_indices[4] = {0,0,0,0};
+  unsigned int * param_indices = locus->param_indices;
+
 
   for (i = 0; i < count; ++i)
   {
@@ -712,9 +711,9 @@ void bpp_core_update_pmatrix(locus_t * locus,
     {
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
 
-      evecs = eigenvecs[params_indices[n]];
-      inv_evecs = inv_eigenvecs[params_indices[n]];
-      evals = eigenvals[params_indices[n]];
+      evecs = eigenvecs[param_indices[n]];
+      inv_evecs = inv_eigenvecs[param_indices[n]];
+      evals = eigenvals[param_indices[n]];
 
       /* if branch length is zero then set the p-matrix to identity matrix */
       if (t < 1e-100)
@@ -770,7 +769,7 @@ int pll_core_update_pmatrix(double ** pmatrix,
                             const double * rates,
                             const double * branch_lengths,
                             const unsigned int * matrix_indices,
-                            const unsigned int * params_indices,
+                            const unsigned int * param_indices,
                             double * const * eigenvals,
                             double * const * eigenvecs,
                             double * const * inv_eigenvecs,
@@ -800,9 +799,9 @@ int pll_core_update_pmatrix(double ** pmatrix,
     {
       pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
 
-      evecs = eigenvecs[params_indices[n]];
-      inv_evecs = inv_eigenvecs[params_indices[n]];
-      evals = eigenvals[params_indices[n]];
+      evecs = eigenvecs[param_indices[n]];
+      inv_evecs = inv_eigenvecs[param_indices[n]];
+      evals = eigenvals[param_indices[n]];
 
       /* if branch length is zero then set the p-matrix to identity matrix */
       if (!branch_lengths[i])

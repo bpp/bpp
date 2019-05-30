@@ -34,6 +34,7 @@ __THREAD int bpp_errno;
 __THREAD char bpp_errmsg[200] = {0};
 
 /* options */
+long opt_alpha_cats;
 long opt_arch;
 long opt_basefreqs_fixed;
 long opt_burnin;
@@ -84,8 +85,11 @@ long opt_threads_start;
 long opt_threads_step;
 long opt_usedata;
 long opt_version;
+double opt_alpha_alpha;
+double opt_alpha_beta;
 double opt_bfbeta;
 double opt_clock_alpha;
+double opt_finetune_alpha;
 double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
@@ -257,6 +261,9 @@ void args_init(int argc, char ** argv)
 
   progname = argv[0];
 
+  opt_alpha_alpha = 1;
+  opt_alpha_beta = 2;
+  opt_alpha_cats = 1;
   opt_arch = -1;
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
@@ -289,6 +296,7 @@ void args_init(int argc, char ** argv)
   opt_revolutionary_spr_method = 0;
   opt_revolutionary_spr_debug = 0;
 #endif
+  opt_finetune_alpha = 0.1;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;

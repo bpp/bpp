@@ -2061,10 +2061,9 @@ void propose_tau_update_gtrees(locus_t ** loci,
       locus_update_partials(loci[i], partials, partials_count);
 
       /* evaluate log-likelihood */
-      unsigned int param_indices[1] = { 0 };
       double logl = locus_root_loglikelihood(loci[i],
                                              gtree[i]->root,
-                                             param_indices,
+                                             loci[i]->param_indices,
                                              NULL);
 
       logl_diff += logl - gtree[i]->logl;
@@ -3566,10 +3565,9 @@ long stree_propose_spr(stree_t ** streeptr,
       locus_update_partials(loci[i], partials, partials_count);
 
       /* evaluate log-likelihood */
-      unsigned int param_indices[1] = { 0 };
       gtree_list[i]->logl = locus_root_loglikelihood(loci[i],
                                                      gtree_list[i]->root,
-                                                     param_indices,
+                                                     loci[i]->param_indices,
                                                      NULL);
     }
 

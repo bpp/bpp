@@ -42,7 +42,6 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
    gnode_t * tnode;
    const double * mclv, *tclv;  /* CLV of moved and target node */
    double * nptr;
-   unsigned int param_indices[1] = { 0 };
    const double * mmat = locus->pmatrix[mnode->pmatrix_index];       /* transition probability matrix for moved node */
    /* space for new p-matrix for target: */
    double * tmat = pll_aligned_alloc(locus->states * locus->states_padded * locus->rate_cats * sizeof(double), locus->alignment);
@@ -98,14 +97,14 @@ void revolutionary_spr_tselect_logl(gnode_t * mnode, gnode_t ** target_list, lon
     /* get transition probability matrix for moved node */
     mmat = locus->pmatrix[mnode->pmatrix_index];  /* Ziheng: mmat is already calculated outside this routine */
     /* construct transition probability matrix tmat for target node */
-    pll_core_update_pmatrix_4x4_jc69(matrices, locus->states, locus->rate_cats, NULL, tlength, matrix_indices, param_indices, 1, locus->attributes);
+    pll_core_update_pmatrix_4x4_jc69(matrices, locus->states, locus->rate_cats, NULL, tlength, matrix_indices, locus->param_indices, 1, locus->attributes);
                                      
     /* TODO: Account for scalers - currently disabled */
     /* update conditional probabilities vector clv using vectors mclv and ntclv and matrices mmat and (new) tmat */
     pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats, clv, NULL, mclv, ntclv, mmat, tmat, NULL, NULL, locus->attributes);
 
     /* compute log-likelihood of tree having root with conditional probabilities vector clv */
-    logl = pll_core_root_loglikelihood(locus->states, locus->sites, locus->rate_cats, clv, NULL, locus->frequencies, locus->rate_weights, locus->pattern_weights, param_indices, NULL, locus->attributes);
+    logl = pll_core_root_loglikelihood(locus->states, locus->sites, locus->rate_cats, clv, NULL, locus->frequencies, locus->rate_weights, locus->pattern_weights, locus->param_indices, NULL, locus->attributes);
     weights[n] = logl;
 
     /* if debugging information enabled */
@@ -151,7 +150,6 @@ void rev_spr_tselect(gnode_t * mnode,
   double * mmat;
   double * tmat;
   unsigned int matrix_indices[2] = {0,1};
-  unsigned int param_indices[1] = {0};
   double length[1];
   double * matrices[1];
 
@@ -179,7 +177,7 @@ void rev_spr_tselect(gnode_t * mnode,
                                    NULL,
                                    length,
                                    matrix_indices,
-                                   param_indices,
+                                   locus->param_indices,
                                    1,
                                    locus->attributes);
 
@@ -195,7 +193,7 @@ void rev_spr_tselect(gnode_t * mnode,
                                      NULL,
                                      length,
                                      matrix_indices,
-                                     param_indices,
+                                     locus->param_indices,
                                      1,
                                      locus->attributes);
 
@@ -241,7 +239,7 @@ void rev_spr_tselect(gnode_t * mnode,
                                              locus->frequencies,
                                              locus->rate_weights,
                                              locus->pattern_weights,
-                                             param_indices,
+                                             locus->param_indices,
                                              NULL,
                                              locus->attributes);
   }
