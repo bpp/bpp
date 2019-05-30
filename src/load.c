@@ -22,6 +22,7 @@
 #include "bpp.h"
 
 #define PROP_COUNT 5
+#define GTR_PROP_COUNT 3
 
 #define LOAD(x,n,fp) (fread((void *)(x),sizeof(*(x)),n,fp) == (size_t)(n))
 
@@ -210,6 +211,7 @@ int load_string(FILE * fp, char ** buffer)
 
 static void load_chk_section_1(FILE * fp,
                                double ** pjump,
+                               double ** pjump_gtr,
                                unsigned long * curstep,
                                long * ft_round,
                                long * ndspecies,
@@ -511,8 +513,13 @@ static void load_chk_section_1(FILE * fp,
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
+  *pjump_gtr = (double *)xmalloc(GTR_PROP_COUNT * sizeof(double));
+
   if (!LOAD(*pjump,pjump_size,fp))
     fatal("Cannot read pjump");
+
+  if (!LOAD(*pjump_gtr,GTR_PROP_COUNT,fp))
+    fatal("Cannot read pjump_gtr");
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC file offset");
@@ -1164,15 +1171,36 @@ static void load_locus(FILE * fp, long index)
                               attributes);
   
   /* set frequencies for model with index 0 */
-  locus_set_frequencies_and_rates(locus[index]);
+  //locus_set_frequencies_and_rates(locus[index]);
 
-  /* TODO DEBUG */
-  assert(rate_cats == 1);
-  locus[index]->rates[0] = 1;
+  for (i = 0; i < rate_matrices; ++i)
+    locus[index]->eigen_decomp_valid[i] = 0;
 
   /* load pattern weights sum */
   if (!LOAD(&(locus[index]->pattern_weights_sum),1,fp))
     fatal("Cannot read pattern weights sum");
+  
+  /* load alpha */
+  if (!LOAD(&(locus[index]->rates_alpha),1,fp))
+    fatal("Cannot read alpha value");
+
+  /* load category rates */
+  if (!LOAD(&(locus[index]->rates),rate_cats,fp))
+    fatal("Cannot read category rates");
+
+  /* load base frequencies */
+  for (i = 0; i < rate_matrices; ++i)
+    if (!LOAD(locus[index]->frequencies[i],states,fp))
+      fatal("Cannot read base frequencies");
+
+  /* load qmatrix rates */
+  for (i = 0; i < rate_matrices; ++i)
+    if (!LOAD(locus[index]->subst_params[i],((states-1)*states)/2,fp))
+      fatal("Cannot read qmatrix rates");
+
+  /* load param indices */
+  if (!LOAD(locus[index]->param_indices,locus[index]->rate_cats,fp))
+    fatal("Cannot read param indices");
 
   /* load mutation rates */
   if (!LOAD(locus[index]->mut_rates,locus[index]->rate_matrices,fp))
@@ -1261,6 +1289,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
+                    double ** pjump_gtr,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
@@ -1299,6 +1328,7 @@ int checkpoint_load(gtree_t *** gtreep,
 
   load_chk_section_1(fp,
                      pjump,
+                     pjump_gtr,
                      curstep,
                      ft_round,
                      ndspecies,
@@ -1339,18 +1369,16 @@ int checkpoint_load(gtree_t *** gtreep,
     locus_update_matrices(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
     locus_update_all_partials(locus[i],gtree[i]);
 
-    unsigned int param_indices[1] = {0};
     gtree[i]->logl = locus_root_loglikelihood(locus[i],
                                               gtree[i]->root,
-                                              param_indices,
+                                              locus[i]->param_indices,
                                               NULL);
   }
 
   #if 0
-  unsigned int param_indices[1] = {0};
   logl = locus_root_loglikelihood(locus[i],
                                   gtree[i]->root,
-                                  param_indices,
+                                  locus->param_indices,
                                   NULL);
   #endif
   fclose(fp);

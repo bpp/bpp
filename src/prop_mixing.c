@@ -109,8 +109,7 @@ void prop_mixing_update_gtrees(locus_t ** locus,
     locus_update_partials(locus[i],gt_nodes,k);
 
     /* compute log-likelihood */
-    unsigned int param_indices[1] = {0};
-    double logl = locus_root_loglikelihood(locus[i],gt->root,param_indices,NULL);
+    double logl = locus_root_loglikelihood(locus[i],gt->root,locus[i]->param_indices,NULL);
 
 
     if (opt_est_theta)

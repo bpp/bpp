@@ -225,6 +225,9 @@ extern const char * global_freqs_strings[28];
 #define THREAD_WORK_GTSPR               2
 #define THREAD_WORK_TAU                 3
 #define THREAD_WORK_MIXING              4
+#define THREAD_WORK_ALPHA               5
+#define THREAD_WORK_RATES               6
+#define THREAD_WORK_FREQS               7
 
 /* libpll related definitions */
 
@@ -252,6 +255,9 @@ extern const char * global_freqs_strings[28];
 #define PLL_SCALE_BUFFER_NONE -1
 
 #define PLL_MISC_EPSILON 1e-8
+
+#define PLL_GAMMA_RATES_MEAN             0
+#define PLL_GAMMA_RATES_MEDIAN           1
 
 /* error codes */
 
@@ -488,6 +494,7 @@ typedef struct locus_s
   size_t alignment;
   unsigned int states_padded;
 
+  double rates_alpha;
   double ** clv;
   double ** pmatrix;
   double * rates;
@@ -504,6 +511,10 @@ typedef struct locus_s
   double ** eigenvecs;
   double ** inv_eigenvecs;
   double ** eigenvals;
+
+  /* index of frequency/qmatrix values set to use for computing the pmatrix
+     for each rate category */
+  unsigned int * param_indices;
 
   /* tip-tip precomputation data */
   unsigned int maxstates;
@@ -678,6 +689,7 @@ typedef struct thread_data_s
 
 /* options */
 
+extern long opt_alpha_cats;
 extern long opt_arch;
 extern long opt_basefreqs_fixed;
 extern long opt_burnin;
@@ -728,8 +740,11 @@ extern long opt_threads_start;
 extern long opt_threads_step;
 extern long opt_usedata;
 extern long opt_version;
+extern double opt_alpha_alpha;
+extern double opt_alpha_beta;
 extern double opt_bfbeta;
 extern double opt_clock_alpha;
+extern double opt_finetune_alpha;
 extern double opt_finetune_freqs;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
@@ -1095,6 +1110,12 @@ long legacy_rndpoisson(long index, double m);
 unsigned int * get_legacy_rndu_array(void);
 void set_legacy_rndu_array(unsigned int * x);
 
+/* functions in gamma.c */
+
+int pll_compute_gamma_cats(double alpha,
+                           unsigned int categories,
+                           double * output_rates,
+                           int rates_mode);
 
 /* functions in gtree.c */
 
@@ -1208,6 +1229,17 @@ void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count);
 
 void rj_fini();
 
+/* functions in prop_gamma.c */
+
+double locus_propose_alpha_serial(locus_t ** locus, gtree_t ** gtree);
+void locus_propose_alpha_parallel(locus_t ** locus,
+                                  gtree_t ** gtree,
+                                  long locus_start,
+                                  long locus_count,
+                                  long thread_index,
+                                  long * p_proposal_count,
+                                  long * p_accepted);
+
 /* functions in locus.c */
 
 locus_t * locus_create(unsigned int dtype,
@@ -1243,6 +1275,7 @@ void pll_set_frequencies(locus_t * locus,
                          const double * frequencies);
 
 void locus_set_frequencies_and_rates(locus_t * locus);
+void pll_set_category_rates(locus_t * locus, const double * rates);
 void locus_set_mut_rates(locus_t * locus, const double * mut_rates);
 void locus_set_heredity_scalers(locus_t * locus, const double * heredity);
 
@@ -1268,8 +1301,23 @@ double locus_root_loglikelihood(locus_t * locus,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl);
 
-double locus_propose_rates(locus_t ** locus, gtree_t ** gtree);
-double locus_propose_freqs(locus_t ** locus, gtree_t ** gtree);
+double locus_propose_rates_serial(locus_t ** locus, gtree_t ** gtree);
+void locus_propose_rates_parallel(locus_t ** locus,
+                                  gtree_t ** gtree,
+                                  long locus_start,
+                                  long locus_count,
+                                  long thread_index,
+                                  long * p_proposal_count,
+                                  long * p_accepted);
+
+double locus_propose_freqs_serial(locus_t ** locus, gtree_t ** gtree);
+void locus_propose_freqs_parallel(locus_t ** locus,
+                                  gtree_t ** gtree,
+                                  long locus_start,
+                                  long locus_count,
+                                  long thread_index,
+                                  long * p_proposal_count,
+                                  long * p_accepted);
 
 /* functions in compress.c */
 
@@ -1334,6 +1382,7 @@ int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
                     double * pjump,
+                    double * pjump_gtr,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -1360,6 +1409,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
+                    double ** pjump_gtr,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,

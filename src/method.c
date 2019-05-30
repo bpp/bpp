@@ -23,6 +23,9 @@
 
 #define PI  3.1415926535897932384626433832795
 #define PROP_COUNT 5
+#define GTR_PROP_COUNT 3
+
+//#define DEBUG_GTR
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
@@ -37,6 +40,7 @@ static time_t time_start;
 
 static long enabled_prop_rates = 0;
 static long enabled_prop_freqs = 0;
+static long enabled_prop_alpha = 0;
 
 static void timer_start()
 {
@@ -115,7 +119,10 @@ static void reset_finetune_onestep(double * pjump, double * param)
   
 }
 
-static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, double * pjump_freqs, double * pjump_rates)
+static void reset_finetune(FILE * fp_out,
+                           double * pjump,
+                           double * pjump_phi,
+                           double * pjump_gtr)
 {
   int i,j;
   int extra;
@@ -134,9 +141,11 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, do
     if (opt_msci)
       fprintf(fp[j], " %8.5f", *pjump_phi);
     if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", *pjump_freqs);
+      fprintf(fp[j], " %8.5f", pjump_gtr[0]);
     if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f", *pjump_rates);
+      fprintf(fp[j], " %8.5f", pjump_gtr[1]);
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f", pjump_gtr[2]);
       
     fprintf(fp[j], "\n");
 
@@ -153,7 +162,9 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, do
     if (enabled_prop_freqs)
       fprintf(fp[j], " %8.5f", opt_finetune_freqs);
     if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_rates);
+      fprintf(fp[j], " %8.5f", opt_finetune_rates);
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f\n", opt_finetune_alpha);
     else
       fprintf(fp[j], "\n");
   }
@@ -170,9 +181,11 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, do
   if (opt_msci)
     reset_finetune_onestep(pjump_phi, &opt_finetune_phi);
   if (enabled_prop_freqs)
-    reset_finetune_onestep(pjump_freqs, &opt_finetune_freqs);
+    reset_finetune_onestep(pjump_gtr+0, &opt_finetune_freqs);
   if (enabled_prop_rates)
-    reset_finetune_onestep(pjump_rates, &opt_finetune_rates);
+    reset_finetune_onestep(pjump_gtr+1, &opt_finetune_rates);
+  if (enabled_prop_alpha)
+    reset_finetune_onestep(pjump_gtr+2, &opt_finetune_alpha);
 
   for (j = 0; j < 2; ++j)
   {
@@ -189,7 +202,9 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_phi, do
     if (enabled_prop_freqs)
       fprintf(fp[j], " %8.5f", opt_finetune_freqs);
     if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_rates);
+      fprintf(fp[j], " %8.5f", opt_finetune_rates);
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f\n", opt_finetune_alpha);
     else
       fprintf(fp[j], "\n");
   }
@@ -578,6 +593,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gtree,
                      locus_t *** ptr_locus,
                      double ** ptr_pjump,
+                     double ** ptr_pjump_gtr,
                      unsigned long * ptr_curstep,
                      long * ptr_ft_round,
                      long * ptr_ndspecies,
@@ -616,6 +632,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_locus,
                   ptr_stree,
                   ptr_pjump,
+                  ptr_pjump_gtr,
                   ptr_curstep,
                   ptr_ft_round,
                   ptr_ndspecies,
@@ -776,6 +793,7 @@ static FILE * init(stree_t ** ptr_stree,
                    gtree_t *** ptr_gtree,
                    locus_t *** ptr_locus,
                    double ** ptr_pjump,
+                   double ** ptr_pjump_gtr,
                    unsigned long * ptr_curstep,
                    long * ptr_ft_round,
                    long * ptr_dparam_count,
@@ -797,6 +815,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logl_sum = 0;
   double logpr_sum = 0;
   double * pjump;
+  double * pjump_gtr;
   list_t * map_list = NULL;
   stree_t * stree;
   const unsigned int * pll_map;
@@ -1247,7 +1266,6 @@ static FILE * init(stree_t ** ptr_stree,
   for (i = 0, pindex=0; i < msa_count; ++i)
   {
     int states = 0;
-    unsigned int rate_cats = 1;
     unsigned int pmatrix_count = gtree[i]->edge_count;
     msa_t * msa = msa_list[i];
     unsigned int scale_buffers = opt_scaling ?
@@ -1284,16 +1302,13 @@ static FILE * init(stree_t ** ptr_stree,
                             msa->length,                /* sequence length */
                             rate_matrices,              /* subst matrices (1) */
                             pmatrix_count,              /* # prob matrices */
-                            rate_cats,                  /* # rate categories */
+                            opt_alpha_cats,             /* # rate categories */
                             scale_buffers,              /* # scale buffers */
                             (unsigned int)opt_arch);    /* attributes */
 
     /* set frequencies and substitution rates */
+    /* TODO: For GTR perhaps set to empirical frequencies */
     locus_set_frequencies_and_rates(locus[i]);
-
-    /*TODO DEBUG */
-    assert(rate_cats == 1);
-    locus[i]->rates[0] = 1;
 
     if (opt_diploid)
     {
@@ -1354,10 +1369,9 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* now that we computed the CLVs, calculate the log-likelihood for the
        current gene tree */
-    unsigned int param_indices[1] = {0};
     logl = locus_root_loglikelihood(locus[i],
                                     gtree[i]->root,
-                                    param_indices,
+                                    locus[i]->param_indices,
                                     NULL);
     logl_sum += logl;
 
@@ -1418,6 +1432,8 @@ static FILE * init(stree_t ** ptr_stree,
   else
     pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
 
+  pjump_gtr = (double *)xcalloc(GTR_PROP_COUNT, sizeof(double));
+
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
 
@@ -1455,6 +1471,7 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_gtree = gtree;
   *ptr_locus = locus;
   *ptr_pjump = pjump;
+  *ptr_pjump_gtr = pjump_gtr;
 
   *ptr_curstep = 0;
   *ptr_ft_round = 0;
@@ -1495,6 +1512,7 @@ void cmd_run()
   long ft_round;
   double logl_sum = 0;
   double * pjump;
+  double * pjump_gtr;
   FILE * fp_mcmc;
   FILE * fp_out;
   stree_t * stree;
@@ -1518,10 +1536,23 @@ void cmd_run()
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
   double mean_phi = 0;
+  #ifdef DEBUG_GTR
+  double mean_freqa = 0;
+  double mean_freqc = 0;
+  double mean_freqg = 0;
+  double mean_freqt = 0;
+
+  double mean_ratea = 0;
+  double mean_rateb = 0;
+  double mean_ratec = 0;
+  double mean_rated = 0;
+  double mean_ratee = 0;
+  double mean_ratef = 0;
+
+  double mean_alpha0 = 0;
+  #endif
 
   double pjump_phi = 0;
-  double pjump_freqs = 0;
-  double pjump_rates = 0;
 
   double * mean_tau = NULL;
   double * mean_theta = NULL;
@@ -1542,6 +1573,7 @@ void cmd_run()
                      &gtree,
                      &locus,
                      &pjump,
+                     &pjump_gtr,
                      &curstep,
                      &ft_round,
                      &ndspecies,
@@ -1567,6 +1599,7 @@ void cmd_run()
                    &gtree,
                    &locus,
                    &pjump,
+                   &pjump_gtr,
                    &curstep,
                    &ft_round,
                    &dparam_count,
@@ -1620,7 +1653,6 @@ void cmd_run()
   timer_print("", " taken to read and process data..\nRestarting timer...\n");
   timer_start();
 
-
   #if 0
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
@@ -1631,6 +1663,11 @@ void cmd_run()
   {
     enabled_prop_rates = 1;
     enabled_prop_freqs = 1;
+  }
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    if (locus[i]->rate_cats > 1)
+      enabled_prop_alpha = 1;
   }
 
   printk = opt_samplefreq * opt_samples;
@@ -1658,20 +1695,17 @@ void cmd_run()
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
       if (opt_finetune_reset && opt_burnin >= 200)
-        reset_finetune(fp_out, pjump,&pjump_phi,&pjump_freqs,&pjump_rates);
+        reset_finetune(fp_out, pjump,&pjump_phi,pjump_gtr);
       for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
       memset(pjump, 0, pjump_size * sizeof(double));
+      memset(pjump_gtr, 0, GTR_PROP_COUNT * sizeof(double));
 
       if (opt_msci)
         pjump_phi = 0;
-      if (enabled_prop_freqs)
-        pjump_freqs = 0;
-      if (enabled_prop_rates)
-        pjump_rates = 0;
 
       if (opt_est_delimit)
       {
@@ -1786,14 +1820,41 @@ void cmd_run()
 
     if (enabled_prop_freqs)
     {
-      ratio = locus_propose_freqs(locus,gtree);
-      pjump_freqs = (pjump_freqs*(ft_round-1) + ratio) / (double)ft_round;
+      if (opt_threads == 1)
+        ratio = locus_propose_freqs_serial(locus,gtree);
+      else
+      {
+        td.locus = locus; td.gtree = gtree;
+        threads_wakeup(THREAD_WORK_FREQS,&td);
+        ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+      }
+      pjump_gtr[0] = (pjump_gtr[0]*(ft_round-1) + ratio) / (double)ft_round;
     }
 
     if (enabled_prop_rates)
     {
-      ratio = locus_propose_rates(locus,gtree);
-      pjump_rates = (pjump_rates*(ft_round-1) + ratio) / (double)ft_round;
+      if (opt_threads == 1)
+        ratio = locus_propose_rates_serial(locus,gtree);
+      else
+      {
+        td.locus = locus; td.gtree = gtree;
+        threads_wakeup(THREAD_WORK_RATES,&td);
+        ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+      }
+      pjump_gtr[1] = (pjump_gtr[1]*(ft_round-1) + ratio) / (double)ft_round;
+    }
+
+    if (enabled_prop_alpha)
+    {
+      if (opt_threads == 1)
+        ratio = locus_propose_alpha_serial(locus,gtree);
+      else
+      {
+        td.locus = locus; td.gtree = gtree;
+        threads_wakeup(THREAD_WORK_ALPHA,&td);
+        ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+      }
+      pjump_gtr[2] = (pjump_gtr[2]*(ft_round-1) + ratio) / (double)ft_round;
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -1878,6 +1939,29 @@ void cmd_run()
       if (opt_msci)
         mean_phi = (mean_phi*(ft_round-1) + stree->nodes[stree->tip_count+stree->inner_count]->hybrid->hphi)/ft_round;
 
+      #ifdef DEBUG_GTR
+      if (fabs(locus[0]->frequencies[0][0] + locus[0]->frequencies[0][1] + locus[0]->frequencies[0][2] + locus[0]->frequencies[0][3]-1) >= 1e-10)
+      {
+        printf ("%f %f %f %f = %f\n", locus[0]->frequencies[0][0], locus[0]->frequencies[0][1], locus[0]->frequencies[0][2], locus[0]->frequencies[0][3], 
+                                 locus[0]->frequencies[0][0]+ locus[0]->frequencies[0][1]+ locus[0]->frequencies[0][2]+ locus[0]->frequencies[0][3]);
+        assert(0);
+      }
+
+      mean_freqa = (mean_freqa*(ft_round-1) + locus[0]->frequencies[0][0])/ft_round;
+      mean_freqc = (mean_freqc*(ft_round-1) + locus[0]->frequencies[0][1])/ft_round;
+      mean_freqg = (mean_freqg*(ft_round-1) + locus[0]->frequencies[0][2])/ft_round;
+      mean_freqt = (mean_freqt*(ft_round-1) + locus[0]->frequencies[0][3])/ft_round;
+
+      mean_ratea = (mean_ratea*(ft_round-1) + locus[0]->subst_params[0][0])/ft_round;
+      mean_rateb = (mean_rateb*(ft_round-1) + locus[0]->subst_params[0][1])/ft_round;
+      mean_ratec = (mean_ratec*(ft_round-1) + locus[0]->subst_params[0][2])/ft_round;
+      mean_rated = (mean_rated*(ft_round-1) + locus[0]->subst_params[0][3])/ft_round;
+      mean_ratee = (mean_ratee*(ft_round-1) + locus[0]->subst_params[0][4])/ft_round;
+      mean_ratef = (mean_ratef*(ft_round-1) + locus[0]->subst_params[0][5])/ft_round;
+
+      mean_alpha0 = (mean_alpha0*(ft_round-1) + locus[0]->rates_alpha)/ft_round;
+      #endif
+
     }
 
     /* compute mean log-L */
@@ -1897,9 +1981,11 @@ void cmd_run()
       if (opt_msci)
         printf(" %4.2f", pjump_phi);
       if (enabled_prop_freqs)
-        printf(" %4.2f", pjump_freqs);
+        printf(" %4.2f", pjump_gtr[0]);
       if (enabled_prop_rates)
-        printf(" %4.2f", pjump_rates);
+        printf(" %4.2f", pjump_gtr[1]);
+      if (enabled_prop_alpha)
+        printf(" %4.2f", pjump_gtr[2]);
       printf(" ");
 
       if (opt_method == METHOD_01)
@@ -1956,6 +2042,12 @@ void cmd_run()
       if (opt_msci)
         printf(" %6.4f ", mean_phi);
 
+      #ifdef DEBUG_GTR
+        printf(" ( %6.4f %6.4f %6.4f %6.4f ) ", mean_freqa,mean_freqc,mean_freqg,mean_freqt);
+        printf(" ( %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f ) ", mean_ratea,mean_rateb,mean_ratec,mean_rated,mean_ratee,mean_ratef);
+        printf(" ( %6.4f ) ", mean_alpha0);
+      #endif
+
       double logpr_sum = 0;
       if (opt_est_theta)
         for (j = 0; j < opt_locus_count; ++j)
@@ -1990,6 +2082,7 @@ void cmd_run()
                         gtree,
                         locus,
                         pjump,
+                        pjump_gtr,
                         curstep,
                         ft_round,
                         ndspecies,
@@ -2015,29 +2108,13 @@ void cmd_run()
 
   }
   timer_print("\n", " spent in MCMC\n\n");
-  #if 0
-  for (i = 0; i < opt_locus_count; ++i)
-  {
-    printf("Locus %ld\n", i+1);
-    printf("rates: [ %.6f %.6f %.6f %.6f %.6f %.6f ]\n", locus[i]->subst_params[0][0],
-                                                         locus[i]->subst_params[0][1],
-                                                         locus[i]->subst_params[0][2],
-                                                         locus[i]->subst_params[0][3],
-                                                         locus[i]->subst_params[0][4],
-                                                         locus[i]->subst_params[0][5]);
-    printf("freqs: [ %.6f %.6f %.6f %.6f ]\n", locus[i]->frequencies[0][0],
-                                               locus[i]->frequencies[0][1],
-                                               locus[i]->frequencies[0][2],
-                                               locus[i]->frequencies[0][3]);
-    printf("\n");
-  }
-  #endif
 
   #if 0
   progress_done();
   #endif
 
   free(pjump);
+  free(pjump_gtr);
 
   if (opt_threads > 1)
     threads_exit();
