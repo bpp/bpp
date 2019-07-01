@@ -1078,7 +1078,7 @@ void load_cfile_sim()
           ++line_count;
 
           if (!get_tree_string_with_thetas(line,&opt_streenewick))
-            fatal("Expected newick tree string in 'species&tree' (line %ld) ",
+            fatal("Expected newick tree string in 'species&tree' (line %ld) "
                   "with ending ';' character", line_count);
         }
         else if (spcount == 1)
@@ -1094,9 +1094,9 @@ void load_cfile_sim()
 
           if (!reached_eof && starts_with_opar(line))
           {
-            if (!get_string(line,&opt_streenewick))
-              fatal("Expected newick string in 'species&tree' (line %ld)",
-                    line_count);
+            if (!get_tree_string_with_thetas(line,&opt_streenewick))
+              fatal("Expected newick string in 'species&tree' (line %ld) "
+                    "with ending ';' character", line_count);
             
             line_not_processed = 0;
           }
