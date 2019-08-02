@@ -51,7 +51,7 @@ bpp --cfile bpp.ctl
 ## References
 
 * Rokas A., Williams BL, King N., Carroll SB. (2003)
-** Genome-scale approaches to resolving incongruence in molecular phylogenies.**
+**Genome-scale approaches to resolving incongruence in molecular phylogenies.**
 *Nature*, 425:798-804.
 
 * Cardona G., Rossello F., Valiente G. (2008)
