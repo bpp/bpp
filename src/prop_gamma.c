@@ -51,8 +51,10 @@ static void gtree_all_partials(gnode_t * root,
   all_partials_recursive(root, trav_size, travbuffer);
 }
 
-static long propose_alpha(locus_t * locus,
+static long propose_alpha(stree_t * stree,
+                          locus_t * locus,
                           gtree_t * gtree,
+                          long msa_index,
                           long thread_index)
 {
   unsigned int m,n;
@@ -104,7 +106,7 @@ static long propose_alpha(locus_t * locus,
       gt_nodes[n++] = p;
     }
   }
-  locus_update_matrices(locus,gt_nodes,n);
+  locus_update_matrices(locus,gt_nodes,stree,msa_index,n);
 
 
   /* get postorder traversal of inner nodes, swap CLV indidces to point to new
@@ -169,7 +171,7 @@ static long propose_alpha(locus_t * locus,
   return accepted;
 }
 
-double locus_propose_alpha_serial(locus_t ** locus, gtree_t ** gtree)
+double locus_propose_alpha_serial(stree_t * stree, locus_t ** locus, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -181,7 +183,7 @@ double locus_propose_alpha_serial(locus_t ** locus, gtree_t ** gtree)
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->rate_cats > 1)
     {
       ++candidates;
-      accepted += propose_alpha(locus[i],gtree[i],thread_index);
+      accepted += propose_alpha(stree,locus[i],gtree[i],i,thread_index);
     }
   }
 
@@ -191,7 +193,8 @@ double locus_propose_alpha_serial(locus_t ** locus, gtree_t ** gtree)
   return ((double)accepted/candidates);
 }
 
-void locus_propose_alpha_parallel(locus_t ** locus,
+void locus_propose_alpha_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -211,7 +214,7 @@ void locus_propose_alpha_parallel(locus_t ** locus,
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->rate_cats > 1)
     {
       ++candidates;
-      accepted += propose_alpha(locus[i],gtree[i],thread_index);
+      accepted += propose_alpha(stree,locus[i],gtree[i],i,thread_index);
     }
   }
 

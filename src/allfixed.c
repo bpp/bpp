@@ -454,6 +454,9 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_usedata)
     col_count++;
 
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+     col_count += 2;
+
 
   /* allocate storage matrix */
   double ** matrix = (double **)xmalloc((size_t)col_count * sizeof(double *));

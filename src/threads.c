@@ -130,7 +130,8 @@ static void * threads_worker(void * vp)
                                     NULL);
           break;
         case THREAD_WORK_ALPHA:
-          locus_propose_alpha_parallel(tip->td.locus,
+          locus_propose_alpha_parallel(tip->td.stree,
+                                       tip->td.locus,
                                        tip->td.gtree,
                                        tip->locus_first,
                                        tip->locus_count,
@@ -139,7 +140,8 @@ static void * threads_worker(void * vp)
                                        &tip->td.accepted);
           break;
         case THREAD_WORK_RATES:
-          locus_propose_rates_parallel(tip->td.locus,
+          locus_propose_rates_parallel(tip->td.stree,
+                                       tip->td.locus,
                                        tip->td.gtree,
                                        tip->locus_first,
                                        tip->locus_count,
@@ -148,7 +150,8 @@ static void * threads_worker(void * vp)
                                        &tip->td.accepted);
           break;
         case THREAD_WORK_FREQS:
-          locus_propose_freqs_parallel(tip->td.locus,
+          locus_propose_freqs_parallel(tip->td.stree,
+                                       tip->td.locus,
                                        tip->td.gtree,
                                        tip->locus_first,
                                        tip->locus_count,

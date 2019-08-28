@@ -131,6 +131,9 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(unsigned long);              /* output file offset */
   if (opt_print_genetrees)
      size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
+  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
+     size_section += opt_locus_count*sizeof(long);
+    
 
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
@@ -170,6 +173,7 @@ static void dump_chk_section_1(FILE * fp,
                                long mcmc_offset,
                                long out_offset,
                                long * gtree_offset,
+                               long * rates_offset,
                                long dparam_count,
                                double * posterior,
                                double * pspecies,
@@ -269,6 +273,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_print_locusrate,1,fp);
   DUMP(&opt_print_hscalars,1,fp);
   DUMP(&opt_print_genetrees,1,fp);
+  DUMP(&opt_print_rates,1,fp);
 
   /* write theta prior */
   DUMP(&opt_theta_alpha,1,fp);
@@ -291,6 +296,16 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_heredity_alpha,1,fp);
   DUMP(&opt_heredity_beta,1,fp);
 
+  /* write clock and locusrate info */
+  DUMP(&opt_clock,1,fp);
+  DUMP(&opt_brate_mean_alpha,1,fp);
+  DUMP(&opt_brate_mean_beta,1,fp);
+  DUMP(&opt_brate_mean_diralpha,1,fp);
+  DUMP(&opt_brate_var_alpha,1,fp);
+  DUMP(&opt_brate_var_beta,1,fp);
+  DUMP(&opt_brate_var_diralpha,1,fp);
+  DUMP(&opt_rate_prior,1,fp);
+
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_phi,1,fp);
@@ -299,10 +314,19 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_theta,1,fp);
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
-  if (opt_est_locusrate || opt_est_heredity)
-    DUMP(&opt_finetune_locusrate,1,fp);
+  DUMP(&opt_finetune_locusrate,1,fp);
+  DUMP(&opt_finetune_mubar,1,fp);
+  DUMP(&opt_finetune_mui,1,fp);
+  DUMP(&opt_finetune_sigma2bar,1,fp);
+  DUMP(&opt_finetune_sigma2i,1,fp);
 
   DUMP(&opt_max_species_count,1,fp);
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    DUMP(&(stree->locusrate_mubar),1,fp);
+    DUMP(&(stree->locusrate_sigma2bar),1,fp);
+  }
 
   /* write diploid */
   if (opt_diploid)
@@ -336,6 +360,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
+
+  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
+    DUMP(rates_offset,opt_locus_count,fp);
 
   DUMP(&dparam_count,1,fp);
 
@@ -424,6 +451,24 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   assert(opt_locus_count == stree->locus_count);
   for (i = 0; i < total_nodes; ++i)
     DUMP(stree->nodes[i]->event_count,opt_locus_count,fp);
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    for (i = 0; i < total_nodes; ++i)
+    {
+      if (stree->nodes[i]->brate)
+      {
+        valid = 1;
+        DUMP(&valid,1,fp);
+        DUMP(stree->nodes[i]->brate,opt_locus_count,fp);
+      }
+      else
+      {
+        valid = 0;
+        DUMP(&valid,1,fp);
+      }
+    }
+  }
 
 //  /* write MSC density contribution - TODO: Candidate for removal */
 //  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -517,6 +562,13 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count
   /* write hpath */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
     DUMP(gtree->nodes[i]->hpath,hybrid_count,fp);
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    DUMP(&(gtree->rate_mui),1,fp);
+    DUMP(&(gtree->rate_sigma2i),1,fp);
+    DUMP(&(gtree->lnprior_rates),1,fp);
+  }
 }
 
 static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
@@ -650,6 +702,7 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
+                    long * rates_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -695,6 +748,7 @@ int checkpoint_dump(stree_t * stree,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
+                     rates_offset,
                      dparam_count,
                      posterior,
                      pspecies,

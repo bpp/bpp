@@ -26,6 +26,9 @@
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
 #define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
+#define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
+                          (p)->node_index : (p)->hybrid->node_index)) - \
+                        ((t)->tip_count+(t)->inner_count))
 
 /* species tree spr move related */
 #define LINEAGE_A       16
@@ -967,6 +970,15 @@ static void stree_init_tau(stree_t * stree, long thread_index)
      stree_init_tau_recursive(stree->root->right, prop, thread_index);
    }
 
+   /* TODO: Remove after debugging */
+   if (opt_debug_rates)
+   {
+     /* this is for the case of three or four species */
+     for (i = stree->tip_count; i < total_nodes; ++i)
+       stree->nodes[i]->tau = .05;
+     stree->root->tau = .1;
+   }
+
    /* check to see if everything is OK */
    if (opt_msci)
    {
@@ -1415,6 +1427,18 @@ static void stree_init_theta(stree_t * stree,
   for (i = 0; i < stree->tip_count; ++i)
     free(seqcount[i]);
   free(seqcount);
+
+  /* TODO: Delete after debugging */
+  if (opt_debug_rates)
+  {
+    stree->nodes[0]->theta = stree->nodes[1]->theta = .1;
+    if (stree->tip_count > 2)
+    {
+      stree->nodes[3]->theta = .1;
+      stree->nodes[4]->theta = .1;
+    }
+    stree->root->theta = .1;
+  }
 }
 
 /* bottom up filling of pptable */
@@ -1761,10 +1785,18 @@ void stree_init(stree_t * stree,
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    /* TODO: Implement branch rates for MSci */
-    assert(!opt_msci);
     for (i=0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
-      stree->nodes[i]->brate = (double *)xmalloc((size_t)msa_count*sizeof(double));
+    {
+      snode_t * snode = stree->nodes[i];
+      snode->brate = NULL;
+      
+      if (opt_msci && snode->hybrid)
+      {
+        if (node_is_hybridization(snode) && !snode->parent->htau) continue;
+        if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
+      }
+      snode->brate = (double *)xmalloc((size_t)msa_count*sizeof(double));
+    }
   }
 
   unsigned int sum_inner = 0;
@@ -2040,7 +2072,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
     gtree[i]->old_logl = gtree[i]->logl;
     if (k)
     {
-      locus_update_matrices(loci[i], branchptr, branch_count);
+      locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
 
       /* get list of nodes for which partials must be recomputed */
       unsigned int partials_count;
@@ -2550,7 +2582,7 @@ static long propose_tau(locus_t ** loci,
           gt_nodesptr++;
         }
         if (matrix_updates)
-          locus_update_matrices(loci[i], gt_nodesptr, matrix_updates);
+          locus_update_matrices(loci[i], gt_nodesptr, stree, i, matrix_updates);
       }
 
       /* restore gene tree log-likelihood */
@@ -3543,7 +3575,7 @@ long stree_propose_spr(stree_t ** streeptr,
                                                     bl_list[j]->pmatrix_index);
       }
 
-      locus_update_matrices(loci[i], bl_list, __mark_count[i]);
+      locus_update_matrices(loci[i], bl_list, stree, i, __mark_count[i]);
 
       /* retrieve all nodes whose partials must be updates */
       unsigned int partials_count;
@@ -3647,4 +3679,615 @@ long stree_propose_spr(stree_t ** streeptr,
   */
   //return (lnacceptance >= 0 || legacy_rndu() < exp(lnacceptance));
   return (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance));
+}
+
+double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
+{
+  /* Calculates the log of the prior of branch rates under the two rate-drift
+     models:
+     the independent rates (opt_clock=BPP_CLOCK_IND) and the geometric Brownian
+     motion model (opt_clock=BPP_CLOCK_CORR). 
+
+     BPP_CLOCK_IND:
+     The algorithm cycles through the branches and adds up the log probabilities
+
+     BPP_CLOCK_CORR:
+     The root rate is mu or mean_rate. The algorithm cycles through the
+     ancestral nodes and deals with the two daughter branches
+
+  */
+
+  long i;
+  double z,r;
+  double mu,sigma2;
+  double alpha,beta;
+  double logpr = 0;
+  snode_t * node;
+
+  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_PRIOR_GAMMA)
+    fatal("Gamma prior for rates for correlated clock not implemented yet");
+
+  assert(opt_clock == BPP_CLOCK_IND);
+
+  /* TODO: Implement autocorrelated clock */
+  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_PRIOR_GAMMA)
+    fatal("Gamma prior for autocorrelated rates not implemented yet.");
+
+  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  {
+    assert(0);
+  }
+
+  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_GAMMA)
+  {
+    /* clock == BPP_CLOCK_IND and gamma rate prior */
+
+    /*
+      We compute the following:
+      
+      Pr = \Prod_{i=1}^{k} \frac{\beta^\alpha}{\Gamma(\alpha)}
+           r_{i}^{\alpha-1} e^{-\beta r_i}
+
+      where k is the number of proposed rates (rates_count)
+
+    */
+
+    mu = gtree->rate_mui;
+    sigma2 = gtree->rate_sigma2i;
+
+    alpha = mu * mu / sigma2;
+    beta  = mu / sigma2;
+    long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    long rates_count = 0;
+
+    for (i = 0; i < total_nodes; ++i)
+    {
+      node = stree->nodes[i];
+
+      if (opt_msci && node->hybrid)
+      {
+        if (node_is_hybridization(node) && !node->parent->htau) continue;
+        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+      }
+
+      r = node->brate[msa_index];
+      logpr += -beta*r + (alpha-1)*log(r);
+
+      ++rates_count;
+    }
+
+    logpr += (alpha*log(beta) - lgamma(alpha)) * rates_count;
+  }
+  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  {
+    /* clock == BPP_CLOCK_IND and log-normal rate prior */
+
+    /*
+      We compute the following:
+
+      Pr = \Prod_{i=1}^{k} \frac{1}{r_i * \sqrt{\sigma^2}}
+           \exp{-\frac{1}{2\sigma^2}(\log\frac{r_i}{\mu} + \frac{sigma^2}{2})^2}
+
+      where k is the number of proposed rates (rates_count)
+
+    */
+
+    mu = gtree->rate_mui;
+    sigma2 = gtree->rate_sigma2i;
+
+    long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    long rates_count = 0;
+
+    double logmu = log(mu);
+    for (i = 0; i < total_nodes; ++i)
+    {
+      node = stree->nodes[i];
+
+      if (opt_msci && node->hybrid)
+      {
+        if (node_is_hybridization(node) && !node->parent->htau) continue;
+        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+      }
+
+      double logr = stree->nodes[i]->brate[msa_index];
+      z = logr - logmu + sigma2/2;
+      logpr += -((z*z) / (2*sigma2)) - logr;
+
+      ++rates_count;
+
+    }
+
+    logpr -= (log(2*BPP_PI*sigma2) / 2) * rates_count;
+  }
+
+  return logpr;
+}
+
+double prop_locusrate_sigma2i(gtree_t ** gtree,
+                              stree_t * stree,
+                              locus_t ** locus,
+                              long thread_index)
+{
+  long i;
+  long accepted = 0;
+  double old_sigma2, old_logsigma2;
+  double new_sigma2, new_logsigma2;
+  double alpha, beta;
+  double new_prior_rates;
+  double lnacceptance = 0;
+
+  assert(opt_clock != BPP_CLOCK_GLOBAL);
+
+  /* TODO: opt_finetune_locusrate */
+  alpha = opt_brate_var_diralpha;
+  beta  = opt_brate_var_diralpha / stree->locusrate_sigma2bar;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    old_sigma2 = gtree[i]->rate_sigma2i;
+    old_logsigma2 = log(old_sigma2);
+
+    double r = old_logsigma2 + opt_finetune_sigma2i *
+               legacy_rnd_symmetrical(thread_index);
+    new_logsigma2 = reflect(r,-99,99,thread_index);
+    gtree[i]->rate_sigma2i = new_sigma2 = exp(new_logsigma2);
+
+    lnacceptance = new_logsigma2 - old_logsigma2;
+
+
+    /* gamma prior ratio */
+    lnacceptance += (alpha-1)*log(new_sigma2/old_sigma2) - beta*(new_sigma2-old_sigma2);
+
+    new_prior_rates = lnprior_rates(gtree[i],stree,i);
+    lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted++;
+
+      /* update rates prior */
+      gtree[i]->lnprior_rates = new_prior_rates;
+    }
+    else
+    {
+      /* rejected */
+
+      gtree[i]->rate_sigma2i = old_sigma2;
+    }
+  }
+  return accepted / opt_locus_count;
+}
+
+double prop_locusrate_mui(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index)
+{
+  long i;
+  long accepted = 0;
+  double old_rate, old_lograte;
+  double new_rate, new_lograte;
+  double alpha,beta;
+  double lnacceptance = 0;
+  double logl = 0;
+  double new_prior_rates = 0;
+  assert(opt_clock != BPP_CLOCK_GLOBAL);
+
+  /* TODO: Separate this routine into different clock cases.
+     
+     If opt_clock == BPP_CLOCK_GLOBAL, then we propose the locus rate, which
+     changes the likelihood but there is no prior for branch rates.
+
+     If opt_clock != BPP_CLOCK_GLOBAL, then we propose mu and sigma2 or loci,
+     which changes the rate prior but not the likelihood
+
+  */
+  alpha = opt_brate_mean_diralpha;
+  beta = opt_brate_mean_diralpha / stree->locusrate_mubar;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    old_rate = gtree[i]->rate_mui;
+    old_lograte = log(old_rate);
+
+    double r = old_lograte + opt_finetune_mui *
+               legacy_rnd_symmetrical(thread_index);
+    new_lograte = reflect(r,-99,99,thread_index);
+    gtree[i]->rate_mui = new_rate = exp(new_lograte);
+
+    lnacceptance = new_lograte - old_lograte;
+
+    /* gamma prior ratio */
+    lnacceptance += (alpha-1)*log(new_rate/old_rate) - beta*(new_rate-old_rate);
+
+    new_prior_rates = lnprior_rates(gtree[i],stree,i);
+    lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted++;
+
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* update log-likelihood */
+        gtree[i]->logl = logl;
+      }
+
+      /* update rates prior */
+      gtree[i]->lnprior_rates = new_prior_rates;
+    }
+    else
+    {
+      /* rejected */
+      gtree[i]->rate_mui = old_rate;
+    }
+  }
+  return accepted / opt_locus_count;
+}
+
+static long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
+{
+  long i;
+  long accepted = 0;
+  double old_rate, old_lograte;
+  double new_rate, new_lograte;
+  double lnacceptance = 0;
+
+  const long thread_index = 0;
+
+  old_rate = stree->locusrate_mubar;
+  old_lograte = log(old_rate);
+
+  /* now sample the universal mean and variance */
+  double r = old_lograte + opt_finetune_mubar *
+             legacy_rnd_symmetrical(thread_index);
+  new_lograte = reflect(r,-99,99,thread_index);
+  stree->locusrate_mubar = new_rate = exp(new_lograte);
+
+  lnacceptance = new_lograte - old_lograte;
+
+  lnacceptance += (opt_brate_mean_alpha-1)*log(new_rate/old_rate) -
+                  opt_brate_mean_beta*(new_rate-old_rate);
+  double a = opt_brate_mean_diralpha;
+  double bnew = opt_brate_mean_diralpha / new_rate;
+  double bold = opt_brate_mean_diralpha / old_rate;
+  lnacceptance += opt_locus_count*a*log(bnew / bold);
+  for (i = 0; i < opt_locus_count; ++i)
+     lnacceptance -= (bnew - bold)*gtree[i]->rate_mui;
+
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+  {
+    /* accepted */
+    accepted++;
+  }
+  else
+  {
+    /* rejected */
+    stree->locusrate_mubar = old_rate;
+  }
+
+  return accepted;
+}
+
+static long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
+{
+  long i;
+  long accepted = 0;
+  double old_sigma2, old_logsigma2;
+  double new_sigma2, new_logsigma2;
+  double lnacceptance = 0;
+
+  const long thread_index = 0;
+
+  old_sigma2 = stree->locusrate_sigma2bar;
+  old_logsigma2 = log(old_sigma2);
+
+  /* now sample the universal mean and variance */
+  double r = old_logsigma2 + opt_finetune_sigma2bar *
+             legacy_rnd_symmetrical(thread_index);
+  new_logsigma2 = reflect(r,-99,99,thread_index);
+  stree->locusrate_sigma2bar = new_sigma2 = exp(new_logsigma2);
+
+  lnacceptance = new_logsigma2 - old_logsigma2;
+
+  lnacceptance += (opt_brate_var_alpha-1)*log(new_sigma2/old_sigma2) -
+                  opt_brate_var_beta*(new_sigma2-old_sigma2);
+  double a = opt_brate_var_diralpha;
+  double bnew = opt_brate_var_diralpha / new_sigma2;
+  double bold = opt_brate_var_diralpha / old_sigma2;
+  lnacceptance += opt_locus_count*a*log(bnew / bold);
+  for (i = 0; i < opt_locus_count; ++i)
+     lnacceptance -= (bnew - bold)*gtree[i]->rate_sigma2i;
+
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+  {
+    /* accepted */
+    accepted++;
+  }
+  else
+  {
+    /* rejected */
+    stree->locusrate_sigma2bar = old_sigma2;
+  }
+
+  return accepted;
+}
+
+void prop_locusrate_params(gtree_t ** gtree,
+                           stree_t * stree,
+                           locus_t ** locus,
+                           double * pjump_rc_mui,
+                           double * pjump_rc_sigma2i,
+                           long ft_round,
+                           long thread_index)
+{
+  double macc = prop_locusrate_mui(gtree,stree,locus,thread_index);
+  *pjump_rc_mui = (*pjump_rc_mui*(ft_round-1) + macc) / (double)ft_round;
+  prop_locusrate_mubar(stree,gtree);
+  double sacc = prop_locusrate_sigma2i(gtree,stree,locus,thread_index);
+  *pjump_rc_sigma2i = (*pjump_rc_sigma2i*(ft_round-1) + sacc) / (double)ft_round;
+  prop_locusrate_sigma2bar(stree,gtree);
+
+
+
+}
+
+static double prior_logratio_rates_ac(locus_t * locus,
+                                      gnode_t * node,
+                                      double new_rate,
+                                      double old_rate)
+{
+  assert(node);
+
+//  if (
+
+
+}
+
+static double prior_logratio_rates(gtree_t * gtree,
+                                   double old_rate,
+                                   double new_rate)
+{
+  /* Calculates the prior ratio when one branch rate is changed.
+
+     If we are updating a terminal (tip) branch, we sum over 1 term (Eq. 7 in RY2007).
+
+     If we are updating an inner branch, we sum over 2 terms.
+
+     Rannala B., Yang. Z.: Speciation time and episodic molecular clock.
+     Systematic Biology, 56(3): 453-466, 2007.
+
+  */
+
+  double a,b;
+  double zold, znew;
+  double ratio;
+
+  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  {
+    /* iid rates and log-normal rate prior */
+
+    zold = log(old_rate / gtree->rate_mui) + gtree->rate_sigma2i / 2;
+    znew = log(new_rate / gtree->rate_mui) + gtree->rate_sigma2i / 2;
+
+    ratio = -log(new_rate / old_rate) - 
+            (znew*znew - zold*zold) / (2*gtree->rate_sigma2i);
+  }
+  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_GAMMA)
+  {
+    /* iid rates and Gamma rate prior */
+
+    a = gtree->rate_mui * gtree->rate_mui / gtree->rate_sigma2i;
+    b = gtree->rate_mui / gtree->rate_sigma2i;
+
+    ratio = -b*(new_rate - old_rate) + (a-1)*log(new_rate / old_rate);
+  }
+  else if (opt_clock == BPP_CLOCK_CORR)
+  {
+    /* auto-correlated rates */
+
+    assert(0);
+  }
+  else
+    assert(0);
+
+  return ratio;
+}
+
+static long fill_travbuffer_and_mark(gtree_t * gtree,
+                                     stree_t * stree,
+                                     gnode_t ** buffer,
+                                     snode_t * target)
+{
+  /* 
+     Fill buffer with nodes whose parent edges intersect with target
+     population and return the number of matches. Also mark that the parents of
+     those nodes need their CLVs updated.
+  
+  */
+
+  long i;
+  long count;
+  snode_t * start;
+  snode_t * end;
+
+  count = 0;
+
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    if (!x->parent) continue;
+
+    start = x->pop;
+    end = x->parent->pop;
+
+    while (start != end)
+    {
+      assert(start && start->parent);
+
+      if (start == target)
+        break;
+
+      start = start->parent;
+
+      if (start->hybrid)
+      {
+        assert(!node_is_mirror(start));
+
+        unsigned int hindex = GET_HINDEX(stree,start);
+        assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+        /* find correct parent node according to hpath flag */
+        assert(x->hpath[hindex] != BPP_HPATH_NONE);
+        assert(start->left);
+        if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+          start = start->hybrid;
+      }
+    }
+    if (start == target)
+    {
+      /* add node x to the buffer to indicate that we want to update its
+         branch length. Also mark that its parent CLV needs update */
+      buffer[count++] = x;
+      x->parent->mark |= FLAG_PARTIAL_UPDATE;
+    }
+  }
+  return count;
+}
+
+void prop_branch_rates(gtree_t ** gtree,
+                       stree_t * stree,
+                       locus_t ** locus,
+                       long thread_index)
+{
+  long i,j,k;
+  long accepted = 0;
+  long branch_count = 0;
+  double old_rate, new_rate;
+  double old_lograte, new_lograte;
+  double lnacceptance = 0;
+  snode_t * node;
+
+  assert(opt_clock != BPP_CLOCK_GLOBAL);
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    unsigned int partials_count;
+    gnode_t ** partials = NULL;
+    gnode_t ** updatelist = __gt_nodes + __gt_nodes_index[i];
+
+    for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
+    {
+      node = stree->nodes[j];
+
+      /* Mirror nodes in bidirectional introgression */
+      if (opt_msci && node->hybrid)
+      {
+        if (node_is_hybridization(node) && !node->parent->htau) continue;
+        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+      }
+
+      old_rate = node->brate[i];
+      old_lograte = log(old_rate);
+
+      double r = old_lograte + opt_finetune_branchrate *
+                 legacy_rnd_symmetrical(thread_index);
+      new_lograte = reflect(r,-99,99,thread_index);
+      node->brate[i] = new_rate = exp(new_lograte);
+
+      lnacceptance = new_lograte - old_lograte;
+
+      /* obtain a list of edges (represented by nodes) that intersect with
+         species tree node and mark nodes whose CLV need update */
+      if (opt_usedata)
+        branch_count = fill_travbuffer_and_mark(gtree[i],stree,updatelist,node);
+
+      /* if at least one gene tree branch needs updating, we must recompute the
+         log-likelihood */
+      gtree[i]->old_logl = gtree[i]->logl;
+      if (branch_count)
+      {
+        /* swap pmatrices */
+        for (k = 0; k < branch_count; ++k)
+          updatelist[k]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                         updatelist[k]->pmatrix_index);
+        /* update necessary p-matrices */
+        locus_update_matrices(locus[i],updatelist,stree,i,branch_count);
+
+        /* get the list of nodes for which CLVs must be reverted, i.e. all marked
+           nodes and all nodes whose left or right subtree has at least one marked
+           node */
+        partials = gtree_return_partials(gtree[i]->root,
+                                         i,
+                                         &partials_count);
+        
+        /* remove flags */
+        for (k = 0 ; k < branch_count; ++k)
+          updatelist[k]->parent->mark = 0;
+          
+        for (k = 0; k < partials_count; ++k)
+        {
+          partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  partials[k]->clv_index);
+          if (opt_scaling)
+            partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                          partials[k]->scaler_index);
+        }
+
+        /* update partials */
+        locus_update_partials(locus[i], partials, partials_count);
+
+        /* evaulate log-likelihood */
+        double logl = locus_root_loglikelihood(locus[i],
+                                               gtree[i]->root,
+                                               locus[i]->param_indices,
+                                               NULL);
+        
+        lnacceptance += logl - gtree[i]->logl;
+
+        gtree[i]->logl = logl;
+      }
+
+      double diff = prior_logratio_rates(gtree[i],old_rate,new_rate);
+      lnacceptance += diff;
+
+      if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      {
+        /* accepted */
+        accepted++;
+        gtree[i]->lnprior_rates += diff;
+      }
+      else
+      {
+        /* rejected */
+
+        /* restore old log-l */
+        gtree[i]->logl = gtree[i]->old_logl;
+
+        /* swap to old p-matrices */
+        for (k = 0; k < branch_count; ++k)
+          updatelist[k]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                         updatelist[k]->pmatrix_index);
+
+        /* need to reset clv indices to point to the old clv buffer */
+        if (branch_count)
+        {
+          for (k = 0; k < partials_count; ++k)
+          {
+            partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                    partials[k]->clv_index);
+            if (opt_scaling)
+              partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                            partials[k]->scaler_index);
+          }
+        }
+
+        /* now reset rate and pmatrices */
+        node->brate[i] = old_rate;
+      }
+    }  /* end species tree loop */
+  } /* loci loop */
 }

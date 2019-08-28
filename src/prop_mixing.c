@@ -95,7 +95,7 @@ void prop_mixing_update_gtrees(locus_t ** locus,
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
       if (gt->nodes[j]->parent)
         gt_nodes[k++] = gt->nodes[j];
-    locus_update_matrices(locus[i],gt_nodes,k);
+    locus_update_matrices(locus[i],gt_nodes,stree,i,k);
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)

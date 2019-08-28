@@ -45,6 +45,7 @@ long opt_checkpoint_step;
 long opt_cleandata;
 long opt_clock;
 long opt_debug;
+long opt_debug_rates;
 long opt_delimit_prior;
 long opt_diploid_size;
 long opt_est_delimit;
@@ -67,9 +68,11 @@ long opt_partition_count;
 long opt_print_genetrees;
 long opt_print_hscalars;
 long opt_print_locusrate;
+long opt_print_rates;
 long opt_print_samples;
 long opt_qrates_fixed;
 long opt_quiet;
+long opt_rate_prior;
 long opt_revolutionary_spr_method;
 long opt_revolutionary_spr_debug;
 long opt_rev_gspr;
@@ -88,15 +91,26 @@ long opt_version;
 double opt_alpha_alpha;
 double opt_alpha_beta;
 double opt_bfbeta;
+double opt_brate_mean_alpha;
+double opt_brate_mean_beta;
+double opt_brate_mean_diralpha;
+double opt_brate_var_alpha;
+double opt_brate_var_beta;
+double opt_brate_var_diralpha;
 double opt_clock_alpha;
 double opt_finetune_alpha;
+double opt_finetune_branchrate;
 double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
 double opt_finetune_mix;
+double opt_finetune_mubar;
+double opt_finetune_mui;
 double opt_finetune_phi;
 double opt_finetune_rates;
+double opt_finetune_sigma2bar;
+double opt_finetune_sigma2i;
 double opt_finetune_tau;
 double opt_finetune_theta;
 double opt_heredity_alpha;
@@ -162,6 +176,7 @@ static struct option long_options[] =
   {"simulate",   required_argument, 0, 0 },  /*  8 */
   {"exp_random", no_argument,       0, 0 },  /*  9 */
   {"rev_gspr",   no_argument,       0, 0 },  /* 10 */
+  {"debugrates", no_argument,       0, 0 },  /* 11 */
   { 0, 0, 0, 0 }
 };
 
@@ -268,6 +283,12 @@ void args_init(int argc, char ** argv)
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
   opt_bfbeta = 1;
+  opt_brate_mean_alpha = -1;
+  opt_brate_mean_beta = -1;
+  opt_brate_mean_diralpha = -1;
+  opt_brate_var_alpha = -1;
+  opt_brate_var_beta = -1;
+  opt_brate_var_diralpha = -1;
   opt_burnin = 100;
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
@@ -280,6 +301,7 @@ void args_init(int argc, char ** argv)
   opt_cleandata = 0;
   opt_concatfile = NULL;
   opt_debug = 0;
+  opt_debug_rates = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
   opt_diploid_size = 0;
@@ -297,14 +319,19 @@ void args_init(int argc, char ** argv)
   opt_revolutionary_spr_debug = 0;
 #endif
   opt_finetune_alpha = 0.1;
+  opt_finetune_branchrate = 0.1;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
+  opt_finetune_mui = 0.1;
+  opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
   opt_finetune_rates = 0.3;
   opt_finetune_reset = 0;
+  opt_finetune_sigma2bar = 0.1;
+  opt_finetune_sigma2i = 0.1;
   opt_finetune_tau = 0.001;
   opt_finetune_theta = 0.001;
   opt_help = 0;
@@ -337,10 +364,12 @@ void args_init(int argc, char ** argv)
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
   opt_print_locusrate = 0;
+  opt_print_rates = 0;
   opt_print_samples = 1;
   opt_qrates_fixed = -1;
   opt_qrates_params = NULL;
   opt_quiet = 0;
+  opt_rate_prior = BPP_PRIOR_GAMMA;
   opt_resume = NULL;
   opt_rev_gspr = 0;
   opt_rjmcmc_alpha = -1;
@@ -424,6 +453,10 @@ void args_init(int argc, char ** argv)
 
       case 10:
         opt_rev_gspr = 1;
+        break;
+
+      case 11:
+        opt_debug_rates = 1;
         break;
 
       default:
