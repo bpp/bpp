@@ -59,6 +59,8 @@ OBJ_BPP = \
   summary11.obj \
   simulate.obj \
   cfile_sim.obj \
+  gamma.obj \
+  prop_gamma.obj \
   threads.obj
 
 all: $(PROG)

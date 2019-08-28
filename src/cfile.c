@@ -994,6 +994,70 @@ l_unwind:
   return ret;
 }
 
+static long parse_branchrate_mean(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_double(p, &opt_brate_mean_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_brate_mean_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read third token */
+  count = get_double(p, &opt_brate_mean_diralpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+  
+l_unwind:
+  free(s);
+  return ret;
+}
+
+static long parse_branchrate_variance(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_double(p, &opt_brate_var_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_brate_var_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read third token */
+  count = get_double(p, &opt_brate_var_diralpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+  
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_phiprior(const char * line)
 {
   long ret = 0;
@@ -1131,7 +1195,7 @@ static long parse_finetune(const char * line)
 
   p += count;
 
-  /* 5. theta finetune param */
+  /* 5. mixing finetune param */
   count = get_double(p, &opt_finetune_mix);
   if (!count) goto l_unwind;
 
@@ -1552,6 +1616,35 @@ static void check_validity()
   {
     assert(!opt_partition_file);
   }
+
+  /* TODO: Consolidate options 'locusrate' and 'branchrate_mean' */
+
+  /* check clock and locusrate/branchrate */
+  if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
+    fatal("Invalid 'clock' value");
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (opt_brate_mean_alpha < 0)
+      fatal("Relaxed clock models require option 'branchrate_mean' to be specified");
+
+    if (opt_brate_var_alpha < 0)
+      fatal("Relaxed clock models require option 'branchrate_var' to be specified");
+  }
+
+  if (opt_est_locusrate && opt_brate_mean_alpha > 0)
+    fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
+  if (opt_est_locusrate && opt_brate_var_alpha > 0)
+    fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
+
+  if (opt_clock == BPP_CLOCK_GLOBAL)
+  {
+    if (opt_brate_mean_alpha > 0)
+      fatal("Use option 'locusrate' instead of 'branchrate_mean' with molecular clock");
+
+    if (opt_brate_var_alpha > 0)
+      fatal("Cannot use option 'branchrate_var' with molecular clock");
+  }
 }
 
 void load_cfile()
@@ -1895,12 +1988,39 @@ void load_cfile()
         valid = 1;
       }
     }
+    else if (token_len == 14)
+    {
+      if (!strncasecmp(token,"branchrate_var",14))
+      {
+        if (!parse_branchrate_variance(value))
+          fatal("Option 'branchrate_var' expects three doubles (line %ld)",
+                line_count);
+        if (opt_brate_var_alpha <= 0 ||
+            opt_brate_var_beta <= 0 ||
+            opt_brate_var_diralpha <= 0)
+          fatal("Option 'branchrate_var' expects three doubles > 0 (line %ld)",
+                line_count);
+        valid = 1;
+      }
+    }
     else if (token_len == 15)
     {
       if (!strncasecmp(token,"bayesfactorbeta",15))
       {
         if (!get_double(value,&opt_bfbeta) || opt_bfbeta <= 0)
           fatal("Option 'bayesfactorbeta' expects a positive real (line %ld)",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"branchrate_mean",15))
+      {
+        if (!parse_branchrate_mean(value))
+          fatal("Option 'branchrate_mean' expects two doubles (line %ld)",
+                line_count);
+        if (opt_brate_mean_alpha <= 0 ||
+            opt_brate_mean_beta <= 0 ||
+            opt_brate_mean_diralpha <= 0)
+          fatal("Option 'branchrate_mean' expects three doubles > 0 (line %ld)",
                 line_count);
         valid = 1;
       }

@@ -25,6 +25,10 @@
 #define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
 #define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
 
+#define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
+                          (p)->node_index : (p)->hybrid->node_index)) - \
+                        ((t)->tip_count+(t)->inner_count))
+
 /* TODO: The below two functions are duplicated several times. Move them as
    public functions in gtree.c */
 static void all_partials_recursive(gnode_t * node,
@@ -1016,8 +1020,51 @@ void locus_set_heredity_scalers(locus_t * locus, const double * heredity)
   memcpy(locus->heredity, heredity, locus->rate_matrices*sizeof(double));
 }
 
+static double update_branchlength_relaxed_clock(stree_t * stree,
+                                                gnode_t * node,
+                                                long msa_index)
+{
+  /* relaxed clock */
+  double t = node->time;
+  double length = 0;
+  snode_t * start = node->pop;
+  snode_t * end   = node->parent->pop;
+  assert(end);
+
+  length = 0;
+
+  while (start != end)
+  {
+    snode_t * pop = start;
+    assert(start && start->parent);
+    start = start->parent;
+
+    if (start->hybrid)
+    {
+      assert(!node_is_mirror(start));
+
+      unsigned int hindex = GET_HINDEX(stree,start);
+      assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+      /* find correct parent node according to hpath flag */
+      assert(node->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (node->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
+    }
+
+    length += (start->tau - t)*pop->brate[msa_index];
+    t = start->tau;
+  }
+  length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
+
+  return length;
+}
+
 static void locus_update_all_matrices_generic_recursive(locus_t * locus,
                                                         gnode_t * node,
+                                                        stree_t * stree,
+                                                        long msa_index,
                                                         double * memexpd,
                                                         double * memtemp)
 {
@@ -1044,7 +1091,16 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
 
   unsigned int * param_indices = locus->param_indices;
 
-  t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+  if (opt_clock == BPP_CLOCK_GLOBAL)
+  {
+    /* strict clock */
+    t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+  }
+  else
+  {
+    /* relaxed clock */
+    t = update_branchlength_relaxed_clock(stree,node,msa_index);
+  }
 
   assert(t >= 0);
 
@@ -1102,12 +1158,25 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
 
   if (!(node->left)) return;
 
-  locus_update_all_matrices_generic_recursive(locus,node->left,memexpd,memtemp);
-  locus_update_all_matrices_generic_recursive(locus,node->right,memexpd,memtemp);
+  locus_update_all_matrices_generic_recursive(locus,
+                                              node->left,
+                                              stree,
+                                              msa_index,
+                                              memexpd,
+                                              memtemp);
+  locus_update_all_matrices_generic_recursive(locus,
+                                              node->right,
+                                              stree,
+                                              msa_index,
+                                              memexpd,
+                                              memtemp);
 
 }
 
-static void locus_update_all_matrices_generic(locus_t * locus, gtree_t * gtree)
+static void locus_update_all_matrices_generic(locus_t * locus,
+                                              gtree_t * gtree,
+                                              stree_t * stree,
+                                              long msa_index)
 {
   unsigned int n;
   double * expd;
@@ -1136,15 +1205,27 @@ static void locus_update_all_matrices_generic(locus_t * locus, gtree_t * gtree)
   expd = (double *)xmalloc(locus->states * sizeof(double));
   temp = (double *)xmalloc(locus->states*locus->states*sizeof(double));
 
-  locus_update_all_matrices_generic_recursive(locus,gtree->root->left,expd,temp);
-  locus_update_all_matrices_generic_recursive(locus,gtree->root->right,expd,temp);
+  locus_update_all_matrices_generic_recursive(locus,
+                                              gtree->root->left,
+                                              stree,
+                                              msa_index,
+                                              expd,
+                                              temp);
+  locus_update_all_matrices_generic_recursive(locus,
+                                              gtree->root->right,
+                                              stree,
+                                              msa_index,
+                                              expd,
+                                              temp);
 
   free(expd);
   free(temp);
 }
 
 static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
-                                                     gnode_t * root)
+                                                     gnode_t * root,
+                                                     stree_t * stree,
+                                                     long msa_index)
 {
   long n;
   double t;
@@ -1152,7 +1233,16 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
   unsigned int states = locus->states;
   unsigned int states_padded = locus->states_padded;
 
-  t = root->length = (root->parent->time - root->time)*locus->mut_rates[0];
+  if (opt_clock == BPP_CLOCK_GLOBAL)
+  {
+    /* strict clock */
+    t = root->length = (root->parent->time - root->time)*locus->mut_rates[0];
+  }
+  else
+  {
+    /* relaxed clock */
+    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+  }
 
   for (n = 0; n < locus->rate_cats; ++n)
   {
@@ -1209,30 +1299,44 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
 
   if (!(root->left)) return;
 
-  locus_update_all_matrices_jc69_recursive(locus,root->left);
-  locus_update_all_matrices_jc69_recursive(locus,root->right);
+  locus_update_all_matrices_jc69_recursive(locus,root->left,stree,msa_index);
+  locus_update_all_matrices_jc69_recursive(locus,root->right,stree,msa_index);
 }
 
-static void locus_update_all_matrices_jc69(locus_t * locus, gtree_t * gtree)
+static void locus_update_all_matrices_jc69(locus_t * locus,
+                                           gtree_t * gtree,
+                                           stree_t * stree,
+                                           long msa_index)
 {
-  locus_update_all_matrices_jc69_recursive(locus,gtree->root->left);
-  locus_update_all_matrices_jc69_recursive(locus,gtree->root->right);
+  locus_update_all_matrices_jc69_recursive(locus,
+                                           gtree->root->left,
+                                           stree,
+                                           msa_index);
+  locus_update_all_matrices_jc69_recursive(locus,
+                                           gtree->root->right,
+                                           stree,
+                                           msa_index);
 }
 
-void locus_update_all_matrices(locus_t * locus, gtree_t * gtree)
+void locus_update_all_matrices(locus_t * locus,
+                               gtree_t * gtree,
+                               stree_t * stree,
+                               long msa_index)
 {
   if (locus->dtype == BPP_DATA_DNA && locus->model == BPP_DNA_MODEL_JC69)
   {
-    locus_update_all_matrices_jc69(locus,gtree);
+    locus_update_all_matrices_jc69(locus,gtree,stree,msa_index);
     return;
   }
 
-  locus_update_all_matrices_generic(locus, gtree);
+  locus_update_all_matrices_generic(locus, gtree, stree, msa_index);
 
 }
 
 static void locus_update_matrices_jc69(locus_t * locus,
                                        gnode_t ** traversal,
+                                       stree_t * stree,
+                                       long msa_index,
                                        unsigned int count)
 {
   unsigned int i,n;
@@ -1249,7 +1353,17 @@ static void locus_update_matrices_jc69(locus_t * locus,
   {
     node = traversal[i];
 
-    t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+    
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* strict clock */
+      t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+    }
+    else
+    {
+      /* relaxed clock */
+      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+    }
 
     for (n = 0; n < locus->rate_cats; ++n)
     {
@@ -1308,12 +1422,14 @@ static void locus_update_matrices_jc69(locus_t * locus,
 
 void locus_update_matrices(locus_t * locus,
                            gnode_t ** traversal,
+                           stree_t * stree,
+                           long msa_index,
                            unsigned int count)
 {
   if (!opt_usedata) return;
   if (locus->dtype == BPP_DATA_DNA && locus->model == BPP_DNA_MODEL_JC69)
   {
-    locus_update_matrices_jc69(locus,traversal,count);
+    locus_update_matrices_jc69(locus,traversal,stree,msa_index,count);
     return;
   }
 
@@ -1337,7 +1453,7 @@ void locus_update_matrices(locus_t * locus,
     }
   }
 
-  bpp_core_update_pmatrix(locus,traversal,count);
+  bpp_core_update_pmatrix(locus,traversal,stree,msa_index,count);
 }
 
 
@@ -1491,8 +1607,10 @@ double locus_root_loglikelihood(locus_t * locus,
   return opt_bfbeta * logl;
 }
 
-static long propose_freqs(locus_t * locus,
+static long propose_freqs(stree_t * stree,
+                          locus_t * locus,
                           gtree_t * gtree,
+                          long msa_index,
                           long thread_index)
 {
   unsigned int i,j,k,m,n;
@@ -1559,7 +1677,7 @@ static long propose_freqs(locus_t * locus,
       }
     }
     locus->eigen_decomp_valid[i] = 0;
-    locus_update_matrices(locus,gt_nodes,n);
+    locus_update_matrices(locus,gt_nodes,stree,msa_index,n);
 
     /* get postorder traversal of inner nodes, swap CLV indidces to point to new
        buffer, and update partials */
@@ -1636,7 +1754,7 @@ static long propose_freqs(locus_t * locus,
   return accepted;
 }
 
-double locus_propose_freqs_serial(locus_t ** locus, gtree_t ** gtree)
+double locus_propose_freqs_serial(stree_t * stree, locus_t ** locus, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -1648,7 +1766,7 @@ double locus_propose_freqs_serial(locus_t ** locus, gtree_t ** gtree)
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
       ++candidates;
-      accepted += propose_freqs(locus[i],gtree[i],thread_index);
+      accepted += propose_freqs(stree,locus[i],gtree[i],i,thread_index);
     }
   }
 
@@ -1658,7 +1776,8 @@ double locus_propose_freqs_serial(locus_t ** locus, gtree_t ** gtree)
   return ((double)accepted/candidates);
 }
 
-void locus_propose_freqs_parallel(locus_t ** locus,
+void locus_propose_freqs_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -1678,7 +1797,7 @@ void locus_propose_freqs_parallel(locus_t ** locus,
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
       ++candidates;
-      accepted += propose_freqs(locus[i],gtree[i],thread_index);
+      accepted += propose_freqs(stree,locus[i],gtree[i],i,thread_index);
     }
   }
 
@@ -1686,8 +1805,10 @@ void locus_propose_freqs_parallel(locus_t ** locus,
   *p_accepted = accepted;
 }
 
-static long propose_rates(locus_t * locus,
+static long propose_rates(stree_t * stree,
+                          locus_t * locus,
                           gtree_t * gtree,
+                          long msa_index,
                           long thread_index)
 {
   unsigned int i,j,k,m,n;
@@ -1794,7 +1915,7 @@ static long propose_rates(locus_t * locus,
       }
     }
     locus->eigen_decomp_valid[i] = 0;
-    locus_update_matrices(locus,gt_nodes,n);
+    locus_update_matrices(locus,gt_nodes,stree,msa_index,n);
 
     /* get postorder traversal of inner nodes, swap CLV indidces to point to new
        buffer, and update partials */
@@ -1870,7 +1991,9 @@ static long propose_rates(locus_t * locus,
   return accepted;
 }
 
-double locus_propose_rates_serial(locus_t ** locus, gtree_t ** gtree)
+double locus_propose_rates_serial(stree_t * stree,
+                                  locus_t ** locus,
+                                  gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -1882,7 +2005,7 @@ double locus_propose_rates_serial(locus_t ** locus, gtree_t ** gtree)
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
       ++candidates;
-      accepted += propose_rates(locus[i],gtree[i],thread_index);
+      accepted += propose_rates(stree, locus[i],gtree[i],i, thread_index);
     }
   }
 
@@ -1892,7 +2015,8 @@ double locus_propose_rates_serial(locus_t ** locus, gtree_t ** gtree)
   return ((double)accepted/candidates);
 }
 
-void locus_propose_rates_parallel(locus_t ** locus,
+void locus_propose_rates_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -1912,7 +2036,7 @@ void locus_propose_rates_parallel(locus_t ** locus,
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
       ++candidates;
-      accepted += propose_rates(locus[i],gtree[i],thread_index);
+      accepted += propose_rates(stree,locus[i],gtree[i],i,thread_index);
     }
   }
 

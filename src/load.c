@@ -219,6 +219,7 @@ static void load_chk_section_1(FILE * fp,
                                long * mcmc_offset,
                                long * out_offset,
                                long ** gtree_offset,
+                               long ** rates_offset,
                                long * dparam_count,
                                double ** posterior,
                                double ** pspecies,
@@ -237,6 +238,7 @@ static void load_chk_section_1(FILE * fp,
   char ** labels;
 
   *gtree_offset = NULL;
+  *rates_offset = NULL;
 
   if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
@@ -398,6 +400,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read print flags");
   if (!LOAD(&opt_print_genetrees,1,fp))
     fatal("Cannot read print flags");
+  if (!LOAD(&opt_print_rates,1,fp))
+    fatal("Cannot read rates flags");
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
@@ -444,6 +448,24 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_heredity_beta,1,fp))
     fatal("Cannot read heredity beta"); 
 
+  /* load clock and locusrate info */
+  if (!LOAD(&opt_clock,1,fp))
+    fatal("Cannot read 'clock' tag");
+  if (!LOAD(&opt_brate_mean_alpha,1,fp))
+    fatal("Cannot read 'branchrate_mean' tag");
+  if (!LOAD(&opt_brate_mean_beta,1,fp))
+    fatal("Cannot read 'branchrate_mean' tag");
+  if (!LOAD(&opt_brate_mean_diralpha,1,fp))
+    fatal("Cannot read 'branchrate_mean' tag");
+  if (!LOAD(&opt_brate_var_alpha,1,fp))
+    fatal("Cannot read 'branchrate_var' tag");
+  if (!LOAD(&opt_brate_var_beta,1,fp))
+    fatal("Cannot read 'branchrate_var' tag");
+  if (!LOAD(&opt_brate_var_diralpha,1,fp))
+    fatal("Cannot read 'branchrate_var' tag");
+  if (!LOAD(&opt_rate_prior,1,fp))
+    fatal("Cannot read rate prior");
+
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
@@ -459,11 +481,17 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
-  if (opt_est_locusrate || opt_est_heredity)
-  {
-    if (!LOAD(&opt_finetune_locusrate,1,fp))
-      fatal("Cannot read species locusrate/heredity finetune parameter");
-  }
+  if (!LOAD(&opt_finetune_locusrate,1,fp))
+    fatal("Cannot read species locusrate/heredity finetune parameter");
+  if (!LOAD(&opt_finetune_mubar,1,fp))
+    fatal("Cannot read mubar finetune parameter");
+  if (!LOAD(&opt_finetune_mui,1,fp))
+    fatal("Cannot read mui finetune parameter");
+  if (!LOAD(&opt_finetune_sigma2bar,1,fp))
+    fatal("Cannot read sigma2bar finetune parameter");
+  if (!LOAD(&opt_finetune_sigma2i,1,fp))
+    fatal("Cannot read sigma2i finetune parameter");
+
   if (!LOAD(&opt_max_species_count,1,fp))
     fatal("Cannot read max number of species");
 
@@ -474,6 +502,14 @@ static void load_chk_section_1(FILE * fp,
     printf(" %f\n", opt_finetune_locusrate);
   else
     printf("\n");
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (!LOAD(&(stree->locusrate_mubar),1,fp))
+      fatal("Cannot read locusrate_mubar value");
+    if (!LOAD(&(stree->locusrate_sigma2bar),1,fp))
+      fatal("Cannot read locusrate_sigma2bar value");
+  }
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
@@ -536,6 +572,13 @@ static void load_chk_section_1(FILE * fp,
     *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
     if (!LOAD(*gtree_offset,opt_locus_count,fp))
       fatal("Cannot read gtree file offsets");
+  }
+
+  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    *rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+    if (!LOAD(*rates_offset,opt_locus_count,fp))
+      fatal("Cannot read rates files offsets");
   }
 
   if (!LOAD(dparam_count,1,fp))
@@ -668,6 +711,8 @@ static void load_chk_section_1(FILE * fp,
       node->t2h_sum = 0;
       node->event_count_sum = 0;
     }
+
+    node->brate = NULL;  /* will be allocated during reading */
   }
 
   /* allocate hx */
@@ -864,6 +909,25 @@ void load_chk_section_2(FILE * fp)
   for (i = 0; i < total_nodes; ++i)
     if (!LOAD(stree->nodes[i]->event_count,opt_locus_count,fp))
         fatal("Cannot read species event counts");
+
+  /* read branch rates */
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    unsigned int valid;
+
+    for (i = 0; i < total_nodes; ++i)
+    {
+      if (!LOAD(&valid,1,fp))
+        fatal("Cannot read branch rates");
+
+      if (!valid) continue;
+
+      snode_t * node = stree->nodes[i];
+      node->brate = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+      if (!LOAD(node->brate,opt_locus_count,fp))
+        fatal("Cannot read branch rates");
+    }
+  }
 
 //  /* read MSC density contributions */
 //  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -1095,6 +1159,17 @@ static void load_gene_tree(FILE * fp, long index)
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
     if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
       fatal("Cannot read gene tree path flags");
+
+  /* relaxed clock mu_i, sigma2_i and logprior */
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (!LOAD(&(gt->rate_mui),1,fp))
+      fatal("Cannot read gene tree mu_%ld", index);
+    if (!LOAD(&(gt->rate_sigma2i),1,fp))
+      fatal("Cannot read gene tree sigma2_%ld", index);
+    if (!LOAD(&(gt->lnprior_rates),1,fp))
+      fatal("Cannot read gene tree %ld rate prior", index);
+  }
 }
 
 static void load_chk_section_3(FILE * fp, long msa_count)
@@ -1301,6 +1376,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
+                    long ** rates_offset,
                     long * dparam_count,
                     double ** posterior,
                     double ** pspecies,
@@ -1341,6 +1417,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
+                     rates_offset,
                      dparam_count,
                      posterior,
                      pspecies,
@@ -1372,7 +1449,10 @@ int checkpoint_load(gtree_t *** gtreep,
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree_reset_leaves(gtree[i]->root);
-    locus_update_matrices(locus[i],gtree[i]->nodes,gtree[i]->edge_count);
+    locus_update_matrices(locus[i],
+                          gtree[i]->nodes,
+                          stree,i,
+                          gtree[i]->edge_count);
     locus_update_all_partials(locus[i],gtree[i]);
 
     gtree[i]->logl = locus_root_loglikelihood(locus[i],

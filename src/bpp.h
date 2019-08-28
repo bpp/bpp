@@ -221,6 +221,11 @@ extern const char * global_freqs_strings[28];
 #define BPP_CLOCK_IND                   2
 #define BPP_CLOCK_AC                    3
 
+#define BPP_PRIOR_LOGNORMAL             0
+#define BPP_PRIOR_GAMMA                 1
+
+#define BPP_PI  3.1415926535897932384626433832795
+
 #define THREAD_WORK_GTAGE               1
 #define THREAD_WORK_GTSPR               2
 #define THREAD_WORK_TAU                 3
@@ -393,6 +398,9 @@ typedef struct stree_s
   double notheta_sfactor;    /* sum of per-locus (sequences-1)*sqrt(2) */
 
 //  int mark;
+  /* mean rate and variance across loci */
+  double locusrate_mubar;
+  double locusrate_sigma2bar;
 } stree_t;
 
 typedef struct gnode_s
@@ -447,6 +455,11 @@ typedef struct gtree_s
   double logpr;
   double old_logpr;
   double old_logl;
+
+  /* locus rate */
+  double rate_mui;
+  double rate_sigma2i;
+  double lnprior_rates;
 
 } gtree_t;
 
@@ -529,7 +542,6 @@ typedef struct locus_s
   unsigned long * diploid_resolution_count;
   double * likelihood_vector;
   int unphased_length;
-
 
 } locus_t;
 
@@ -700,6 +712,7 @@ extern long opt_checkpoint_step;
 extern long opt_cleandata;
 extern long opt_clock;
 extern long opt_debug;
+extern long opt_debug_rates;
 extern long opt_delimit_prior;
 extern long opt_diploid_size;
 extern long opt_est_heredity;
@@ -722,9 +735,11 @@ extern long opt_partition_count;
 extern long opt_print_genetrees;
 extern long opt_print_hscalars;
 extern long opt_print_locusrate;
+extern long opt_print_rates;
 extern long opt_print_samples;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
+extern long opt_rate_prior;
 extern long opt_revolutionary_spr_method;
 extern long opt_revolutionary_spr_debug;
 extern long opt_rev_gspr;
@@ -743,15 +758,26 @@ extern long opt_version;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
 extern double opt_bfbeta;
+extern double opt_brate_mean_alpha;
+extern double opt_brate_mean_beta;
+extern double opt_brate_mean_diralpha;
+extern double opt_brate_var_alpha;
+extern double opt_brate_var_beta;
+extern double opt_brate_var_diralpha;
 extern double opt_clock_alpha;
 extern double opt_finetune_alpha;
+extern double opt_finetune_branchrate;
 extern double opt_finetune_freqs;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
+extern double opt_finetune_mubar;
+extern double opt_finetune_mui;
 extern double opt_finetune_phi;
 extern double opt_finetune_rates;
+extern double opt_finetune_sigma2bar;
+extern double opt_finetune_sigma2i;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
@@ -1012,6 +1038,8 @@ void propose_tau_update_gtrees(locus_t ** loci,
                                double * ret_logpr_diff,
                                long thread_index);
 
+double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
+
 /* functions in arch.c */
 
 uint64_t arch_get_memused(void);
@@ -1196,6 +1224,28 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 
+void prop_branch_rates(gtree_t ** gtree,
+                       stree_t * stree,
+                       locus_t ** locus,
+                       long thread_index);
+
+double prop_locusrate_sigma2i(gtree_t ** gtree,
+                              stree_t * stree,
+                              locus_t ** locus,
+                              long thread_index);
+
+double prop_locusrate_mui(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index);
+void prop_locusrate_params(gtree_t ** gtree,
+                           stree_t * stree,
+                           locus_t ** locus,
+                           double * pjump_rc_mui,
+                           double * pjump_rc_sigma2i,
+                           long ft_round,
+                           long thread_index);
+
 /* functions in prop_mixing.c */
 
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
@@ -1231,8 +1281,11 @@ void rj_fini();
 
 /* functions in prop_gamma.c */
 
-double locus_propose_alpha_serial(locus_t ** locus, gtree_t ** gtree);
-void locus_propose_alpha_parallel(locus_t ** locus,
+double locus_propose_alpha_serial(stree_t * stree,
+                                  locus_t ** locus,
+                                  gtree_t ** gtree);
+void locus_propose_alpha_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -1288,21 +1341,25 @@ void pll_set_pattern_weights(locus_t * locus,
 
 void locus_update_matrices(locus_t * locus,
                            gnode_t ** traversal,
+                           stree_t * stree,
+                           long msa_index,
                            unsigned int count);
-/*
-void locus_update_matrices_jc69(locus_t * locus,
-                                gnode_t ** traversal,
-                                unsigned int count);
-*/
-void locus_update_all_matrices(locus_t * locus, gtree_t * gtree);
+
+void locus_update_all_matrices(locus_t * locus,
+                               gtree_t * gtree,
+                               stree_t * stree,
+                               long msa_index);
 
 double locus_root_loglikelihood(locus_t * locus,
                                 gnode_t * root,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl);
 
-double locus_propose_rates_serial(locus_t ** locus, gtree_t ** gtree);
-void locus_propose_rates_parallel(locus_t ** locus,
+double locus_propose_rates_serial(stree_t * stree,
+                                  locus_t ** locus,
+                                  gtree_t ** gtree);
+void locus_propose_rates_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -1310,8 +1367,11 @@ void locus_propose_rates_parallel(locus_t ** locus,
                                   long * p_proposal_count,
                                   long * p_accepted);
 
-double locus_propose_freqs_serial(locus_t ** locus, gtree_t ** gtree);
-void locus_propose_freqs_parallel(locus_t ** locus,
+double locus_propose_freqs_serial(stree_t * stree,
+                                  locus_t ** locus,
+                                  gtree_t ** gtree);
+void locus_propose_freqs_parallel(stree_t * stree,
+                                  locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
                                   long locus_count,
@@ -1390,6 +1450,7 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
+                    long * rates_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -1418,6 +1479,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
+                    long ** rates_offset,
                     long * dparam_count,
                     double ** posterior,
                     double ** pspecies,
@@ -1512,6 +1574,8 @@ void pll_core_create_lookup(unsigned int states,
 
 void bpp_core_update_pmatrix(locus_t * locus,
                              gnode_t ** traversal,
+                             stree_t * stree,
+                             long msa_index,
                              unsigned int count);
 
 int pll_core_update_pmatrix(double ** pmatrix,

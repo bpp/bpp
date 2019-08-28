@@ -541,6 +541,8 @@ long prop_split(gtree_t ** gtree,
     {
       locus_update_matrices(locus[i],
                             nodevec+nodevec_offset[i],
+                            stree,
+                            i,
                             nodevec_count[i]);
 
       /* TODO: Never call functions like propose_age that change travbuffer
@@ -697,6 +699,8 @@ long prop_split(gtree_t ** gtree,
       {
         locus_update_matrices(locus[i],
                               nodevec+nodevec_offset[i],
+                              stree,
+                              i,
                               nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)
@@ -938,6 +942,8 @@ long prop_join(gtree_t ** gtree,
     {
       locus_update_matrices(locus[i],
                             nodevec+nodevec_offset[i],
+                            stree,
+                            i,
                             nodevec_count[i]);
 
       /* TODO: Never call functions like propose_age that change travbuffer
@@ -1098,6 +1104,8 @@ long prop_join(gtree_t ** gtree,
       {
         locus_update_matrices(locus[i],
                               nodevec+nodevec_offset[i],
+                              stree,
+                              i,
                               nodevec_count[i]);
 
         for (k = 0; k < partials_count[i]; ++k)

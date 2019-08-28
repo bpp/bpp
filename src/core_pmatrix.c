@@ -21,6 +21,10 @@
 
 #include "bpp.h"
 
+#define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
+                          (p)->node_index : (p)->hybrid->node_index)) - \
+                        ((t)->tip_count+(t)->inner_count))
+
 static int mytqli(double *d, double *e, const unsigned int n, double **z)
 {
   unsigned int     m, l, iter, i, k;
@@ -669,6 +673,8 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
 
 void bpp_core_update_pmatrix(locus_t * locus,
                              gnode_t ** traversal,
+                             stree_t * stree,
+                             long msa_index,
                              unsigned int count)
 {
   unsigned int i,n,j,k,m;
@@ -702,7 +708,46 @@ void bpp_core_update_pmatrix(locus_t * locus,
   {
     node = traversal[i];
 
-    t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* strict clock */
+      t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+    }
+    else
+    {
+      /* relaxed clock */
+      node->length = 0;
+      t = node->time;
+      snode_t * start = node->pop;
+      snode_t * end   = node->parent->pop;
+
+      while (start != end)
+      {
+        snode_t * pop = start;
+        assert(start && start->parent);
+        start = start->parent;
+
+        if (start->hybrid)
+        {
+          assert(!node_is_mirror(start));
+
+          unsigned int hindex = GET_HINDEX(stree,start);
+          assert(hindex >= 0 && hindex < stree->hybrid_count);
+
+          /* find correct parent node according to hpath flag */
+          assert(node->hpath[hindex] != BPP_HPATH_NONE);
+          assert(start->left);
+          if (node->hpath[hindex] == BPP_HPATH_RIGHT)
+            start = start->hybrid;
+        }
+
+        node->length += (start->tau - t)*pop->brate[msa_index];
+        t = start->tau;
+      }
+      node->length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
+
+      t = node->length;
+    }
 
     assert(t >= 0);
 
