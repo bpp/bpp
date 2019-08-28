@@ -3927,7 +3927,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
   return accepted / opt_locus_count;
 }
 
-static long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
+long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -3971,7 +3971,7 @@ static long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
   return accepted;
 }
 
-static long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
+long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
@@ -4015,35 +4015,12 @@ static long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
   return accepted;
 }
 
-void prop_locusrate_params(gtree_t ** gtree,
-                           stree_t * stree,
-                           locus_t ** locus,
-                           double * pjump_rc_mui,
-                           double * pjump_rc_sigma2i,
-                           long ft_round,
-                           long thread_index)
-{
-  double macc = prop_locusrate_mui(gtree,stree,locus,thread_index);
-  *pjump_rc_mui = (*pjump_rc_mui*(ft_round-1) + macc) / (double)ft_round;
-  prop_locusrate_mubar(stree,gtree);
-  double sacc = prop_locusrate_sigma2i(gtree,stree,locus,thread_index);
-  *pjump_rc_sigma2i = (*pjump_rc_sigma2i*(ft_round-1) + sacc) / (double)ft_round;
-  prop_locusrate_sigma2bar(stree,gtree);
-
-
-
-}
-
 static double prior_logratio_rates_ac(locus_t * locus,
                                       gnode_t * node,
                                       double new_rate,
                                       double old_rate)
 {
   assert(node);
-
-//  if (
-
-
 }
 
 static double prior_logratio_rates(gtree_t * gtree,
@@ -4158,13 +4135,14 @@ static long fill_travbuffer_and_mark(gtree_t * gtree,
   return count;
 }
 
-void prop_branch_rates(gtree_t ** gtree,
-                       stree_t * stree,
-                       locus_t ** locus,
-                       long thread_index)
+double prop_branch_rates(gtree_t ** gtree,
+                         stree_t * stree,
+                         locus_t ** locus,
+                         long thread_index)
 {
   long i,j,k;
   long accepted = 0;
+  long proposal_count = 0;
   long branch_count = 0;
   double old_rate, new_rate;
   double old_lograte, new_lograte;
@@ -4189,6 +4167,7 @@ void prop_branch_rates(gtree_t ** gtree,
         if (node_is_hybridization(node) && !node->parent->htau) continue;
         if (node_is_bidirection(node) && node_is_mirror(node)) continue;
       }
+      proposal_count++;
 
       old_rate = node->brate[i];
       old_lograte = log(old_rate);
@@ -4290,4 +4269,5 @@ void prop_branch_rates(gtree_t ** gtree,
       }
     }  /* end species tree loop */
   } /* loci loop */
+  return (accepted / (double)proposal_count);
 }
