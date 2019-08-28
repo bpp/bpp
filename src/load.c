@@ -23,6 +23,7 @@
 
 #define PROP_COUNT 5
 #define GTR_PROP_COUNT 3
+#define CLOCK_PROP_COUNT 5
 
 #define LOAD(x,n,fp) (fread((void *)(x),sizeof(*(x)),n,fp) == (size_t)(n))
 
@@ -212,6 +213,7 @@ int load_string(FILE * fp, char ** buffer)
 static void load_chk_section_1(FILE * fp,
                                double ** pjump,
                                double ** pjump_gtr,
+                               double ** pjump_clock,
                                double * pjump_phi,
                                unsigned long * curstep,
                                long * ft_round,
@@ -491,6 +493,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read sigma2bar finetune parameter");
   if (!LOAD(&opt_finetune_sigma2i,1,fp))
     fatal("Cannot read sigma2i finetune parameter");
+  if (!LOAD(&opt_finetune_branchrate,1,fp))
+    fatal("Cannot read branchrate finetune parameter");
 
   if (!LOAD(&opt_max_species_count,1,fp))
     fatal("Cannot read max number of species");
@@ -550,13 +554,17 @@ static void load_chk_section_1(FILE * fp,
   size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
-  *pjump_gtr = (double *)xmalloc(GTR_PROP_COUNT * sizeof(double));
+  *pjump_gtr   = (double *)xmalloc(GTR_PROP_COUNT * sizeof(double));
+  *pjump_clock = (double *)xmalloc(CLOCK_PROP_COUNT * sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))
     fatal("Cannot read pjump");
 
   if (!LOAD(*pjump_gtr,GTR_PROP_COUNT,fp))
     fatal("Cannot read pjump_gtr");
+
+  if (!LOAD(*pjump_clock,CLOCK_PROP_COUNT,fp))
+    fatal("Cannot read pjump_clock");
 
   if (!LOAD(pjump_phi,1,fp))
     fatal("Cannot read pjump phi"); 
@@ -1369,6 +1377,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     stree_t ** streep,
                     double ** pjump,
                     double ** pjump_gtr,
+                    double ** pjump_clock,
                     double * pjump_phi,
                     unsigned long * curstep,
                     long * ft_round,
@@ -1410,6 +1419,7 @@ int checkpoint_load(gtree_t *** gtreep,
   load_chk_section_1(fp,
                      pjump,
                      pjump_gtr,
+                     pjump_clock,
                      pjump_phi,
                      curstep,
                      ft_round,

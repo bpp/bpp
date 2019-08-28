@@ -23,6 +23,7 @@
 
 #define PROP_COUNT 5
 #define GTR_PROP_COUNT 3
+#define CLOCK_PROP_COUNT 5
 
 //#define DEBUG_GTR
 
@@ -125,7 +126,8 @@ static void reset_finetune_onestep(double * pjump, double * param)
 static void reset_finetune(FILE * fp_out,
                            double * pjump,
                            double * pjump_phi,
-                           double * pjump_gtr)
+                           double * pjump_gtr,
+                           double * pjump_clock)
 {
   int i,j;
   int extra;
@@ -149,6 +151,14 @@ static void reset_finetune(FILE * fp_out,
       fprintf(fp[j], " %8.5f", pjump_gtr[1]);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", pjump_gtr[2]);
+    if (enabled_prop_branchrates)
+    {
+      fprintf(fp[j], " %8.5f", pjump_clock[0]);
+      fprintf(fp[j], " %8.5f", pjump_clock[1]);
+      fprintf(fp[j], " %8.5f", pjump_clock[2]);
+      fprintf(fp[j], " %8.5f", pjump_clock[3]);
+      fprintf(fp[j], " %8.5f", pjump_clock[4]);
+    }
       
     fprintf(fp[j], "\n");
 
@@ -167,7 +177,15 @@ static void reset_finetune(FILE * fp_out,
     if (enabled_prop_rates)
       fprintf(fp[j], " %8.5f", opt_finetune_rates);
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_alpha);
+      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+    if (enabled_prop_branchrates)
+    {
+      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+      fprintf(fp[j], " %8.5f", opt_finetune_mui);
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
+      fprintf(fp[j], " %8.5f\n", opt_finetune_branchrate);
+    }
     else
       fprintf(fp[j], "\n");
   }
@@ -189,6 +207,14 @@ static void reset_finetune(FILE * fp_out,
     reset_finetune_onestep(pjump_gtr+1, &opt_finetune_rates);
   if (enabled_prop_alpha)
     reset_finetune_onestep(pjump_gtr+2, &opt_finetune_alpha);
+  if (enabled_prop_branchrates)
+  {
+    reset_finetune_onestep(pjump_clock+0, &opt_finetune_mubar);
+    reset_finetune_onestep(pjump_clock+1, &opt_finetune_sigma2bar);
+    reset_finetune_onestep(pjump_clock+2, &opt_finetune_mui);
+    reset_finetune_onestep(pjump_clock+3, &opt_finetune_sigma2i);
+    reset_finetune_onestep(pjump_clock+4, &opt_finetune_branchrate);
+  }
 
   for (j = 0; j < 2; ++j)
   {
@@ -207,7 +233,15 @@ static void reset_finetune(FILE * fp_out,
     if (enabled_prop_rates)
       fprintf(fp[j], " %8.5f", opt_finetune_rates);
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f\n", opt_finetune_alpha);
+      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+    if (enabled_prop_branchrates)
+    {
+      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+      fprintf(fp[j], " %8.5f", opt_finetune_mui);
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
+      fprintf(fp[j], " %8.5f\n", opt_finetune_branchrate);
+    }
     else
       fprintf(fp[j], "\n");
   }
@@ -646,6 +680,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      locus_t *** ptr_locus,
                      double ** ptr_pjump,
                      double ** ptr_pjump_gtr,
+                     double ** ptr_pjump_clock,
                      double * ptr_pjump_phi,
                      unsigned long * ptr_curstep,
                      long * ptr_ft_round,
@@ -688,6 +723,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_stree,
                   ptr_pjump,
                   ptr_pjump_gtr,
+                  ptr_pjump_clock,
                   ptr_pjump_phi,
                   ptr_curstep,
                   ptr_ft_round,
@@ -882,6 +918,7 @@ static FILE * init(stree_t ** ptr_stree,
                    locus_t *** ptr_locus,
                    double ** ptr_pjump,
                    double ** ptr_pjump_gtr,
+                   double ** ptr_pjump_clock,
                    double * ptr_pjump_phi,
                    unsigned long * ptr_curstep,
                    long * ptr_ft_round,
@@ -906,6 +943,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logpr_sum = 0;
   double * pjump;
   double * pjump_gtr;
+  double * pjump_clock;
   list_t * map_list = NULL;
   stree_t * stree;
   const unsigned int * pll_map;
@@ -1588,7 +1626,8 @@ static FILE * init(stree_t ** ptr_stree,
   else
     pjump = (double *)xcalloc(PROP_COUNT, sizeof(double));
 
-  pjump_gtr = (double *)xcalloc(GTR_PROP_COUNT, sizeof(double));
+  pjump_gtr   = (double *)xcalloc(GTR_PROP_COUNT, sizeof(double));
+  pjump_clock = (double *)xcalloc(CLOCK_PROP_COUNT, sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
@@ -1631,6 +1670,7 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_locus = locus;
   *ptr_pjump = pjump;
   *ptr_pjump_gtr = pjump_gtr;
+  *ptr_pjump_clock = pjump_clock;
   *ptr_pjump_phi = 0;
 
   *ptr_curstep = 0;
@@ -1673,6 +1713,7 @@ void cmd_run()
   double logl_sum = 0;
   double * pjump;
   double * pjump_gtr;
+  double * pjump_clock;
   FILE * fp_mcmc;
   FILE * fp_out;
   stree_t * stree;
@@ -1743,6 +1784,7 @@ void cmd_run()
                      &locus,
                      &pjump,
                      &pjump_gtr,
+                     &pjump_clock,
                      &pjump_phi,
                      &curstep,
                      &ft_round,
@@ -1771,6 +1813,7 @@ void cmd_run()
                    &locus,
                    &pjump,
                    &pjump_gtr,
+                   &pjump_clock,
                    &pjump_phi,
                    &curstep,
                    &ft_round,
@@ -1877,7 +1920,7 @@ void cmd_run()
       int pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
 
       if (opt_finetune_reset && opt_burnin >= 200)
-        reset_finetune(fp_out, pjump,&pjump_phi,pjump_gtr);
+        reset_finetune(fp_out, pjump,&pjump_phi,pjump_gtr,pjump_clock);
       for (j = 0; j < pjump_size; ++j)
         pjump[j] = 0;
 
@@ -1885,6 +1928,7 @@ void cmd_run()
       ft_round = 0;
       memset(pjump, 0, pjump_size * sizeof(double));
       memset(pjump_gtr, 0, GTR_PROP_COUNT * sizeof(double));
+      memset(pjump_clock, 0, CLOCK_PROP_COUNT * sizeof(double));
 
       if (opt_msci)
         pjump_phi = 0;
@@ -2056,10 +2100,23 @@ void cmd_run()
 
     if (enabled_prop_branchrates)
     {
-      prop_locusrate_params(gtree,stree,locus,&pjump_rc_mui,&pjump_rc_sigma2i,ft_round,0);
+      ratio = prop_locusrate_mui(gtree,stree,locus,thread_index_zero);
+      pjump_clock[2] = (pjump_clock[2]*(ft_round-1) + ratio) / (double)ft_round;
+
+      ratio = prop_locusrate_mubar(stree,gtree);
+      pjump_clock[0] = (pjump_clock[0]*(ft_round-1) + ratio) / (double)ft_round;
+
+      ratio = prop_locusrate_sigma2i(gtree,stree,locus,thread_index_zero);
+      pjump_clock[3] = (pjump_clock[3]*(ft_round-1) + ratio) / (double)ft_round;
+
+      ratio = prop_locusrate_sigma2bar(stree,gtree);
+      pjump_clock[1] = (pjump_clock[1]*(ft_round-1) + ratio) / (double)ft_round;
 
       if (opt_clock != BPP_CLOCK_GLOBAL);
-        prop_branch_rates(gtree,stree,locus,0);
+      {
+        ratio = prop_branch_rates(gtree,stree,locus,0);
+        pjump_clock[4] = (pjump_clock[4]*(ft_round-1) + ratio) / (double)ft_round;
+      }
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -2196,6 +2253,14 @@ void cmd_run()
         printf(" %4.2f", pjump_gtr[1]);
       if (enabled_prop_alpha)
         printf(" %4.2f", pjump_gtr[2]);
+      if (enabled_prop_branchrates)
+      {
+        printf(" %4.2f", pjump_clock[0]);
+        printf(" %4.2f", pjump_clock[1]);
+        printf(" %4.2f", pjump_clock[2]);
+        printf(" %4.2f", pjump_clock[3]);
+        printf(" %4.2f", pjump_clock[4]);
+      }
       printf(" ");
 
       /**************/
@@ -2307,6 +2372,7 @@ void cmd_run()
                         locus,
                         pjump,
                         pjump_gtr,
+                        pjump_clock,
                         pjump_phi,
                         curstep,
                         ft_round,
@@ -2341,6 +2407,7 @@ void cmd_run()
 
   free(pjump);
   free(pjump_gtr);
+  free(pjump_clock);
 
   if (opt_threads > 1)
     threads_exit();

@@ -1224,10 +1224,13 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 
-void prop_branch_rates(gtree_t ** gtree,
-                       stree_t * stree,
-                       locus_t ** locus,
-                       long thread_index);
+double prop_branch_rates(gtree_t ** gtree,
+                         stree_t * stree,
+                         locus_t ** locus,
+                         long thread_index);
+
+long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree);
+long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree);
 
 double prop_locusrate_sigma2i(gtree_t ** gtree,
                               stree_t * stree,
@@ -1238,13 +1241,6 @@ double prop_locusrate_mui(gtree_t ** gtree,
                           stree_t * stree,
                           locus_t ** locus,
                           long thread_index);
-void prop_locusrate_params(gtree_t ** gtree,
-                           stree_t * stree,
-                           locus_t ** locus,
-                           double * pjump_rc_mui,
-                           double * pjump_rc_sigma2i,
-                           long ft_round,
-                           long thread_index);
 
 /* functions in prop_mixing.c */
 
@@ -1443,6 +1439,7 @@ int checkpoint_dump(stree_t * stree,
                     locus_t ** locus_list,
                     double * pjump,
                     double * pjump_gtr,
+                    double * pjump_clock,
                     double pjump_phi,
                     unsigned long curstep,
                     long ft_round,
@@ -1472,6 +1469,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     stree_t ** streep,
                     double ** pjump,
                     double ** pjump_gtr,
+                    double ** pjump_clock,
                     double * pjump_phi,
                     unsigned long * curstep,
                     long * ft_round,

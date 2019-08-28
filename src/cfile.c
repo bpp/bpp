@@ -1161,6 +1161,13 @@ static long parse_finetune(const char * line)
 
   p += ws+1;
 
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
@@ -1176,6 +1183,13 @@ static long parse_finetune(const char * line)
   if (!count) goto l_unwind;
 
   p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
   
   /* 2. gene tree spr finetune param */
   count = get_double(p, &opt_finetune_gtspr);
@@ -1183,11 +1197,24 @@ static long parse_finetune(const char * line)
 
   p += count;
 
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+
   /* 3. theta finetune param */
   count = get_double(p, &opt_finetune_theta);
   if (!count) goto l_unwind;
 
   p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
 
   /* 4. theta finetune param */
   count = get_double(p, &opt_finetune_tau);
@@ -1195,11 +1222,23 @@ static long parse_finetune(const char * line)
 
   p += count;
 
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
   /* 5. mixing finetune param */
   count = get_double(p, &opt_finetune_mix);
   if (!count) goto l_unwind;
 
   p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
 
   /* TODO: The next is not implemented yet */
   double opt_finetune_seqerr;
@@ -1210,23 +1249,94 @@ static long parse_finetune(const char * line)
 
   p += count;
 
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
   /* 7. sequence error finetune param */
   count = get_double(p, &opt_finetune_seqerr);
   if (!count) goto l_unwind;
 
   p += count;
 
-  opt_finetune_phi = -1;
   if (is_emptyline(p))
   {
     ret = 1;
+    goto l_unwind;
   }
-  else
+
+  /* 8. phi finetune */
+  count = get_double(p, &opt_finetune_phi);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
   {
-    /* 8. phi finetune */
-    count = get_double(p, &opt_finetune_phi);
-    if (!count) goto l_unwind;
-    p += count;
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 9. mubar finetune */
+  count = get_double(p, &opt_finetune_mubar);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 10. sigma2bar finetune */
+  count = get_double(p, &opt_finetune_sigma2bar);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 11. mu_i finetune */
+  count = get_double(p, &opt_finetune_mui);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 12. sigma2_i finetune */
+  count = get_double(p, &opt_finetune_sigma2i);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 13. branchrates finetune */
+  count = get_double(p, &opt_finetune_branchrate);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
   }
 
   if (is_emptyline(p)) ret = 1;

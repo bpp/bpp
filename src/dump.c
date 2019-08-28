@@ -23,6 +23,7 @@
 
 #define PROP_COUNT 5
 #define GTR_PROP_COUNT 3
+#define CLOCK_PROP_COUNT 5
 
 #define DUMP(x,n,fp) fwrite((void *)(x),sizeof(*(x)),n,fp)
 
@@ -166,6 +167,7 @@ static void dump_chk_section_1(FILE * fp,
                                stree_t * stree,
                                double * pjump,
                                double * pjump_gtr,
+                               double * pjump_clock,
                                double pjump_phi,
                                long curstep,
                                long ft_round,
@@ -319,6 +321,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_mui,1,fp);
   DUMP(&opt_finetune_sigma2bar,1,fp);
   DUMP(&opt_finetune_sigma2i,1,fp);
+  DUMP(&opt_finetune_branchrate,1,fp);
 
   DUMP(&opt_max_species_count,1,fp);
 
@@ -349,6 +352,7 @@ static void dump_chk_section_1(FILE * fp,
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
   DUMP(pjump_gtr,GTR_PROP_COUNT,fp);
+  DUMP(pjump_clock,CLOCK_PROP_COUNT,fp);
   DUMP(&pjump_phi,1,fp);
 
   /* write MCMC file offset */
@@ -695,6 +699,7 @@ int checkpoint_dump(stree_t * stree,
                     locus_t ** locus_list,
                     double * pjump,
                     double * pjump_gtr,
+                    double * pjump_clock,
                     double pjump_phi,
                     unsigned long curstep,
                     long ft_round,
@@ -741,6 +746,7 @@ int checkpoint_dump(stree_t * stree,
                      stree,
                      pjump,
                      pjump_gtr,
+                     pjump_clock,
                      pjump_phi,
                      curstep,
                      ft_round,
