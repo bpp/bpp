@@ -57,6 +57,7 @@ void legacy_init()
 
    assert(opt_threads >= 1);
 
+   if (z_rndu) free(z_rndu);
    z_rndu = (unsigned int *)xmalloc((size_t)opt_threads * sizeof(unsigned int));
    for (i = 0; i < opt_threads; ++i)
      z_rndu[i] = (unsigned int)seed;

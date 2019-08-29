@@ -136,7 +136,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
      size_section += opt_locus_count*sizeof(long);
     
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -166,9 +166,6 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
 static void dump_chk_section_1(FILE * fp,
                                stree_t * stree,
                                double * pjump,
-                               double * pjump_gtr,
-                               double * pjump_clock,
-                               double pjump_phi,
                                long curstep,
                                long ft_round,
                                long ndspecies,
@@ -348,12 +345,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + (opt_est_locusrate || opt_est_heredity);
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
-  DUMP(pjump_gtr,GTR_PROP_COUNT,fp);
-  DUMP(pjump_clock,CLOCK_PROP_COUNT,fp);
-  DUMP(&pjump_phi,1,fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -698,9 +692,6 @@ int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
                     double * pjump,
-                    double * pjump_gtr,
-                    double * pjump_clock,
-                    double pjump_phi,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -745,9 +736,6 @@ int checkpoint_dump(stree_t * stree,
   dump_chk_section_1(fp,
                      stree,
                      pjump,
-                     pjump_gtr,
-                     pjump_clock,
-                     pjump_phi,
                      curstep,
                      ft_round,
                      ndspecies,
