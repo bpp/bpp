@@ -234,6 +234,24 @@ extern const char * global_freqs_strings[28];
 #define THREAD_WORK_RATES               6
 #define THREAD_WORK_FREQS               7
 
+#define BPP_MOVE_INDEX_MIN              0
+#define BPP_MOVE_GTAGE_INDEX            0
+#define BPP_MOVE_GTSPR_INDEX            1
+#define BPP_MOVE_THETA_INDEX            2
+#define BPP_MOVE_TAU_INDEX              3
+#define BPP_MOVE_MIX_INDEX              4
+#define BPP_MOVE_LRHT_INDEX             5
+#define BPP_MOVE_PHI_INDEX              6
+#define BPP_MOVE_FREQS_INDEX            7
+#define BPP_MOVE_RATES_INDEX            8
+#define BPP_MOVE_ALPHA_INDEX            9
+#define BPP_MOVE_MUBAR_INDEX            10
+#define BPP_MOVE_SIGMA2BAR_INDEX        11
+#define BPP_MOVE_MUI_INDEX              12
+#define BPP_MOVE_SIGMA2I_INDEX          13
+#define BPP_MOVE_BRANCHRATE_INDEX       14
+#define BPP_MOVE_INDEX_MAX              14
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -1438,9 +1456,6 @@ int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
                     double * pjump,
-                    double * pjump_gtr,
-                    double * pjump_clock,
-                    double pjump_phi,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -1468,9 +1483,6 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
-                    double ** pjump_gtr,
-                    double ** pjump_clock,
-                    double * pjump_phi,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
