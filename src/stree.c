@@ -1931,7 +1931,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
                                double * ret_logpr_diff,
                                long thread_index)
 {
-  long i;
+  long i,m;
   unsigned int j,k;
   unsigned int locus_count_above;
   unsigned int locus_count_below;
@@ -1974,7 +1974,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
           if ((node->time < minage) || (node->time > maxage)) continue;
 
           gt_nodesptr[k] = node;
-          node->mark = FLAG_PARTIAL_UPDATE;
+          node->mark = FLAG_PARTIAL_UPDATE | FLAG_BRANCH_UPDATE;
           oldbranches[k++] = node->time;
 
           if (node->time >= oldage && snode != stree->root)
@@ -2053,11 +2053,13 @@ void propose_tau_update_gtrees(locus_t ** loci,
       if (!node->left->mark)
       {
         branchptr[branch_count++] = node->left;
+        node->left->mark = FLAG_BRANCH_UPDATE;
         extra++;
       }
       if (!node->right->mark)
       {
         branchptr[branch_count++] = node->right;
+        node->right->mark = FLAG_BRANCH_UPDATE;
         extra++;
       }
     }
@@ -2067,12 +2069,162 @@ void propose_tau_update_gtrees(locus_t ** loci,
     offset += extra;
     #endif
 
+    /* relaxed clock */
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      snode_t * parents[2];
+      long parents_count = 0;
+
+      if (opt_msci && snode->hybrid)
+      {
+        if (node_is_hybridization(snode))
+        {
+          if (snode->parent->htau && snode->hybrid->parent->htau)
+          {
+            /* model H3
+                 *
+                / \
+               *   *
+              / \ / \
+             /   +   \
+            /    |    \
+            
+            */
+
+            parents[0] = snode;
+            parents[1] = snode->hybrid;
+            parents_count = 2;
+          }
+          else if (!snode->parent->htau && !snode->hybrid->parent->htau)
+          {
+            /* model H1 
+                *
+               / \
+              /   \
+             *--+--*
+            /   |   \
+
+            */
+
+            parents[0] = snode->parent;
+            parents[1] = snode->hybrid->parent;
+            parents_count = 2;
+          }
+          else
+          {
+            /* model H2
+                   *                  *
+                  / \                / \
+                 /   *      or      *   \
+                /   / \            / \   \
+               *---+   \          /   +---*
+              /    |    \        /    |    \
+
+            */
+
+            if (!snode->parent->htau)
+            {
+              parents[0] = snode->parent;
+              parents[1] = snode->hybrid;
+            }
+            else
+            {
+              assert(!snode->hybrid->parent->htau);
+              parents[0] = snode->hybrid->parent;
+              parents[1] = snode;
+              parents_count = 2;
+            }
+          }
+        }
+        else
+        {
+          assert(node_is_bidirection(snode));
+          parents[0] = snode;
+          parents[1] = snode->hybrid->parent;
+          parents_count = 2;
+          assert(snode->right->hybrid == snode->hybrid->parent);
+        }
+      }
+      else
+      {
+        assert(paffected_count == 3);
+        assert(affected[1]->parent == affected[2]->parent &&
+               affected[1]->parent == affected[0]);
+        parents[0] = affected[0];
+        parents_count = 1;
+      }
+
+      for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+      {
+        gnode_t * x = gtree[i]->nodes[j];
+
+        if (x->mark || !x->parent) continue;
+        for (m = 0; m < parents_count; ++m)
+        {
+          snode_t * p = parents[m];
+
+          if (stree->pptable[x->pop->node_index][p->node_index] &&
+              stree->pptable[p->node_index][x->parent->pop->node_index])
+          {
+            if (opt_msci)
+            {
+              long n;
+              snode_t * mnode;
+              snode_t * visited;
+              for (n = 0; n < stree->hybrid_count; ++n)
+              {
+                mnode = stree->nodes[stree->tip_count+stree->inner_count+n];
+                unsigned int hindex = GET_HINDEX(stree,mnode);
+
+                if (x->hpath[hindex] == BPP_HPATH_NONE) continue;
+                if (stree->pptable[p->node_index][mnode->node_index] &&
+                    stree->pptable[p->node_index][mnode->hybrid->node_index]) continue;
+                if (x->hpath[hindex] == BPP_HPATH_RIGHT)
+                  visited = mnode;
+                else
+                  visited = mnode->hybrid;
+
+                if (stree->pptable[visited->node_index][p->node_index]) continue;
+
+                /* otherwise, it does not pass through p */
+                break;
+              }
+              if (n == stree->hybrid_count)
+              {
+                x->mark = FLAG_BRANCH_UPDATE;
+                x->parent->mark = FLAG_PARTIAL_UPDATE;
+                branchptr[branch_count++] = x;
+                ++extra;
+                break;
+              }
+            }
+            else
+            {
+              x->mark = FLAG_BRANCH_UPDATE;
+              x->parent->mark = FLAG_PARTIAL_UPDATE;
+              branchptr[branch_count++] = x;
+              ++extra;
+              break;
+            }
+          }
+        }
+      }
+      __extra_count[i] = extra;
+    }
+
     /* if at least one gene tree node age was changed, we need to recompute the
        log-likelihood */
     gtree[i]->old_logl = gtree[i]->logl;
     if (k)
     {
+      #if 0
       locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
+      #else
+      for (j = 0; j < branch_count; ++j)
+        branchptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                      branchptr[j]->pmatrix_index);
+      locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
+      #endif
 
       /* get list of nodes for which partials must be recomputed */
       unsigned int partials_count;
@@ -2484,7 +2636,7 @@ static long propose_tau(locus_t ** loci,
       k = __mark_count[i];
       gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
 
-      for (j = 0; j < k; ++j)
+      for (j = 0; j < k + __extra_count[i]; ++j)
         gt_nodesptr[j]->mark = 0;
     }
   }
@@ -2569,7 +2721,7 @@ static long propose_tau(locus_t ** loci,
       }
 
       /* un-mark nodes */
-      for (j = 0; j < k; ++j)
+      for (j = 0; j < k + __extra_count[i]; ++j)
          gt_nodesptr[j]->mark = 0;
 
       /* restore branch lengths and pmatrices */
@@ -2582,7 +2734,13 @@ static long propose_tau(locus_t ** loci,
           gt_nodesptr++;
         }
         if (matrix_updates)
+        #if 0
           locus_update_matrices(loci[i], gt_nodesptr, stree, i, matrix_updates);
+        #else
+        for (j = 0; j < matrix_updates; ++j)
+          gt_nodesptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                          gt_nodesptr[j]->pmatrix_index);
+        #endif
       }
 
       /* restore gene tree log-likelihood */
@@ -2804,6 +2962,11 @@ long stree_propose_spr(stree_t ** streeptr,
   double lnacceptance = 0;
 
   long thread_index = 0;
+
+  assert(opt_clock == BPP_CLOCK_GLOBAL);
+  /* TODO: If relaxed clock, we need to detect gene tree branches that simply
+     pass by (without coalescing) the pruned subtree
+  */
 
   /* the following clones the species tree and gene trees, and then
      we work on a copy */
