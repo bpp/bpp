@@ -3725,6 +3725,35 @@ long stree_propose_spr(stree_t ** streeptr,
   bl_list = __gt_nodes;
   snode_contrib = snode_contrib_space;
 
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    /* relaxed clock */
+    for (j = 0; j < gtree_list[i]->tip_count+gtree_list[i]->inner_count; ++j)
+    {
+      gnode_t * node = gtree_list[i]->nodes[j];
+
+      /* if root or parent already marked for branch update, skip */
+      if (!node->parent || (node->mark & FLAG_BRANCH_UPDATE)) continue;
+
+      if (stree->pptable[node->pop->node_index][b->node_index])
+      {
+        if (node->time >= y->tau)
+        {
+          bl_list[__mark_count[i]++] = node;
+          node->mark |= FLAG_BRANCH_UPDATE;
+          node->parent->mark |= FLAG_PARTIAL_UPDATE;
+        }
+      }
+      else if (stree->pptable[node->pop->node_index][y->node_index] &&
+               stree->pptable[y->node_index][node->parent->pop->node_index])
+      {
+        bl_list[__mark_count[i]++] = node;
+        node->mark |= FLAG_BRANCH_UPDATE;
+        node->parent->mark |= FLAG_PARTIAL_UPDATE;
+      }
+    }
+  }
+
   double logpr_notheta = stree->notheta_logpr;
   for (i = 0; i < stree->locus_count; ++i)
   {
@@ -3865,7 +3894,9 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
   double mu,sigma2;
   double alpha,beta;
   double logpr = 0;
-  snode_t * node;
+  snode_t * snode;
+  
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_PRIOR_GAMMA)
     fatal("Gamma prior for rates for correlated clock not implemented yet");
@@ -3878,7 +3909,47 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
   if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
   {
-    assert(0);
+    double t1,t2,tA,detT;
+    double Tinv[4];
+
+    for (i = stree->tip_count; i < total_nodes; ++i)
+    {
+      snode = stree->nodes[i];
+
+      if (opt_msci && snode->hybrid)
+      {
+        assert(0);
+
+        /* TODO: It is not clear how tA is calculated for hybridizations */
+        if (node_is_hybridization(snode) && !snode->parent->htau) continue;
+        if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
+      }
+
+      if (!snode->parent)
+        tA = 0;
+      else
+        tA = (snode->parent->tau - snode->tau) / 2;
+
+      /* TODO: It is not clear how t1,t2 are calculated for hybridization nodes */
+      t1 = (snode->tau - snode->left->tau) / 2;
+      t2 = (snode->tau - snode->right->tau) / 2;
+      detT = t1*t2 + tA*(t1+t2);
+
+      Tinv[0] = (tA+t2) / detT;
+      Tinv[1] = Tinv[2] = -tA / detT;
+      Tinv[3] = (tA+t1) / detT;
+      mu = gtree->rate_mui;
+      sigma2 = gtree->rate_sigma2i;
+
+      double rA,r1,r2,y1,y2,zz;
+      rA = snode->parent ? mu : snode->brate[msa_index];
+      r1 = snode->left->brate[msa_index];
+      r2 = snode->right->brate[msa_index];
+      y1 = log(r1/rA) + (tA+t1)*sigma2 / 2;
+      y2 = log(r2/rA) + (tA+t2)*sigma2 / 2;
+      zz = (y1*y1*Tinv[0] + 2*y1*y2*Tinv[1] + y2*y2*Tinv[3]);
+      logpr -= zz / (2*sigma2) + log(detT*sigma2*sigma2)/2 + log(r1*r2);
+    }
   }
 
   if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_GAMMA)
@@ -3900,20 +3971,19 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
     alpha = mu * mu / sigma2;
     beta  = mu / sigma2;
-    long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
     long rates_count = 0;
 
     for (i = 0; i < total_nodes; ++i)
     {
-      node = stree->nodes[i];
+      snode = stree->nodes[i];
 
-      if (opt_msci && node->hybrid)
+      if (opt_msci && snode->hybrid)
       {
-        if (node_is_hybridization(node) && !node->parent->htau) continue;
-        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+        if (node_is_hybridization(snode) && !snode->parent->htau) continue;
+        if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
 
-      r = node->brate[msa_index];
+      r = snode->brate[msa_index];
       logpr += -beta*r + (alpha-1)*log(r);
 
       ++rates_count;
@@ -3937,19 +4007,17 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
     mu = gtree->rate_mui;
     sigma2 = gtree->rate_sigma2i;
-
-    long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
     long rates_count = 0;
 
     double logmu = log(mu);
     for (i = 0; i < total_nodes; ++i)
     {
-      node = stree->nodes[i];
+      snode = stree->nodes[i];
 
-      if (opt_msci && node->hybrid)
+      if (opt_msci && snode->hybrid)
       {
-        if (node_is_hybridization(node) && !node->parent->htau) continue;
-        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+        if (node_is_hybridization(snode) && !snode->parent->htau) continue;
+        if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
 
       double logr = stree->nodes[i]->brate[msa_index];
