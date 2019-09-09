@@ -2077,7 +2077,7 @@ void cmd_run()
       pjump[BPP_MOVE_SIGMA2BAR_INDEX] = (pjump[BPP_MOVE_SIGMA2BAR_INDEX]*(ft_round-1)+ratio) /
                                         (double)ft_round;
 
-      if (opt_clock != BPP_CLOCK_GLOBAL);
+      if (opt_clock != BPP_CLOCK_GLOBAL)
       {
         ratio = prop_branch_rates(gtree,stree,locus,0);
         pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
