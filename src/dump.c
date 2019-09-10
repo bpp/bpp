@@ -286,6 +286,15 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_phi_alpha,1,fp);
   DUMP(&opt_phi_beta,1,fp);
 
+  /* write substitution model information */
+  DUMP(&opt_model,1,fp);
+
+  /* write gamma rate variation information */
+  DUMP(&opt_alpha_cats,1,fp);
+  DUMP(&opt_alpha_alpha,1,fp);
+  DUMP(&opt_alpha_beta,1,fp);
+
+
   /* whether locus mutation rate is estimated */
   DUMP(&opt_est_locusrate,1,fp);
   DUMP(&opt_locusrate_alpha,1,fp);
@@ -314,6 +323,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
   DUMP(&opt_finetune_locusrate,1,fp);
+  DUMP(&opt_finetune_freqs,1,fp);
+  DUMP(&opt_finetune_alpha,1,fp);
   DUMP(&opt_finetune_mubar,1,fp);
   DUMP(&opt_finetune_mui,1,fp);
   DUMP(&opt_finetune_sigma2bar,1,fp);
@@ -608,15 +619,15 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   DUMP(&(locus->rates_alpha),1,fp);
 
   /* write category rates */
-  DUMP(&(locus->rates),locus->rate_cats,fp);
+  DUMP(locus->rates,locus->rate_cats,fp);
 
   /* dump base frequencies */
   for (i = 0; i < locus->rate_matrices; ++i)
-    DUMP(&(locus->frequencies[i]),locus->states,fp);
+    DUMP(locus->frequencies[i],locus->states,fp);
 
   /* dump qmatrix rates */
   for (i = 0; i < locus->rate_matrices; ++i)
-    DUMP(&(locus->subst_params[i]),((locus->states-1)*locus->states)/2,fp);
+    DUMP(locus->subst_params[i],((locus->states-1)*locus->states)/2,fp);
 
   /* write param indices */
   DUMP(locus->param_indices,locus->rate_cats,fp);
