@@ -426,6 +426,15 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_phi_beta,1,fp))
     fatal("Cannot read beta of 'phiprior' tag"); 
 
+  if (!LOAD(&opt_model,1,fp))
+    fatal("Cannot read substitution model information");
+
+  if (!LOAD(&opt_alpha_cats,1,fp))
+    fatal("Cannot read number of gamma categories");
+  if (!LOAD(&opt_alpha_alpha,1,fp))
+    fatal("Cannot read alpha parameter of gamma rates");
+  if (!LOAD(&opt_alpha_beta,1,fp))
+    fatal("Cannot read beta parameter of gamma rates");
 
   /* load locus rate estimation flag */
   if (!LOAD(&opt_est_locusrate,1,fp))
@@ -482,6 +491,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species mixing step finetune parameter");
   if (!LOAD(&opt_finetune_locusrate,1,fp))
     fatal("Cannot read species locusrate/heredity finetune parameter");
+  if (!LOAD(&opt_finetune_freqs,1,fp))
+    fatal("Cannot read base frequencies finetune parameter");
+  if (!LOAD(&opt_finetune_alpha,1,fp))
+    fatal("Cannot read alpha value for gamma rate variation");
   if (!LOAD(&opt_finetune_mubar,1,fp))
     fatal("Cannot read mubar finetune parameter");
   if (!LOAD(&opt_finetune_mui,1,fp))
@@ -1257,7 +1270,7 @@ static void load_locus(FILE * fp, long index)
     fatal("Cannot read alpha value");
 
   /* load category rates */
-  if (!LOAD(&(locus[index]->rates),rate_cats,fp))
+  if (!LOAD(locus[index]->rates,rate_cats,fp))
     fatal("Cannot read category rates");
 
   /* load base frequencies */
