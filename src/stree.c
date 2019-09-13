@@ -3912,6 +3912,8 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
     double t1,t2,tA,detT;
     double Tinv[4];
 
+    assert(0);
+
     for (i = stree->tip_count; i < total_nodes; ++i)
     {
       snode = stree->nodes[i];
@@ -4020,7 +4022,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
         if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
 
-      double logr = stree->nodes[i]->brate[msa_index];
+      double logr = snode->brate[msa_index];
       z = logr - logmu + sigma2/2;
       logpr += -((z*z) / (2*sigma2)) - logr;
 

@@ -1714,6 +1714,7 @@ void cmd_run()
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
   double mean_phi = 0;
+  double dbg_mean_rate = 0;
   #ifdef DEBUG_GTR
   double mean_freqa = 0;
   double mean_freqc = 0;
@@ -2195,6 +2196,7 @@ void cmd_run()
       mean_alpha0 = (mean_alpha0*(ft_round-1) + locus[0]->rates_alpha)/ft_round;
       #endif
 
+      dbg_mean_rate = (dbg_mean_rate*(ft_round-1) + gtree[0]->rate_mui)/ft_round;
     }
 
     /* compute mean log-L */
@@ -2282,6 +2284,11 @@ void cmd_run()
       
       if (opt_msci)
         printf(" %6.4f ", mean_phi);
+
+      #if 1
+      if (enabled_prop_branchrates)
+        printf(" MU_0=%6.4f ", dbg_mean_rate);
+      #endif
 
       #ifdef DEBUG_GTR
         printf(" ( %6.4f %6.4f %6.4f %6.4f ) ", mean_freqa,mean_freqc,mean_freqg,mean_freqt);
