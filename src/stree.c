@@ -2154,6 +2154,8 @@ void propose_tau_update_gtrees(locus_t ** loci,
         parents_count = 1;
       }
 
+      /* Note: At this point all marked nodes have the FLAG_BRANCH_UPDATE set,
+         and a subset of them have the FLAG_PARTIAL_UPDATE */
       for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
       {
         gnode_t * x = gtree[i]->nodes[j];
@@ -2191,6 +2193,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
               }
               if (n == stree->hybrid_count)
               {
+                assert(!x->parent->mark || x->parent->mark == FLAG_PARTIAL_UPDATE);
                 x->mark = FLAG_BRANCH_UPDATE;
                 x->parent->mark = FLAG_PARTIAL_UPDATE;
                 branchptr[branch_count++] = x;
@@ -2200,6 +2203,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
             }
             else
             {
+              assert(!x->parent->mark || x->parent->mark == FLAG_PARTIAL_UPDATE);
               x->mark = FLAG_BRANCH_UPDATE;
               x->parent->mark = FLAG_PARTIAL_UPDATE;
               branchptr[branch_count++] = x;
@@ -2215,16 +2219,12 @@ void propose_tau_update_gtrees(locus_t ** loci,
     /* if at least one gene tree node age was changed, we need to recompute the
        log-likelihood */
     gtree[i]->old_logl = gtree[i]->logl;
-    if (k)
+    if (k+extra)   /* Nasty bug!! When having relaxed clock +extra must be there */
     {
-      #if 0
-      locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
-      #else
       for (j = 0; j < branch_count; ++j)
         branchptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
                                                       branchptr[j]->pmatrix_index);
       locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
-      #endif
 
       /* get list of nodes for which partials must be recomputed */
       unsigned int partials_count;
@@ -2636,8 +2636,11 @@ static long propose_tau(locus_t ** loci,
       k = __mark_count[i];
       gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
 
-      for (j = 0; j < k + __extra_count[i]; ++j)
-        gt_nodesptr[j]->mark = 0;
+      /* The commented loop is probably sufficient */
+      //for (j = 0; j < k + __extra_count[i]; ++j)
+      //  gt_nodesptr[j]->mark = 0;
+      for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+        gtree[i]->nodes[j]->mark = 0;
     }
   }
   else
@@ -2719,10 +2722,15 @@ static long propose_tau(locus_t ** loci,
           partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
                                                     partials[j]->scaler_index);
       }
+      /* un-mark nodes */
+      for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+        gtree[i]->nodes[j]->mark = 0;
 
+      #if 0
       /* un-mark nodes */
       for (j = 0; j < k + __extra_count[i]; ++j)
          gt_nodesptr[j]->mark = 0;
+      #endif
 
       /* restore branch lengths and pmatrices */
       int matrix_updates = __mark_count[i] + __extra_count[i];
@@ -2733,14 +2741,9 @@ static long propose_tau(locus_t ** loci,
           --matrix_updates;
           gt_nodesptr++;
         }
-        if (matrix_updates)
-        #if 0
-          locus_update_matrices(loci[i], gt_nodesptr, stree, i, matrix_updates);
-        #else
         for (j = 0; j < matrix_updates; ++j)
           gt_nodesptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
                                                           gt_nodesptr[j]->pmatrix_index);
-        #endif
       }
 
       /* restore gene tree log-likelihood */
@@ -3725,6 +3728,7 @@ long stree_propose_spr(stree_t ** streeptr,
   bl_list = __gt_nodes;
   snode_contrib = snode_contrib_space;
 
+  long extra = 0;
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
     /* relaxed clock */
@@ -3742,6 +3746,7 @@ long stree_propose_spr(stree_t ** streeptr,
           bl_list[__mark_count[i]++] = node;
           node->mark |= FLAG_BRANCH_UPDATE;
           node->parent->mark |= FLAG_PARTIAL_UPDATE;
+          extra++;
         }
       }
       else if (stree->pptable[node->pop->node_index][y->node_index] &&
@@ -3750,6 +3755,7 @@ long stree_propose_spr(stree_t ** streeptr,
         bl_list[__mark_count[i]++] = node;
         node->mark |= FLAG_BRANCH_UPDATE;
         node->parent->mark |= FLAG_PARTIAL_UPDATE;
+        extra++;
       }
     }
   }
@@ -3758,7 +3764,8 @@ long stree_propose_spr(stree_t ** streeptr,
   for (i = 0; i < stree->locus_count; ++i)
   {
     gtree_list[i]->old_logl = gtree_list[i]->logl;
-    if (moved_count[i])
+    /* TODO: Perhaps change the below check to if (__mark_count[i]) ?? */
+    if (moved_count[i]+extra)
     {
       /* update branch lengths and transition probability matrices */
       for (j = 0; j < (unsigned int)__mark_count[i]; ++j)
@@ -4465,6 +4472,9 @@ double prop_branch_rates(gtree_t ** gtree,
 
       double diff = prior_logratio_rates(gtree[i],old_rate,new_rate);
       lnacceptance += diff;
+
+      if (opt_debug)
+        printf("[Debug] (br) lnacceptance = %f\n", lnacceptance);
 
       if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
       {

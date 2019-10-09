@@ -3160,6 +3160,9 @@ static long propose_ages(locus_t * locus,
     travbuffer[msa_index][k++] = node->right;
     if (node->parent)
       travbuffer[msa_index][k++] = node;
+    for (j = 0; j < k; ++j)
+      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
+
     locus_update_matrices(locus,travbuffer[msa_index],stree,msa_index,k);
       
 
@@ -3196,6 +3199,9 @@ static long propose_ages(locus_t * locus,
     else
       lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
 
+    if (opt_debug)
+      printf("[Debug] (gtage) lnacceptance = %f\n", lnacceptance);
+
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accepted */
@@ -3229,7 +3235,9 @@ static long propose_ages(locus_t * locus,
       travbuffer[msa_index][k++] = node->right;
       if (node->parent)
         travbuffer[msa_index][k++] = node;
-      locus_update_matrices(locus,travbuffer[msa_index],stree,msa_index,k);
+
+      for (j = 0; j < k; ++j)
+        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
 
       if (opt_msci)
       {
