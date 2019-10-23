@@ -572,9 +572,9 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
     DUMP(gtree->nodes[i]->hpath,hybrid_count,fp);
 
+  DUMP(&(gtree->rate_mui),1,fp);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    DUMP(&(gtree->rate_mui),1,fp);
     DUMP(&(gtree->rate_sigma2i),1,fp);
     DUMP(&(gtree->lnprior_rates),1,fp);
   }
@@ -631,9 +631,6 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   /* write param indices */
   DUMP(locus->param_indices,locus->rate_cats,fp);
-
-  /* write mutation rates */
-  DUMP(locus->mut_rates,locus->rate_matrices,fp);
 
   /* write heredity scalars */
   DUMP(locus->heredity,locus->rate_matrices,fp);

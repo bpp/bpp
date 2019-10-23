@@ -3163,7 +3163,7 @@ static long propose_ages(locus_t * locus,
     for (j = 0; j < k; ++j)
       SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
 
-    locus_update_matrices(locus,travbuffer[msa_index],stree,msa_index,k);
+    locus_update_matrices(locus,gtree,travbuffer[msa_index],stree,msa_index,k);
       
 
     /* fill traversal buffer with root-path starting from current node */
@@ -4593,7 +4593,7 @@ static long propose_spr(locus_t * locus,
     for (j = 0; j < k; ++j)
       SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
 
-    locus_update_matrices(locus,travbuffer[msa_index],stree,msa_index,k);
+    locus_update_matrices(locus,gtree,travbuffer[msa_index],stree,msa_index,k);
 
     /* locate all nodes  whose CLV need to be updated */
     k = 0;
@@ -5055,16 +5055,16 @@ static long prop_locusrate(gtree_t ** gtree,
       if (locnodes[j]->parent)
         SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
 
-    old_locrate = locus[i]->mut_rates[0];
-    old_refrate = locus[ref]->mut_rates[0];
+    old_locrate = gtree[i]->rate_mui;
+    old_refrate = gtree[ref]->rate_mui;
 
     double r = old_locrate + opt_finetune_locusrate * 
                legacy_rnd_symmetrical(thread_index);
     new_locrate = reflect(r, 0, old_locrate + old_refrate, thread_index);
-    new_refrate = locus[ref]->mut_rates[0] - (new_locrate - old_locrate);
+    new_refrate = gtree[ref]->rate_mui - (new_locrate - old_locrate);
 
-    locus[i]->mut_rates[0] = new_locrate;
-    locus[ref]->mut_rates[0] = new_refrate;
+    gtree[i]->rate_mui   = new_locrate;
+    gtree[ref]->rate_mui = new_refrate;
 
     lnacceptance = (opt_locusrate_alpha - 1) *
                    log((new_locrate*new_refrate) / (old_locrate*old_refrate));
@@ -5123,8 +5123,8 @@ static long prop_locusrate(gtree_t ** gtree,
     else
     {
       /* reject */
-      locus[i]->mut_rates[0] = old_locrate;
-      locus[ref]->mut_rates[0] = old_refrate;
+      gtree[i]->rate_mui   = old_locrate;
+      gtree[ref]->rate_mui = old_refrate;
 
       /* reset selected locus */
       gnodeptr = gtree[i]->nodes;

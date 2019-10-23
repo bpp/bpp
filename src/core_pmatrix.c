@@ -672,6 +672,7 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
 }
 
 void bpp_core_update_pmatrix(locus_t * locus,
+                             gtree_t * gtree,
                              gnode_t ** traversal,
                              stree_t * stree,
                              long msa_index,
@@ -711,7 +712,7 @@ void bpp_core_update_pmatrix(locus_t * locus,
     if (opt_clock == BPP_CLOCK_GLOBAL)
     {
       /* strict clock */
-      t = node->length = (node->parent->time - node->time)*locus->mut_rates[0];
+      t = node->length = (node->parent->time - node->time)*gtree->rate_mui;
     }
     else
     {

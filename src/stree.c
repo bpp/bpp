@@ -2244,7 +2244,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
       for (j = 0; j < branch_count; ++j)
         branchptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
                                                       branchptr[j]->pmatrix_index);
-      locus_update_matrices(loci[i], branchptr, stree, i, branch_count);
+      locus_update_matrices(loci[i], gtree[i], branchptr, stree, i, branch_count);
 
       /* get list of nodes for which partials must be recomputed */
       unsigned int partials_count;
@@ -3793,7 +3793,7 @@ long stree_propose_spr(stree_t ** streeptr,
                                                     bl_list[j]->pmatrix_index);
       }
 
-      locus_update_matrices(loci[i], bl_list, stree, i, __mark_count[i]);
+      locus_update_matrices(loci[i], gtree_list[i], bl_list, stree, i, __mark_count[i]);
 
       /* retrieve all nodes whose partials must be updates */
       unsigned int partials_count;
@@ -4453,7 +4453,7 @@ double prop_branch_rates(gtree_t ** gtree,
           updatelist[k]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
                                                          updatelist[k]->pmatrix_index);
         /* update necessary p-matrices */
-        locus_update_matrices(locus[i],updatelist,stree,i,branch_count);
+        locus_update_matrices(locus[i],gtree[i],updatelist,stree,i,branch_count);
 
         /* get the list of nodes for which CLVs must be reverted, i.e. all marked
            nodes and all nodes whose left or right subtree has at least one marked

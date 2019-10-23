@@ -106,7 +106,7 @@ static long propose_alpha(stree_t * stree,
       gt_nodes[n++] = p;
     }
   }
-  locus_update_matrices(locus,gt_nodes,stree,msa_index,n);
+  locus_update_matrices(locus,gtree,gt_nodes,stree,msa_index,n);
 
 
   /* get postorder traversal of inner nodes, swap CLV indidces to point to new
