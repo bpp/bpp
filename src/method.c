@@ -501,7 +501,7 @@ static void mcmc_logsample(FILE * fp,
   if (opt_est_locusrate && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\t%.6f", locus[i]->mut_rates[0]);
+      fprintf(fp, "\t%.6f", gtree[i]->rate_mui);
   }
 
   /* 4. Print mutation rate for each locus */
@@ -1457,10 +1457,8 @@ static FILE * init(stree_t ** ptr_stree,
         }
     }
 
-    /* TODO with more complex mixture models where rate_matrices > 1 we need
-       to revisit this */
-    assert(rate_matrices == 1);
-    locus_set_mut_rates(locus[i],locusrate+i);
+    /* set rate of evolution and heredity scalar for each locus */
+    gtree[i]->rate_mui = locusrate[i];
     locus_set_heredity_scalers(locus[i],heredity+i);
 
     /* set pattern weights and free the weights array */
@@ -1538,6 +1536,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* compute the conditional probabilities for each inner node */
     locus_update_matrices(locus[i],
+                          gtree[i],
                           gtree[i]->nodes,
                           stree,
                           i,

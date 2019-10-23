@@ -1166,11 +1166,12 @@ static void load_gene_tree(FILE * fp, long index)
     if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
       fatal("Cannot read gene tree path flags");
 
-  /* relaxed clock mu_i, sigma2_i and logprior */
+  if (!LOAD(&(gt->rate_mui),1,fp))
+      fatal("Cannot read gene tree mu_%ld", index);
+
+  /* relaxed clock sigma2_i and logprior */
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    if (!LOAD(&(gt->rate_mui),1,fp))
-      fatal("Cannot read gene tree mu_%ld", index);
     if (!LOAD(&(gt->rate_sigma2i),1,fp))
       fatal("Cannot read gene tree sigma2_%ld", index);
     if (!LOAD(&(gt->lnprior_rates),1,fp))
@@ -1286,10 +1287,6 @@ static void load_locus(FILE * fp, long index)
   /* load param indices */
   if (!LOAD(locus[index]->param_indices,locus[index]->rate_cats,fp))
     fatal("Cannot read param indices");
-
-  /* load mutation rates */
-  if (!LOAD(locus[index]->mut_rates,locus[index]->rate_matrices,fp))
-    fatal("Cannot read locus mutation rates");
 
   /* load heredity scalars */
   if (!LOAD(locus[index]->heredity,locus[index]->rate_matrices,fp))
@@ -1452,6 +1449,7 @@ int checkpoint_load(gtree_t *** gtreep,
   {
     gtree_reset_leaves(gtree[i]->root);
     locus_update_matrices(locus[i],
+                          gtree[i],
                           gtree[i]->nodes,
                           stree,i,
                           gtree[i]->edge_count);

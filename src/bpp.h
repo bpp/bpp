@@ -533,7 +533,6 @@ typedef struct locus_s
   double ** subst_params;
   unsigned int ** scale_buffer;
   double ** frequencies;
-  double * mut_rates;
   double * heredity;
   unsigned int * pattern_weights;
   unsigned int pattern_weights_sum;
@@ -1343,7 +1342,6 @@ void pll_set_frequencies(locus_t * locus,
 
 void locus_set_frequencies_and_rates(locus_t * locus);
 void pll_set_category_rates(locus_t * locus, const double * rates);
-void locus_set_mut_rates(locus_t * locus, const double * mut_rates);
 void locus_set_heredity_scalers(locus_t * locus, const double * heredity);
 
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count);
@@ -1354,6 +1352,7 @@ void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights);
 
 void locus_update_matrices(locus_t * locus,
+                           gtree_t * gtree,
                            gnode_t ** traversal,
                            stree_t * stree,
                            long msa_index,
@@ -1583,6 +1582,7 @@ void pll_core_create_lookup(unsigned int states,
 /* functions in core_pmatrix.c */
 
 void bpp_core_update_pmatrix(locus_t * locus,
+                             gtree_t * gtree,
                              gnode_t ** traversal,
                              stree_t * stree,
                              long msa_index,

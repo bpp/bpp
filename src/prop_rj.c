@@ -540,6 +540,7 @@ long prop_split(gtree_t ** gtree,
     if (j)
     {
       locus_update_matrices(locus[i],
+                            gtree[i],
                             nodevec+nodevec_offset[i],
                             stree,
                             i,
@@ -698,6 +699,7 @@ long prop_split(gtree_t ** gtree,
       if (gtree[i]->logl != gtree[i]->old_logl)
       {
         locus_update_matrices(locus[i],
+                              gtree[i],
                               nodevec+nodevec_offset[i],
                               stree,
                               i,
@@ -752,7 +754,7 @@ long prop_split(gtree_t ** gtree,
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
       if (gt->nodes[j]->parent)
         gt_nodes[k++] = gt->nodes[j];
-    locus_update_matrices(locus[i],gt_nodes,k);
+    locus_update_matrices(locus[i],gtree[i],gt_nodes,k);
 
     gtree_all_partials(gt->root,gt_nodes,&k);
     for (j = 0; j < k; ++j)
@@ -941,6 +943,7 @@ long prop_join(gtree_t ** gtree,
     if (j)
     {
       locus_update_matrices(locus[i],
+                            gtree[i],
                             nodevec+nodevec_offset[i],
                             stree,
                             i,
@@ -1103,6 +1106,7 @@ long prop_join(gtree_t ** gtree,
       if (gtree[i]->logl != gtree[i]->old_logl)
       {
         locus_update_matrices(locus[i],
+                              gtree[i],
                               nodevec+nodevec_offset[i],
                               stree,
                               i,
