@@ -459,18 +459,18 @@ static void load_chk_section_1(FILE * fp,
   /* load clock and locusrate info */
   if (!LOAD(&opt_clock,1,fp))
     fatal("Cannot read 'clock' tag");
-  if (!LOAD(&opt_brate_mean_alpha,1,fp))
-    fatal("Cannot read 'branchrate_mean' tag");
-  if (!LOAD(&opt_brate_mean_beta,1,fp))
-    fatal("Cannot read 'branchrate_mean' tag");
-  if (!LOAD(&opt_brate_mean_diralpha,1,fp))
-    fatal("Cannot read 'branchrate_mean' tag");
-  if (!LOAD(&opt_brate_var_alpha,1,fp))
-    fatal("Cannot read 'branchrate_var' tag");
-  if (!LOAD(&opt_brate_var_beta,1,fp))
-    fatal("Cannot read 'branchrate_var' tag");
-  if (!LOAD(&opt_brate_var_diralpha,1,fp))
-    fatal("Cannot read 'branchrate_var' tag");
+  if (!LOAD(&opt_mubar_alpha,1,fp))
+    fatal("Cannot read 'mubar_alpha'");
+  if (!LOAD(&opt_mubar_beta,1,fp))
+    fatal("Cannot read 'mubar_beta'");
+  if (!LOAD(&opt_mui_alpha,1,fp))
+    fatal("Cannot read 'mui_alpha'");
+  if (!LOAD(&opt_vbar_alpha,1,fp))
+    fatal("Cannot read 'vbar_alpha'");
+  if (!LOAD(&opt_vbar_beta,1,fp))
+    fatal("Cannot read 'vbar_beta'");
+  if (!LOAD(&opt_vi_alpha,1,fp))
+    fatal("Cannot read 'vi_alpha'");
   if (!LOAD(&opt_rate_prior,1,fp))
     fatal("Cannot read rate prior");
 

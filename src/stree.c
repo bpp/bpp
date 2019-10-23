@@ -4078,8 +4078,8 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
   assert(opt_clock != BPP_CLOCK_GLOBAL);
 
   /* TODO: opt_finetune_locusrate */
-  alpha = opt_brate_var_diralpha;
-  beta  = opt_brate_var_diralpha / stree->locusrate_sigma2bar;
+  alpha = opt_vi_alpha;
+  beta  = opt_vi_alpha / stree->locusrate_sigma2bar;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -4142,8 +4142,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
      which changes the rate prior but not the likelihood
 
   */
-  alpha = opt_brate_mean_diralpha;
-  beta = opt_brate_mean_diralpha / stree->locusrate_mubar;
+  alpha = opt_mui_alpha;
+  beta = opt_mui_alpha / stree->locusrate_mubar;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -4207,11 +4207,11 @@ long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
 
   lnacceptance = new_lograte - old_lograte;
 
-  lnacceptance += (opt_brate_mean_alpha-1)*log(new_rate/old_rate) -
-                  opt_brate_mean_beta*(new_rate-old_rate);
-  double a = opt_brate_mean_diralpha;
-  double bnew = opt_brate_mean_diralpha / new_rate;
-  double bold = opt_brate_mean_diralpha / old_rate;
+  lnacceptance += (opt_mubar_alpha-1)*log(new_rate/old_rate) -
+                  opt_mubar_beta*(new_rate-old_rate);
+  double a = opt_mui_alpha;
+  double bnew = opt_mui_alpha / new_rate;
+  double bold = opt_mui_alpha / old_rate;
   lnacceptance += opt_locus_count*a*log(bnew / bold);
   for (i = 0; i < opt_locus_count; ++i)
      lnacceptance -= (bnew - bold)*gtree[i]->rate_mui;
@@ -4251,11 +4251,11 @@ long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
 
   lnacceptance = new_logsigma2 - old_logsigma2;
 
-  lnacceptance += (opt_brate_var_alpha-1)*log(new_sigma2/old_sigma2) -
-                  opt_brate_var_beta*(new_sigma2-old_sigma2);
-  double a = opt_brate_var_diralpha;
-  double bnew = opt_brate_var_diralpha / new_sigma2;
-  double bold = opt_brate_var_diralpha / old_sigma2;
+  lnacceptance += (opt_vbar_alpha-1)*log(new_sigma2/old_sigma2) -
+                  opt_vbar_beta*(new_sigma2-old_sigma2);
+  double a = opt_vi_alpha;
+  double bnew = opt_vi_alpha / new_sigma2;
+  double bold = opt_vi_alpha / old_sigma2;
   lnacceptance += opt_locus_count*a*log(bnew / bold);
   for (i = 0; i < opt_locus_count; ++i)
      lnacceptance -= (bnew - bold)*gtree[i]->rate_sigma2i;

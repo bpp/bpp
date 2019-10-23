@@ -306,12 +306,12 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write clock and locusrate info */
   DUMP(&opt_clock,1,fp);
-  DUMP(&opt_brate_mean_alpha,1,fp);
-  DUMP(&opt_brate_mean_beta,1,fp);
-  DUMP(&opt_brate_mean_diralpha,1,fp);
-  DUMP(&opt_brate_var_alpha,1,fp);
-  DUMP(&opt_brate_var_beta,1,fp);
-  DUMP(&opt_brate_var_diralpha,1,fp);
+  DUMP(&opt_mubar_alpha,1,fp);
+  DUMP(&opt_mubar_beta,1,fp);
+  DUMP(&opt_mui_alpha,1,fp);
+  DUMP(&opt_vbar_alpha,1,fp);
+  DUMP(&opt_vbar_beta,1,fp);
+  DUMP(&opt_vi_alpha,1,fp);
   DUMP(&opt_rate_prior,1,fp);
 
   /* write finetune */

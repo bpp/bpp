@@ -1396,8 +1396,8 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
     /* set universal mean/variance */
-    stree->locusrate_mubar = opt_brate_mean_alpha / opt_brate_mean_beta;
-    stree->locusrate_sigma2bar = opt_brate_var_alpha / opt_brate_var_beta;
+    stree->locusrate_mubar = opt_mubar_alpha / opt_mubar_beta;
+    stree->locusrate_sigma2bar = opt_vbar_alpha / opt_vbar_beta;
   }
 
   for (i = 0, pindex=0; i < msa_count; ++i)
