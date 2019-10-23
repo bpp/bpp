@@ -1002,19 +1002,19 @@ static long parse_branchrate_mean(const char * line)
 
   long count;
 
-  count = get_double(p, &opt_brate_mean_alpha);
+  count = get_double(p, &opt_mubar_alpha);
   if (!count) goto l_unwind;
 
   p += count;
 
   /* now read second token */
-  count = get_double(p, &opt_brate_mean_beta);
+  count = get_double(p, &opt_mubar_beta);
   if (!count) goto l_unwind;
 
   p += count;
 
   /* now read third token */
-  count = get_double(p, &opt_brate_mean_diralpha);
+  count = get_double(p, &opt_mui_alpha);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1034,19 +1034,19 @@ static long parse_branchrate_variance(const char * line)
 
   long count;
 
-  count = get_double(p, &opt_brate_var_alpha);
+  count = get_double(p, &opt_vbar_alpha);
   if (!count) goto l_unwind;
 
   p += count;
 
   /* now read second token */
-  count = get_double(p, &opt_brate_var_beta);
+  count = get_double(p, &opt_vbar_beta);
   if (!count) goto l_unwind;
 
   p += count;
 
   /* now read third token */
-  count = get_double(p, &opt_brate_var_diralpha);
+  count = get_double(p, &opt_vi_alpha);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1735,24 +1735,24 @@ static void check_validity()
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    if (opt_brate_mean_alpha < 0)
+    if (opt_mubar_alpha < 0)
       fatal("Relaxed clock models require option 'branchrate_mean' to be specified");
 
-    if (opt_brate_var_alpha < 0)
+    if (opt_vbar_alpha < 0)
       fatal("Relaxed clock models require option 'branchrate_var' to be specified");
   }
 
-  if (opt_est_locusrate && opt_brate_mean_alpha > 0)
+  if (opt_est_locusrate && opt_mubar_alpha > 0)
     fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
-  if (opt_est_locusrate && opt_brate_var_alpha > 0)
+  if (opt_est_locusrate && opt_vbar_alpha > 0)
     fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
 
   if (opt_clock == BPP_CLOCK_GLOBAL)
   {
-    if (opt_brate_mean_alpha > 0)
+    if (opt_mubar_alpha > 0)
       fatal("Use option 'locusrate' instead of 'branchrate_mean' with molecular clock");
 
-    if (opt_brate_var_alpha > 0)
+    if (opt_vbar_alpha > 0)
       fatal("Cannot use option 'branchrate_var' with molecular clock");
   }
 }
@@ -2105,9 +2105,7 @@ void load_cfile()
         if (!parse_branchrate_variance(value))
           fatal("Option 'branchrate_var' expects three doubles (line %ld)",
                 line_count);
-        if (opt_brate_var_alpha <= 0 ||
-            opt_brate_var_beta <= 0 ||
-            opt_brate_var_diralpha <= 0)
+        if (opt_vbar_alpha <= 0 || opt_vbar_beta <= 0 || opt_vi_alpha <= 0)
           fatal("Option 'branchrate_var' expects three doubles > 0 (line %ld)",
                 line_count);
         valid = 1;
@@ -2127,9 +2125,7 @@ void load_cfile()
         if (!parse_branchrate_mean(value))
           fatal("Option 'branchrate_mean' expects two doubles (line %ld)",
                 line_count);
-        if (opt_brate_mean_alpha <= 0 ||
-            opt_brate_mean_beta <= 0 ||
-            opt_brate_mean_diralpha <= 0)
+        if (opt_mubar_alpha <= 0 || opt_mubar_beta <= 0 || opt_mui_alpha <= 0)
           fatal("Option 'branchrate_mean' expects three doubles > 0 (line %ld)",
                 line_count);
         valid = 1;
