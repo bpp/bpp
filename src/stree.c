@@ -346,6 +346,15 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
     clone->event_count = (int *)xmalloc(msa_count * sizeof(int));
   memcpy(clone->event_count, snode->event_count, msa_count * sizeof(int));
 
+  /* branch rate (per locus) */
+  if (snode->brate)
+  {
+    if (!clone->brate)
+      clone->brate = (double *)xmalloc(msa_count * sizeof(double));
+    memcpy(clone->brate, snode->brate, msa_count * sizeof(double));
+  }
+    
+
   /* seqin (incoming sequences to a population) counts per locus */
   if (!clone->seqin_count)
     clone->seqin_count = (int *)xmalloc(msa_count * sizeof(int));
@@ -447,6 +456,8 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   unsigned int i;
   unsigned nodes_count = stree->tip_count + stree->inner_count;
 
+  assert(!opt_msci);
+
   /* clone node contents */
   for (i = 0; i < nodes_count; ++i)
     snode_clone(stree->nodes[i], clone->nodes[i], clone);
@@ -463,6 +474,10 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->notheta_old_logpr = stree->notheta_old_logpr;
   clone->notheta_hfactor = stree->notheta_hfactor;
   clone->notheta_sfactor = stree->notheta_sfactor;
+
+  /* relaxed clock attributes */
+  clone->locusrate_mubar = stree->locusrate_mubar;
+  clone->locusrate_sigma2bar = stree->locusrate_sigma2bar;
 }
 
 stree_t * stree_clone_init(stree_t * stree)
@@ -508,6 +523,11 @@ static void gtree_clone(gtree_t * gtree,
   clone_gtree->logpr = gtree->logpr;
   clone_gtree->old_logl = gtree->old_logl;
   clone_gtree->old_logpr = gtree->old_logpr;
+
+  /* locus rate */
+  clone_gtree->rate_mui = gtree->rate_mui;
+  clone_gtree->rate_sigma2i = gtree->rate_sigma2i;
+  clone_gtree->lnprior_rates = gtree->lnprior_rates;
 }
 
 gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
@@ -2634,9 +2654,9 @@ static long propose_tau(locus_t ** loci,
     for (i = 0; i < stree->locus_count; ++i)
     {
       k = __mark_count[i];
-      gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
 
       /* The commented loop is probably sufficient */
+      //gnode_t ** gt_nodesptr = __gt_nodes + __gt_nodes_index[i];
       //for (j = 0; j < k + __extra_count[i]; ++j)
       //  gt_nodesptr[j]->mark = 0;
       for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
@@ -2966,7 +2986,6 @@ long stree_propose_spr(stree_t ** streeptr,
 
   long thread_index = 0;
 
-  assert(opt_clock == BPP_CLOCK_GLOBAL);
   /* TODO: If relaxed clock, we need to detect gene tree branches that simply
      pass by (without coalescing) the pruned subtree
   */
@@ -3624,6 +3643,35 @@ long stree_propose_spr(stree_t ** streeptr,
     gtarget_nodes += gtree->inner_count;
     gtarget_list += gtree->tip_count + gtree->inner_count;
 
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      /* relaxed clock */
+      for (j = 0; j < gtree_list[i]->tip_count+gtree_list[i]->inner_count; ++j)
+      {
+        gnode_t * node = gtree_list[i]->nodes[j];
+
+        /* if root or parent already marked for branch update, skip */
+        if (!node->parent || (node->mark & FLAG_BRANCH_UPDATE)) continue;
+
+        if (stree->pptable[node->pop->node_index][b->node_index])
+        {
+          if (node->time >= y->tau)
+          {
+            bl_list[branch_update_count++] = node;
+            node->mark |= FLAG_BRANCH_UPDATE;
+            node->parent->mark |= FLAG_PARTIAL_UPDATE;
+          }
+        }
+        else if (stree->pptable[node->pop->node_index][y->node_index] &&
+                 stree->pptable[y->node_index][node->parent->pop->node_index])
+        {
+          bl_list[branch_update_count++] = node;
+          node->mark |= FLAG_BRANCH_UPDATE;
+          node->parent->mark |= FLAG_PARTIAL_UPDATE;
+        }
+      }
+    }
+
     __mark_count[i] = branch_update_count;
     bl_list += branch_update_count;
     snode_contrib += stree->tip_count + stree->inner_count;
@@ -3728,44 +3776,15 @@ long stree_propose_spr(stree_t ** streeptr,
   bl_list = __gt_nodes;
   snode_contrib = snode_contrib_space;
 
-  long extra = 0;
-  if (opt_clock != BPP_CLOCK_GLOBAL)
-  {
-    /* relaxed clock */
-    for (j = 0; j < gtree_list[i]->tip_count+gtree_list[i]->inner_count; ++j)
-    {
-      gnode_t * node = gtree_list[i]->nodes[j];
-
-      /* if root or parent already marked for branch update, skip */
-      if (!node->parent || (node->mark & FLAG_BRANCH_UPDATE)) continue;
-
-      if (stree->pptable[node->pop->node_index][b->node_index])
-      {
-        if (node->time >= y->tau)
-        {
-          bl_list[__mark_count[i]++] = node;
-          node->mark |= FLAG_BRANCH_UPDATE;
-          node->parent->mark |= FLAG_PARTIAL_UPDATE;
-          extra++;
-        }
-      }
-      else if (stree->pptable[node->pop->node_index][y->node_index] &&
-               stree->pptable[y->node_index][node->parent->pop->node_index])
-      {
-        bl_list[__mark_count[i]++] = node;
-        node->mark |= FLAG_BRANCH_UPDATE;
-        node->parent->mark |= FLAG_PARTIAL_UPDATE;
-        extra++;
-      }
-    }
-  }
-
   double logpr_notheta = stree->notheta_logpr;
   for (i = 0; i < stree->locus_count; ++i)
   {
     gtree_list[i]->old_logl = gtree_list[i]->logl;
+
+
     /* TODO: Perhaps change the below check to if (__mark_count[i]) ?? */
-    if (moved_count[i]+extra)
+    //if (moved_count[i])
+    if (__mark_count[i])
     {
       /* update branch lengths and transition probability matrices */
       for (j = 0; j < (unsigned int)__mark_count[i]; ++j)
