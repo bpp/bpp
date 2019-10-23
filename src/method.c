@@ -2195,9 +2195,8 @@ void cmd_run()
 
       mean_alpha0 = (mean_alpha0*(ft_round-1) + locus[0]->rates_alpha)/ft_round;
       #endif
-
-      dbg_mean_rate = (dbg_mean_rate*(ft_round-1) + gtree[0]->rate_mui)/ft_round;
     }
+    dbg_mean_rate = (dbg_mean_rate*(ft_round-1) + gtree[0]->rate_mui)/ft_round;
 
     /* compute mean log-L */
     if (opt_usedata)
@@ -2397,8 +2396,8 @@ void cmd_run()
     char * cmd;
 
     /* execute ds on rates sample of first locus */
-    asprintf(&s, template_ratesfile, 1);
-    asprintf(&cmd, "/a/c/ds %s", s);
+    xasprintf(&s, template_ratesfile, 1);
+    xasprintf(&cmd, "/a/c/ds %s", s);
     system(cmd);
     free(s);
     free(cmd);
@@ -2406,8 +2405,8 @@ void cmd_run()
     if (opt_locus_count > 1)
     {
       /* execute ds on rates sample of last locus */
-      asprintf(&s, template_ratesfile, opt_locus_count-1);
-      asprintf(&cmd, "/a/c/ds %s", s);
+      xasprintf(&s, template_ratesfile, opt_locus_count-1);
+      xasprintf(&cmd, "/a/c/ds %s", s);
       system(cmd);
       free(s);
       free(cmd);
