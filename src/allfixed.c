@@ -444,7 +444,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_msci)
     col_count += stree->hybrid_count;
 
-  if (opt_est_locusrate && opt_print_locusrate)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) && opt_print_locusrate)
     col_count += opt_locus_count;
 
   if (opt_est_heredity && opt_print_hscalars)

@@ -221,8 +221,15 @@ extern const char * global_freqs_strings[28];
 #define BPP_CLOCK_IND                   2
 #define BPP_CLOCK_AC                    3
 
-#define BPP_PRIOR_LOGNORMAL             0
-#define BPP_PRIOR_GAMMA                 1
+#define BPP_LOCRATE_PRIOR_MIN           0
+#define BPP_LOCRATE_PRIOR_GAMMADIR      0
+#define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
+#define BPP_LOCRATE_PRIOR_MAX           1
+
+#define BPP_BRATE_PRIOR_MIN             0
+#define BPP_BRATE_PRIOR_LOGNORMAL       0
+#define BPP_BRATE_PRIOR_GAMMA           1
+#define BPP_BRATE_PRIOR_MAX             1
 
 #define BPP_PI  3.1415926535897932384626433832795
 
@@ -301,10 +308,13 @@ extern const char * global_freqs_strings[28];
 #define METHOD_11       3
 
 /* other */
-#define MUTRATE_ESTIMATE        1
-#define MUTRATE_FROMFILE        2
-#define HEREDITY_ESTIMATE       1
-#define HEREDITY_FROMFILE       2
+#define MUTRATE_CONSTANT                0
+#define MUTRATE_ESTIMATE                1
+#define MUTRATE_FROMFILE                2
+#define MUTRATE_ESTIMATE_SIMPLE         3
+#define MUTRATE_ESTIMATE_COMPLEX        4 
+#define HEREDITY_ESTIMATE               1
+#define HEREDITY_FROMFILE               2
 
 /* structures and data types */
 
@@ -740,6 +750,7 @@ extern long opt_est_theta;
 extern long opt_exp_randomize;
 extern long opt_finetune_reset;
 extern long opt_help;
+extern long opt_locusrate_prior;
 extern long opt_locus_count;
 extern long opt_locus_simlen;
 extern long opt_max_species_count;

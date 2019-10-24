@@ -42,8 +42,6 @@ static long enabled_prop_rates = 0;
 static long enabled_prop_freqs = 0;
 static long enabled_prop_alpha = 0;
 
-static long enabled_prop_branchrates = 0;
-
 static const char * template_ratesfile = "locus_%ld_rates.txt";
 
 static void timer_start()
@@ -131,7 +129,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
   fp[0] = stdout; fp[1] = fp_out;
   
-  extra = (opt_est_locusrate || opt_est_heredity);
+  extra = (opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE || opt_est_heredity);
 
   for (j = 0; j < 2; ++j)
   {
@@ -147,11 +145,14 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_RATES_INDEX]);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_ALPHA_INDEX]);
-    if (enabled_prop_branchrates)
-    {
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUBAR_INDEX]);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUI_INDEX]);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2I_INDEX]);
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
     }
@@ -174,11 +175,14 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", opt_finetune_rates);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", opt_finetune_alpha);
-    if (enabled_prop_branchrates)
-    {
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", opt_finetune_mui);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
       fprintf(fp[j], " %8.5f\n", opt_finetune_branchrate);
     }
@@ -203,11 +207,14 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_RATES_INDEX], &opt_finetune_rates);
   if (enabled_prop_alpha)
     reset_finetune_onestep(pjump[BPP_MOVE_ALPHA_INDEX], &opt_finetune_alpha);
-  if (enabled_prop_branchrates)
-  {
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
     reset_finetune_onestep(pjump[BPP_MOVE_MUBAR_INDEX], &opt_finetune_mubar);
+  if (opt_clock != BPP_CLOCK_GLOBAL)
     reset_finetune_onestep(pjump[BPP_MOVE_SIGMA2BAR_INDEX], &opt_finetune_sigma2bar);
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
     reset_finetune_onestep(pjump[BPP_MOVE_MUI_INDEX], &opt_finetune_mui);
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
     reset_finetune_onestep(pjump[BPP_MOVE_SIGMA2I_INDEX], &opt_finetune_sigma2i);
     reset_finetune_onestep(pjump[BPP_MOVE_BRANCHRATE_INDEX], &opt_finetune_branchrate);
   }
@@ -230,11 +237,14 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", opt_finetune_rates);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", opt_finetune_alpha);
-    if (enabled_prop_branchrates)
-    {
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
       fprintf(fp[j], " %8.5f", opt_finetune_mui);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
       fprintf(fp[j], " %8.5f\n", opt_finetune_branchrate);
     }
@@ -347,7 +357,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   }
 
   /* 3. Print mutation rate for each locus */
-  if (opt_est_locusrate && opt_print_locusrate)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
       fprintf(fp, "\trate_L%d", i+1);
@@ -498,7 +508,7 @@ static void mcmc_logsample(FILE * fp,
   }
 
   /* 3. Print mutation rate for each locus */
-  if (opt_est_locusrate && opt_print_locusrate)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
       fprintf(fp, "\t%.6f", gtree[i]->rate_mui);
@@ -511,8 +521,10 @@ static void mcmc_logsample(FILE * fp,
       fprintf(fp, "\t%.6f", locus[i]->heredity[0]);
   }
 
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
+    fprintf(fp,"\t%.6f",stree->locusrate_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL)
-    fprintf(fp,"\t%.6f\t%.6f",stree->locusrate_mubar,stree->locusrate_sigma2bar);
+    fprintf(fp,"\t%.6f", stree->locusrate_sigma2bar);
 
   /* 5. print log-likelihood if usedata=1 */
   if (opt_usedata)
@@ -1313,7 +1325,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* initialize locus mutation rates if estimation was selected */
-  if (opt_est_locusrate == MUTRATE_ESTIMATE)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE)
   {
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
@@ -1354,7 +1366,7 @@ static FILE * init(stree_t ** ptr_stree,
       locusrate[i] /= mean;
 
     /* disable estimation of mutation rates */
-    opt_est_locusrate = 0;
+    opt_est_locusrate = MUTRATE_CONSTANT;
   }
 
   /* We must first link tip sequences (gene tips) to populations */
@@ -1387,18 +1399,18 @@ static FILE * init(stree_t ** ptr_stree,
   assert(opt_arch < (1L << 32) - 1);
 #endif
 
-  /* ensure that heredity / locusrate estimation is now set to either 0 or 1 */
-  assert(opt_est_locusrate >= 0 && opt_est_locusrate <= 1);
+  /* ensure that heredity is now set to either 0 or 1, and locusrate is not set
+     to MUTATE_FROMFILE */
+  assert(opt_est_locusrate >= MUTRATE_CONSTANT && opt_est_locusrate != MUTRATE_FROMFILE);
   assert(opt_est_heredity  >= 0 && opt_est_heredity  <= 1);
 
   gtree_update_branch_lengths(gtree, msa_count);
 
-  if (opt_clock != BPP_CLOCK_GLOBAL)
-  {
     /* set universal mean/variance */
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
     stree->locusrate_mubar = opt_mubar_alpha / opt_mubar_beta;
+  if (opt_clock != BPP_CLOCK_GLOBAL)
     stree->locusrate_sigma2bar = opt_vbar_alpha / opt_vbar_beta;
-  }
 
   for (i = 0, pindex=0; i < msa_count; ++i)
   {
@@ -1496,22 +1508,25 @@ static FILE * init(stree_t ** ptr_stree,
     for (j = 0; j < (int)(gtree[i]->tip_count); ++j)
       pll_set_tip_states(locus[i], j, pll_map, msa_list[i]->sequence[j]);
 
-    if (opt_clock != BPP_CLOCK_GLOBAL)
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
     {
-      assert(opt_clock == BPP_CLOCK_IND);
-
-      gtree[i]->rate_mui     = stree->locusrate_mubar;
-      gtree[i]->rate_sigma2i = stree->locusrate_sigma2bar;
-
       long thread_index = 0;
 
-      /* set mu_i and sigma2_i around the means */
+      gtree[i]->rate_mui  = stree->locusrate_mubar;
+      gtree[i]->rate_mui *= (.9 + .2*legacy_rndu(thread_index));
+    }
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      long thread_index = 0;
+      assert(opt_clock == BPP_CLOCK_IND);
+      assert(opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX);
+
+      gtree[i]->rate_sigma2i = stree->locusrate_sigma2bar;
+
       /* TODO: Remove if condition after debugging */
       if (!opt_debug_rates)
-      {
-        gtree[i]->rate_mui *= (.9 + .2*legacy_rndu(thread_index));
         gtree[i]->rate_sigma2i *= (.9 + .2*legacy_rndu(thread_index));
-      }
 
       for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
       {
@@ -1995,7 +2010,7 @@ void cmd_run()
     pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX]*(ft_round-1)+ratio) /
                                 (double)ft_round;
 
-    if (opt_est_locusrate || opt_est_heredity)
+    if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) || opt_est_heredity)
     {
       ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_LRHT_INDEX] = (pjump[BPP_MOVE_LRHT_INDEX]*(ft_round-1)+ratio) /
@@ -2059,7 +2074,7 @@ void cmd_run()
       legacy_init();
     }
 
-    if (enabled_prop_branchrates)
+    if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
     {
       ratio = prop_locusrate_mui(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_MUI_INDEX] = (pjump[BPP_MOVE_MUI_INDEX]*(ft_round-1)+ratio) /
@@ -2068,7 +2083,10 @@ void cmd_run()
       ratio = prop_locusrate_mubar(stree,gtree);
       pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
+    }
 
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
       ratio = prop_locusrate_sigma2i(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_SIGMA2I_INDEX] = (pjump[BPP_MOVE_SIGMA2I_INDEX]*(ft_round-1)+ratio) /
                                       (double)ft_round;
@@ -2077,12 +2095,9 @@ void cmd_run()
       pjump[BPP_MOVE_SIGMA2BAR_INDEX] = (pjump[BPP_MOVE_SIGMA2BAR_INDEX]*(ft_round-1)+ratio) /
                                         (double)ft_round;
 
-      if (opt_clock != BPP_CLOCK_GLOBAL)
-      {
-        ratio = prop_branch_rates(gtree,stree,locus,0);
-        pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
-                                           (double)ft_round;
-      }
+      ratio = prop_branch_rates(gtree,stree,locus,0);
+      pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
+                                         (double)ft_round;
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -2209,7 +2224,7 @@ void cmd_run()
     if (printk <= 500 || (i+1) % (printk / 200) == 0)
     {
       printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
-      for (j = 0; j < 5 + (opt_est_locusrate || opt_est_heredity); ++j)
+      for (j = 0; j < 5 + ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) || opt_est_heredity); ++j)
         printf(" %4.2f", pjump[j]);
       if (opt_msci)
         printf(" %4.2f", pjump[BPP_MOVE_PHI_INDEX]);
@@ -2219,11 +2234,14 @@ void cmd_run()
         printf(" %4.2f", pjump[BPP_MOVE_RATES_INDEX]);
       if (enabled_prop_alpha)
         printf(" %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
-      if (enabled_prop_branchrates)
-      {
+      if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
         printf(" %4.2f", pjump[BPP_MOVE_MUBAR_INDEX]);
+      if (opt_clock != BPP_CLOCK_GLOBAL)
         printf(" %4.2f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+      if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
         printf(" %4.2f", pjump[BPP_MOVE_MUI_INDEX]);
+      if (opt_clock != BPP_CLOCK_GLOBAL)
+      {
         printf(" %4.2f", pjump[BPP_MOVE_SIGMA2I_INDEX]);
         printf(" %4.2f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
       }
@@ -2284,7 +2302,7 @@ void cmd_run()
         printf(" %6.4f ", mean_phi);
 
       #if 1
-      if (enabled_prop_branchrates)
+      if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
         printf(" MU_0=%6.4f ", dbg_mean_rate);
       #endif
 

@@ -512,15 +512,18 @@ static void load_chk_section_1(FILE * fp,
   printf(" Current finetune: %ld: %f %f %f %f %f",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
-  if (opt_est_locusrate || opt_est_heredity)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) || opt_est_heredity)
     printf(" %f\n", opt_finetune_locusrate);
   else
     printf("\n");
 
-  if (opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_clock == MUTRATE_ESTIMATE_COMPLEX)
   {
     if (!LOAD(&(stree->locusrate_mubar),1,fp))
       fatal("Cannot read locusrate_mubar value");
+  }
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
     if (!LOAD(&(stree->locusrate_sigma2bar),1,fp))
       fatal("Cannot read locusrate_sigma2bar value");
   }

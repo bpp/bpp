@@ -3924,16 +3924,16 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
   
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
-  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_PRIOR_GAMMA)
+  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
     fatal("Gamma prior for rates for correlated clock not implemented yet");
 
   assert(opt_clock == BPP_CLOCK_IND);
 
   /* TODO: Implement autocorrelated clock */
-  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_PRIOR_GAMMA)
+  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
     fatal("Gamma prior for autocorrelated rates not implemented yet.");
 
-  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
     double t1,t2,tA,detT;
     double Tinv[4];
@@ -3980,7 +3980,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
     }
   }
 
-  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_GAMMA)
+  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
   {
     /* clock == BPP_CLOCK_IND and gamma rate prior */
 
@@ -4019,7 +4019,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
     logpr += (alpha*log(beta) - lgamma(alpha)) * rates_count;
   }
-  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
     /* clock == BPP_CLOCK_IND and log-normal rate prior */
 
@@ -4301,7 +4301,7 @@ static double prior_logratio_rates(gtree_t * gtree,
   double zold, znew;
   double ratio;
 
-  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_LOGNORMAL)
+  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
     /* iid rates and log-normal rate prior */
 
@@ -4311,7 +4311,7 @@ static double prior_logratio_rates(gtree_t * gtree,
     ratio = -log(new_rate / old_rate) - 
             (znew*znew - zold*zold) / (2*gtree->rate_sigma2i);
   }
-  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_PRIOR_GAMMA)
+  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
   {
     /* iid rates and Gamma rate prior */
 
