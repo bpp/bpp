@@ -26,7 +26,7 @@
       tauprior = 3 0.002    # invgamma(a, b) for root tau & Dirichlet(a) for other tau's
 
      heredity = 1 4 4
-    locusrate = 1 5
+    locusrate = 1 0 0 5
 
       finetune =  1: 5 0.001 0.001  0.001 0.3 0.33 1.0  # finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
 

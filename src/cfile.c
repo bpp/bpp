@@ -504,6 +504,102 @@ l_unwind:
   return ret;
 }
 
+static long parse_clock(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_long(p, &opt_clock);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* if molecular clock then accept no other parameters */
+  if (opt_clock == BPP_CLOCK_GLOBAL)
+  {
+    if (is_emptyline(p)) ret = 1;
+    goto l_unwind;
+  }
+
+  /* the only other choice is local clock in which mutation rate drifts over
+     branches independently among loci */
+  if (opt_clock != BPP_CLOCK_IND) goto l_unwind;
+
+  /* read vbar alpha and vbar beta */
+
+  /* get a_vbar */
+  count = get_double(p, &opt_vbar_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* get b_vbar */
+  count = get_double(p, &opt_vbar_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* get a_vi */
+  count = get_double(p, &opt_vi_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* next two parameters are optional */
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* get prior */
+  long temp = 0;
+  count = get_long(p, &temp);
+  if (!count) goto l_unwind;
+  
+  /* check whether prior was already specified in the locusrate option */
+  if (opt_locusrate_prior != -1)
+  {
+    if (temp != opt_locusrate_prior)
+      fatal("ERROR: Prior entry in 'clock' must match entry in 'locusrate'");
+  }
+  else
+  {
+    opt_locusrate_prior = temp;
+  }
+
+  p += count;
+
+  if (opt_locusrate_prior < BPP_LOCRATE_PRIOR_MIN ||
+      opt_locusrate_prior > BPP_LOCRATE_PRIOR_MAX)
+    goto l_unwind; 
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* get branch rate prior distribution */
+  count = get_long(p,&opt_rate_prior);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (opt_rate_prior < BPP_BRATE_PRIOR_MIN ||
+      opt_rate_prior > BPP_BRATE_PRIOR_MAX)
+    goto l_unwind;
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_locusrate(const char * line)
 {
   long ret = 0;
@@ -517,23 +613,81 @@ static long parse_locusrate(const char * line)
 
   p += count;
 
-  if (is_emptyline(p) && !opt_est_locusrate) ret = 1;
+  if (is_emptyline(p) && opt_est_locusrate == MUTRATE_CONSTANT) ret = 1;
 
   count = 0;
   if (opt_est_locusrate == MUTRATE_ESTIMATE)
   {
-    count = get_double(p, &opt_locusrate_alpha);
+    /* get a_mubar */
+    count = get_double(p, &opt_mubar_alpha);
     if (!count) goto l_unwind;
+
+    p += count;
+
+    if (is_emptyline(p))
+      fatal("The syntax for 'locusrate' tag has changed since BPP v4.1.4.\n"
+            "Please refer to the BPP manual for the new syntax.\n");
+
+    /* get b_mubar */
+    count = get_double(p, &opt_mubar_beta);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    /* Choose between the symmetric dirichlet prior (MUTRATE_ESTIMATE_SIMPLE) or
+       either the Gamma-Dirichlet or conditional iid prior (MUTRATE_ESTIMATE_COMPLEX)
+       which is then selected using the opt_locusrate_prior variable */
+    if (opt_mubar_alpha == 0 && opt_mubar_alpha == opt_mubar_beta)
+      opt_est_locusrate = MUTRATE_ESTIMATE_SIMPLE;
+    else
+      opt_est_locusrate = MUTRATE_ESTIMATE_COMPLEX;
+
+    /* get a_mui */
+    count = get_double(p, &opt_mui_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    /* get optional prior */
+    if (is_emptyline(p))
+    {
+      opt_locusrate_prior = BPP_LOCRATE_PRIOR_GAMMADIR;
+      ret = 1;
+      goto l_unwind;
+    }
+
+    /* get prior */
+    long temp = 0;
+    count = get_long(p, &temp);
+    if (!count) goto l_unwind;
+
+    /* check whether prior was already specified in the clock option */
+    if (opt_locusrate_prior != -1)
+    {
+      if (temp != opt_locusrate_prior)
+        fatal("ERROR: Prior entry in 'locusrate' must match entry in 'clock'");
+    }
+    else
+    {
+      opt_locusrate_prior = temp;
+    }
+
+    p += count;
+
+    if (opt_locusrate_prior < BPP_LOCRATE_PRIOR_MIN ||
+        opt_locusrate_prior > BPP_LOCRATE_PRIOR_MAX)
+      goto l_unwind;
   }
   else if (opt_est_locusrate == MUTRATE_FROMFILE)
   {
     count = get_string(p,&opt_locusrate_filename);
     if (!count) goto l_unwind;
+    
+    p += count;
   }
   else
     goto l_unwind;
 
-  p += count;
 
   if (is_emptyline(p)) ret = 1;
 
@@ -988,70 +1142,6 @@ static long parse_tauprior(const char * line)
     if (is_emptyline(p))
       ret = 1;
   }
-  
-l_unwind:
-  free(s);
-  return ret;
-}
-
-static long parse_branchrate_mean(const char * line)
-{
-  long ret = 0;
-  char * s = xstrdup(line);
-  char * p = s;
-
-  long count;
-
-  count = get_double(p, &opt_mubar_alpha);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  /* now read second token */
-  count = get_double(p, &opt_mubar_beta);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  /* now read third token */
-  count = get_double(p, &opt_mui_alpha);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p)) ret = 1;
-  
-l_unwind:
-  free(s);
-  return ret;
-}
-
-static long parse_branchrate_variance(const char * line)
-{
-  long ret = 0;
-  char * s = xstrdup(line);
-  char * p = s;
-
-  long count;
-
-  count = get_double(p, &opt_vbar_alpha);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  /* now read second token */
-  count = get_double(p, &opt_vbar_beta);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  /* now read third token */
-  count = get_double(p, &opt_vi_alpha);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p)) ret = 1;
   
 l_unwind:
   free(s);
@@ -1727,34 +1817,32 @@ static void check_validity()
     assert(!opt_partition_file);
   }
 
-  /* TODO: Consolidate options 'locusrate' and 'branchrate_mean' */
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) &&
+      (opt_clock != BPP_CLOCK_GLOBAL))
+  {
+    fatal("ERROR: 'Locusrate = 1 0 0 %f' and relaxed clock not implemented yet",
+          opt_mubar_alpha);
+  }
+
+  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
+  {
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR) 
+        fatal("Gamma-Dirichlet prior with molecular clock not implemented yet");
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL) 
+        fatal("Hierarchical prior with molecular clock not implemented yet");
+    }
+    else
+    {
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR) 
+        fatal("Gamma-Dirichlet prior with relaxed clock not implemented yet");
+    }
+  }
 
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");
-
-  if (opt_clock != BPP_CLOCK_GLOBAL)
-  {
-    if (opt_mubar_alpha < 0)
-      fatal("Relaxed clock models require option 'branchrate_mean' to be specified");
-
-    if (opt_vbar_alpha < 0)
-      fatal("Relaxed clock models require option 'branchrate_var' to be specified");
-  }
-
-  if (opt_est_locusrate && opt_mubar_alpha > 0)
-    fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
-  if (opt_est_locusrate && opt_vbar_alpha > 0)
-    fatal("Cannot specify option 'locusrate' and 'branchrate_mean' together");
-
-  if (opt_clock == BPP_CLOCK_GLOBAL)
-  {
-    if (opt_mubar_alpha > 0)
-      fatal("Use option 'locusrate' instead of 'branchrate_mean' with molecular clock");
-
-    if (opt_vbar_alpha > 0)
-      fatal("Cannot use option 'branchrate_var' with molecular clock");
-  }
 }
 
 void load_cfile()
@@ -1850,10 +1938,8 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"clock",5))
       {
-        if (!parse_long(value,&opt_clock) ||
-            (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX))
-          fatal("Option 'clock' expects positive integer between %d and %d (line %ld)",
-                 BPP_CLOCK_MIN, BPP_CLOCK_MAX, line_count);
+        if (!parse_clock(value))
+          fatal("Erroneous format of 'clock' (line %ld)", line_count);
         valid = 1;
       }
     }
@@ -2098,35 +2184,12 @@ void load_cfile()
         valid = 1;
       }
     }
-    else if (token_len == 14)
-    {
-      if (!strncasecmp(token,"branchrate_var",14))
-      {
-        if (!parse_branchrate_variance(value))
-          fatal("Option 'branchrate_var' expects three doubles (line %ld)",
-                line_count);
-        if (opt_vbar_alpha <= 0 || opt_vbar_beta <= 0 || opt_vi_alpha <= 0)
-          fatal("Option 'branchrate_var' expects three doubles > 0 (line %ld)",
-                line_count);
-        valid = 1;
-      }
-    }
     else if (token_len == 15)
     {
       if (!strncasecmp(token,"bayesfactorbeta",15))
       {
         if (!get_double(value,&opt_bfbeta) || opt_bfbeta <= 0)
           fatal("Option 'bayesfactorbeta' expects a positive real (line %ld)",
-                line_count);
-        valid = 1;
-      }
-      else if (!strncasecmp(token,"branchrate_mean",15))
-      {
-        if (!parse_branchrate_mean(value))
-          fatal("Option 'branchrate_mean' expects two doubles (line %ld)",
-                line_count);
-        if (opt_mubar_alpha <= 0 || opt_mubar_beta <= 0 || opt_mui_alpha <= 0)
-          fatal("Option 'branchrate_mean' expects three doubles > 0 (line %ld)",
                 line_count);
         valid = 1;
       }

@@ -56,6 +56,7 @@ long opt_est_theta;
 long opt_exp_randomize;
 long opt_finetune_reset;
 long opt_help;
+long opt_locusrate_prior;
 long opt_locus_count;
 long opt_locus_simlen;
 long opt_max_species_count;
@@ -307,7 +308,7 @@ void args_init(int argc, char ** argv)
   opt_diploid_size = 0;
   opt_est_delimit = 0;
   opt_est_heredity = 0;
-  opt_est_locusrate = 0;
+  opt_est_locusrate = MUTRATE_CONSTANT;
   opt_est_stree = 0;
   opt_est_theta = 1;
   opt_exp_randomize = 0;
@@ -340,6 +341,7 @@ void args_init(int argc, char ** argv)
   opt_heredity_filename = NULL;
   opt_locusrate_alpha = 0;
   opt_locusrate_filename = NULL;
+  opt_locusrate_prior = -1;
   opt_locus_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
@@ -369,7 +371,7 @@ void args_init(int argc, char ** argv)
   opt_qrates_fixed = -1;
   opt_qrates_params = NULL;
   opt_quiet = 0;
-  opt_rate_prior = BPP_PRIOR_GAMMA;
+  opt_rate_prior = BPP_BRATE_PRIOR_GAMMA;
   opt_resume = NULL;
   opt_rev_gspr = 0;
   opt_rjmcmc_alpha = -1;
