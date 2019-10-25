@@ -4071,8 +4071,10 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
   long accepted = 0;
   double old_sigma2, old_logsigma2;
   double new_sigma2, new_logsigma2;
+  double sum_old, sum_new;
   double alpha, beta;
   double new_prior_rates;
+  double terma, termb;
   double lnacceptance = 0;
 
   assert(opt_clock != BPP_CLOCK_GLOBAL);
@@ -4080,6 +4082,18 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
   /* TODO: opt_finetune_locusrate */
   alpha = opt_vi_alpha;
   beta  = opt_vi_alpha / stree->locusrate_sigma2bar;
+
+  sum_old = sum_new = terma = termb = 0;
+  /* TODO: Note Gamma-Dirichlet prior cannot be parallelized as we have to
+     compute the sum of mu_i across loci */
+  if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+  {
+    for (i = 0; i < opt_locus_count; ++i)
+      sum_old += gtree[i]->rate_sigma2i;
+
+    terma = opt_vi_alpha*opt_locus_count;
+    termb = opt_vbar_beta/opt_locus_count;
+  }
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -4093,9 +4107,22 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
 
     lnacceptance = new_logsigma2 - old_logsigma2;
 
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+    {
+      /* Gamma-Dirichlet prior */
 
-    /* gamma prior ratio */
-    lnacceptance += (alpha-1)*log(new_sigma2/old_sigma2) - beta*(new_sigma2-old_sigma2);
+      sum_new = sum_old + new_sigma2 - old_sigma2;
+      lnacceptance += (opt_vbar_alpha - terma)*log(sum_new / sum_old) -
+                      termb*(sum_new - sum_old) +
+                      (opt_vi_alpha - 1)*(new_logsigma2 - old_logsigma2);
+    }
+    else
+    {
+      /* Hierarchical conditional iid prior */
+
+      /* gamma prior ratio */
+      lnacceptance += (alpha-1)*log(new_sigma2/old_sigma2) - beta*(new_sigma2-old_sigma2);
+    }
 
     new_prior_rates = lnprior_rates(gtree[i],stree,i);
     lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
@@ -4107,6 +4134,9 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
 
       /* update rates prior */
       gtree[i]->lnprior_rates = new_prior_rates;
+
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+        sum_old = sum_new;
     }
     else
     {
@@ -4125,12 +4155,14 @@ double prop_locusrate_mui(gtree_t ** gtree,
 {
   long i;
   long accepted = 0;
-  double old_rate, old_lograte;
-  double new_rate, new_lograte;
+  double old_mui, old_logmui;
+  double new_mui, new_logmui;
+  double sum_old, sum_new;
   double alpha,beta;
   double lnacceptance = 0;
   double logl = 0;
   double new_prior_rates = 0;
+  double terma, termb;
   assert(opt_clock != BPP_CLOCK_GLOBAL);
 
   /* TODO: Separate this routine into different clock cases.
@@ -4145,20 +4177,48 @@ double prop_locusrate_mui(gtree_t ** gtree,
   alpha = opt_mui_alpha;
   beta = opt_mui_alpha / stree->locusrate_mubar;
 
+  sum_old = sum_new = terma = termb = 0;
+  /* TODO: Note Gamma-Dirichlet prior cannot be parallelized as we have to
+     compute the sum of mu_i across loci */
+  if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+  {
+    sum_old = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+      sum_old += gtree[i]->rate_mui;
+
+    terma = opt_mui_alpha*opt_locus_count;
+    termb = opt_mubar_beta/opt_locus_count;
+  }
+
   for (i = 0; i < opt_locus_count; ++i)
   {
-    old_rate = gtree[i]->rate_mui;
-    old_lograte = log(old_rate);
+    old_mui = gtree[i]->rate_mui;
+    old_logmui = log(old_mui);
 
-    double r = old_lograte + opt_finetune_mui *
+    double r = old_logmui + opt_finetune_mui *
                legacy_rnd_symmetrical(thread_index);
-    new_lograte = reflect(r,-99,99,thread_index);
-    gtree[i]->rate_mui = new_rate = exp(new_lograte);
+    new_logmui = reflect(r,-99,99,thread_index);
+    gtree[i]->rate_mui = new_mui = exp(new_logmui);
 
-    lnacceptance = new_lograte - old_lograte;
+    lnacceptance = new_logmui - old_logmui;
 
-    /* gamma prior ratio */
-    lnacceptance += (alpha-1)*log(new_rate/old_rate) - beta*(new_rate-old_rate);
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+    {
+      /* Gamma-Dirichlet prior */
+
+      sum_new = sum_old + new_mui - old_mui;
+      lnacceptance += (opt_mubar_alpha - terma)*log(sum_new / sum_old) -
+                      termb*(sum_new - sum_old) +
+                      (opt_mui_alpha - 1)*(new_logmui - old_logmui);
+
+    }
+    else
+    {
+      /* Hierarchical conditional iid prior */
+
+      /* gamma prior ratio */
+      lnacceptance += (alpha-1)*log(new_mui/old_mui) - beta*(new_mui-old_mui);
+    }
 
     new_prior_rates = lnprior_rates(gtree[i],stree,i);
     lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
@@ -4176,11 +4236,14 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
       /* update rates prior */
       gtree[i]->lnprior_rates = new_prior_rates;
+
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+        sum_old = sum_new;
     }
     else
     {
       /* rejected */
-      gtree[i]->rate_mui = old_rate;
+      gtree[i]->rate_mui = old_mui;
     }
   }
   return accepted / opt_locus_count;

@@ -1833,11 +1833,6 @@ static void check_validity()
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL) 
         fatal("Hierarchical prior with molecular clock not implemented yet");
     }
-    else
-    {
-      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR) 
-        fatal("Gamma-Dirichlet prior with relaxed clock not implemented yet");
-    }
   }
 
   /* check clock and locusrate/branchrate */
