@@ -5035,6 +5035,18 @@ static long prop_locusrate(gtree_t ** gtree,
   double new_refrate;
   double old_locrate;
   double old_refrate;
+  double new_locprior = 0;
+  double new_refprior = 0;
+  double loc_logl = 0;
+  double ref_logl = 0;
+  gnode_t ** gnodeptr = NULL;
+  gnode_t ** refnodes = NULL;
+  gnode_t ** locnodes = NULL;
+  /* Note: For the molecular clock, this changes locus rate (mu_i) and changes
+     the likelihood, but there is no prior for branch rates.
+
+     For relaxed clock, this changes mu_i, and consequently changes the rate
+     prior but not the likelihood */
 
   /* set reference locus as the one with the highest number of site patterns */
   for (i = 1, ref = 0; i < opt_locus_count; ++i)
@@ -5045,15 +5057,18 @@ static long prop_locusrate(gtree_t ** gtree,
   {
     if (i == ref) continue;
 
-    gnode_t ** refnodes = gtree[ref]->nodes;
-    for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
-      if (refnodes[j]->parent)
-        SWAP_PMAT_INDEX(gtree[ref]->edge_count, refnodes[j]->pmatrix_index);
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      refnodes = gtree[ref]->nodes;
+      for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
+        if (refnodes[j]->parent)
+          SWAP_PMAT_INDEX(gtree[ref]->edge_count, refnodes[j]->pmatrix_index);
 
-    gnode_t ** locnodes = gtree[i]->nodes;
-    for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
-      if (locnodes[j]->parent)
-        SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+      locnodes = gtree[i]->nodes;
+      for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+        if (locnodes[j]->parent)
+          SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+    }
 
     old_locrate = gtree[i]->rate_mui;
     old_refrate = gtree[ref]->rate_mui;
@@ -5069,64 +5084,11 @@ static long prop_locusrate(gtree_t ** gtree,
     lnacceptance = (opt_mui_alpha - 1) *
                    log((new_locrate*new_refrate) / (old_locrate*old_refrate));
 
-    /* update selected locus */
-    locus_update_all_matrices(locus[i],gtree[i],stree,i);
-
-    gnode_t ** gnodeptr = gtree[i]->nodes;
-    for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    if (opt_clock == BPP_CLOCK_GLOBAL)
     {
-      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                              gnodeptr[j]->clv_index);
-      if (opt_scaling)
-        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                      gnodeptr[j]->scaler_index);
-    }
+      /* update selected locus */
+      locus_update_all_matrices(locus[i],gtree[i],stree,i);
 
-    locus_update_all_partials(locus[i],gtree[i]);
-
-    /* update reference locus */
-    locus_update_all_matrices(locus[ref],gtree[ref],stree,ref);
-
-    gnodeptr = gtree[ref]->nodes;
-    for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
-    {
-      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
-                                              gnodeptr[j]->clv_index);
-      if (opt_scaling)
-         gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
-                                                      gnodeptr[j]->scaler_index);
-    }
-    locus_update_all_partials(locus[ref],gtree[ref]);
-
-    double loc_logl = locus_root_loglikelihood(locus[i],
-                                               gtree[i]->root,
-                                               locus[i]->param_indices,
-                                               NULL);
-    double ref_logl = locus_root_loglikelihood(locus[ref],
-                                               gtree[ref]->root,
-                                               locus[ref]->param_indices,
-                                               NULL);
-
-    lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
-
-    if (opt_debug)
-      fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
-
-    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
-    {
-      /* accept */
-      accepted++;
-
-      gtree[i]->logl = loc_logl;
-      gtree[ref]->logl = ref_logl;
-    }
-    else
-    {
-      /* reject */
-      gtree[i]->rate_mui   = old_locrate;
-      gtree[ref]->rate_mui = old_refrate;
-
-      /* reset selected locus */
       gnodeptr = gtree[i]->nodes;
       for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
       {
@@ -5137,23 +5099,101 @@ static long prop_locusrate(gtree_t ** gtree,
                                                         gnodeptr[j]->scaler_index);
       }
 
-      /* reset reference locus */
+      locus_update_all_partials(locus[i],gtree[i]);
+
+      /* update reference locus */
+      locus_update_all_matrices(locus[ref],gtree[ref],stree,ref);
+
       gnodeptr = gtree[ref]->nodes;
       for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
       {
         gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
                                                 gnodeptr[j]->clv_index);
         if (opt_scaling)
-          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+           gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
                                                         gnodeptr[j]->scaler_index);
       }
-      
-      for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
-        if (refnodes[j]->parent)
-          SWAP_PMAT_INDEX(gtree[ref]->edge_count,refnodes[j]->pmatrix_index);
-      for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
-        if (locnodes[j]->parent)
-          SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+      locus_update_all_partials(locus[ref],gtree[ref]);
+
+      loc_logl = locus_root_loglikelihood(locus[i],
+                                          gtree[i]->root,
+                                          locus[i]->param_indices,
+                                          NULL);
+      ref_logl = locus_root_loglikelihood(locus[ref],
+                                          gtree[ref]->root,
+                                          locus[ref]->param_indices,
+                                          NULL);
+
+      lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
+    }
+    else
+    {
+      /* relaxed clock */
+      new_locprior = lnprior_rates(gtree[i],stree,i);
+      new_refprior = lnprior_rates(gtree[ref],stree,ref);
+
+      lnacceptance += new_locprior - gtree[i]->lnprior_rates +
+                      new_refprior - gtree[ref]->lnprior_rates;
+    }
+
+    if (opt_debug)
+      fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      /* accept */
+      accepted++;
+
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* update log-L */
+        gtree[i]->logl = loc_logl;
+        gtree[ref]->logl = ref_logl;
+      }
+      else
+      {
+        /* update prior */
+        gtree[i]->lnprior_rates   = new_locprior;
+        gtree[ref]->lnprior_rates = new_refprior;
+      }
+    }
+    else
+    {
+      /* reject */
+      gtree[i]->rate_mui   = old_locrate;
+      gtree[ref]->rate_mui = old_refrate;
+
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* reset selected locus */
+        gnodeptr = gtree[i]->nodes;
+        for (j = gtree[i]->tip_count; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+        {
+          gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  gnodeptr[j]->clv_index);
+          if (opt_scaling)
+            gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                          gnodeptr[j]->scaler_index);
+        }
+
+        /* reset reference locus */
+        gnodeptr = gtree[ref]->nodes;
+        for (j = gtree[ref]->tip_count; j < gtree[ref]->tip_count+gtree[ref]->inner_count; ++j)
+        {
+          gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[ref]->tip_count,
+                                                  gnodeptr[j]->clv_index);
+          if (opt_scaling)
+            gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[ref]->tip_count,
+                                                          gnodeptr[j]->scaler_index);
+        }
+        
+        for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
+          if (refnodes[j]->parent)
+            SWAP_PMAT_INDEX(gtree[ref]->edge_count,refnodes[j]->pmatrix_index);
+        for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
+          if (locnodes[j]->parent)
+            SWAP_PMAT_INDEX(gtree[i]->edge_count,locnodes[j]->pmatrix_index);
+      }
     }
   }
   return accepted;

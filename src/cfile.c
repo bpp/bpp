@@ -1817,13 +1817,6 @@ static void check_validity()
     assert(!opt_partition_file);
   }
 
-  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) &&
-      (opt_clock != BPP_CLOCK_GLOBAL))
-  {
-    fatal("ERROR: 'Locusrate = 1 0 0 %f' and relaxed clock not implemented yet",
-          opt_mubar_alpha);
-  }
-
   if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
   {
     if (opt_clock == BPP_CLOCK_GLOBAL)
