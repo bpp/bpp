@@ -522,7 +522,8 @@ static void mcmc_logsample(FILE * fp,
   }
 
   /* 3. Print mutation rate for each locus */
-  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) && opt_print_locusrate)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE ||
+       opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX) && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
       fprintf(fp, "\t%.6f", gtree[i]->rate_mui);
@@ -1537,7 +1538,6 @@ static FILE * init(stree_t ** ptr_stree,
     {
       long thread_index = 0;
       assert(opt_clock == BPP_CLOCK_IND);
-      assert(opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX);
 
       gtree[i]->rate_sigma2i = stree->locusrate_sigma2bar;
 
