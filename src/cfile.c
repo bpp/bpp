@@ -1817,17 +1817,6 @@ static void check_validity()
     assert(!opt_partition_file);
   }
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
-  {
-    if (opt_clock == BPP_CLOCK_GLOBAL)
-    {
-      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR) 
-        fatal("Gamma-Dirichlet prior with molecular clock not implemented yet");
-      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL) 
-        fatal("Hierarchical prior with molecular clock not implemented yet");
-    }
-  }
-
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");

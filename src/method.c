@@ -363,7 +363,8 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   }
 
   /* 3. Print mutation rate for each locus */
-  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE) && opt_print_locusrate)
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE ||
+       opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX) && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
       fprintf(fp, "\trate_L%d", i+1);

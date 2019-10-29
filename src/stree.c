@@ -4067,17 +4067,19 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
                               locus_t ** locus,
                               long thread_index)
 {
+  unsigned int j;
+  unsigned int total_nodes;
   long i;
   long accepted = 0;
   double old_sigma2, old_logsigma2;
   double new_sigma2, new_logsigma2;
   double sum_old, sum_new;
   double alpha, beta;
-  double new_prior_rates;
+  double logl = 0;
+  double new_prior_rates = 0;
   double terma, termb;
   double lnacceptance = 0;
-
-  assert(opt_clock != BPP_CLOCK_GLOBAL);
+  gnode_t ** gnodeptr;
 
   /* TODO: opt_finetune_locusrate */
   alpha = opt_vi_alpha;
@@ -4088,6 +4090,7 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
      compute the sum of mu_i across loci */
   if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
   {
+    sum_old = 0;
     for (i = 0; i < opt_locus_count; ++i)
       sum_old += gtree[i]->rate_sigma2i;
 
@@ -4097,6 +4100,19 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* if molecular clock then swap pmatrices */
+
+      gnodeptr = gtree[i]->nodes;
+      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+      for (j = 0; j < total_nodes; ++j)
+        if (gnodeptr[j]->parent)
+          gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                    gnodeptr[j]->pmatrix_index);
+    }
+
     old_sigma2 = gtree[i]->rate_sigma2i;
     old_logsigma2 = log(old_sigma2);
 
@@ -4124,16 +4140,57 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
       lnacceptance += (alpha-1)*log(new_sigma2/old_sigma2) - beta*(new_sigma2-old_sigma2);
     }
 
-    new_prior_rates = lnprior_rates(gtree[i],stree,i);
-    lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* if molecular clock then recompute pmatrices, CLVs and log-L */
+      locus_update_all_matrices(locus[i],gtree[i],stree,i);
+
+      gnodeptr = gtree[i]->nodes;
+      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+      for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+      {
+        gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     gnodeptr[j]->scaler_index);
+      }
+
+      locus_update_all_partials(locus[i],gtree[i]);
+
+      logl = locus_root_loglikelihood(locus[i],
+                                      gtree[i]->root,
+                                      locus[i]->param_indices,
+                                      NULL);
+
+      lnacceptance += logl - gtree[i]->logl;
+    }
+    else
+    {
+      /* if relaxed clock then update rates prior */
+
+      new_prior_rates = lnprior_rates(gtree[i],stree,i);
+      lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+    }
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
       /* accepted */
       accepted++;
 
-      /* update rates prior */
-      gtree[i]->lnprior_rates = new_prior_rates;
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* update log-likelihood */
+        gtree[i]->logl = logl;
+      }
+      else
+      {
+        /* relaxed clock */
+
+        /* update rates prior */
+        gtree[i]->lnprior_rates = new_prior_rates;
+      }
 
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
         sum_old = sum_new;
@@ -4143,6 +4200,25 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
       /* rejected */
 
       gtree[i]->rate_sigma2i = old_sigma2;
+
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* reset selected locus */
+        gnodeptr = gtree[i]->nodes;
+        total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+        for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+        {
+          gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  gnodeptr[j]->clv_index);
+          if (opt_scaling)
+            gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                          gnodeptr[j]->scaler_index);
+          if (gnodeptr[j]->parent)
+            gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                         gnodeptr[j]->pmatrix_index);
+        }
+      }
     }
   }
   return accepted / opt_locus_count;
@@ -4153,6 +4229,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
                           locus_t ** locus,
                           long thread_index)
 {
+  unsigned int j;
+  unsigned int total_nodes;
   long i;
   long accepted = 0;
   double old_mui, old_logmui;
@@ -4163,7 +4241,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
   double logl = 0;
   double new_prior_rates = 0;
   double terma, termb;
-  assert(opt_clock != BPP_CLOCK_GLOBAL);
+  gnode_t ** gnodeptr;
+
 
   /* TODO: Separate this routine into different clock cases.
      
@@ -4192,6 +4271,19 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* if molecular clock then swap pmatrices */
+
+      gnodeptr = gtree[i]->nodes;
+      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+      for (j = 0; j < total_nodes; ++j)
+        if (gnodeptr[j]->parent)
+          gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                    gnodeptr[j]->pmatrix_index);
+    }
+
     old_mui = gtree[i]->rate_mui;
     old_logmui = log(old_mui);
 
@@ -4210,7 +4302,6 @@ double prop_locusrate_mui(gtree_t ** gtree,
       lnacceptance += (opt_mubar_alpha - terma)*log(sum_new / sum_old) -
                       termb*(sum_new - sum_old) +
                       (opt_mui_alpha - 1)*(new_logmui - old_logmui);
-
     }
     else
     {
@@ -4220,8 +4311,39 @@ double prop_locusrate_mui(gtree_t ** gtree,
       lnacceptance += (alpha-1)*log(new_mui/old_mui) - beta*(new_mui-old_mui);
     }
 
-    new_prior_rates = lnprior_rates(gtree[i],stree,i);
-    lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+    {
+      /* if molecular clock then recompute pmatrices, CLVs and log-L */
+      locus_update_all_matrices(locus[i],gtree[i],stree,i);
+
+      gnodeptr = gtree[i]->nodes;
+      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+      for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+      {
+        gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                gnodeptr[j]->clv_index);
+        if (opt_scaling)
+          gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     gnodeptr[j]->scaler_index);
+      }
+
+      locus_update_all_partials(locus[i],gtree[i]);
+
+      logl = locus_root_loglikelihood(locus[i],
+                                      gtree[i]->root,
+                                      locus[i]->param_indices,
+                                      NULL);
+
+      lnacceptance += logl - gtree[i]->logl;
+    }
+    else
+    {
+      /* if relaxed clock then update rates prior */
+
+      new_prior_rates = lnprior_rates(gtree[i],stree,i);
+      lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+    }
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
@@ -4233,9 +4355,13 @@ double prop_locusrate_mui(gtree_t ** gtree,
         /* update log-likelihood */
         gtree[i]->logl = logl;
       }
+      else
+      {
+        /* relaxed clock */
 
-      /* update rates prior */
-      gtree[i]->lnprior_rates = new_prior_rates;
+        /* update rates prior */
+        gtree[i]->lnprior_rates = new_prior_rates;
+      }
 
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
         sum_old = sum_new;
@@ -4244,6 +4370,25 @@ double prop_locusrate_mui(gtree_t ** gtree,
     {
       /* rejected */
       gtree[i]->rate_mui = old_mui;
+
+      if (opt_clock == BPP_CLOCK_GLOBAL)
+      {
+        /* reset selected locus */
+        gnodeptr = gtree[i]->nodes;
+        total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+        for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+        {
+          gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  gnodeptr[j]->clv_index);
+          if (opt_scaling)
+            gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                          gnodeptr[j]->scaler_index);
+          if (gnodeptr[j]->parent)
+            gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                         gnodeptr[j]->pmatrix_index);
+        }
+      }
     }
   }
   return accepted / opt_locus_count;
