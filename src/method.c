@@ -96,7 +96,7 @@ static stree_t * load_tree_or_network(void)
 
   assert(opt_streenewick);
 
-  stree = stree_parse_newick_string(opt_streenewick);
+  stree = bpp_parse_newick_string(opt_streenewick);
 
   if (!stree)
     fatal("Error while reading species tree");
@@ -1629,7 +1629,7 @@ static FILE * init(stree_t ** ptr_stree,
   #endif
 
   printf("\nInitial MSC density and log-likelihood of observing data:\n");
-  printf("log-P0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
+  printf("log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
 
   /* free weights array */
   free(weights);

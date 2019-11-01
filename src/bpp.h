@@ -338,6 +338,7 @@ typedef struct dlist_s
 typedef struct snode_s
 {
   char * label;
+  char * attrib;
   double length;
   double rate;          /* used for simulations (MCcoal) */
   double theta;
@@ -2111,3 +2112,7 @@ void threads_init(locus_t ** locus);
 void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit(void);
 void threads_pin_master(void);
+
+/* functions in treeparse.c */
+
+stree_t * bpp_parse_newick_string(const char * line);

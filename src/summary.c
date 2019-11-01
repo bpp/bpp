@@ -323,7 +323,7 @@ static void print_stree_with_support(FILE * fp_out,
   long i;
   struct bipartition_s * bp;
 
-  stree_t * stree = stree_parse_newick_string(treestr);
+  stree_t * stree = bpp_parse_newick_string(treestr);
 
   /* assign bitmasks to tree nodes (present bits indicate species in subtree) */
   assign_bitmasks(stree);
@@ -698,7 +698,7 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
   while (getnextline(fp_mcmc))
   {
     strip_attributes(line);
-    stree_t * t = stree_parse_newick_string(line);
+    stree_t * t = bpp_parse_newick_string(line);
     stree_sort(t);
     treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
 
