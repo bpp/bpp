@@ -110,8 +110,30 @@ static int longint_len(long x)
 void print_network_table(stree_t * stree)
 {
   long i;
+  long hybrid_count = 0;
+  long bidir_count = 0;
 
   printf("Species tree contains hybridization/introgression events.\n\n");
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->hybrid)
+    {
+      if  (node_is_hybridization(stree->nodes[i]))
+      {
+        hybrid_count++;
+      }
+      else if (node_is_bidirection(stree->nodes[i]))
+      {
+        if (stree->nodes[i]->htau)
+          bidir_count++;
+      }
+      else
+      {
+        fatal("Internal error when counting hybridization events");
+      }
+    }
+  printf("Hybridization events: %ld\n", hybrid_count);
+  printf("Bidirectional introgressions: %ld\n", bidir_count);
+    
   printf("Label        Node-index  Child1-index  Child2-index  Parent-index\n");
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
   {
@@ -159,7 +181,14 @@ void print_network_table(stree_t * stree)
     }
 
     if (stree->nodes[i]->hybrid)
+    {
       printf("   [tau = %ld, phi = %f]", stree->nodes[i]->htau, stree->nodes[i]->hphi);
+      if (i < stree->tip_count+stree->inner_count)
+      {
+        printf("  phi_%s : %s -> %s", stree->nodes[i]->label,
+               stree->nodes[i]->parent->label, stree->nodes[i]->label);
+      }
+    }
 
     printf("\n");
   }
@@ -1731,6 +1760,58 @@ static void network_init_hx(stree_t * stree)
   #endif
 }
 
+static void stree_reset_leaves_network(stree_t * stree)
+{
+  /* NOTE: Assumes that pptable is computed correctly */
+  unsigned int i,j;
+  for (i = 0; i < stree->tip_count; ++i)
+    stree->nodes[i]->leaves = 1;
+
+  /* quadratic algorithm to count number of leaves for every inner node */
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+
+    for (j = 0; j < stree->tip_count; ++j)
+      if (stree->pptable[j][snode->node_index])
+        snode->leaves++;
+  }
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    snode->leaves = snode->hybrid->leaves;
+  }
+}
+
+static void stree_reset_leaves_tree_recursive(snode_t * snode)
+{
+  if (!snode->left)
+  {
+    snode->leaves = 1;
+    return;
+  }
+
+  stree_reset_leaves_tree_recursive(snode->left);
+  stree_reset_leaves_tree_recursive(snode->right);
+
+  snode->leaves = snode->left->leaves + snode->right->leaves;
+}
+
+static void stree_reset_leaves_tree(stree_t * stree)
+{
+  stree_reset_leaves_tree_recursive(stree->root);
+}
+
+static void stree_reset_leaves(stree_t * stree)
+{
+  if (opt_msci)
+    stree_reset_leaves_network(stree);
+  else
+    stree_reset_leaves_tree(stree);
+}
+
 void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
@@ -1746,6 +1827,8 @@ void stree_init(stree_t * stree,
   assert(opt_msci == !!stree->hybrid_count);
 
   stree_init_pptable(stree);
+  
+  stree_reset_leaves(stree);
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */

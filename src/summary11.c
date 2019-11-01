@@ -484,10 +484,10 @@ static stree_t * parse_tree(const char * s)
   if (!s)
     fatal("Error parsing tree");
 
-  /* we distinguish two cases here. The 'stree_parse_newick_string' function
+  /* we distinguish two cases here. The 'bpp_parse_newick_string' function
      cannot parse single nodes, and therefore, we check whether s starts with
      an opening parenthesis. If not, it means it is a single node, and we
-     create a tree manually, otherwise we call the stree_parse_newick_string
+     create a tree manually, otherwise we call the bpp_parse_newick_string 
      routine */
 
   /* TODO: This is an ugly hack to disable checking that the tip labels of
@@ -512,7 +512,7 @@ static stree_t * parse_tree(const char * s)
     t->tip_count = 1;
   }
   else
-    t = stree_parse_newick_string(s);
+    t = bpp_parse_newick_string(s);
 
   /* restore opt_reorder */
   opt_reorder = debug_opt_reorder;
@@ -545,12 +545,12 @@ void mixed_summary(FILE * fp_out)
   db_stree_t * treelist;
   snode_t ** inner;
 
-  /* TODO: Ugly hack to make stree_parse_newick_string. The issue is that if
+  /* TODO: Ugly hack to make bpp_parse_newick_string. The issue is that if
      opt_diploid is set, the program checks whether opt_diploid_size matches
      stree->tip_count. If the first MCMC sample has a different number of
      species than the initial tree in the guide tree, the check will fail.
      To 'fix' this issue I disable 'opt_diploid' before calling 
-     stree_parse_newick_string, but we should come up with a better solution */
+     bpp_parse_newick_string, but we should come up with a better solution */
   long * debug_opt_diploid = opt_diploid; opt_diploid = NULL;
 
   /* open MCMC file for reading */
@@ -576,7 +576,7 @@ void mixed_summary(FILE * fp_out)
     /* parse newick string and unambiguously sort tree by its labels */
     if (opt_est_theta)
       strip_theta_attributes(line);
-    stree_t * t = stree_parse_newick_string(line);
+    stree_t * t = bpp_parse_newick_string(line);
     stree_sort(t);
 
     /* convert expanded tree into delimited tree, e.g.:

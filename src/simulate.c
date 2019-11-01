@@ -1657,7 +1657,7 @@ void cmd_simulate()
 
   assert(opt_streenewick);
 
-  stree = stree_parse_newick_string(opt_streenewick);
+  stree = bpp_parse_newick_string(opt_streenewick);
 
   assert(opt_msci == !!stree->hybrid_count);
 
