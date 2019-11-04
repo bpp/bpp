@@ -21,8 +21,6 @@
 
 #include "bpp.h"
 
-#define FINALIZE
-
 /* tokens returned by lexical analyzer */
 #define TOKEN_NONE              0
 #define TOKEN_ATTR              1
@@ -646,27 +644,15 @@ static void parse_annotation(snode_t * snode, const char * annotation)
 
     if (!strcasecmp(s,"phi"))
     {
-      #ifdef FINALIZE
-      if (opt_simulate)
-      {
-      #endif
-        if (!get_double(s+optlen+1,&val))
-          fatal("Cannot parse value (%s) for token (%s) in annotation (%s) - "
-                "value must be of type float", s+optlen, s, annotation);
-        
-        if (val < 0 || val > 1)
-          fatal("Parameter phi in annotations must be greater than 0 and "
-                "smaller than 1");
-        
-        snode->hphi = val;
-      #ifdef FINALIZE
-      }
-      else
-      {
-        fprintf(stderr,"Warning: ignoring annotation phi=%s (phi annotations "
-                "required only when simulating data\n", s+optlen+1);
-      }
-      #endif
+      if (!get_double(s+optlen+1,&val))
+        fatal("Cannot parse value (%s) for token (%s) in annotation (%s) - "
+              "value must be of type float", s+optlen, s, annotation);
+      
+      if (val < 0 || val > 1)
+        fatal("Parameter phi in annotations must be greater than 0 and "
+              "smaller than 1");
+      
+      snode->hphi = val;
     }
     else if (!strcasecmp(s,"tau-parent"))
     {
@@ -746,57 +732,50 @@ static void annotate_bd_introgression(snode_t * xtip,
           "annotations for these two nodes.",
           xtip->label, yparent->label);
 
-  #ifdef FINALIZE
-  /* check phi values only during simulation. For inference, they will be reset
-     later */
-  if (opt_simulate)
+  if (xtip->hphi && xinner->hphi)
   {
-  #endif
-    if (xtip->hphi && xinner->hphi)
-    {
-      if (xtip->hphi + xinner->hphi != 1)
-        fatal("Phi parameter annotations for bidirectional introgression event "
-              "on node (%s) do not sum to 1",  xtip->label);
-    }
-    else if (xtip->hphi)
-    {
-      /* phi on edge Y->X */
+    if (xtip->hphi + xinner->hphi != 1)
+      fatal("Phi parameter annotations for bidirectional introgression event "
+            "on node (%s) do not sum to 1",  xtip->label);
+  }
+  else if (xtip->hphi)
+  {
+    /* phi on edge Y->X */
 
-      xinner->hybrid->hphi = xtip->hphi;
-      xinner->hphi = 1 - xtip->hphi;
+    xinner->hybrid->hphi = xtip->hphi;
+    xinner->hphi = 1 - xtip->hphi;
 
-    }
-    else if (xinner->hphi)
-      xinner->hybrid->hphi = 1 - xinner->hphi;
-    else
-    {
+  }
+  else if (xinner->hphi)
+    xinner->hybrid->hphi = 1 - xinner->hphi;
+  else
+  {
+    if (opt_simulate)
       fatal("Missing phi parameter annotation for bidirectional introgression "
             "event on node (%s)", xtip->label);
-    }
+  }
 
-    if (yparent->hphi && ychild->hphi)
-    {
-      if (yparent->hphi + ychild->hphi != 1)
-        fatal("Phi parameter annotations for bidirectional introgression event "
-              "on node (%s) do not sum to 1",  yparent->label);
-    }
-    else if (yparent->hphi)
-    {
-      yparent->hybrid->hphi = 1 - yparent->hphi;
-    }
-    else if (ychild->hphi)
-    {
-      yparent->hphi = 1 - ychild->hphi;
-      yparent->hybrid->hphi = ychild->hphi;
-    }
-    else
-    {
+  if (yparent->hphi && ychild->hphi)
+  {
+    if (yparent->hphi + ychild->hphi != 1)
+      fatal("Phi parameter annotations for bidirectional introgression event "
+            "on node (%s) do not sum to 1",  yparent->label);
+  }
+  else if (yparent->hphi)
+  {
+    yparent->hybrid->hphi = 1 - yparent->hphi;
+  }
+  else if (ychild->hphi)
+  {
+    yparent->hphi = 1 - ychild->hphi;
+    yparent->hybrid->hphi = ychild->hphi;
+  }
+  else
+  {
+    if (opt_simulate)
       fatal("Missing phi parameter annotation for bidirectional introgression "
             "event on node (%s)", yparent->label);
-    }
-  #ifdef FINALIZE
   }
-  #endif
 }
 
 static void annotate_hybridization(snode_t * hinner, snode_t * htip)
@@ -838,38 +817,30 @@ static void annotate_hybridization(snode_t * hinner, snode_t * htip)
    
   }
 
-  #ifdef FINALIZE
-  /* check phi values only during simulation. For inference, they will be reset
-     later */
-  if (opt_simulate)
+  if (hinner->hphi && hinner->hybrid->hphi)
   {
-  #endif
-    if (hinner->hphi && hinner->hybrid->hphi)
-    {
-      if (hinner->hphi + hinner->hybrid->hphi != 1)
-        fatal("Gamma parameter annotations for hybridization event (%s) do not "
-              "sum to 1", hinner->label);
-    }
-    else if (hinner->hphi)
-    {
-      hinner->hybrid->hphi = 1 - hinner->hphi;
-      hinner->parent->hphi = hinner->hphi;
-      hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
-    }
-    else if (hinner->hybrid->hphi)
-    {
-      hinner->hphi = 1 - hinner->hybrid->hphi;
-      hinner->parent->hphi = hinner->hphi;
-      hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
-    }
-    else
-    {
+    if (hinner->hphi + hinner->hybrid->hphi != 1)
+      fatal("Phi parameter annotations for hybridization event (%s) do not "
+            "sum to 1", hinner->label);
+  }
+  else if (hinner->hphi)
+  {
+    hinner->hybrid->hphi = 1 - hinner->hphi;
+    hinner->parent->hphi = hinner->hphi;
+    hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
+  }
+  else if (hinner->hybrid->hphi)
+  {
+    hinner->hphi = 1 - hinner->hybrid->hphi;
+    hinner->parent->hphi = hinner->hphi;
+    hinner->hybrid->parent->hphi = hinner->hybrid->hphi;
+  }
+  else
+  {
+    if (opt_simulate)
       fatal("Missing phi parameter annotation for hybridization event (%s)",
             hinner->label);
-    }
-  #ifdef FINALIZE
   }
-  #endif
 
   hinner->parent->htau = hinner->htau;
   hinner->hybrid->parent->htau = hinner->hybrid->htau;
@@ -1307,8 +1278,11 @@ static void set_phi_values(stree_t * stree)
 
     if (snode->hybrid)
     {
+      if (fabs(snode->hphi + snode->hybrid->hphi - 1) > 1e-10)
+      {
         snode->hphi         = opt_phi_alpha / (opt_phi_alpha + opt_phi_beta);
         snode->hybrid->hphi = 1 - snode->hphi;
+      }
     }
   }
 }
@@ -1325,10 +1299,8 @@ static void resolve_network(stree_t * stree)
   resolve_hybridization(stree,dups);
   free(dups);
 
-  #ifdef FINALIZE
   if (opt_cfile && stree->hybrid_count)
     set_phi_values(stree);
-  #endif
 
   validate_stree(stree);
 }
