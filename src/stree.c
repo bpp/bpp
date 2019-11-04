@@ -896,7 +896,7 @@ static void network_init_tau_iterative(stree_t * stree,
                  x->right->tau == 1 &&
                  x->right->hybrid->tau == 1);
 
-          double age = x->parent->tau*
+          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau)*
                        (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
 
           x->tau                = age;
