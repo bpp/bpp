@@ -45,16 +45,35 @@ Download and install the BPP version suitable for your operating system (see [Do
 Run BPP using the control file
 
 ```bash
-bpp --cfile bpp.ctl
+bpp --cfile Rokas2003-5species-bpp.ctl
 ```
+
+This may take some minutes, depending on the processor.  You may also
+experiment with the number of threads used to see which value gives you the
+shortest running time.
+
+The results should be comparable with Figure 22e in (Wen and Nakhleh, 2018).
+For example, the posterior mean and median of the introgression probability
+should be 0.70 with the 95% HPD interval to be (0.56,0.83).
+
+
+
+
+
 
 ## References
 
 * Rokas A., Williams BL, King N., Carroll SB. (2003)
 **Genome-scale approaches to resolving incongruence in molecular phylogenies.**
 *Nature*, 425:798-804.
+doi:[10.1038/nature020503](http://dx.doi.org/10.1038/nature020503)
 
 * Cardona G., Rossello F., Valiente G. (2008)
 **Extended Newick: it is time for a standard representation of phylogenetic networks.**
 *BMC Bioinformatics*, 9:532.
 doi:[10.1186/1471-2105-9-532](https://doi.org/10.1186/1471-2105-9-532)
+
+* Wen D., Nakhleh L. (2018) 
+**Coestimating reticulate phylogenies and gene trees from multilocus sequence data.**
+*Systematic Biology*, 67(3):439-457.
+doi:[10.1093/sysbio/syx085](http://dx.doi.org/10.1093/sysbio/syx085)
