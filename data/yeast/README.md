@@ -66,7 +66,7 @@ should be 0.70 with the 95% HPD interval to be (0.56,0.83).
 * Rokas A., Williams BL, King N., Carroll SB. (2003)
 **Genome-scale approaches to resolving incongruence in molecular phylogenies.**
 *Nature*, 425:798-804.
-doi:[10.1038/nature020503](http://dx.doi.org/10.1038/nature020503)
+doi:[10.1038/nature02053](http://dx.doi.org/10.1038/nature02053)
 
 * Cardona G., Rossello F., Valiente G. (2008)
 **Extended Newick: it is time for a standard representation of phylogenetic networks.**
