@@ -601,6 +601,22 @@ static void parse_annotation(snode_t * snode, const char * annotation)
   assert(s[tlen-1] == ']');
   s[tlen-1] = 0;
 
+  /* remove all spaces and tabs */
+  char * dst = s;
+  char * src = s;
+  while (*src)
+  {
+    if (*src != ' ' && *src != '\t')
+    {
+      if (src != dst)
+        *dst = *src;
+
+      ++dst;
+    }
+    ++src;
+  }
+  *dst = 0;
+
 
   /* s now (possibly) has the format "token1,token2,...,tokenN"  where
      tokenX has the format option=value or &option=value */
