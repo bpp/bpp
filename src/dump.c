@@ -333,10 +333,8 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&opt_max_species_count,1,fp);
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX)
-    DUMP(&(stree->locusrate_mubar),1,fp);
-  if (opt_clock != BPP_CLOCK_GLOBAL)
-    DUMP(&(stree->locusrate_sigma2bar),1,fp);
+  DUMP(&(stree->locusrate_mubar),1,fp);
+  DUMP(&(stree->locusrate_sigma2bar),1,fp);
 
   /* write diploid */
   if (opt_diploid)

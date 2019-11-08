@@ -51,6 +51,7 @@ long opt_diploid_size;
 long opt_est_delimit;
 long opt_est_heredity;
 long opt_est_locusrate;
+long opt_est_mubar;
 long opt_est_stree;
 long opt_est_theta;
 long opt_exp_randomize;
@@ -309,6 +310,7 @@ void args_init(int argc, char ** argv)
   opt_est_delimit = 0;
   opt_est_heredity = 0;
   opt_est_locusrate = MUTRATE_CONSTANT;
+  opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
   opt_exp_randomize = 0;

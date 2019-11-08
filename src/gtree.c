@@ -5073,8 +5073,8 @@ static long prop_locusrate(gtree_t ** gtree,
     old_locrate = gtree[i]->rate_mui;
     old_refrate = gtree[ref]->rate_mui;
 
-    double r = old_locrate + opt_finetune_locusrate * 
-               legacy_rnd_symmetrical(thread_index);
+
+    double r = old_locrate + opt_finetune_locusrate*legacy_rnd_symmetrical(thread_index);
     new_locrate = reflect(r, 0, old_locrate + old_refrate, thread_index);
     new_refrate = gtree[ref]->rate_mui - (new_locrate - old_locrate);
 
@@ -5307,13 +5307,13 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
   long accepted = 0;
   double divisor = 0;
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
     accepted = prop_locusrate(gtree,stree,locus,thread_index);
 
   if (opt_est_heredity)
     accepted += prop_heredity(gtree,stree,locus,thread_index);
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE)
+  if (opt_est_locusrate == MUTRATE_ESTIMATE)
     divisor = opt_locus_count-1;
   if (opt_est_heredity)
     divisor += opt_locus_count;

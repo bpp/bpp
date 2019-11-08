@@ -444,12 +444,12 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_msci)
     col_count += stree->hybrid_count;
 
-  if ((opt_est_locusrate == MUTRATE_ESTIMATE_SIMPLE ||
-       opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX) && opt_print_locusrate)
+  /* columns for mu_i */
+  if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     col_count += opt_locus_count;
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX &&
-      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+  /* column for mubar */
+  if (opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     ++col_count;
 
   if (opt_est_heredity && opt_print_hscalars)
@@ -459,8 +459,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_usedata)
     col_count++;
 
+  /* column for vbar */
   if (opt_clock != BPP_CLOCK_GLOBAL &&
-      opt_est_locusrate == MUTRATE_ESTIMATE_COMPLEX &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     ++col_count;
 
