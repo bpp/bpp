@@ -64,6 +64,11 @@ static const long aa_model_index[] =
    BPP_AA_MODEL_STMTREV
  };
 
+static const char * rate_prior_name[] =
+ {
+   "gamma-Dirichlet", "Conditional iid"
+ };
+
 static void reallocline(size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
@@ -559,12 +564,17 @@ static long parse_clock(const char * line)
   long temp = 0;
   count = get_long(p, &temp);
   if (!count) goto l_unwind;
-  
+
+  if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+    fatal("ERROR: Invalid prior value (%ld) in 'locusrate' option", temp);
+
   /* check whether prior was already specified in the locusrate option */
   if (opt_locusrate_prior != -1)
   {
     if (temp != opt_locusrate_prior)
-      fatal("ERROR: Prior entry in 'clock' must match entry in 'locusrate'");
+      fatal("ERROR: prior = %ld (%s) in 'clock' does not match prior = %ld (%s)"
+            " in 'locusrate'", temp, rate_prior_name[temp], opt_locusrate_prior,
+            rate_prior_name[opt_locusrate_prior]);
   }
   else
   {
@@ -634,14 +644,6 @@ static long parse_locusrate(const char * line)
 
     p += count;
 
-    /* Choose between the symmetric dirichlet prior (MUTRATE_ESTIMATE_SIMPLE) or
-       either the Gamma-Dirichlet or conditional iid prior (MUTRATE_ESTIMATE_COMPLEX)
-       which is then selected using the opt_locusrate_prior variable */
-    if (opt_mubar_alpha == 0 && opt_mubar_alpha == opt_mubar_beta)
-      opt_est_locusrate = MUTRATE_ESTIMATE_SIMPLE;
-    else
-      opt_est_locusrate = MUTRATE_ESTIMATE_COMPLEX;
-
     /* get a_mui */
     count = get_double(p, &opt_mui_alpha);
     if (!count) goto l_unwind;
@@ -661,11 +663,16 @@ static long parse_locusrate(const char * line)
     count = get_long(p, &temp);
     if (!count) goto l_unwind;
 
+    if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+      fatal("ERROR: Invalid prior value (%ld) in 'clock' option", temp);
+
     /* check whether prior was already specified in the clock option */
     if (opt_locusrate_prior != -1)
     {
       if (temp != opt_locusrate_prior)
-        fatal("ERROR: Prior entry in 'locusrate' must match entry in 'clock'");
+        fatal("ERROR: prior = %ld (%s) in 'locusrate' does not match prior = "
+              "%ld (%s) in 'clock'", temp, rate_prior_name[temp],
+              opt_locusrate_prior, rate_prior_name[opt_locusrate_prior]);
     }
     else
     {
@@ -677,6 +684,7 @@ static long parse_locusrate(const char * line)
     if (opt_locusrate_prior < BPP_LOCRATE_PRIOR_MIN ||
         opt_locusrate_prior > BPP_LOCRATE_PRIOR_MAX)
       goto l_unwind;
+
   }
   else if (opt_est_locusrate == MUTRATE_FROMFILE)
   {
@@ -1822,6 +1830,25 @@ static void check_validity()
     fatal("Invalid 'clock' value");
 }
 
+void update_locusrate_information()
+{
+
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
+    {
+      if (opt_mubar_alpha == 0 && opt_mubar_beta == 0)
+        opt_locusrate_prior = BPP_LOCRATE_PRIOR_DIR;
+    }
+
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+    {
+      /* if mubar_alpha = mubar_beta = 0 then fix (do not estimate) mubar */
+      if (opt_mubar_alpha == 0 && opt_mubar_beta == 0)
+        opt_est_mubar = 0;
+      else
+        opt_est_mubar = 1;
+    }
+}
+
 void load_cfile()
 {
   long line_count = 0;
@@ -2213,6 +2240,7 @@ void load_cfile()
   else
     opt_method = METHOD_11;
 
+  update_locusrate_information();
   check_validity();
 
   if (opt_diploid)

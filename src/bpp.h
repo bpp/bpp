@@ -225,6 +225,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
 #define BPP_LOCRATE_PRIOR_MAX           1
+#define BPP_LOCRATE_PRIOR_DIR           2
 
 #define BPP_BRATE_PRIOR_MIN             0
 #define BPP_BRATE_PRIOR_LOGNORMAL       0
@@ -311,8 +312,6 @@ extern const char * global_freqs_strings[28];
 #define MUTRATE_CONSTANT                0
 #define MUTRATE_ESTIMATE                1
 #define MUTRATE_FROMFILE                2
-#define MUTRATE_ESTIMATE_SIMPLE         3
-#define MUTRATE_ESTIMATE_COMPLEX        4 
 #define HEREDITY_ESTIMATE               1
 #define HEREDITY_FROMFILE               2
 
@@ -746,6 +745,7 @@ extern long opt_diploid_size;
 extern long opt_est_heredity;
 extern long opt_est_delimit;
 extern long opt_est_locusrate;
+extern long opt_est_mubar;
 extern long opt_est_stree;
 extern long opt_est_theta;
 extern long opt_exp_randomize;
