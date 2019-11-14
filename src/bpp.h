@@ -1380,17 +1380,17 @@ double locus_root_loglikelihood(locus_t * locus,
                                 const unsigned int * freqs_indices,
                                 double * persite_lnl);
 
-double locus_propose_rates_serial(stree_t * stree,
-                                  locus_t ** locus,
-                                  gtree_t ** gtree);
-void locus_propose_rates_parallel(stree_t * stree,
-                                  locus_t ** locus,
-                                  gtree_t ** gtree,
-                                  long locus_start,
-                                  long locus_count,
-                                  long thread_index,
-                                  long * p_proposal_count,
-                                  long * p_accepted);
+double locus_propose_qrates_serial(stree_t * stree,
+                                   locus_t ** locus,
+                                   gtree_t ** gtree);
+void locus_propose_qrates_parallel(stree_t * stree,
+                                   locus_t ** locus,
+                                   gtree_t ** gtree,
+                                   long locus_start,
+                                   long locus_count,
+                                   long thread_index,
+                                   long * p_proposal_count,
+                                   long * p_accepted);
 
 double locus_propose_freqs_serial(stree_t * stree,
                                   locus_t ** locus,

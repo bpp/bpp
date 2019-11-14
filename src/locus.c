@@ -1613,6 +1613,7 @@ double locus_root_loglikelihood(locus_t * locus,
   return opt_bfbeta * logl;
 }
 
+#if 0
 static long propose_freqs(stree_t * stree,
                           locus_t * locus,
                           gtree_t * gtree,
@@ -1759,27 +1760,174 @@ static long propose_freqs(stree_t * stree,
 
   return accepted;
 }
+#endif
+
+static void propose_freqs(stree_t * stree,
+                          locus_t * locus,
+                          gtree_t * gtree,
+                          long msa_index,
+                          long thread_index,
+                          long * p_accepted,
+                          long * p_candidates)
+{
+  unsigned int i,j,m,n;
+  unsigned int ref;
+  long accepted = 0;
+  long candidates = 0;
+  double lnacceptance;
+  double logl;
+  double old_freq_j, old_freq_ref;
+  double old_logfreq_j, old_logfreq_ref;
+  double new_logfreq_j, new_logfreq_ref;
+  double sum;
+  unsigned int * param_indices = locus->param_indices;
+  gnode_t ** gt_nodes;
+
+  /* allocate temporary space for gene tree traversal */
+  gt_nodes = (gnode_t **)xmalloc((gtree->tip_count+gtree->inner_count) *
+                                 sizeof(gnode_t *));
+    
+  for (i = 0; i < locus->rate_matrices; ++i)
+  {
+    double * freqs = locus->frequencies[param_indices[i]];
+
+    /* choose reference frequency */
+    ref = 0;
+    for (j = 1; j < locus->states; ++j)
+      if (freqs[j] > freqs[ref])
+        ref = j;
+
+    for (j = 0; j < locus->states; ++j)
+    {
+      /* skip reference rate */
+      if (j == ref) continue;
+
+      ++candidates;
+
+      /* set bounds for proposing new freq */
+      sum = freqs[j] + freqs[ref];
+      double minv = log(1e-5);
+      double maxv = log(sum);
+
+      old_freq_j   = freqs[j];
+      old_freq_ref = freqs[ref];
+      old_logfreq_j   = log(old_freq_j);
+      old_logfreq_ref = log(old_freq_ref);
+
+      /* propose new ratio */
+      new_logfreq_j = log(old_freq_j) + opt_finetune_freqs *
+                      legacy_rnd_symmetrical(thread_index);
+      new_logfreq_j = reflect(new_logfreq_j,minv,maxv,thread_index);
+
+      /* set new proposed rates */
+      freqs[j]   = exp(new_logfreq_j);
+      freqs[ref] = sum - freqs[j];
+      new_logfreq_ref = log(freqs[ref]);
+
+      /* swap pmatrix indices to new buffers, and update pmatrices */
+      for (m=0,n=0; m < gtree->tip_count+gtree->inner_count; ++m)
+      {
+        gnode_t * p = gtree->nodes[m];
+        if (p->parent)
+          SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+      }
+      locus->eigen_decomp_valid[i] = 0;
+      locus_update_matrices(locus,gtree,gt_nodes,stree,msa_index,n);
+
+      /* get postorder traversal of inner nodes, swap CLV indidces to point to new
+         buffer, and update partials */
+      gtree_all_partials(gtree->root,gt_nodes,&n);
+      for (m = 0; m < n; ++m)
+      {
+        gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                                gt_nodes[m]->clv_index);
+        if (opt_scaling)
+          gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                        gt_nodes[m]->scaler_index);
+      }
+      locus_update_partials(locus,gt_nodes,n);
+
+      /* compute log-likelihood */
+      logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
+
+      lnacceptance = new_logfreq_j - old_logfreq_j +
+                     new_logfreq_ref - old_logfreq_ref +
+                     logl - gtree->logl;
+
+      if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      {
+        /* accepted */
+        ++accepted;
+        gtree->logl = logl;
+      }
+      else
+      {
+        /* rejected */
+
+        /* revert pmatrices */
+        for (m = 0; m < gtree->tip_count + gtree->inner_count; ++m)
+        {
+          gnode_t * p = gtree->nodes[m];
+          if (p->parent)
+            SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+        }
+
+        /* revert CLV */
+        for (m = 0; m < n; ++m)
+        {
+          gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                                  gt_nodes[m]->clv_index);
+          if (opt_scaling)
+            gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                          gt_nodes[m]->scaler_index);
+        }
+
+        /* revert old frequencies */
+        freqs[j] = old_freq_j;
+        freqs[ref] = old_freq_ref;
+
+        /* update eigen decomposition */
+        if (opt_usedata)
+          pll_update_eigen(locus->eigenvecs[param_indices[i]],
+                           locus->inv_eigenvecs[param_indices[i]],
+                           locus->eigenvals[param_indices[i]],
+                           locus->frequencies[param_indices[i]],
+                           locus->subst_params[param_indices[i]],
+                           locus->states,
+                           locus->states_padded);
+      }
+    }
+  }
+  free(gt_nodes);
+
+  *p_accepted = accepted;
+  *p_candidates = candidates;
+}
 
 double locus_propose_freqs_serial(stree_t * stree, locus_t ** locus, gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
-  long thread_index = 0;
   long candidates = 0;
+  long loc_acc = 0;
+  long loc_cand = 0;
+  long thread_index = 0;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
-      ++candidates;
-      accepted += propose_freqs(stree,locus[i],gtree[i],i,thread_index);
+      propose_freqs(stree,locus[i],gtree[i],i,thread_index,&loc_acc,&loc_cand);
+
+      accepted += loc_acc;
+      candidates += loc_cand;;
     }
   }
 
-  if (!accepted)
+  if (!candidates)
     return 0;
 
-  return ((double)accepted/candidates);
+  return (accepted/(double)candidates);
 }
 
 void locus_propose_freqs_parallel(stree_t * stree,
@@ -1794,6 +1942,8 @@ void locus_propose_freqs_parallel(stree_t * stree,
   long i;
   long accepted = 0;
   long candidates = 0;
+  long loc_acc = 0;
+  long loc_cand = 0;
 
   assert(locus_start >= 0);
   assert(locus_count > 0);
@@ -1802,8 +1952,9 @@ void locus_propose_freqs_parallel(stree_t * stree,
   {
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
-      ++candidates;
-      accepted += propose_freqs(stree,locus[i],gtree[i],i,thread_index);
+      propose_freqs(stree,locus[i],gtree[i],i,thread_index,&loc_acc,&loc_cand);
+      candidates += loc_cand;
+      accepted += loc_acc;
     }
   }
 
@@ -1811,11 +1962,12 @@ void locus_propose_freqs_parallel(stree_t * stree,
   *p_accepted = accepted;
 }
 
-static long propose_rates(stree_t * stree,
-                          locus_t * locus,
-                          gtree_t * gtree,
-                          long msa_index,
-                          long thread_index)
+#if 0
+static long propose_qrates(stree_t * stree,
+                           locus_t * locus,
+                           gtree_t * gtree,
+                           long msa_index,
+                           long thread_index)
 {
   unsigned int i,j,k,m,n;
   long accepted = 0;
@@ -1996,32 +2148,213 @@ static long propose_rates(stree_t * stree,
   free(gt_nodes);
   return accepted;
 }
+#endif
 
-double locus_propose_rates_serial(stree_t * stree,
-                                  locus_t ** locus,
-                                  gtree_t ** gtree)
+static void propose_qrates(stree_t * stree,
+                             locus_t * locus,
+                             gtree_t * gtree,
+                             long msa_index,
+                             long thread_index,
+                             long * p_accepted,
+                             long * p_candidates)
+{
+  unsigned int i,j,m,n;
+  unsigned int ref = 0;
+  long accepted = 0;
+  long candidates = 0;
+  long rates_count = 0;
+  double lnacceptance;
+  double logl;
+  double old_rate_j, old_rate_ref;
+  double old_lograte_j, old_lograte_ref;
+  double new_lograte_j, new_lograte_ref;
+  double sum;
+  unsigned int * param_indices = locus->param_indices;
+  gnode_t ** gt_nodes;
+
+  /* TODO: Implement amino acids */
+  assert(locus->dtype == BPP_DATA_DNA);
+  assert(locus->states == 4);
+
+  switch (locus->model)
+  {
+    case BPP_DNA_MODEL_K80:
+      rates_count = 1;
+      assert(0);
+      break;
+
+    case BPP_DNA_MODEL_F81:
+      rates_count = 0;
+      assert(0);
+      break;
+
+    case BPP_DNA_MODEL_HKY:
+    case BPP_DNA_MODEL_T92:
+    case BPP_DNA_MODEL_F84:
+      rates_count = 1;
+      assert(0);
+      break;
+
+    case BPP_DNA_MODEL_TN93:
+      rates_count = 2;
+      break;
+
+    case BPP_DNA_MODEL_GTR:
+      rates_count = 6;
+      ref = 1;          /* A->G */
+      break;
+
+    default:
+      assert(0);
+  }
+
+
+  /* allocate temporary space for gene tree traversal */
+  /* TODO: Allocate this memory only once inside the gene tree so that allocas/
+     deallocs are no longer necessary. This will also simplify gtree.c */
+  gt_nodes = (gnode_t **)xmalloc((gtree->tip_count+gtree->inner_count) *
+                                 sizeof(gnode_t *));
+    
+  for (i = 0; i < locus->rate_matrices; ++i)
+  {
+    double * rates = locus->subst_params[param_indices[i]];
+
+    for (j = 0; j < rates_count; ++j)
+    {
+      /* skip reference rate */
+      if (j == ref) continue;
+
+      ++candidates;
+
+      /* set bounds for proposing new rate */
+      sum = rates[j] + rates[ref];
+      double minv = log(1e-5);
+      double maxv = log(sum);
+
+      old_rate_j   = rates[j];
+      old_rate_ref = rates[ref];
+      old_lograte_j   = log(old_rate_j);
+      old_lograte_ref = log(old_rate_ref);
+      
+      /* propose new ratio */
+      new_lograte_j = log(old_rate_j) + opt_finetune_qrates *
+                      legacy_rnd_symmetrical(thread_index);
+      new_lograte_j = reflect(new_lograte_j,minv,maxv,thread_index);
+
+      /* set new proposed rates */
+      rates[j]   = exp(new_lograte_j);
+      rates[ref] = sum - rates[j];
+      new_lograte_ref = log(rates[ref]);
+
+      /* swap pmatrix indices to new buffers, and update pmatrices */
+      for (m=0,n=0; m < gtree->tip_count+gtree->inner_count; ++m)
+      {
+        gnode_t * p = gtree->nodes[m];
+        if (p->parent)
+          SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+      }
+      locus->eigen_decomp_valid[i] = 0;
+      locus_update_matrices(locus,gtree,gt_nodes,stree,msa_index,n);
+
+      /* get postorder traversal of inner nodes, swap CLV indidces to point to new
+         buffer, and update partials */
+      gtree_all_partials(gtree->root,gt_nodes,&n);
+      for (m = 0; m < n; ++m)
+      {
+        gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                                gt_nodes[m]->clv_index);
+        if (opt_scaling)
+          gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                        gt_nodes[m]->scaler_index);
+      }
+      locus_update_partials(locus,gt_nodes,n);
+
+      /* compute log-likelihood */
+      logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
+
+      lnacceptance = new_lograte_j - old_lograte_j +
+                     new_lograte_ref - old_lograte_ref +
+                     logl - gtree->logl;
+
+      if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      {
+        /* accepted */
+        ++accepted;
+        gtree->logl = logl;
+      }
+      else
+      {
+        /* rejected */
+
+        /* revert pmatrices */
+        for (m = 0; m < gtree->tip_count + gtree->inner_count; ++m)
+        {
+          gnode_t * p = gtree->nodes[m];
+          if (p->parent)
+            SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+        }
+
+        /* revert CLV */
+        for (m = 0; m < n; ++m)
+        {
+          gt_nodes[m]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                                  gt_nodes[m]->clv_index);
+          if (opt_scaling)
+            gt_nodes[m]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                          gt_nodes[m]->scaler_index);
+        }
+
+        /* revert old rates */
+        rates[j]   = old_rate_j;
+        rates[ref] = old_rate_ref;
+
+        /* update eigen decomposition */
+        if (opt_usedata)
+          pll_update_eigen(locus->eigenvecs[param_indices[i]],
+                           locus->inv_eigenvecs[param_indices[i]],
+                           locus->eigenvals[param_indices[i]],
+                           locus->frequencies[param_indices[i]],
+                           locus->subst_params[param_indices[i]],
+                           locus->states,
+                           locus->states_padded);
+      }
+    }
+  }
+  free(gt_nodes);
+
+  *p_accepted = accepted;
+  *p_candidates = candidates;
+}
+
+double locus_propose_qrates_serial(stree_t * stree,
+                                 locus_t ** locus,
+                                 gtree_t ** gtree)
 {
   long i;
   long accepted = 0;
-  long thread_index = 0;
   long candidates = 0;
+  long loc_acc = 0;
+  long loc_cand = 0;
+  long thread_index = 0;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
-      ++candidates;
-      accepted += propose_rates(stree, locus[i],gtree[i],i, thread_index);
+      propose_qrates(stree,locus[i],gtree[i],i,thread_index,&loc_acc,&loc_cand);
+
+      accepted += loc_acc;
+      candidates += loc_cand;
     }
   }
 
-  if (!accepted)
+  if (!candidates)
     return 0;
 
-  return ((double)accepted/candidates);
+  return (accepted/(double)candidates);
 }
 
-void locus_propose_rates_parallel(stree_t * stree,
+void locus_propose_qrates_parallel(stree_t * stree,
                                   locus_t ** locus,
                                   gtree_t ** gtree,
                                   long locus_start,
@@ -2033,6 +2366,8 @@ void locus_propose_rates_parallel(stree_t * stree,
   long i;
   long accepted = 0;
   long candidates = 0;
+  long loc_acc = 0;
+  long loc_cand = 0;
 
   assert(locus_start >= 0);
   assert(locus_count > 0);
@@ -2041,8 +2376,9 @@ void locus_propose_rates_parallel(stree_t * stree,
   {
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->model != BPP_DNA_MODEL_JC69)
     {
-      ++candidates;
-      accepted += propose_rates(stree,locus[i],gtree[i],i,thread_index);
+      propose_qrates(stree,locus[i],gtree[i],i,thread_index,&loc_acc,&loc_cand);
+      candidates += loc_cand;
+      accepted += loc_acc;
     }
   }
 

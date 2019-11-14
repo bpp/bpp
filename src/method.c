@@ -1762,6 +1762,14 @@ static FILE * init(stree_t ** ptr_stree,
 
 }
 
+
+#if 0
+/***** Ziheng 2019-11-8 ************/
+char *MCMCMoveStrings[] = { "GTAGE", "GTSPR", "THETA", "TAU", "MIX", "LRHT", "PHI", "FREQS",
+"RATES", "ALPHA", "MUBAR", "SIGMA2BAR", "MUI", "SIGMA2I", "BRANCHRATE" };
+#endif
+
+
 void cmd_run()
 {
   /* common variables for all methods */
@@ -1963,6 +1971,18 @@ void cmd_run()
     {
       int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
 
+
+
+#if 0
+      /***** Ziheng 2019-11-8 ************/
+      printf("\nMoves and Pjump\n");
+      for (int i = 0; i < 15; i++)
+      {
+        printf("%-20s %12.9f\n", MCMCMoveStrings[i], pjump[i]);
+      }
+#endif
+
+
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(fp_out, pjump);
 
@@ -2098,7 +2118,7 @@ void cmd_run()
       {
         td.locus = locus; td.gtree = gtree;
         threads_wakeup(THREAD_WORK_FREQS,&td);
-        ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+        ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
       pjump[BPP_MOVE_FREQS_INDEX] = (pjump[BPP_MOVE_FREQS_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
@@ -2107,12 +2127,12 @@ void cmd_run()
     if (enabled_prop_qrates)
     {
       if (opt_threads == 1)
-        ratio = locus_propose_rates_serial(stree,locus,gtree);
+        ratio = locus_propose_qrates_serial(stree,locus,gtree);
       else
       {
         td.locus = locus; td.gtree = gtree;
         threads_wakeup(THREAD_WORK_RATES,&td);
-        ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
+        ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
       pjump[BPP_MOVE_QRATES_INDEX] = (pjump[BPP_MOVE_QRATES_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
@@ -2464,6 +2484,16 @@ void cmd_run()
 
   }
   timer_print("\n", " spent in MCMC\n\n");
+
+
+  #if 0
+  /***** Ziheng 2019-11-8 ************/
+  printf("\nMoves and Pjump\n");
+  for (int i = 0; i < 15; i++)
+  {
+    printf("%-20s %12.9f\n", MCMCMoveStrings[i], pjump[i]);
+  }
+  #endif
 
   #if 0
   progress_done();
