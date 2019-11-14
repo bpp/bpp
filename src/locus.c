@@ -1890,7 +1890,7 @@ static long propose_rates(stree_t * stree,
     double maxv = 1 - minv;
 
     /* propose new ratio */
-    y = x + opt_finetune_rates*legacy_rnd_symmetrical(thread_index);
+    y = x + opt_finetune_qrates*legacy_rnd_symmetrical(thread_index);
     y = reflect(y,minv,maxv,thread_index);
 
     /* set new proposed rates */

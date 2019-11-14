@@ -104,7 +104,7 @@ double opt_finetune_mix;
 double opt_finetune_mubar;
 double opt_finetune_mui;
 double opt_finetune_phi;
-double opt_finetune_rates;
+double opt_finetune_qrates;
 double opt_finetune_sigma2bar;
 double opt_finetune_sigma2i;
 double opt_finetune_tau;
@@ -331,7 +331,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_mui = 0.1;
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
-  opt_finetune_rates = 0.3;
+  opt_finetune_qrates = 0.3;
   opt_finetune_reset = 0;
   opt_finetune_sigma2bar = 0.1;
   opt_finetune_sigma2i = 0.1;

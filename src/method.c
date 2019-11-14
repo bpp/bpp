@@ -38,9 +38,9 @@ static double pj_optimum = 0.3;
 static thread_data_t td;
 static time_t time_start;
 
-static long enabled_prop_rates = 0;
-static long enabled_prop_freqs = 0;
-static long enabled_prop_alpha = 0;
+static long enabled_prop_qrates = 0;
+static long enabled_prop_freqs  = 0;
+static long enabled_prop_alpha  = 0;
 
 static const char * template_ratesfile = "locus_%ld_rates.txt";
 
@@ -175,8 +175,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     if (enabled_prop_freqs)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_FREQS_INDEX]);
-    if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_RATES_INDEX]);
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_QRATES_INDEX]);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_ALPHA_INDEX]);
       
@@ -221,8 +221,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     if (enabled_prop_freqs)
       fprintf(fp[j], " %8.5f", opt_finetune_freqs);
-    if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f", opt_finetune_rates);
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", opt_finetune_alpha);
 
@@ -242,8 +242,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_PHI_INDEX], &opt_finetune_phi);
   if (enabled_prop_freqs)
     reset_finetune_onestep(pjump[BPP_MOVE_FREQS_INDEX], &opt_finetune_freqs);
-  if (enabled_prop_rates)
-    reset_finetune_onestep(pjump[BPP_MOVE_RATES_INDEX], &opt_finetune_rates);
+  if (enabled_prop_qrates)
+    reset_finetune_onestep(pjump[BPP_MOVE_QRATES_INDEX], &opt_finetune_qrates);
   if (enabled_prop_alpha)
     reset_finetune_onestep(pjump[BPP_MOVE_ALPHA_INDEX], &opt_finetune_alpha);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -292,8 +292,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", opt_finetune_phi);
     if (enabled_prop_freqs)
       fprintf(fp[j], " %8.5f", opt_finetune_freqs);
-    if (enabled_prop_rates)
-      fprintf(fp[j], " %8.5f", opt_finetune_rates);
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
     if (enabled_prop_alpha)
       fprintf(fp[j], " %8.5f", opt_finetune_alpha);
     fprintf(fp[j], "\n");
@@ -403,14 +403,14 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->hybrid->label);
   }
 
-  /* 3. Print mutation rate for each locus */
+  /* 3. Print mutation rate mu_i for each locus */
   if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
   {
     for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\trate_L%d", i+1);
+      fprintf(fp, "\tmu_%d", i+1);
   }
 
-  /* 4. Print mutation rate for each locus */
+  /* 4. Print heredity scalars for each locus */
   if (opt_est_heredity && opt_print_hscalars)
   {
     for (i = 0; i < opt_locus_count; ++i)
@@ -419,6 +419,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+      opt_est_mubar &&
       opt_print_locusrate)
     fprintf(fp, "\tmu_bar");
     
@@ -568,7 +569,7 @@ static void mcmc_logsample(FILE * fp,
       fprintf(fp, "\t%.6f", gtree[i]->rate_mui);
   }
 
-  /* 4. Print mutation rate for each locus */
+  /* 4. Print heredity scalars for each locus */
   if (opt_est_heredity && opt_print_hscalars)
   {
     for (i = 0; i < opt_locus_count; ++i)
@@ -576,6 +577,7 @@ static void mcmc_logsample(FILE * fp,
   }
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+      opt_est_mubar &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     fprintf(fp,"\t%.6f",stree->locusrate_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
@@ -1385,13 +1387,11 @@ static FILE * init(stree_t ** ptr_stree,
       (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR ||
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR))
   {
-    printf("DIRICHLET!!!\n");
     double mean = 0;
     for (i = 0; i < opt_locus_count; ++i)
     {
       locusrate[i] = 0.8 + 0.4*legacy_rndu(thread_index_zero);
       mean += locusrate[i];
-      printf("Locusrate[%ld] = %f\n", i, locusrate[i]);
     }
 
     mean /= opt_locus_count;
@@ -1923,8 +1923,8 @@ void cmd_run()
   /* enable proposals */
   if (opt_model != BPP_DNA_MODEL_JC69)
   {
-    enabled_prop_rates = 1;
-    enabled_prop_freqs = 1;
+    enabled_prop_qrates = 1;
+    enabled_prop_freqs  = 1;
   }
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -1965,8 +1965,6 @@ void cmd_run()
 
       if (opt_finetune_reset && opt_burnin >= 200)
         reset_finetune(fp_out, pjump);
-      for (j = 0; j < pjump_size; ++j)
-        pjump[j] = 0;
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
@@ -2106,7 +2104,7 @@ void cmd_run()
                                     (double)ft_round;
     }
 
-    if (enabled_prop_rates)
+    if (enabled_prop_qrates)
     {
       if (opt_threads == 1)
         ratio = locus_propose_rates_serial(stree,locus,gtree);
@@ -2116,7 +2114,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_RATES,&td);
         ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      pjump[BPP_MOVE_RATES_INDEX] = (pjump[BPP_MOVE_RATES_INDEX]*(ft_round-1)+ratio) /
+      pjump[BPP_MOVE_QRATES_INDEX] = (pjump[BPP_MOVE_QRATES_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
     }
 
@@ -2330,8 +2328,8 @@ void cmd_run()
         printf(" %4.2f", pjump[BPP_MOVE_PHI_INDEX]);
       if (enabled_prop_freqs)
         printf(" %4.2f", pjump[BPP_MOVE_FREQS_INDEX]);
-      if (enabled_prop_rates)
-        printf(" %4.2f", pjump[BPP_MOVE_RATES_INDEX]);
+      if (enabled_prop_qrates)
+        printf(" %4.2f", pjump[BPP_MOVE_QRATES_INDEX]);
       if (enabled_prop_alpha)
         printf(" %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
       printf(" ");

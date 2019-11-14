@@ -251,7 +251,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_LRHT_INDEX             5
 #define BPP_MOVE_PHI_INDEX              6
 #define BPP_MOVE_FREQS_INDEX            7
-#define BPP_MOVE_RATES_INDEX            8
+#define BPP_MOVE_QRATES_INDEX           8
 #define BPP_MOVE_ALPHA_INDEX            9
 #define BPP_MOVE_MUBAR_INDEX            10
 #define BPP_MOVE_SIGMA2BAR_INDEX        11
@@ -798,7 +798,7 @@ extern double opt_finetune_mix;
 extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
-extern double opt_finetune_rates;
+extern double opt_finetune_qrates;
 extern double opt_finetune_sigma2bar;
 extern double opt_finetune_sigma2i;
 extern double opt_finetune_tau;
