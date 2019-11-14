@@ -4131,15 +4131,13 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
         if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
 
-      double logr = snode->brate[msa_index];
+      double logr = log(snode->brate[msa_index]);
       z = logr - logmu + sigma2/2;
-      logpr += -((z*z) / (2*sigma2)) - logr;
+      logpr += -(z*z) / (2*sigma2) - logr;
 
       ++rates_count;
-
     }
-
-    logpr -= (log(2*BPP_PI*sigma2) / 2) * rates_count;
+    logpr -= 0.5*log(2*BPP_PI*sigma2) * rates_count;
   }
 
   return logpr;
