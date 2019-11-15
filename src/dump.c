@@ -273,6 +273,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_print_hscalars,1,fp);
   DUMP(&opt_print_genetrees,1,fp);
   DUMP(&opt_print_rates,1,fp);
+  DUMP(&opt_print_qmatrix,1,fp);
+  DUMP(&opt_print_locusfile,1,fp);
 
   /* write theta prior */
   DUMP(&opt_theta_alpha,1,fp);

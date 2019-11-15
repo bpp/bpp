@@ -1453,6 +1453,7 @@ static long parse_print(const char * line)
 
   long count;
 
+  opt_print_qmatrix = 0;
   /* samples */
   count = get_long(p, &opt_print_samples);
   if (!count) goto l_unwind;
@@ -1485,6 +1486,15 @@ static long parse_print(const char * line)
   p += count;
 
   if (is_emptyline(p)) ret = 1;
+
+  /* optional qmatrix for backwards compatibility */
+  count = get_long(p, &opt_print_qmatrix);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
   
 l_unwind:
   free(s);
@@ -1830,7 +1840,7 @@ static void check_validity()
     fatal("Invalid 'clock' value");
 }
 
-void update_locusrate_information()
+static void update_locusrate_information()
 {
 
     if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
@@ -1847,6 +1857,14 @@ void update_locusrate_information()
       else
         opt_est_mubar = 1;
     }
+}
+
+
+static void set_print_locusfile()
+{
+  if (opt_print_rates || opt_print_locusrate ||
+      opt_print_hscalars || opt_print_qmatrix)
+    opt_print_locusfile = 1;
 }
 
 void load_cfile()
@@ -1923,7 +1941,7 @@ void load_cfile()
       else if (!strncasecmp(token,"print",5))
       {
         if (!parse_print(value))
-          fatal("Option 'print' expects either four bits or '-1' (line %ld)",
+          fatal("Option 'print' expects either four bits or '-1'  and a fifth optional bit(line %ld)",
                 line_count);
 
         if (opt_print_samples == 0)
@@ -2242,6 +2260,9 @@ void load_cfile()
 
   update_locusrate_information();
   check_validity();
+
+  /* decide whether per-locus files for sampling are required */
+  set_print_locusfile();
 
   if (opt_diploid)
     update_sp_seqcount();

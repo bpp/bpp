@@ -401,6 +401,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read print flags");
   if (!LOAD(&opt_print_rates,1,fp))
     fatal("Cannot read rates flags");
+  if (!LOAD(&opt_print_qmatrix,1,fp))
+    fatal("Cannot read qmatrix flag");
+  if (!LOAD(&opt_print_locusfile,1,fp))
+    fatal("Cannot read locusfile flag");
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
