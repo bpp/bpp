@@ -882,8 +882,26 @@ void locus_set_frequencies_and_rates(locus_t * locus)
 
   if (locus->dtype == BPP_DATA_DNA)
   {
-    //assert(locus->model == BPP_DNA_MODEL_JC69);
     assert(locus->states == 4);
+
+    if (locus->model == BPP_DNA_MODEL_GTR)
+    {
+      int i;
+      double sum;
+
+      /****** Ziheng 2019-11-14 ****************/
+      for (i = 0, sum = 0; i < 4; i++)
+        sum += frequencies[i] = 0.8 + 0.4*legacy_rndu(0);
+      for (i = 0; i < 4; i++)
+        frequencies[i] /= sum;
+
+      for (i = 0, sum = 0; i < 6; i++)
+        sum += jcrates[i] = 0.8 + 0.4*legacy_rndu(0);
+      for (i = 0; i < 6; i++)
+        jcrates[i] /= sum;
+    }
+
+
 
     freqs = frequencies;
     rates = jcrates;
@@ -1771,14 +1789,13 @@ static void propose_freqs(stree_t * stree,
                           long * p_candidates)
 {
   unsigned int i,j,m,n;
-  unsigned int ref;
+  unsigned int ref = locus->states - 1;
   long accepted = 0;
   long candidates = 0;
   double lnacceptance;
   double logl;
   double old_freq_j, old_freq_ref;
-  double old_logfreq_j, old_logfreq_ref;
-  double new_logfreq_j, new_logfreq_ref;
+  double old_logfreq_j, new_logfreq_j;
   double sum;
   unsigned int * param_indices = locus->param_indices;
   gnode_t ** gt_nodes;
@@ -1790,12 +1807,6 @@ static void propose_freqs(stree_t * stree,
   for (i = 0; i < locus->rate_matrices; ++i)
   {
     double * freqs = locus->frequencies[param_indices[i]];
-
-    /* choose reference frequency */
-    ref = 0;
-    for (j = 1; j < locus->states; ++j)
-      if (freqs[j] > freqs[ref])
-        ref = j;
 
     for (j = 0; j < locus->states; ++j)
     {
@@ -1812,7 +1823,6 @@ static void propose_freqs(stree_t * stree,
       old_freq_j   = freqs[j];
       old_freq_ref = freqs[ref];
       old_logfreq_j   = log(old_freq_j);
-      old_logfreq_ref = log(old_freq_ref);
 
       /* propose new ratio */
       new_logfreq_j = log(old_freq_j) + opt_finetune_freqs *
@@ -1822,7 +1832,6 @@ static void propose_freqs(stree_t * stree,
       /* set new proposed rates */
       freqs[j]   = exp(new_logfreq_j);
       freqs[ref] = sum - freqs[j];
-      new_logfreq_ref = log(freqs[ref]);
 
       /* swap pmatrix indices to new buffers, and update pmatrices */
       for (m=0,n=0; m < gtree->tip_count+gtree->inner_count; ++m)
@@ -1851,7 +1860,6 @@ static void propose_freqs(stree_t * stree,
       logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
       lnacceptance = new_logfreq_j - old_logfreq_j +
-                     new_logfreq_ref - old_logfreq_ref +
                      logl - gtree->logl;
 
       if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -2162,15 +2170,19 @@ static void propose_qrates(stree_t * stree,
   unsigned int ref = 0;
   long accepted = 0;
   long candidates = 0;
-  long rates_count = 0;
+  long qrates_count = 0;
   double lnacceptance;
   double logl;
   double old_rate_j, old_rate_ref;
-  double old_lograte_j, old_lograte_ref;
-  double new_lograte_j, new_lograte_ref;
+  double old_lograte_j, new_lograte_j;
   double sum;
   unsigned int * param_indices = locus->param_indices;
   gnode_t ** gt_nodes;
+#if 0
+  double gtr_alpha[6] = { 1,1,1,1,1,1 };
+#else
+  double gtr_alpha[6] = { 1,2,1,1,2,1 };
+#endif
 
   /* TODO: Implement amino acids */
   assert(locus->dtype == BPP_DATA_DNA);
@@ -2179,28 +2191,28 @@ static void propose_qrates(stree_t * stree,
   switch (locus->model)
   {
     case BPP_DNA_MODEL_K80:
-      rates_count = 1;
+      qrates_count = 1;
       assert(0);
       break;
 
     case BPP_DNA_MODEL_F81:
-      rates_count = 0;
+      qrates_count = 0;
       assert(0);
       break;
 
     case BPP_DNA_MODEL_HKY:
     case BPP_DNA_MODEL_T92:
     case BPP_DNA_MODEL_F84:
-      rates_count = 1;
+      qrates_count = 1;
       assert(0);
       break;
 
     case BPP_DNA_MODEL_TN93:
-      rates_count = 2;
+      qrates_count = 2;
       break;
 
     case BPP_DNA_MODEL_GTR:
-      rates_count = 6;
+      qrates_count = 6;
       ref = 1;          /* A->G */
       break;
 
@@ -2217,9 +2229,9 @@ static void propose_qrates(stree_t * stree,
     
   for (i = 0; i < locus->rate_matrices; ++i)
   {
-    double * rates = locus->subst_params[param_indices[i]];
+    double * qrates = locus->subst_params[param_indices[i]];
 
-    for (j = 0; j < rates_count; ++j)
+    for (j = 0; j < qrates_count; ++j)
     {
       /* skip reference rate */
       if (j == ref) continue;
@@ -2227,24 +2239,22 @@ static void propose_qrates(stree_t * stree,
       ++candidates;
 
       /* set bounds for proposing new rate */
-      sum = rates[j] + rates[ref];
+      sum = qrates[j] + qrates[ref];
       double minv = log(1e-5);
       double maxv = log(sum);
 
-      old_rate_j   = rates[j];
-      old_rate_ref = rates[ref];
+      old_rate_j   = qrates[j];
+      old_rate_ref = qrates[ref];
       old_lograte_j   = log(old_rate_j);
-      old_lograte_ref = log(old_rate_ref);
       
       /* propose new ratio */
-      new_lograte_j = log(old_rate_j) + opt_finetune_qrates *
+      new_lograte_j = old_lograte_j + opt_finetune_qrates *
                       legacy_rnd_symmetrical(thread_index);
       new_lograte_j = reflect(new_lograte_j,minv,maxv,thread_index);
 
       /* set new proposed rates */
-      rates[j]   = exp(new_lograte_j);
-      rates[ref] = sum - rates[j];
-      new_lograte_ref = log(rates[ref]);
+      qrates[j]   = exp(new_lograte_j);
+      qrates[ref] = sum - qrates[j];
 
       /* swap pmatrix indices to new buffers, and update pmatrices */
       for (m=0,n=0; m < gtree->tip_count+gtree->inner_count; ++m)
@@ -2273,8 +2283,13 @@ static void propose_qrates(stree_t * stree,
       logl = locus_root_loglikelihood(locus,gtree->root,param_indices,NULL);
 
       lnacceptance = new_lograte_j - old_lograte_j +
-                     new_lograte_ref - old_lograte_ref +
                      logl - gtree->logl;
+
+      /* This is code for dubugging purposes to ensure that we obtain the prior when running the program without data */
+      if (gtr_alpha[j] - 1)
+        lnacceptance += (gtr_alpha[j] - 1.0)*(new_lograte_j - old_lograte_j);
+      if (gtr_alpha[ref] - 1)
+        lnacceptance += (gtr_alpha[ref] - 1.0)*log(qrates[ref] / old_rate_ref);
 
       if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
       {
@@ -2304,9 +2319,9 @@ static void propose_qrates(stree_t * stree,
                                                           gt_nodes[m]->scaler_index);
         }
 
-        /* revert old rates */
-        rates[j]   = old_rate_j;
-        rates[ref] = old_rate_ref;
+        /* revert old qrates */
+        qrates[j]   = old_rate_j;
+        qrates[ref] = old_rate_ref;
 
         /* update eigen decomposition */
         if (opt_usedata)

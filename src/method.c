@@ -1914,6 +1914,13 @@ void cmd_run()
 
   unsigned long curstep = 0;
 
+  /* enable proposals */
+  if (opt_model != BPP_DNA_MODEL_JC69)
+  {
+    enabled_prop_qrates = 1;
+    enabled_prop_freqs  = 1;
+  }
+
   printf("\nStarting timer..\n");
   timer_start();
 
@@ -2013,12 +2020,6 @@ void cmd_run()
   progress_init("Running MCMC...", total_steps);
   #endif
 
-  /* enable proposals */
-  if (opt_model != BPP_DNA_MODEL_JC69)
-  {
-    enabled_prop_qrates = 1;
-    enabled_prop_freqs  = 1;
-  }
   for (i = 0; i < opt_locus_count; ++i)
   {
     if (locus[i]->rate_cats > 1)
