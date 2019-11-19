@@ -2067,7 +2067,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
     {
       /* process events for current population */
-      if (affected[j]->event_count)
+      if (affected[j]->event_count[i])
       {
         dlist_item_t * event;
         for (event = affected[j]->event[i]->head; event; event = event->next)
@@ -2536,8 +2536,8 @@ static long propose_tau(locus_t ** loci,
         //snode->hybrid->theta = 
       }
 
-      lnacceptance += -log(thetafactor) + (-opt_theta_alpha - 1) *
-                      log(snode->theta / oldtheta) -
+      lnacceptance += -log(thetafactor) +
+                      (-opt_theta_alpha - 1) * log(snode->theta / oldtheta) -
                       opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
     }
   }
