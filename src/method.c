@@ -451,7 +451,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
-    if (opt_print_locusrate)
+    if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
       fprintf(fp_locus[i],
               "%smu_%ld",
@@ -488,7 +488,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
       else
       {
         /* TODO: Implement other models */
-        assert(0);
+        assert(locus[i]->model == BPP_DNA_MODEL_JC69);
       }
     }
     if (tab_required)
@@ -519,7 +519,7 @@ static void print_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     /* print mu_i and sigma2_i */
-    if (opt_print_locusrate)
+    if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
       fprintf(fp_locus[i],
               "%s%.6f",
@@ -563,7 +563,7 @@ static void print_rates(FILE ** fp_locus,
       else
       {
         /* TODO: Implement other models */
-        assert(0);
+        assert(locus[i]->model == BPP_DNA_MODEL_JC69);
       }
         
     }
