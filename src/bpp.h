@@ -1071,6 +1071,8 @@ void propose_tau_update_gtrees(locus_t ** loci,
 
 double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
+void stree_reset_leaves(stree_t * stree);
+
 /* functions in arch.c */
 
 uint64_t arch_get_memused(void);
