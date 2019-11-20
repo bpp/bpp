@@ -1838,7 +1838,10 @@ static void propose_freqs(stree_t * stree,
       {
         gnode_t * p = gtree->nodes[m];
         if (p->parent)
+        {
           SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+          gt_nodes[n++] = p;
+        }
       }
       locus->eigen_decomp_valid[i] = 0;
       locus_update_matrices(locus,gtree,gt_nodes,stree,msa_index,n);
@@ -1928,7 +1931,7 @@ double locus_propose_freqs_serial(stree_t * stree, locus_t ** locus, gtree_t ** 
       propose_freqs(stree,locus[i],gtree[i],i,thread_index,&loc_acc,&loc_cand);
 
       accepted += loc_acc;
-      candidates += loc_cand;;
+      candidates += loc_cand;
     }
   }
 
@@ -2261,7 +2264,10 @@ static void propose_qrates(stree_t * stree,
       {
         gnode_t * p = gtree->nodes[m];
         if (p->parent)
+        {
           SWAP_PMAT_INDEX(gtree->edge_count, p->pmatrix_index);
+          gt_nodes[n++] = p;
+        }
       }
       locus->eigen_decomp_valid[i] = 0;
       locus_update_matrices(locus,gtree,gt_nodes,stree,msa_index,n);
