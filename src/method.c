@@ -2061,10 +2061,11 @@ void cmd_run()
 
 #if 0
       /***** Ziheng 2019-11-8 ************/
-      printf("\nMoves and Pjump\n");
-      for (int i = 0; i < 15; i++)
+      printf ("\nMoves and Pjump\n");
+      int ii;
+      for (ii = 0; ii < 15; ii++)
       {
-        printf("%-20s %12.9f\n", MCMCMoveStrings[i], pjump[i]);
+        printf("%-20s %12.9f\n", MCMCMoveStrings[ii], pjump[ii]);
       }
 #endif
 
@@ -2575,7 +2576,7 @@ void cmd_run()
   #if 0
   /***** Ziheng 2019-11-8 ************/
   printf("\nMoves and Pjump\n");
-  for (int i = 0; i < 15; i++)
+  for (i = 0; i < 15; i++)
   {
     printf("%-20s %12.9f\n", MCMCMoveStrings[i], pjump[i]);
   }
