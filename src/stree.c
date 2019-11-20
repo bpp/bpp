@@ -1804,7 +1804,7 @@ static void stree_reset_leaves_tree(stree_t * stree)
   stree_reset_leaves_tree_recursive(stree->root);
 }
 
-static void stree_reset_leaves(stree_t * stree)
+void stree_reset_leaves(stree_t * stree)
 {
   if (opt_msci)
     stree_reset_leaves_network(stree);

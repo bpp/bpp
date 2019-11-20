@@ -1940,6 +1940,7 @@ stree_t * bpp_parse_newick_string(const char * line)
   free(token_list);
 
   stree = stree_from_ntree(tree);
+  stree_reset_leaves(stree);
 
   ntree_destroy(tree,NULL);
 
