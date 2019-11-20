@@ -2067,7 +2067,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
     {
       /* process events for current population */
-      if (affected[j]->event_count[i])
+      if (affected[j]->seqin_count[i] > 1)
       {
         dlist_item_t * event;
         for (event = affected[j]->event[i]->head; event; event = event->next)
@@ -2797,15 +2797,21 @@ static long propose_tau(locus_t ** loci,
 
       /* restore logpr contributions */
       if (opt_est_theta)
+      {
         for (j = 0; j < paffected_count; ++j)
-          gtree_update_logprob_contrib(affected[j],
-                                       loci[i]->heredity[0],
-                                       i,
-                                       thread_index);
+        {
+          if (affected[j]->seqin_count[i] > 1)
+            gtree_update_logprob_contrib(affected[j],
+                                         loci[i]->heredity[0],
+                                         i,
+                                         thread_index);
+        }
+      }
       else
       {
         for (j = 0; j < paffected_count; ++j)
-          logprob_revert_notheta(affected[j], i);
+          if (affected[j]->seqin_count[i] > 1)
+            logprob_revert_notheta(affected[j], i);
       }
 
       /* get the list of nodes for which CLVs must be reverted, i.e. all marked
