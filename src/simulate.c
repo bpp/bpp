@@ -743,7 +743,9 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
           start = start->hybrid;
       }
 
-      x->length += (start->tau - t)*pop->rate;
+      /* skip using branch rates on horizontal edges in hybridization events */
+      if (!(pop->hybrid && start->htau == 0))
+        x->length += (start->tau - t)*pop->rate;
       t = start->tau;
     }
     x->length += (x->parent->time - t) * x->parent->pop->rate;

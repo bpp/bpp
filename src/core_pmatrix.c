@@ -742,7 +742,9 @@ void bpp_core_update_pmatrix(locus_t * locus,
             start = start->hybrid;
         }
 
-        node->length += (start->tau - t)*pop->brate[msa_index];
+        /* skip using branch rates on horizontal edges in hybridization events */
+        if (!(pop->hybrid && start->htau == 0))
+          node->length += (start->tau - t)*pop->brate[msa_index];
         t = start->tau;
       }
       node->length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
