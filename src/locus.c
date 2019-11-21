@@ -1059,7 +1059,9 @@ static double update_branchlength_relaxed_clock(stree_t * stree,
         start = start->hybrid;
     }
 
-    length += (start->tau - t)*pop->brate[msa_index];
+    /* skip using branch rates on horizontal edges in hybridization events */
+    if (!(pop->hybrid && start->htau == 0))
+      length += (start->tau - t)*pop->brate[msa_index];
     t = start->tau;
   }
   length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
