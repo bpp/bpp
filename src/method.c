@@ -403,29 +403,13 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->hybrid->label);
   }
 
-  /* 3. Print mutation rate mu_i for each locus */
-  if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
-  {
-    for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\tmu_%d", i+1);
-  }
-
-  /* 4. Print heredity scalars for each locus */
-  if (opt_est_heredity && opt_print_hscalars)
-  {
-    for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\theredity_L%d", i+1);
-  }
-
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-      opt_est_mubar &&
-      opt_print_locusrate)
+      opt_est_mubar)
     fprintf(fp, "\tmu_bar");
     
   if (opt_clock != BPP_CLOCK_GLOBAL &&
-      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-      opt_print_locusrate)
+      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     fprintf(fp, "\tnu_bar");
 
   /* 5. Print log likelihood */
@@ -451,6 +435,16 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    /* print heredity scalars header */
+    if (opt_est_heredity && opt_print_hscalars)
+    {
+      fprintf(fp_locus[i],
+              "%sheredity_L%ld",
+              tab_required ? "\t" : "", i+1);
+      tab_required = 1;
+    }
+
+    /* print mu_i header */
     if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
       fprintf(fp_locus[i],
@@ -458,14 +452,15 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
               tab_required ? "\t" : "", i+1);
       tab_required = 1;
     }
+    /* print nu_i header */
     if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
     {
       fprintf(fp_locus[i],
-              "%ssigma2_%ld",
+              "%snu_%ld",
               tab_required ? "\t" : "", i+1);
       tab_required = 1;
     }
-
+    /* print species tree branch rates header */
     if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
     {
       fprintf(fp_locus[i],
@@ -476,6 +471,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
         fprintf(fp_locus[i], "\tr_%s", stree->nodes[j]->label);
     }
 
+    /* print qmatrix parameters header */
     if (opt_print_qmatrix)
     {
       if (locus[i]->model == BPP_DNA_MODEL_GTR)
@@ -532,6 +528,12 @@ static void print_rates(FILE ** fp_locus,
               "%s%.6f",
               tab_required ? "\t" : "", gtree[i]->rate_sigma2i);
       tab_required = 1;
+    }
+
+    /* print heredity scalars */
+    if (opt_est_heredity && opt_print_hscalars)
+    {
+      fprintf(fp_locus[i], "\t%.6f", locus[i]->heredity[0]);
     }
 
     /* print r_i */
@@ -644,20 +646,6 @@ static void mcmc_logsample(FILE * fp,
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
       fprintf(fp, "\t%.6f", stree->nodes[offset+i]->hybrid->hphi);
-  }
-
-  /* 3. Print mutation rate for each locus */
-  if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
-  {
-    for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\t%.6f", gtree[i]->rate_mui);
-  }
-
-  /* 4. Print heredity scalars for each locus */
-  if (opt_est_heredity && opt_print_hscalars)
-  {
-    for (i = 0; i < opt_locus_count; ++i)
-      fprintf(fp, "\t%.6f", locus[i]->heredity[0]);
   }
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
