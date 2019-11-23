@@ -34,13 +34,86 @@ in the [BPP wiki](https://github.com/bpp/bpp/wiki).
 
 ### Running the dataset
 
-Download and install the BPP version suitable for your operating system (see [Download and install](https://github.com/bpp/bpp#download-and-install)).
+Download and install the BPP version suitable for your operating system (see
+[Download and install](https://github.com/bpp/bpp#download-and-install)).
 
 Run BPP using the control file
 
 ```bash
 bpp --cfile bpp.ctl
 ```
+This assumes the JC mutation model and the molecular clock.  With the settings
+`burnin = 32000`, `sampfreq = 2`, `nsample = 500000`, the run took about 1h10m
+using 4 threads on an
+[Intel Xeon Gold 6154 CPU](https://ark.intel.com/content/www/us/en/ark/products/120495/intel-xeon-gold-6154-processor-24-75m-cache-3-00-ghz.html)
+CPU. The posterior means and 95% HPD CI are **0.176 (0.069, 0.288)** for
+`phi_h` (&phi;<sub>R&rarr;Q</sub>), and **0.981 (0.946, 1.000)** for
+`phi_f` (&phi;<sub>A&rarr;GC</sub>).  Estimates of other parameters
+are in the excel file anopheles-noncoding-block3-MSci-estimates.xlsx.
+
+
+For illustration, the control file bpp.gtr.ctl specifies the GTR mutation
+model.
+
+```bash
+bpp --cfile bpp.gtr.ctl
+```
+
+With all other settings the same as for the JC model, the run took about 2h10m
+using 4 threads on the same CPU.  The posterior means and 95% HPD CI are
+**0.173 (0.069, 0.288)** for `phi_h` (&phi;<sub>R&rarr;Q</sub>), and 
+**0.982 (0.949, 1.000)** for `phi_f` (&phi;<sub>A&rarr;GC</sub>).  The results
+are virtually identical to those under JC.  Those species are very closely
+related and the sequences are highly similar, so that JC does a good job at
+multiple-hit correction, and the use of GTR is unnecessary.
+
+### Estimates
+
+#### Theta estimates
+
+<table>
+<tr><th>JC theta estimates</th><th>GTR theta estimates</th></tr>
+<tr><td>
+
+|   &theta;   | mean     | 2.5% HPD | 97.5% HPD |
+|-------------|----------|----------|-----------|
+| theta_1G    | 0.020353 | 0.009347 | 0.034987  |
+| theta_2C    | 0.047352 | 0.013925 | 0.098182  |
+| theta_3R    | 0.00353  | 0.002627 | 0.004482  |
+| theta_4L    | 0.002372 | 0.001745 | 0.003022  |
+| theta_5A    | 0.004086 | 0.003091 | 0.005206  |
+| theta_6Q    | 0.007419 | 0.005723 | 0.009282  |
+| theta_7o    | 0.009217 | 0.005397 | 0.01396   |
+| theta_8g    | 0.036599 | 0.007    | 0.081634  |
+| theta_10a   | 0.018444 | 0.003386 | 0.046029  |
+| theta_11c   | 0.00868  | 0.004698 | 0.01328   |
+| theta_12d   | 0.00516  | 0.002772 | 0.007984  |
+| theta_13e   | 0.008921 | 0.006147 | 0.011845  |
+| theta_15b   | 0.004749 | 0.003339 | 0.006245  |
+| theta_16h   | 0.020236 | 0.003429 | 0.049355  |
+| theta_17f   | 0.019664 | 0.003521 | 0.048952  |
+
+</td><td>
+
+|   &theta;   | mean      |  2.5% HPD | 97.5% HPD  |
+|-------------|-----------|-----------|------------|
+| theta_1G    | 0.02006   | 0.00941   | 0.0343645  |
+| theta_2C    | 0.048687  | 0.0142785 | 0.102599   |
+| theta_3R    | 0.0035275 | 0.0026305 | 0.0044685  |
+| theta_4L    | 0.002368  | 0.0017355 | 0.0030165  |
+| theta_5A    | 0.004078  | 0.0030815 | 0.005151   |
+| theta_6Q    | 0.0075725 | 0.0058235 | 0.009477   |
+| theta_7o    | 0.0089225 | 0.005873  | 0.0122755  |
+| theta_8g    | 0.037665  | 0.007166  | 0.082657   |
+| theta_10a   | 0.0188865 | 0.0034215 | 0.047591   |
+| theta_11c   | 0.0083765 | 0.00481   | 0.0125065  |
+| theta_12d   | 0.0051465 | 0.0028495 | 0.0079185  |
+| theta_13e   | 0.0087985 | 0.0060765 | 0.0116845  |
+| theta_15b   | 0.004638  | 0.0032715 | 0.006078   |
+| theta_16h   | 0.0198265 | 0.0035675 | 0.0491005  |
+| theta_17f   | 0.020095  | 0.00343   | 0.049422   |
+
+</td></tr> </table>
 
 ## References
 
