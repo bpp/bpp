@@ -684,7 +684,15 @@ locus_t * locus_create(unsigned int dtype,
   locus->states = states;
   locus->sites = sites;
 
-  locus->rates_alpha = 1;
+  assert(opt_alpha_cats == rate_cats);
+  if (rate_cats > 1)
+  {
+    /* set alpha to mean */
+    locus->rates_alpha = opt_alpha_alpha / opt_alpha_beta;
+  }
+  else
+    locus->rates_alpha = 1;
+
   locus->rate_matrices = rate_matrices;
   locus->prob_matrices = prob_matrices;
   locus->rate_cats = rate_cats;
@@ -815,8 +823,15 @@ locus_t * locus_create(unsigned int dtype,
 
   /* rates */
   locus->rates = (double *)xcalloc(locus->rate_cats,sizeof(double));
+  pll_compute_gamma_cats(locus->rates_alpha,
+                         locus->rates_alpha,
+                         locus->rate_cats,
+                         locus->rates,
+                         PLL_GAMMA_RATES_MEAN);
+  #if 0
   for (i = 0; i < locus->rate_cats; ++i)
     locus->rates[i] = 1;
+  #endif
 
   /* rate weights */
   locus->rate_weights = (double *)xcalloc(locus->rate_cats,sizeof(double));
@@ -1117,6 +1132,7 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
   for (n = 0; n < rate_cats; ++n)
   {
     pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+    t *= locus->rates[n];
 
     evecs = eigenvecs[param_indices[n]];
     inv_evecs = inv_eigenvecs[param_indices[n]];
@@ -1261,6 +1277,7 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
   for (n = 0; n < locus->rate_cats; ++n)
   {
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
+    t *= locus->rates[n];
 
     if (t < 1e-100)
     {
@@ -1393,6 +1410,7 @@ static void locus_update_matrices_jc69(locus_t * locus,
     for (n = 0; n < locus->rate_cats; ++n)
     {
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+      t *= locus->rates[n];
 
       if (t < 1e-100)
       {

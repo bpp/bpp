@@ -609,7 +609,7 @@ int pll_core_update_pmatrix_4x4_jc69(double ** pmatrix,
     {
       pmat = pmatrix[matrix_indices[i]] + n*states*states_padded;
 
-      double t = branch_lengths[i];
+      double t = branch_lengths[i] * rates[n];
 
       if (t < 1e-100)
       {

@@ -444,16 +444,9 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_msci)
     col_count += stree->hybrid_count;
 
-  /* columns for mu_i */
-  if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
-    col_count += opt_locus_count;
-
   /* column for mubar */
   if (opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     ++col_count;
-
-  if (opt_est_heredity && opt_print_hscalars)
-    col_count += opt_locus_count;
 
   /* add one more for log-L if usedata is on */
   if (opt_usedata)
@@ -507,7 +500,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         {
           if (line_count == 0)
             fprintf(stderr,
-                    "ERROR: First record has mismatching number of columns\n");
+                    "ERROR: First record has mismatching number of columns (expected %ld)\n",col_count);
           else
             fprintf(stderr,
                     "ERROR: Found two consecutive records with mismatching "

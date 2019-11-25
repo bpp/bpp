@@ -229,6 +229,7 @@ void msa_summary(msa_t ** msa_list, int msa_count)
                             "Ambiguous sites",
                             "Compressed",
                             "Base freqs"};
+  char * sgamma = "+GAMMA";
 
   int col_len[COLUMNS];
 
@@ -246,7 +247,10 @@ void msa_summary(msa_t ** msa_list, int msa_count)
     assert(msa_list[i]->model >= BPP_DNA_MODEL_MIN &&
            msa_list[i]->model <= BPP_AA_MODEL_MAX &&
            msa_list[i]->model != BPP_DNA_MODEL_CUSTOM);
-    k = MAX(k,(long)strlen(global_model_strings[msa_list[i]->model]));
+    long l = strlen(global_model_strings[msa_list[i]->model]);
+    if (opt_alpha_cats > 1)
+      l += strlen(sgamma) + (long)(floor(log10(opt_alpha_cats)+1));
+    k = MAX(k,l);
   }
   col_len[1] = MAX(col_len[1], k+2);
 
@@ -312,7 +316,19 @@ void msa_summary(msa_t ** msa_list, int msa_count)
   for (i = 0; i < msa_count; ++i)
   {
     printf("%*ld |", col_len[0]-1, i+1);
-    printf("%*s |", col_len[1]-1, global_model_strings[msa_list[i]->model]);
+    if (opt_alpha_cats > 1)
+    {
+      char * tmp;
+      xasprintf(&tmp,
+                "%s%s%ld",
+                global_model_strings[msa_list[i]->model],
+                sgamma,
+                opt_alpha_cats);
+      printf("%*s |", col_len[1]-1, tmp);
+      free(tmp);
+    }
+    else
+      printf("%*s |", col_len[1]-1, global_model_strings[msa_list[i]->model]);
     printf("%*d |", col_len[2]-1, msa_list[i]->count);
     printf("%*d |", col_len[3]-1, msa_list[i]->original_length);
     printf("%*d |", col_len[4]-1, msa_list[i]->amb_sites_count);

@@ -435,6 +435,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    tab_required = 0;
     /* print heredity scalars header */
     if (opt_est_heredity && opt_print_hscalars)
     {
@@ -468,7 +469,8 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
               tab_required ? "\t" : "", stree->nodes[0]->label);
       tab_required = 1;
       for (j = 1; j < total_nodes; ++j)
-        fprintf(fp_locus[i], "\tr_%s", stree->nodes[j]->label);
+        if (stree->nodes[j]->brate)
+          fprintf(fp_locus[i], "\tr_%s", stree->nodes[j]->label);
     }
 
     /* print qmatrix parameters header */
@@ -485,6 +487,16 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
       {
         /* TODO: Implement other models */
         assert(locus[i]->model == BPP_DNA_MODEL_JC69);
+      }
+
+      if (opt_alpha_cats > 1)
+      {
+        fprintf(fp_locus[i],
+                "%sg_a",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+        for (j = 0; j < opt_alpha_cats; ++j)
+          fprintf(fp_locus[i], "\tg_%ld", j+1);
       }
     }
     if (tab_required)
@@ -514,6 +526,16 @@ static void print_rates(FILE ** fp_locus,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    tab_required = 0;
+    /* print heredity scalars */
+    if (opt_est_heredity && opt_print_hscalars)
+    {
+      fprintf(fp_locus[i],
+              "%s%.6f",
+              tab_required ? "\t" : "", locus[i]->heredity[0]);
+      tab_required = 1;
+    }
+
     /* print mu_i and sigma2_i */
     if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
@@ -528,12 +550,6 @@ static void print_rates(FILE ** fp_locus,
               "%s%.6f",
               tab_required ? "\t" : "", gtree[i]->rate_sigma2i);
       tab_required = 1;
-    }
-
-    /* print heredity scalars */
-    if (opt_est_heredity && opt_print_hscalars)
-    {
-      fprintf(fp_locus[i], "\t%.6f", locus[i]->heredity[0]);
     }
 
     /* print r_i */
@@ -566,6 +582,16 @@ static void print_rates(FILE ** fp_locus,
       {
         /* TODO: Implement other models */
         assert(locus[i]->model == BPP_DNA_MODEL_JC69);
+      }
+
+      if (opt_alpha_cats > 1)
+      {
+        fprintf(fp_locus[i],
+                "%s%f",
+                tab_required ? "\t" : "", locus[i]->rates_alpha);
+        tab_required = 1;
+        for (j = 0; j < opt_alpha_cats; ++j)
+          fprintf(fp_locus[i], "\t%f", locus[i]->rates[j]);
       }
         
     }
