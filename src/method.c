@@ -492,11 +492,9 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
       if (opt_alpha_cats > 1)
       {
         fprintf(fp_locus[i],
-                "%sg_a",
+                "%salpha",
                 tab_required ? "\t" : "");
         tab_required = 1;
-        for (j = 0; j < opt_alpha_cats; ++j)
-          fprintf(fp_locus[i], "\tg_%ld", j+1);
       }
     }
     if (tab_required)
@@ -590,8 +588,6 @@ static void print_rates(FILE ** fp_locus,
                 "%s%f",
                 tab_required ? "\t" : "", locus[i]->rates_alpha);
         tab_required = 1;
-        for (j = 0; j < opt_alpha_cats; ++j)
-          fprintf(fp_locus[i], "\t%f", locus[i]->rates[j]);
       }
         
     }
