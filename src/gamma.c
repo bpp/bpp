@@ -219,25 +219,26 @@ l4:
 }
 
 int pll_compute_gamma_cats(double alpha,
+                           double beta,
                            unsigned int categories,
                            double * output_rates,
                            int rates_mode)
 {
   unsigned int i;
 
-  double
-    factor = alpha / alpha * categories,
-    lnga1,
-    alfa = alpha,
-    beta = alpha,
-    *gammaProbs;
+  double mean = alpha / beta;
+  double lnga1;
+  double * gammaProbs;
 
+  #if 0
   /* Note that ALPHA_MIN setting is somewhat critical due to   */
   /* numerical instability caused by very small rate[0] values */
   /* induced by low alpha values around 0.01 */
 
   if (alpha < ALPHA_MIN || categories < 1)
     fatal("Invalid alpha value (%f)", alpha);
+  #endif
+  assert(categories > 0);
 
   if (categories == 1)
   {
@@ -245,36 +246,34 @@ int pll_compute_gamma_cats(double alpha,
   }
   else if (rates_mode == PLL_GAMMA_RATES_MEDIAN)
   {
-    double
-      middle = 1.0 / (2.0 * categories),
-      t = 0.0;
+    double t = 0.0;
 
     for(i = 0; i < categories; i++)
-      output_rates[i] = POINT_GAMMA((double)(i * 2 + 1) * middle, alfa, beta);
+      output_rates[i] = POINT_GAMMA((double)(i*2+1)/(2.*categories),alpha,beta);
 
     for (i = 0; i < categories; i++)
       t += output_rates[i];
      for( i = 0; i < categories; i++)
-       output_rates[i] *= factor / t;
+       output_rates[i] *= mean*categories/ t;
   }
   else if (rates_mode == PLL_GAMMA_RATES_MEAN)
   {
-    gammaProbs = (double *)malloc(categories * sizeof(double));
+    gammaProbs = (double *)xmalloc((size_t)categories * sizeof(double));
 
-    lnga1 = LnGamma(alfa + 1);
-
-    for (i = 0; i < categories - 1; i++)
-      gammaProbs[i] = POINT_GAMMA((i + 1.0) / categories, alfa, beta);
+    lnga1 = LnGamma(alpha+1);
 
     for (i = 0; i < categories - 1; i++)
-      gammaProbs[i] = IncompleteGamma(gammaProbs[i] * beta, alfa + 1, lnga1);
+      gammaProbs[i] = POINT_GAMMA((i + 1.0) / categories, alpha, beta);
 
-    output_rates[0] = gammaProbs[0] * factor;
+    for (i = 0; i < categories - 1; i++)
+      gammaProbs[i] = IncompleteGamma(gammaProbs[i] * beta, alpha+1, lnga1);
 
-    output_rates[categories - 1] = (1 - gammaProbs[categories - 2]) * factor;
+    output_rates[0] = gammaProbs[0] * mean*categories;
 
-    for (i= 1; i < categories - 1; i++)
-      output_rates[i] = (gammaProbs[i] - gammaProbs[i - 1]) * factor;
+    output_rates[categories - 1] = (1-gammaProbs[categories-2])*mean*categories;
+
+    for (i=1; i < categories-1; i++)
+      output_rates[i] = (gammaProbs[i] - gammaProbs[i-1])*mean*categories;
 
     free(gammaProbs);
   }

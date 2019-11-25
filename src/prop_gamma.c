@@ -91,6 +91,7 @@ static long propose_alpha(stree_t * stree,
 
   /* update locus->rates with new rates */
   pll_compute_gamma_cats(locus->rates_alpha,
+                         locus->rates_alpha,
                          locus->rate_cats,
                          locus->rates,
                          PLL_GAMMA_RATES_MEAN);

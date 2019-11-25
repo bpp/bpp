@@ -1174,6 +1174,7 @@ void set_legacy_rndu_array(unsigned int * x);
 /* functions in gamma.c */
 
 int pll_compute_gamma_cats(double alpha,
+                           double beta,
                            unsigned int categories,
                            double * output_rates,
                            int rates_mode);
