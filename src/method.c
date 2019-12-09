@@ -483,6 +483,48 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
                 tab_required ? "\t" : "");
         tab_required = 1;
       }
+      else if (locus[i]->model == BPP_DNA_MODEL_K80)
+      {
+        fprintf(fp_locus[i],
+                "%skappa",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_F81)
+      {
+        fprintf(fp_locus[i],
+                "%spi_A\tpi_C\tpi_G\tpi_T",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_HKY)
+      {
+        fprintf(fp_locus[i],
+                "%skappa\tpi_A\tpi_C\tpi_G\tpi_T",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_F84)
+      {
+        fprintf(fp_locus[i],
+                "%skappa\tpi_A\tpi_C\tpi_G\tpi_T",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_T92)
+      {
+        fprintf(fp_locus[i],
+                "%skappa\tpi_GC",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_TN93)
+      {
+        fprintf(fp_locus[i],
+                "%skappa1\tkappa2\tpi_A\tpi_C\tpi_G\tpi_T",
+                tab_required ? "\t" : "");
+        tab_required = 1;
+      }
       else
       {
         /* TODO: Implement other models */
@@ -575,6 +617,71 @@ static void print_rates(FILE ** fp_locus,
           fprintf(fp_locus[i], "\t%.6f", locus[i]->subst_params[0][j]);
         for (j = 0; j < locus[i]->states; ++j)
           fprintf(fp_locus[i], "\t%.6f", locus[i]->frequencies[0][j]);
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_K80)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->subst_params[0][0]/locus[i]->subst_params[0][1]);
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_F81)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f\t%.6f\t%.6f\t%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->frequencies[0][0],
+                locus[i]->frequencies[0][1],
+                locus[i]->frequencies[0][2],
+                locus[i]->frequencies[0][3]);
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_HKY)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f\t%.6f\t%.6f\t%.6f\t%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->subst_params[0][0]/locus[i]->subst_params[0][1],
+                locus[i]->frequencies[0][0],
+                locus[i]->frequencies[0][1],
+                locus[i]->frequencies[0][2],
+                locus[i]->frequencies[0][3]);
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_F84)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f\t%.6f\t%.6f\t%.6f\t%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->subst_params[0][0]/locus[i]->subst_params[0][1],
+                locus[i]->frequencies[0][0],
+                locus[i]->frequencies[0][1],
+                locus[i]->frequencies[0][2],
+                locus[i]->frequencies[0][3]);
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_T92)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f\t%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->subst_params[0][0]/locus[i]->subst_params[0][1],
+                locus[i]->frequencies[0][1]+locus[i]->frequencies[0][2]);
+        tab_required = 1;
+      }
+      else if (locus[i]->model == BPP_DNA_MODEL_TN93)
+      {
+        fprintf(fp_locus[i],
+                "%s%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f",
+                tab_required ? "\t" : "",
+                locus[i]->subst_params[0][0]/locus[i]->subst_params[0][2],
+                locus[i]->subst_params[0][1]/locus[i]->subst_params[0][2],
+                locus[i]->frequencies[0][0],
+                locus[i]->frequencies[0][1],
+                locus[i]->frequencies[0][2],
+                locus[i]->frequencies[0][3]);
+        tab_required = 1;
       }
       else
       {
@@ -756,8 +863,14 @@ static void compute_base_freqs(msa_t * msa, unsigned int * weights, const unsign
     switch (msa->model)
     {
       case BPP_DNA_MODEL_JC69:
+      case BPP_DNA_MODEL_K80:
         msa->freqs[0] = msa->freqs[1] = msa->freqs[2] = msa->freqs[3] = 0.25;
         break;
+      case BPP_DNA_MODEL_F81:
+      case BPP_DNA_MODEL_HKY:
+      case BPP_DNA_MODEL_T92:
+      case BPP_DNA_MODEL_TN93:
+      case BPP_DNA_MODEL_F84:
       case BPP_DNA_MODEL_GTR:
         empirical_base_freqs_dna(msa,weights,pll_map);
         break;
@@ -1239,7 +1352,9 @@ static FILE * init(stree_t ** ptr_stree,
       else if (msa_list[i]->model == BPP_DNA_MODEL_GTR)
         compress_method = COMPRESS_GENERAL;
       else
-        assert(0);
+      {
+        compress_method = COMPRESS_GENERAL;
+      }
     }
     else if (msa_list[i]->dtype == BPP_DATA_AA)
     {
@@ -1924,13 +2039,6 @@ void cmd_run()
 
   unsigned long curstep = 0;
 
-  /* enable proposals */
-  if (opt_model != BPP_DNA_MODEL_JC69)
-  {
-    enabled_prop_qrates = 1;
-    enabled_prop_freqs  = 1;
-  }
-
   printf("\nStarting timer..\n");
   timer_start();
 
@@ -2013,6 +2121,20 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Revolutionary gene tree SPR algorithm\n");
   if (opt_revolutionary_spr_method)
     fprintf(stdout, "[EXPERIMENTAL] - Revolutionary species tree SPR algorithm\n");
+
+  /* enable proposals */
+  if (opt_model != BPP_DNA_MODEL_JC69)
+  {
+    enabled_prop_qrates = 0;
+    enabled_prop_freqs  = 0;
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (locus[i]->qrates_param_count)
+        enabled_prop_qrates = 1;
+      if (locus[i]->freqs_param_count)
+        enabled_prop_freqs = 1;
+    }
+  }
 
   if (opt_threads > 1)
   {

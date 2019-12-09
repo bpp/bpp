@@ -526,6 +526,8 @@ typedef struct locus_s
   unsigned int rate_matrices;
   unsigned int prob_matrices;
   unsigned int rate_cats;
+  unsigned int qrates_param_count;
+  unsigned int freqs_param_count;
   unsigned int scale_buffers;
   unsigned int attributes;
   unsigned int model;

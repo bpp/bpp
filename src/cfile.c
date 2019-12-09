@@ -36,7 +36,7 @@ static const long aa_model_count  = 19;
 /* Important: CUSTOM *MUST* be last in the list */
 static const char * dna_model_name[] = 
  {
-   "JC69", "K80", "F81", "HKY", "T92", "TN93", "GTR", "CUSTOM"
+   "JC69", "K80", "F81", "HKY", "T92", "TN93", "F84", "GTR", "CUSTOM"
  };
 
 static const char * aa_model_name[] =
@@ -48,9 +48,9 @@ static const char * aa_model_name[] =
 
 static const long dna_model_index[] =
  {
-   BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_K80,    BPP_DNA_MODEL_F81, 
-   BPP_DNA_MODEL_HKY,  BPP_DNA_MODEL_T92,    BPP_DNA_MODEL_TN93,
-   BPP_DNA_MODEL_GTR,  BPP_DNA_MODEL_CUSTOM
+   BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_K80, BPP_DNA_MODEL_F81, 
+   BPP_DNA_MODEL_HKY,  BPP_DNA_MODEL_T92, BPP_DNA_MODEL_TN93,
+   BPP_DNA_MODEL_F84,  BPP_DNA_MODEL_GTR, BPP_DNA_MODEL_CUSTOM
  };
 
 static const long aa_model_index[] =

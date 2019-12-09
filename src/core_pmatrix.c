@@ -560,7 +560,7 @@ int pll_core_update_pmatrix_4x4_hky(double ** pmatrix,
         m=0;
         for (j = 0; j < 4; ++j)
         {
-          for (k = 0; k < 4; ++j)
+          for (k = 0; k < 4; ++k)
           {
             u = 1.0/pijk[k] - 1;
             w = -beta * (1+pijk[k]*(kappa[n]-1));
