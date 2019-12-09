@@ -335,7 +335,12 @@ void msa_summary(msa_t ** msa_list, int msa_count)
     printf("%*d |", col_len[5]-1, msa_list[i]->length);
 
     char * freqs;
-    if (msa_list[i]->model == BPP_DNA_MODEL_GTR)
+    if (msa_list[i]->model == BPP_DNA_MODEL_GTR ||
+        msa_list[i]->model == BPP_DNA_MODEL_F81 ||
+        msa_list[i]->model == BPP_DNA_MODEL_HKY ||
+        msa_list[i]->model == BPP_DNA_MODEL_T92 ||
+        msa_list[i]->model == BPP_DNA_MODEL_TN93 ||
+        msa_list[i]->model == BPP_DNA_MODEL_F84)
       xasprintf(&freqs,
                 "Empirical ACGT %.2f %.2f %.2f %.2f",
                 msa_list[i]->freqs[0],
