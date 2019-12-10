@@ -1164,7 +1164,6 @@ static void epoch_reorder(snode_t ** epoch,
     }
     else if (mindex > hindex+1)
     {
-      assert(mindex - hindex <= 3);
       while (mindex != hindex+1)
       {
         SWAP(epoch[mindex],epoch[mindex-1]);
