@@ -2801,7 +2801,7 @@ void cmd_run()
   }
   else if (opt_method == METHOD_11)
   {
-    mixed_summary(fp_out);
+    mixed_summary(fp_out,stree->tip_count);
     delimitations_fini();
     rj_fini();
     free(pspecies);

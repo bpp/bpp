@@ -537,7 +537,7 @@ static void replace(db_stree_t * treelist,
   treelist[index].count = freq;
 }
 
-void mixed_summary(FILE * fp_out)
+void mixed_summary(FILE * fp_out, unsigned int sp_count)
 {
   int64_t line_count = 0;
   int64_t i,j;
@@ -579,14 +579,42 @@ void mixed_summary(FILE * fp_out)
     stree_t * t = bpp_parse_newick_string(line);
     stree_sort(t);
 
+    int64_t species_count;
+    if (!get_int64(tmp,&species_count))
+      fatal("Cannot read number of species; line %ld of %s",line_count+1,opt_mcmcfile);
+
+    /* In case the number of delimited species in the sample log is equal to the
+       number of species we add a small number to the branch lengths of tips in
+       order to avoid zero-branch lengths due to truncation and result to a
+       smaller number of species (backwards compatibility with BPP 3.4)
+    */
+    if (species_count == sp_count)
+    {
+      for (i = 0; i < t->tip_count; ++i)
+        t->nodes[i]->length += 0.1;
+    }
+
     /* convert expanded tree into delimited tree, e.g.:
 
        ((A:0,B:0):0.02,(C:0.01,D:0.01):0.01); -> (AB,(C,D)); */
     char * dnewick = get_delimit_string(t);
 
-    int64_t species_count;
-    if (!get_int64(tmp,&species_count))
-      fatal("Cannot read number of species; line %ld of %s",line_count+1,opt_mcmcfile);
+
+    /* count the number of delimited species in current species tree when the
+       logged number of species does not equal the species count.
+       The number of species may not match the logged number due to trancation
+       (we print only six decimal digits, which causes zero-branch lengths for
+       branches with very small length. For backwards-compatibility with BPP 3.4
+       we use the logged number of species when it's equal to the number of
+       species
+      */
+    if (species_count != sp_count)
+    {
+      species_count = 1;
+      for (i = t->tip_count; i < t->tip_count+t->inner_count; ++i)
+        if (t->nodes[i]->tau > 0)
+          ++species_count;
+    }
 
     treelist[line_count].newick = dnewick;
     treelist[line_count].species = species_count;

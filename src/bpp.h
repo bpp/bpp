@@ -1443,7 +1443,7 @@ long getlinecount(const char * filename);
 
 /* functions in summary11.c */
 
-void mixed_summary(FILE * fp_out);
+void mixed_summary(FILE * fp_out, unsigned int sp_count);
 
 /* functions in hardware.c */
 
