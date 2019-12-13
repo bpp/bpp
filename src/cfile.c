@@ -374,6 +374,7 @@ static long parse_diploid(const char * line)
   char * p = s;
   size_t ws;
   size_t count = 0;
+  long ones_count = 0;
 
   assert(line);
 
@@ -410,6 +411,8 @@ static long parse_diploid(const char * line)
     if (*p == '0' || *p == '1')
     {
       opt_diploid[count++] = *p - '0';
+      if (*p-'0' == 1)
+        ones_count++;
       p++;
     }
 
@@ -424,6 +427,11 @@ static long parse_diploid(const char * line)
   ret = 1;
 
 l_unwind:
+  if (opt_diploid && !ones_count)
+  {
+    free(opt_diploid);
+    opt_diploid = NULL;
+  }
   free(s);
   return ret;
 }
