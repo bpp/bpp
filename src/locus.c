@@ -1266,7 +1266,6 @@ static void locus_update_all_matrices_generic(locus_t * locus,
   double * temp;
 
   unsigned int * param_indices = locus->param_indices;
-  assert(0);
 
   for (n = 0; n < locus->rate_cats; ++n)
   {
