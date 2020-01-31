@@ -1030,6 +1030,8 @@ static void resolve_bd_introgression(stree_t * stree, long * dups)
     /* if no duplicate label for current tip node, move to next tip */
     if (!stree->nodes[i] || stree->nodes[i]->left || dups[i] == i) continue;
 
+    ychild = xtip = NULL;
+
     /* if the duplicate of tip is a tip, fail as we checked this in
        create_duplicate_indices */
     assert(dups[i] >= stree->tip_count);
