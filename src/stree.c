@@ -4323,7 +4323,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
   double old_mui, old_logmui;
   double new_mui, new_logmui;
   double sum_old, sum_new;
-  double alpha,beta;
+  double alpha;
   double lnacceptance = 0;
   double logl = 0;
   double new_prior_rates = 0;
@@ -4341,7 +4341,6 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
   */
   alpha = opt_mui_alpha;
-  beta = opt_mui_alpha / stree->locusrate_mubar;
 
   sum_old = sum_new = terma = termb = 0;
   /* TODO: Note Gamma-Dirichlet prior cannot be parallelized as we have to
@@ -4395,7 +4394,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
       /* Hierarchical conditional iid prior */
 
       /* gamma prior ratio */
-      lnacceptance += (alpha-1)*log(new_mui/old_mui) - beta*(new_mui-old_mui);
+      lnacceptance += (alpha-1)*log(new_mui/old_mui) - 
+                      (opt_mui_alpha/stree->locusrate_mubar)*(new_mui-old_mui);
     }
 
     if (opt_clock == BPP_CLOCK_GLOBAL)
