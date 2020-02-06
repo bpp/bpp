@@ -444,10 +444,6 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_est_locusrate,1,fp))
     fatal("Cannot read locusrate tag"); 
 
-  /* load locus rate alpha */
-  if (!LOAD(&opt_locusrate_alpha,1,fp))
-    fatal("Cannot read locusrate alpha"); 
-
   /* load heredity scalers estimation flag */
   if (!LOAD(&opt_est_heredity,1,fp))
     fatal("Cannot read heredity tag"); 
