@@ -791,7 +791,6 @@ extern long opt_version;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
 extern double opt_bfbeta;
-extern double opt_clock_alpha;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
 extern double opt_finetune_freqs;
@@ -809,7 +808,7 @@ extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
-extern double opt_locusrate_alpha;
+extern double opt_locusrate_mubar;      /* used only in simulation */
 extern double opt_mubar_alpha;
 extern double opt_mubar_beta;
 extern double opt_mui_alpha;
@@ -826,6 +825,7 @@ extern double opt_theta_alpha;
 extern double opt_theta_beta;
 extern double opt_vbar_alpha;
 extern double opt_vbar_beta;
+extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
@@ -1172,6 +1172,7 @@ void legacy_rnddirichlet(long index, double * output, double * alpha, long k);
 long legacy_rndpoisson(long index, double m);
 unsigned int * get_legacy_rndu_array(void);
 void set_legacy_rndu_array(unsigned int * x);
+double rndNormal(long index);
 
 /* functions in gamma.c */
 

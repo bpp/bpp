@@ -667,6 +667,8 @@ static list_t * create_maplist(stree_t * stree)
   return list;
 }
 
+#if 0
+/* correlated clock currently disabled */
 static void compute_relaxed_rates_recursive(snode_t * node)
 {
   if (!node) return;
@@ -683,6 +685,8 @@ static void compute_relaxed_rates_recursive(snode_t * node)
   compute_relaxed_rates_recursive(node->right);
     
 }
+#endif
+
 
 static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
 {
@@ -698,17 +702,37 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
 
   if (opt_clock == BPP_CLOCK_IND)
   {
-    for (i = 0; i < total_nodes; ++i)
-      stree->nodes[i]->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
-                              opt_clock_alpha;
+    if (opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+    {
+      /* log-normal distributed branch rates */
+      for (i = 0; i < total_nodes; ++i)
+      {
+        double nv = gtree->rate_mui +
+                    sqrt(gtree->rate_sigma2i)*rndNormal(thread_index_zero);
+        stree->nodes[i]->rate = exp(nv);
+      }
+    }
+    else
+    {
+      assert(opt_rate_prior == BPP_BRATE_PRIOR_GAMMA);
+      /* gamma distributed branch rates */
+      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_sigma2i;
+      double b = gtree->rate_mui / gtree->rate_sigma2i;
+      for (i = 0; i < total_nodes; ++i)
+        stree->nodes[i]->rate = legacy_rndgamma(thread_index_zero,a) / b;
+    }
   }
   else
   {
+    assert(0);  /* currently disabled */
+
+    #if 0
+    /* correlated clock */
     stree->root->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
                         opt_clock_alpha;
     compute_relaxed_rates_recursive(stree->root->left);
     compute_relaxed_rates_recursive(stree->root->right);
-
+    #endif
   }
 
   /* now update gene tree */
@@ -1107,13 +1131,26 @@ static void simulate(stree_t * stree)
   {
     if (opt_model == BPP_DNA_MODEL_JC69)
     {
-      if (opt_locusrate_alpha > 0)
-        fprintf(fp_param, "locus\tlocusrate\n");
+      if (opt_est_locusrate)
+        fprintf(fp_param, "locus\tmu_i");
     }
     else if (opt_model == BPP_DNA_MODEL_GTR)
-      fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha\tlocusrate\n");
+    {
+      if (opt_est_locusrate)
+        fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha\tmu_i");
+      else
+        fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha");
+    }
     else
       assert(0);
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      assert(opt_clock == BPP_CLOCK_IND);
+      fprintf(fp_param, "\tnu_i");
+    }
+    
+    fprintf(fp_param, "\n");
   }
 
   /* print imap file */
@@ -1134,8 +1171,9 @@ static void simulate(stree_t * stree)
   double qrates[6];
   double freqs[4];
   double locus_siterate_alpha = opt_siterate_alpha;
-  double locus_rate = 0;
   double * siterates = NULL;
+  double * mui_array = NULL;
+  double * vi_array = NULL;
 
   /* allocate array used for shuffling order of sites */
   if (opt_msafile)
@@ -1181,6 +1219,63 @@ static void simulate(stree_t * stree)
     eigenvals = (double *)xmalloc(4*sizeof(double));
   }
 
+  /* pre-generate mu_i and v_i */
+  if (opt_est_locusrate)
+  {
+    mui_array = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+    {
+      /* generate locus rates from Gamma(a_mui,a_mui/mubar) */
+      for (i = 0; i < opt_locus_count; ++i)
+        mui_array[i] = legacy_rndgamma(thread_index_zero,opt_mui_alpha) /
+                       (opt_mui_alpha/opt_locusrate_mubar);
+    }
+    else
+    {
+      /* generate locus rate from Dir(a_mui) */
+      assert(opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR);
+      double tmp_sum = 0;
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        mui_array[i] = legacy_rndgamma(thread_index_zero,opt_mui_alpha);
+        tmp_sum += mui_array[i];
+      }
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        mui_array[i] /= tmp_sum;
+        mui_array[i] *= opt_locusrate_mubar*opt_locus_count;
+      }
+    }
+  }
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    vi_array = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+    {
+      /* generate v_i from Gamma(a_vi,a_vi/vbar) */
+      for (i = 0; i < opt_locus_count; ++i)
+        vi_array[i] = legacy_rndgamma(thread_index_zero,opt_vi_alpha) /
+                      (opt_vi_alpha/opt_clock_vbar);
+    }
+    else
+    {
+      /* generate v_i from Dir(a_vi) */
+      assert(opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR);
+      double tmp_sum = 0;
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        vi_array[i] = legacy_rndgamma(thread_index_zero,opt_vi_alpha);
+        tmp_sum += vi_array[i];
+      }
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        vi_array[i] /= tmp_sum;
+        vi_array[i] *= opt_clock_vbar*opt_locus_count;
+      }
+    }
+  }
+
   /* start generating */
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -1221,13 +1316,12 @@ static void simulate(stree_t * stree)
       if (opt_modelparafile)
         fprintf(fp_param, " %9.6f", locus_siterate_alpha);
     }
-    if (opt_locusrate_alpha)
+    if (opt_est_locusrate)
+      fprintf(fp_param, " %9.6f", mui_array[i]);
+    if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      /* generate locus rate from Gamma(a,a) */
-      locus_rate = legacy_rndgamma(thread_index_zero,opt_locusrate_alpha) / 
-                   opt_locusrate_alpha;
-      if (opt_modelparafile)
-        fprintf(fp_param, " %9.6f", locus_rate);
+      assert(opt_clock == BPP_CLOCK_IND);
+      fprintf(fp_param, " %9.6f", vi_array[i]);
     }
 
     if (opt_msafile || opt_treefile)
@@ -1267,6 +1361,14 @@ static void simulate(stree_t * stree)
     /* simulate gene tree */
     gtree[i] = gtree_simulate(stree,msa[i],i);
 
+    if (opt_est_locusrate)
+      gtree[i]->rate_mui = mui_array[i];
+    else
+      gtree[i]->rate_mui = 1;
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+      gtree[i]->rate_sigma2i = vi_array[i];
+
     tmrca += gtree[i]->root->time;
 
     /* set branch lengths */
@@ -1297,11 +1399,12 @@ static void simulate(stree_t * stree)
       fprintf(fp_param, "\n");
 
     /* multiply branches with locus rate */
-    if (opt_locusrate_alpha)
+    if (opt_est_locusrate && opt_clock == BPP_CLOCK_GLOBAL)
     {
       for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
-        gtree[i]->nodes[j]->length *= locus_rate;
+        gtree[i]->nodes[j]->length *= mui_array[i];
     }
+
 
     if (opt_treefile)
     {
@@ -1415,6 +1518,11 @@ static void simulate(stree_t * stree)
         printf("\n");
     }
   }
+
+  if (mui_array)
+    free(mui_array);
+  if (vi_array)
+    free(vi_array);
   
   /* deallocate hashtables used for mapping sequences to species */
   gtree_simulate_fini();

@@ -148,7 +148,6 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(double);                     /* mean_root_age */
   size_section += sizeof(double);                     /* mean_root_theta */
   size_section += sizeof(long);                       /* opt_est_locusrate */
-  size_section += sizeof(double);                     /* opt_locusrate_alpha */
   size_section += sizeof(long);                       /* opt_est_heredity */
   size_section += sizeof(double);                     /* opt_heredity_alpha */
   size_section += sizeof(double);                     /* opt_heredity_beta */
@@ -299,7 +298,6 @@ static void dump_chk_section_1(FILE * fp,
 
   /* whether locus mutation rate is estimated */
   DUMP(&opt_est_locusrate,1,fp);
-  DUMP(&opt_locusrate_alpha,1,fp);
 
   /* whether heredity scalers are estimated */
   DUMP(&opt_est_heredity,1,fp);

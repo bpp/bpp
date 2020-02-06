@@ -130,7 +130,7 @@ static double rndBactrianTriangle(long index)
    return (z);
 }
 
-static double rndNormal(long index)
+double rndNormal(long index)
 {
 /* Standard normal variate, using the Box-Muller method (1958), improved by 
    Marsaglia and Bray (1964).  The method generates a pair of N(0,1) variates, 

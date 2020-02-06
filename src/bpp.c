@@ -95,7 +95,7 @@ long opt_version;
 double opt_alpha_alpha;
 double opt_alpha_beta;
 double opt_bfbeta;
-double opt_clock_alpha;
+double opt_clock_vbar;
 double opt_finetune_alpha;
 double opt_finetune_branchrate;
 double opt_finetune_freqs;
@@ -113,7 +113,7 @@ double opt_finetune_tau;
 double opt_finetune_theta;
 double opt_heredity_alpha;
 double opt_heredity_beta;
-double opt_locusrate_alpha;
+double opt_locusrate_mubar;
 double opt_mubar_alpha;
 double opt_mubar_beta;
 double opt_mui_alpha;
@@ -296,7 +296,7 @@ void args_init(int argc, char ** argv)
   opt_burnin = 100;
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
-  opt_clock_alpha = 0;
+  opt_clock_vbar = 0;
 
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;
@@ -343,9 +343,9 @@ void args_init(int argc, char ** argv)
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
   opt_heredity_filename = NULL;
-  opt_locusrate_alpha = 0;
   opt_locusrate_filename = NULL;
   opt_locusrate_prior = -1;
+  opt_locusrate_mubar = 1;
   opt_locus_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;

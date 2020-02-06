@@ -28,6 +28,11 @@ static size_t line_maxsize = 0;
 
 static long species_count = 0;
 
+static const char * rate_prior_name[] =
+ {
+   "gamma-Dirichlet", "Conditional iid"
+ };
+
 static void reallocline(size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
@@ -706,6 +711,83 @@ static long get_token(char * line, char ** token, char ** value)
   return p - *token + 1;
 }
 
+static long parse_locusrate(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_double(p, &opt_locusrate_mubar);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p) && opt_locusrate_mubar == 0)
+  {
+    opt_est_locusrate = MUTRATE_CONSTANT;
+    ret = 1;
+  }
+
+  count = 0;
+  if (opt_locusrate_mubar > 0)
+  {
+    opt_est_locusrate = MUTRATE_ESTIMATE;
+
+    /* get a_mui */
+    count = get_double(p, &opt_mui_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    /* get optional prior */
+    if (is_emptyline(p))
+    {
+      opt_locusrate_prior = BPP_LOCRATE_PRIOR_GAMMADIR;
+      ret = 1;
+      goto l_unwind;
+    }
+
+    /* get prior */
+    long temp = 0;
+    count = get_long(p, &temp);
+    if (!count) goto l_unwind;
+
+    if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+      fatal("ERROR: Invalid prior value (%ld) in 'clock' option", temp);
+
+    /* check whether prior was already specified in the clock option */
+    if (opt_locusrate_prior != -1)
+    {
+      if (temp != opt_locusrate_prior)
+        fatal("ERROR: prior = %ld (%s) in 'locusrate' does not match prior = "
+              "%ld (%s) in 'clock'", temp, rate_prior_name[temp],
+              opt_locusrate_prior, rate_prior_name[opt_locusrate_prior]);
+    }
+    else
+    {
+      opt_locusrate_prior = temp;
+    }
+
+    p += count;
+
+    if (opt_locusrate_prior < BPP_LOCRATE_PRIOR_MIN ||
+        opt_locusrate_prior > BPP_LOCRATE_PRIOR_MAX)
+      goto l_unwind;
+
+  }
+  else
+    goto l_unwind;
+
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_siterate(const char * line)
 {
   long ret = 0;
@@ -782,16 +864,80 @@ static long parse_clock(const char * line)
 
   p += count;
 
-  if (opt_clock < 1 || opt_clock > 3)
-    fatal("Option 'clock' expects values '1', '2' or '3'");
-
-  if (opt_clock > 1)
+  /* if molecular clock then accept no other parameters */
+  if (opt_clock == BPP_CLOCK_GLOBAL)
   {
-    count = get_double(p, &opt_clock_alpha);
-    if (!count) goto l_unwind;
-
-    p += count;
+    if (is_emptyline(p)) ret = 1;
+    goto l_unwind;
   }
+
+  /* the only other choice is local clock in which mutation rate drifts over
+     branches independently among loci */
+  if (opt_clock != BPP_CLOCK_IND) goto l_unwind;
+
+  /* read vbar alpha and vbar beta */
+
+  /* get vbar */
+  count = get_double(p, &opt_clock_vbar);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* get a_vi */
+  count = get_double(p, &opt_vi_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* next two parameters are optional */
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* get prior */
+  long temp = 0;
+  count = get_long(p, &temp);
+  if (!count) goto l_unwind;
+
+  if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+    fatal("ERROR: Invalid prior value (%ld) in 'locusrate' option", temp);
+
+  /* check whether prior was already specified in the locusrate option */
+  if (opt_locusrate_prior != -1)
+  {
+    if (temp != opt_locusrate_prior)
+      fatal("ERROR: prior = %ld (%s) in 'clock' does not match prior = %ld (%s)"
+            " in 'locusrate'", temp, rate_prior_name[temp], opt_locusrate_prior,
+            rate_prior_name[opt_locusrate_prior]);
+  }
+  else
+  {
+    opt_locusrate_prior = temp;
+  }
+
+  p += count;
+
+  if (opt_locusrate_prior < BPP_LOCRATE_PRIOR_MIN ||
+      opt_locusrate_prior > BPP_LOCRATE_PRIOR_MAX)
+    goto l_unwind; 
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* get branch rate prior distribution */
+  count = get_long(p,&opt_rate_prior);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (opt_rate_prior < BPP_BRATE_PRIOR_MIN ||
+      opt_rate_prior > BPP_BRATE_PRIOR_MAX)
+    goto l_unwind;
 
   if (is_emptyline(p)) ret = 1;
 
@@ -833,9 +979,6 @@ static void check_validity()
   }
   assert(opt_model == BPP_DNA_MODEL_JC69 || opt_model == BPP_DNA_MODEL_GTR);
 
-  if (opt_locusrate_alpha < 0)
-    fatal("Option 'alpha_locusrate' requires a positive number or 0");
-
   if (opt_model == BPP_DNA_MODEL_GTR && !opt_modelparafile)
     fatal("Usage of 'GTR' model requires the specification of an output file "
           "with the option 'modelparafile'");
@@ -864,6 +1007,22 @@ static void check_validity()
           fatal("Alpha parameters for dirichlet distribution must be positive "
                 "numbers (option 'basefreqs')");
     }
+  }
+
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (opt_clock_vbar <= 0)
+      fatal("Argument 'v_bar' in option 'clock' must be greater than zero");
+    if (opt_vi_alpha <= 0)
+      fatal("Argument 'a_vi' in option 'clock' must be greater than zero");
+  }
+
+  if (opt_est_locusrate)
+  {
+    if (opt_locusrate_mubar <= 0)
+      fatal("Argument 'mu_bar' in option 'clock' must be greater than zero");
+    if (opt_mui_alpha <= 0)
+      fatal("Argument 'mu_bar' in option 'clock' must be greater than zero");
   }
 
   if (!opt_siterate_fixed)
@@ -960,7 +1119,7 @@ void load_cfile_sim()
       if (!strncasecmp(token,"clock",5))
       {
         if (!parse_clock(value))
-          fatal("Option 'clock' expects values '1', '2 a' or '3 a' (line %ld)",
+          fatal("Option 'clock' expects values '1', or '2 v_bar a_vi prior dist' (line %ld)",
                 line_count);
         valid = 1;
       }
@@ -1019,6 +1178,13 @@ void load_cfile_sim()
       {
         if (!parse_basefreqs(value))
           fatal("Option 'basefreqs' expects one switch and 4 values (line %ld)",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"locusrate",9))
+      {
+        if (!parse_locusrate(value))
+          fatal("Option 'locusrate' expects values '0' or 'mu_bar a_mui prior' (line %ld)",
                 line_count);
         valid = 1;
       }
@@ -1138,17 +1304,8 @@ void load_cfile_sim()
     {
       if (!strncasecmp(token,"alpha_locusrate",15))
       {
-        if  (!get_double(value, &opt_locusrate_alpha))
-          fatal("Option 'alpha_locusrate' expects one value (line %ld)",
-                line_count);
-        if (opt_locusrate_alpha < 0)
-          fatal("Option 'alpha_locusrate' expects a non-negative value (line %ld)",
-                line_count);
-        if (opt_locusrate_alpha == 0)
-          opt_est_locusrate = 0;
-        else
-          opt_est_locusrate = 1;
-        valid = 1;
+        fatal("Option 'alpha_locusrate' was replaced by option 'locusrate' as "
+              "of BPP 4.2.1. Please read the BPP manual for new syntax.");
       }
     }
 
