@@ -47,20 +47,19 @@ CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # 
 LINKFLAGS=$(PROFILING)
 LIBS=-lm -lpthread
 
-BISON = bison
-FLEX = flex
-
 PROG=bpp
 
 all: $(PROG)
 
-OBJS=bpp.o rtree.o util.o parse_stree.o lex_stree.o arch.o phylip.o msa.o \
-     maps.o locus.o parse_map.o lex_map.o mapping.o compress.o hash.o list.o \
+OBJS=bpp.o rtree.o util.o \
+     arch.o phylip.o msa.o \
+     maps.o locus.o \
+     mapping.o compress.o hash.o list.o \
      stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
      output.o core_partials_sse.o dlist.o allfixed.o core_likelihood_sse.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
-     gamma.o prop_gamma.o threads.o treeparse.o $(AVXOBJ) $(AVX2OBJ)
+     gamma.o prop_gamma.o threads.o treeparse.o parsemap.o $(AVXOBJ) $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)
@@ -73,12 +72,6 @@ $(PROG): $(OBJS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
-
-parse_%.c: parse_%.y
-	$(BISON) -p $*_ -d -o $@ $<
-
-lex_%.c: lex_%.l
-	$(FLEX) -P $*_ -o $@ $<
 
 clean:
 	rm -f *~ $(OBJS) gmon.out $(PROG)

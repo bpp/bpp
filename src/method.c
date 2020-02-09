@@ -1384,8 +1384,10 @@ static FILE * init(stree_t ** ptr_stree,
   if (stree->tip_count > 1)
   {
     printf("Parsing map file...");
-    map_list = yy_parse_map(opt_mapfile);
-    printf(" Done\n");
+    if (!(map_list = parse_mapfile(opt_mapfile)))
+      fatal("Failed parsing map file %s", opt_mapfile);
+    else
+      printf(" Done\n");
   }
   #if 0
   maplist_print(map_list);
