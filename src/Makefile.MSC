@@ -1,5 +1,3 @@
-DIR_FLEXBISON = C:\Programs\winflexbison
-
 OBJ_AVX=core_likelihood_avx.obj core_partials_avx.obj
 SRC_AVX=core_likelihood_avx.c core_partials_avx.c
 
@@ -41,11 +39,7 @@ OBJ_BPP = \
   method.obj \
   msa.obj \
   output.obj \
-  lex_map.obj \
   load.obj \
-  parse_map.obj \
-  lex_stree.obj \
-  parse_stree.obj \
   phylip.obj \
   prop_mixing.obj \
   prop_rj.obj \
@@ -62,21 +56,10 @@ OBJ_BPP = \
   gamma.obj \
   prop_gamma.obj \
   threads.obj \
-  treeparse.obj
+  treeparse.obj \
+  parsemap.o
 
 all: $(PROG)
-
-parse_map.c: parse_map.y
-	$(DIR_FLEXBISON)\win_bison -p map_ -d -o parse_map.c parse_map.y
-
-lex_map.c: lex_map.l
-	$(DIR_FLEXBISON)\win_flex -P map_ -o lex_map.c lex_map.l
-
-parse_stree.c: parse_stree.y
-	$(DIR_FLEXBISON)\win_bison -p stree_ -d -o parse_stree.c parse_stree.y
-
-lex_stree.c: lex_stree.l
-	$(DIR_FLEXBISON)\win_flex -P stree_ -o lex_stree.c lex_stree.l
 
 $(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP) 
 	link /out:$@ $** libpthreadvc3.lib

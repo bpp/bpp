@@ -954,15 +954,6 @@ void show_header(void);
 
 void cmd_ml(void);
 
-/* functions in parse_stree.y */
-
-stree_t * stree_parse_newick(const char * filename);
-
-stree_t * stree_parse_newick_string(const char * s);
-
-void stree_destroy(stree_t * tree,
-                   void (*cb_destroy)(void *));
-
 /* functions in phylip.c */
 
 phylip_t * phylip_open(const char * filename,
@@ -1097,10 +1088,6 @@ int msa_remove_ambiguous(msa_t * msa);
 void msa_summary(msa_t ** msa_list, int msa_count);
 
 void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map);
-
-/* functions in parse_map.y */
-
-list_t * yy_parse_map(const char * filename);
 
 /* functions in mapping.c */
 
@@ -2124,3 +2111,8 @@ void threads_pin_master(void);
 /* functions in treeparse.c */
 
 stree_t * bpp_parse_newick_string(const char * line);
+void stree_destroy(stree_t * tree, void (*cb_destroy)(void *));
+
+/* functions in parsemap.c */
+
+list_t * parse_mapfile(const char * mapfile);

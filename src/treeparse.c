@@ -318,6 +318,81 @@ static void stree_graph_destroy(snode_t * root,
   free(root);
 }
 
+void stree_destroy(stree_t * tree,
+                   void (*cb_destroy)(void *))
+{
+  unsigned int i,j;
+  snode_t * node;
+
+  /* deallocate all nodes */
+  for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
+  {
+    node = tree->nodes[i];
+    dealloc_data(node,cb_destroy);
+
+    if (node->label)
+      free(node->label);
+
+    if (node->event)
+    {
+      for (j = 0; j < tree->locus_count; ++j)
+        if (tree->nodes[i]->event[j])
+        {
+          dlist_clear(tree->nodes[i]->event[j],NULL);
+          dlist_destroy(tree->nodes[i]->event[j]);
+        }
+      free(node->event);
+    }
+    
+    if (node->event_count)
+      free(node->event_count);
+
+    if (node->seqin_count)
+      free(node->seqin_count);
+
+    if (node->logpr_contrib)
+      free(node->logpr_contrib);
+
+    if (node->old_logpr_contrib)
+      free(node->old_logpr_contrib);
+
+    if (node->gene_leaves)
+      free(node->gene_leaves);
+
+    if (node->t2h)
+      free(node->t2h);
+
+    if (node->old_t2h)
+      free(node->old_t2h);
+
+    if (node->hx)
+      free(node->hx);
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+      free(node->brate);
+
+    if (node->mark)
+      free(node->mark);
+
+    free(node);
+  }
+
+  /* safety check */
+  assert(opt_msci == !!tree->hybrid_count);
+
+  if (tree->pptable)
+  {
+    for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
+      if (tree->pptable[i])
+        free(tree->pptable[i]);
+    free(tree->pptable);
+  }
+
+  /* deallocate tree structure */
+  free(tree->nodes);
+  free(tree);
+}
+
 #if 0
 int opt_precision = 6;
 static char * ntree_export_newick_recursive(node_t * root)
