@@ -1278,6 +1278,8 @@ static FILE * init(stree_t ** ptr_stree,
   {
     if (opt_finetune_phi == -1)
       fatal("Missing finetune value for phi parameter");
+    if (opt_clock == BPP_CLOCK_CORR)
+      fatal("MSCi model with auto-correlated relaxed clock is not currently implemented.");
 
     print_network_table(stree);
   }
@@ -1842,7 +1844,6 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
       long thread_index = 0;
-      assert(opt_clock == BPP_CLOCK_IND);
 
       gtree[i]->rate_sigma2i = stree->locusrate_sigma2bar;
 
@@ -1866,7 +1867,13 @@ static FILE * init(stree_t ** ptr_stree,
         if (opt_debug_rates)
           node->brate[i] = gtree[i]->rate_mui;
         else
-          node->brate[i] = gtree[i]->rate_mui*(.9+.2*legacy_rndu(thread_index));
+        {
+          if (opt_clock == BPP_CLOCK_CORR && !node->parent)  /* root node */
+            node->brate[i] = gtree[i]->rate_mui;
+          else
+            node->brate[i] = gtree[i]->rate_mui *
+                             (.9+.2*legacy_rndu(thread_index));
+        }
       }
       gtree[i]->lnprior_rates   = lnprior_rates(gtree[i],stree,i);
     }
