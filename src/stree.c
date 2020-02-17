@@ -2361,6 +2361,14 @@ void propose_tau_update_gtrees(locus_t ** loci,
        hold */
        //if (__mark_count[i] + __extra_count[i] >= 2*loci[i]->tips-1)
        //  assert(0);
+
+    if (opt_clock == BPP_CLOCK_CORR)
+    {
+      double new_prior_rates = lnprior_rates(gtree[i],stree,i);
+      logpr_diff += new_prior_rates - gtree[i]->lnprior_rates;
+      gtree[i]->old_lnprior_rates = gtree[i]->lnprior_rates;
+      gtree[i]->lnprior_rates = new_prior_rates;
+    }
   }
   *ret_logpr_diff = logpr_diff;
   *ret_logl_diff = logl_diff;
@@ -2794,6 +2802,11 @@ static long propose_tau(locus_t ** loci,
       /* restore gene tree node ages */
       for (j = 0; j < k; ++j)
         gt_nodesptr[j]->time = old_ageptr[j];
+
+      if (opt_clock == BPP_CLOCK_CORR)
+      {
+        gtree[i]->lnprior_rates = gtree[i]->old_lnprior_rates;
+      }
 
       /* restore logpr contributions */
       if (opt_est_theta)
@@ -3952,6 +3965,18 @@ long stree_propose_spr(stree_t ** streeptr,
         logpr_notheta += xtmp;
     }
 
+    /* 
+       TODO: Several improvements can be made here
+       1. Call this function only for the gene trees that are modified
+       2. Only re-compute the prior for the affected gene tree nodes/edges
+    */
+    if (opt_clock == BPP_CLOCK_CORR)
+    {
+      double new_prior_rates = lnprior_rates(gtree_list[i],stree,i);
+      lnacceptance += new_prior_rates - gtree_list[i]->lnprior_rates;
+      gtree_list[i]->lnprior_rates = new_prior_rates;
+    }
+
     /* reset markings on affected populations */
     for (j = 0; j < snode_contrib_count[i]; ++j)
       snode_contrib[j]->mark[thread_index] = 0;
@@ -4006,28 +4031,48 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
   long i;
   double z,r;
-  double mu,sigma2;
+  double mui,sigma2i;
   double alpha,beta;
   double logpr = 0;
   snode_t * snode;
   
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
-  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
-    fatal("Gamma prior for rates for correlated clock not implemented yet");
-
-  assert(opt_clock == BPP_CLOCK_IND);
+  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR);
 
   /* TODO: Implement autocorrelated clock */
-  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
-    fatal("Gamma prior for autocorrelated rates not implemented yet.");
+  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
+  {
+    assert(!opt_msci);
+    mui = gtree->rate_mui;
+    sigma2i = gtree->rate_sigma2i;
+    alpha = mui * mui / sigma2i;
+    double term = 0;
 
-  if (opt_clock == BPP_CLOCK_AC && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+    for (i = 0; i < total_nodes; ++i)
+    {
+      snode = stree->nodes[i];
+      if (!snode->parent) continue;
+
+      r = snode->brate[msa_index];
+      beta = alpha / snode->parent->brate[msa_index];
+      logpr += -beta*r + (alpha-1)*log(r);
+      term += log(beta);
+    }
+    term *= alpha;
+    term -= lgamma(alpha)*(total_nodes-1);
+    logpr += term;
+  }
+
+  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
     double t1,t2,tA,detT;
     double Tinv[4];
 
-    assert(0);
+    assert(!opt_msci);
+
+    mui = gtree->rate_mui;
+    sigma2i = gtree->rate_sigma2i;
 
     for (i = stree->tip_count; i < total_nodes; ++i)
     {
@@ -4042,31 +4087,28 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
         if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
 
-      if (!snode->parent)
-        tA = 0;
-      else
-        tA = (snode->parent->tau - snode->tau) / 2;
-
       /* TODO: It is not clear how t1,t2 are calculated for hybridization nodes */
+      tA = snode->parent ? (snode->parent->tau - snode->tau) / 2 : 0;
       t1 = (snode->tau - snode->left->tau) / 2;
       t2 = (snode->tau - snode->right->tau) / 2;
-      detT = t1*t2 + tA*(t1+t2);
 
+      detT = t1*t2 + tA*(t1+t2);
       Tinv[0] = (tA+t2) / detT;
       Tinv[1] = Tinv[2] = -tA / detT;
       Tinv[3] = (tA+t1) / detT;
-      mu = gtree->rate_mui;
-      sigma2 = gtree->rate_sigma2i;
 
       double rA,r1,r2,y1,y2,zz;
-      rA = snode->parent ? mu : snode->brate[msa_index];
+      /* root node should have mui anyway */
+      rA = snode->parent ? snode->brate[msa_index] : mui;
       r1 = snode->left->brate[msa_index];
       r2 = snode->right->brate[msa_index];
-      y1 = log(r1/rA) + (tA+t1)*sigma2 / 2;
-      y2 = log(r2/rA) + (tA+t2)*sigma2 / 2;
+      y1 = log(r1/rA) + (tA+t1)*sigma2i / 2;
+      y2 = log(r2/rA) + (tA+t2)*sigma2i / 2;
       zz = (y1*y1*Tinv[0] + 2*y1*y2*Tinv[1] + y2*y2*Tinv[3]);
-      logpr -= zz / (2*sigma2) + log(detT*sigma2*sigma2)/2 + log(r1*r2);
+      logpr -= zz / (2*sigma2i) + log(detT*sigma2i*sigma2i)/2 + log(r1*r2);
     }
+    assert(!opt_msci);
+    logpr -= 0.5*log(2*BPP_PI*sigma2i) * stree->inner_count*2;
   }
 
   if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
@@ -4083,11 +4125,11 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
     */
 
-    mu = gtree->rate_mui;
-    sigma2 = gtree->rate_sigma2i;
+    mui = gtree->rate_mui;
+    sigma2i = gtree->rate_sigma2i;
 
-    alpha = mu * mu / sigma2;
-    beta  = mu / sigma2;
+    alpha = mui * mui / sigma2i;
+    beta  = mui / sigma2i;
     long rates_count = 0;
 
     for (i = 0; i < total_nodes; ++i)
@@ -4122,11 +4164,11 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
 
     */
 
-    mu = gtree->rate_mui;
-    sigma2 = gtree->rate_sigma2i;
+    mui = gtree->rate_mui;
+    sigma2i = gtree->rate_sigma2i;
     long rates_count = 0;
 
-    double logmu = log(mu);
+    double logmui = log(mui);
     for (i = 0; i < total_nodes; ++i)
     {
       snode = stree->nodes[i];
@@ -4138,12 +4180,12 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
       }
 
       double logr = log(snode->brate[msa_index]);
-      z = logr - logmu + sigma2/2;
-      logpr += -(z*z) / (2*sigma2) - logr;
+      z = logr - logmui + sigma2i/2;
+      logpr += -(z*z) / (2*sigma2i) - logr;
 
       ++rates_count;
     }
-    logpr -= 0.5*log(2*BPP_PI*sigma2) * rates_count;
+    logpr -= 0.5*log(2*BPP_PI*sigma2i) * rates_count;
   }
 
   return logpr;
@@ -4428,6 +4470,9 @@ double prop_locusrate_mui(gtree_t ** gtree,
     {
       /* if relaxed clock then update rates prior */
 
+      if (opt_clock == BPP_CLOCK_CORR)
+        stree->root->brate[i] = gtree[i]->rate_mui;
+
       new_prior_rates = lnprior_rates(gtree[i],stree,i);
       lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
     }
@@ -4457,6 +4502,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
     {
       /* rejected */
       gtree[i]->rate_mui = old_mui;
+      if (opt_clock == BPP_CLOCK_CORR)
+        stree->root->brate[i] = old_mui;
 
       if (opt_clock == BPP_CLOCK_GLOBAL)
       {
@@ -4569,12 +4616,109 @@ long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree)
   return accepted;
 }
 
-static double prior_logratio_rates_ac(locus_t * locus,
-                                      gnode_t * node,
-                                      double new_rate,
-                                      double old_rate)
+static double prior_logratio_rates_corr_ln(snode_t * node_changed,
+                                           double old_rate,
+                                           double new_rate,
+                                           double variance,
+                                           long msa_index)
 {
-  assert(node);
+  long i,j,cycles;
+  double tA,t1,t2;
+  double rA,r1,r2,y1,y2;
+  double detT;
+  double Tinv[4];
+  double rates[2] = { old_rate, new_rate };
+  double logterm[2] = {0,0};
+
+
+  /* log-normal correlated clock */
+
+  /* follows closely the notation in:
+  
+     Rannala B., Yang Z.
+     Inferring Speciation Times under an Episodic Molecular Clock.
+     Systematic Biology, 56(3):453-466, 2007.
+
+  */ 
+
+  assert(opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL);
+  assert(node_changed->parent);
+
+  snode_t * snodes[2] = { node_changed->parent, node_changed };
+
+  cycles = (node_changed->left) ? 2 : 1;
+
+  /* cycle through parent and node or just parent if node is a tip */
+  for (i = 0; i < cycles; ++i)
+  {
+    snode_t * node = snodes[i];   /* this is inode */
+
+    tA = node->parent ? (node->parent->tau - node->tau) / 2 : 0;
+    t1 = (node->tau - node->left->tau) / 2;
+    t2 = (node->tau - node->right->tau) / 2;
+
+    detT = t1*t2 + tA*(t1+t2);
+    Tinv[0] = (tA + t2) / detT;
+    Tinv[1] = Tinv[2] = -tA / detT;
+    Tinv[3] = (tA+t1) / detT;
+
+    /* now cycle through old and new rate */
+    for (j = 0; j < 2; ++j)
+    {
+      node_changed->brate[msa_index] = rates[j];
+
+      if (node->parent)
+        rA = node->brate[msa_index];
+      else
+        rA = node->brate[msa_index];   /* we assume mu_i is in array, if node is root */
+        
+      assert(node->left && node->right);
+      r1 = node->left->brate[msa_index];
+      r2 = node->right->brate[msa_index];
+
+      y1 = log(r1/rA) + (tA+t1)*variance/2;
+      y2 = log(r2/rA) + (tA+t2)*variance/2;
+      logterm[j] += (y1*y1*Tinv[0] + 2*y1*y2*Tinv[1] + y2*y2*Tinv[3]);
+      logterm[j] += logterm[j]/(2*variance) + log(r1*r2);
+    }
+  }
+
+  return (logterm[0] - logterm[1]);
+}
+
+static double prior_logratio_rates_corr(snode_t * node,
+                                        gtree_t * gtree,
+                                        double old_rate,
+                                        double new_rate,
+                                        long msa_index)
+{
+  double logratio = 0;
+
+  assert(opt_clock == BPP_CLOCK_CORR);
+  assert(!opt_msci);
+  assert(node->parent);
+
+  if (opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+  {
+    /* log-normal */
+    logratio = prior_logratio_rates_corr_ln(node,
+                                            old_rate,
+                                            new_rate,
+                                            gtree->rate_sigma2i,
+                                            msa_index);
+  }
+  else
+  {
+    /* gamma */
+    double mui = gtree->rate_mui;
+    double sigma2i = gtree->rate_sigma2i;
+    double alpha = mui*mui / sigma2i;
+    double beta = alpha / node->parent->brate[msa_index];
+
+    logratio = -beta*(new_rate - old_rate) + (alpha-1)*log(new_rate / old_rate);
+  }
+
+  return logratio;
 }
 
 static double prior_logratio_rates(gtree_t * gtree,
@@ -4594,7 +4738,9 @@ static double prior_logratio_rates(gtree_t * gtree,
 
   double a,b;
   double zold, znew;
-  double ratio;
+  double ratio = 0;
+
+  assert(opt_clock == BPP_CLOCK_IND);
 
   if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
@@ -4614,12 +4760,6 @@ static double prior_logratio_rates(gtree_t * gtree,
     b = gtree->rate_mui / gtree->rate_sigma2i;
 
     ratio = -b*(new_rate - old_rate) + (a-1)*log(new_rate / old_rate);
-  }
-  else if (opt_clock == BPP_CLOCK_CORR)
-  {
-    /* auto-correlated rates */
-
-    assert(0);
   }
   else
     assert(0);
@@ -4698,6 +4838,7 @@ double prop_branch_rates(gtree_t ** gtree,
   long accepted = 0;
   long proposal_count = 0;
   long branch_count = 0;
+  double diff;
   double old_rate, new_rate;
   double old_lograte, new_lograte;
   double lnacceptance = 0;
@@ -4714,6 +4855,9 @@ double prop_branch_rates(gtree_t ** gtree,
     for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
     {
       node = stree->nodes[j];
+
+      /* if root node and we use correlated clock, skip */
+      if (!node->parent && opt_clock == BPP_CLOCK_CORR) continue;
 
       /* Mirror nodes in bidirectional introgression */
       if (opt_msci && node->hybrid)
@@ -4784,7 +4928,11 @@ double prop_branch_rates(gtree_t ** gtree,
         gtree[i]->logl = logl;
       }
 
-      double diff = prior_logratio_rates(gtree[i],old_rate,new_rate);
+      if (opt_clock == BPP_CLOCK_CORR)
+        diff = prior_logratio_rates_corr(node,gtree[i],old_rate,new_rate,i); 
+      else
+        diff = prior_logratio_rates(gtree[i],old_rate,new_rate);
+
       lnacceptance += diff;
 
       if (opt_debug)

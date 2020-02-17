@@ -539,7 +539,7 @@ static long parse_clock(const char * line)
 
   /* the only other choice is local clock in which mutation rate drifts over
      branches independently among loci */
-  if (opt_clock != BPP_CLOCK_IND) goto l_unwind;
+  if (opt_clock != BPP_CLOCK_IND && opt_clock != BPP_CLOCK_CORR) goto l_unwind;
 
   /* read vbar alpha and vbar beta */
 

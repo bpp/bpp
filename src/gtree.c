@@ -5041,6 +5041,7 @@ static long prop_locusrate(gtree_t ** gtree,
   gnode_t ** gnodeptr = NULL;
   gnode_t ** refnodes = NULL;
   gnode_t ** locnodes = NULL;
+
   /* Note: For the molecular clock, this changes locus rate (mu_i) and changes
      the likelihood, but there is no prior for branch rates.
 
@@ -5128,6 +5129,12 @@ static long prop_locusrate(gtree_t ** gtree,
     else
     {
       /* relaxed clock */
+
+      if (opt_clock == BPP_CLOCK_CORR)
+      {
+        stree->root->brate[i] = new_locrate;
+        stree->root->brate[ref] = new_refrate;
+      }
       new_locprior = lnprior_rates(gtree[i],stree,i);
       new_refprior = lnprior_rates(gtree[ref],stree,ref);
 
@@ -5161,6 +5168,12 @@ static long prop_locusrate(gtree_t ** gtree,
       /* reject */
       gtree[i]->rate_mui   = old_locrate;
       gtree[ref]->rate_mui = old_refrate;
+
+      if (opt_clock == BPP_CLOCK_CORR)
+      {
+        stree->root->brate[i] = old_locrate;
+        stree->root->brate[ref] = old_refrate;
+      }
 
       if (opt_clock == BPP_CLOCK_GLOBAL)
       {

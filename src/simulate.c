@@ -667,9 +667,8 @@ static list_t * create_maplist(stree_t * stree)
   return list;
 }
 
-#if 0
-/* correlated clock currently disabled */
-static void compute_relaxed_rates_recursive(snode_t * node)
+/* correlated clock */
+static void compute_relaxed_rates_recursive(snode_t * node, gtree_t * gtree)
 {
   if (!node) return;
 
@@ -678,14 +677,29 @@ static void compute_relaxed_rates_recursive(snode_t * node)
   if (node->parent->tau == 0)
     node->rate = node->parent->rate;
   else
-    node->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
-                 opt_clock_alpha * node->parent->rate;
+  {
+    if (opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
+    {
+      /* gamma prior */
 
-  compute_relaxed_rates_recursive(node->left);
-  compute_relaxed_rates_recursive(node->right);
+      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_sigma2i;
+      node->rate = legacy_rndgamma(thread_index_zero,a) /
+                   a * node->parent->rate;
+    }
+    else
+    {
+      /* log-normal prior */
+
+      double nv = node->parent->rate +
+                  sqrt(gtree->rate_sigma2i)*rndNormal(thread_index_zero);
+      node->rate = exp(nv);
+    }
+  }
+
+  compute_relaxed_rates_recursive(node->left,gtree);
+  compute_relaxed_rates_recursive(node->right,gtree);
     
 }
-#endif
 
 
 static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
@@ -696,7 +710,7 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
   snode_t * start;
   snode_t * end;
 
-  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_AC);
+  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR);
 
   long total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
@@ -724,15 +738,13 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
   }
   else
   {
-    assert(0);  /* currently disabled */
+    assert(opt_clock == BPP_CLOCK_CORR);
 
-    #if 0
     /* correlated clock */
-    stree->root->rate = legacy_rndgamma(thread_index_zero,opt_clock_alpha) /
-                        opt_clock_alpha;
-    compute_relaxed_rates_recursive(stree->root->left);
-    compute_relaxed_rates_recursive(stree->root->right);
-    #endif
+    
+    stree->root->rate = gtree->rate_mui;
+    compute_relaxed_rates_recursive(stree->root->left,gtree);
+    compute_relaxed_rates_recursive(stree->root->right,gtree);
   }
 
   /* now update gene tree */
@@ -1145,10 +1157,7 @@ static void simulate(stree_t * stree)
       assert(0);
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
-    {
-      assert(opt_clock == BPP_CLOCK_IND);
       fprintf(fp_param, "\tnu_i");
-    }
     
     fprintf(fp_param, "\n");
   }
@@ -1319,10 +1328,7 @@ static void simulate(stree_t * stree)
     if (opt_est_locusrate)
       fprintf(fp_param, " %9.6f", mui_array[i]);
     if (opt_clock != BPP_CLOCK_GLOBAL)
-    {
-      assert(opt_clock == BPP_CLOCK_IND);
       fprintf(fp_param, " %9.6f", vi_array[i]);
-    }
 
     if (opt_msafile || opt_treefile)
     {
@@ -1386,7 +1392,7 @@ static void simulate(stree_t * stree)
 
     /* if clock is assumed, compute species tree branch rates and write them to
        file */
-    if (opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_AC)
+    if (opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR)
     {
       relaxed_clock_branch_lengths(stree, gtree[i]);
       assert(opt_modelparafile);

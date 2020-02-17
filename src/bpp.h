@@ -217,10 +217,6 @@
 extern const char * global_model_strings[28];
 extern const char * global_freqs_strings[28];
 
-#define BPP_CLOCK_GLOBAL                1
-#define BPP_CLOCK_IND                   2
-#define BPP_CLOCK_AC                    3
-
 #define BPP_LOCRATE_PRIOR_MIN           0
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
@@ -488,6 +484,7 @@ typedef struct gtree_s
   double rate_mui;
   double rate_sigma2i;
   double lnprior_rates;
+  double old_lnprior_rates;
 
 } gtree_t;
 
