@@ -214,11 +214,13 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     /* mubar */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
       fprintf(fp[j], " %8.5f", opt_finetune_mubar);
 
     /* sigma2bar */
-    if (opt_clock != BPP_CLOCK_GLOBAL)
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
 
     /* phi */
