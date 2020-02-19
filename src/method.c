@@ -279,21 +279,28 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     fprintf(fp[j], " %8.5f", opt_finetune_theta);
     fprintf(fp[j], " %8.5f", opt_finetune_tau);
     fprintf(fp[j], " %8.5f", opt_finetune_mix);
+
     if (extra)
       fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
+
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
       fprintf(fp[j], " %8.5f", opt_finetune_mui);
+
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
       fprintf(fp[j], " %8.5f", opt_finetune_branchrate);
     }
+
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
       fprintf(fp[j], " %8.5f", opt_finetune_mubar);
-    if (opt_clock != BPP_CLOCK_GLOBAL)
+
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
 
     if (opt_msci)
