@@ -2473,7 +2473,14 @@ void cmd_run()
                                           (double)ft_round;
       }
 
-      ratio = prop_branch_rates(gtree,stree,locus,0);
+      if (opt_threads == 1)
+        ratio = prop_branch_rates_serial(gtree,stree,locus);
+      else
+      {
+        td.locus = locus; td.gtree = gtree;
+        threads_wakeup(THREAD_WORK_BRATE,&td);
+        ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
+      }
       pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
                                          (double)ft_round;
     }

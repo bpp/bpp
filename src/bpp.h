@@ -237,6 +237,7 @@ extern const char * global_freqs_strings[28];
 #define THREAD_WORK_ALPHA               5
 #define THREAD_WORK_RATES               6
 #define THREAD_WORK_FREQS               7
+#define THREAD_WORK_BRATE               8
 
 #define BPP_MOVE_INDEX_MIN              0
 #define BPP_MOVE_GTAGE_INDEX            0
@@ -1245,10 +1246,17 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
 
-double prop_branch_rates(gtree_t ** gtree,
-                         stree_t * stree,
-                         locus_t ** locus,
-                         long thread_index);
+double prop_branch_rates_serial(gtree_t ** gtree,
+                                stree_t * stree,
+                                locus_t ** locus);
+void prop_branch_rates_parallel(gtree_t ** gtree,
+                                stree_t * stree,
+                                locus_t ** locus,
+                                long locus_start,
+                                long locus_count,
+                                long thread_index,
+                                long * p_proposal_count,
+                                long * p_accepted);
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree);
 long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree);
