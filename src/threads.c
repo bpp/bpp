@@ -159,6 +159,16 @@ static void * threads_worker(void * vp)
                                        &tip->td.proposals,
                                        &tip->td.accepted);
           break;
+        case THREAD_WORK_BRATE:
+          prop_branch_rates_parallel(tip->td.gtree,
+                                     tip->td.stree,
+                                     tip->td.locus,
+                                     tip->locus_first,
+                                     tip->locus_count,
+                                     t,
+                                     &tip->td.proposals,
+                                     &tip->td.accepted);
+          break;
         default:
           fatal("Unknown work function assigned to thread worker %ld", t);
                              
@@ -283,7 +293,8 @@ void threads_wakeup(int work_type, thread_data_t * data)
       work_type == THREAD_WORK_GTSPR ||
       work_type == THREAD_WORK_ALPHA ||
       work_type == THREAD_WORK_RATES ||
-      work_type == THREAD_WORK_FREQS)
+      work_type == THREAD_WORK_FREQS ||
+      work_type == THREAD_WORK_BRATE)
   {
     long proposals = 0;
     long accepted = 0;
