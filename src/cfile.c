@@ -517,6 +517,53 @@ l_unwind:
   return ret;
 }
 
+static long get_dist(const char * line, long * dist)
+{
+  int ret=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  /* invalidate return value */
+  *dist = BPP_BRATE_PRIOR_MAX+1;
+
+  ret = ws + end - start;
+  if (!strcasecmp(start,"G"))
+  {
+    *dist = BPP_BRATE_PRIOR_GAMMA;
+  }
+  else if (!strcasecmp(start,"LN"))
+  {
+    *dist = BPP_BRATE_PRIOR_LOGNORMAL;
+  }
+  else
+  {
+    ret = 0;
+  }
+
+  free(s);
+
+  return ret;
+}
+
 static long parse_clock(const char * line)
 {
   long ret = 0;
@@ -602,7 +649,7 @@ static long parse_clock(const char * line)
   }
 
   /* get branch rate prior distribution */
-  count = get_long(p,&opt_rate_prior);
+  count = get_dist(p,&opt_rate_prior);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1969,7 +2016,11 @@ void load_cfile()
       else if (!strncasecmp(token,"clock",5))
       {
         if (!parse_clock(value))
-          fatal("Erroneous format of 'clock' (line %ld)", line_count);
+          fatal("Erroneous format of 'clock' (line %ld)\n"
+                "Syntax:\n"
+                "  clock = 1                                # strict clock\n"
+                "  clock = 2 a_vbar b_vbar a_vi prior dist  # relaxed clock",
+                line_count);
         valid = 1;
       }
     }
