@@ -2023,6 +2023,13 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"phase",5))
+      {
+        if (!parse_diploid(value))
+          fatal("Option %s expects values 0 or 1 for each species (line %ld)",
+                token,line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 6)
     {
@@ -2038,10 +2045,8 @@ void load_cfile()
     {
       if (!strncasecmp(token,"diploid",7))
       {
-        if (!parse_diploid(value))
-          fatal("Option %s expects values 0 or 1 for each species (line %ld)",
-                token,line_count);
-        valid = 1;
+        fatal("Option 'diploid' was renamed to 'phase' (same syntax).\n"
+              "Please update the control file (line %ld).", line_count);
       }
       else if (!strncasecmp(token,"seqfile",7))
       {
