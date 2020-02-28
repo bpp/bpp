@@ -42,7 +42,16 @@ static long enabled_prop_qrates = 0;
 static long enabled_prop_freqs  = 0;
 static long enabled_prop_alpha  = 0;
 
+static int enabled_lrht  = 0;
+static int enabled_hrdt  = 0;
+static int enabled_mui   = 0;
+static int enabled_mubar = 0;
+static int enabled_nubar = 0;
+
 static const char * template_ratesfile = "locus.%ld.sample.txt";
+
+static int prec_logl =  8;
+static int prec_logpr = 8;
 
 static void timer_start()
 {
@@ -89,6 +98,304 @@ static void init_outfile(FILE * fp)
           VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
   fprintf(fp, "Command: %s\n\n", cmdline);
 
+}
+
+static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
+{
+  long i,j,k;
+  long mean_theta_count = 0;
+  long mean_tau_count = 0;
+
+  long linewidth = 0;
+  long ap_width = 0;
+  long delim_count = 0;
+
+  char * s = NULL;
+
+  double logl = 0;
+  double logpr = 0;
+  if (opt_est_theta)
+    for (i = 0; i < opt_locus_count; ++i)
+      logpr += gtree[i]->logpr;
+  else
+    logpr = stree->notheta_logpr;
+
+  for (i = 0; i < opt_locus_count; ++i)
+    logl += gtree[i]->logl;
+
+  /* compute digits for log-L */
+  xasprintf(&s,"%8.5f", logl);
+  long len_logl = strlen(s);
+  free(s);
+
+  xasprintf(&s,"%8.5f", logpr);
+  long len_logpr = strlen(s);
+  free(s);
+
+  prec_logl  = (len_logl+1 > prec_logl) ? len_logl+1 : prec_logl;
+  prec_logpr = (len_logpr+1 > prec_logpr) ? len_logpr+1 : prec_logpr;
+
+  if (opt_method != METHOD_00)    /* species tree inference or delimitation */
+  {
+    mean_theta_count = 1;
+    mean_tau_count = 1;
+  }
+  else
+  {
+    /* compute mean thetas */
+
+    /* 1. calculate number of thetas to print */
+    long max_param_count = MIN(stree->tip_count+stree->inner_count,
+                               MAX_THETA_OUTPUT);
+
+    /* 2. calculate number of mean thetas */
+    k = 0;
+    if (opt_est_theta)
+    {
+      for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+      {
+        if (stree->nodes[j]->theta < 0) continue;
+
+        if (++k == max_param_count) break;
+      }
+    }
+    mean_theta_count = k;
+
+    /* compute mean taus */
+
+    /* 1. calculate number of taus to print */
+    max_param_count = MIN(stree->tip_count+stree->inner_count,
+                          MAX_TAU_OUTPUT);
+
+    /* 2. calculate means */
+    k = 0;
+    for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      if (stree->nodes[j]->tau == 0) continue;
+      
+      if (++k == max_param_count) break;
+    }
+    mean_tau_count = k;
+  }
+
+  /* print legend */
+  fprintf(fp, "\n");
+  fprintf(fp, "-*- Glossary of terms -*-\n\n");
+  fprintf(fp, "  Prgs: progress of MCMC run (negative progress means burnin)\n");
+  fprintf(fp, "  Gage: gene-tree age proposal\n");
+  fprintf(fp, "  Gspr: gene-tree SPR proposal\n");
+  fprintf(fp, "  thet: species tree theta proposal\n");
+  fprintf(fp, "   tau: species tree tau proposal\n");
+  fprintf(fp, "   mix: mixing proposal\n");
+  if (enabled_hrdt)
+    fprintf(fp, "  hrdt: heredity proposal\n");
+  if (enabled_lrht)
+    fprintf(fp, "  lrht: locus rate and heredity proposal\n");
+  if (enabled_mui)
+    fprintf(fp, "  mu_i: locus rate (mu_i) proposal\n");
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    fprintf(fp, "  nu_i: locus rate variance (nu_i) proposal\n");
+    fprintf(fp, "  brte: per-locus species tree Branch rate proposal\n");
+  }
+  if (enabled_mubar)
+    fprintf(fp, "  mubr: average locus rate (mu_bar) proposal\n");
+  if (enabled_nubar)
+    fprintf(fp, "  nubr: average locus rate variance (nu_bar) proposal\n");
+  if (opt_msci)
+    fprintf(fp, "   phi: MSCi phi parameter proposal\n");
+  if (enabled_prop_freqs)
+    fprintf(fp, "    pi: base frequencies proposal\n");
+  if (enabled_prop_qrates)
+    fprintf(fp, "  qmat: instantaneous substitution rates proposal\n");
+  if (enabled_prop_alpha)
+    fprintf(fp, "  alfa: discretized gamma (rate variation among sites) alpha proposal\n");
+  if (opt_method == METHOD_01)
+    fprintf(fp, "  Sspr: species tree SPR proposal\n");
+  if (opt_method == METHOD_10)
+    fprintf(fp, "    rj: reversible-jump split/merge proposal\n");
+  if (opt_method == METHOD_11)
+  {
+    fprintf(fp, "    sp: number of delimited specices\n");
+  }
+  if (opt_method == METHOD_10 || opt_method == METHOD_11)
+  {
+    fprintf(fp, "    np: number of parameters\n");
+  }
+  if (opt_method == METHOD_10)
+  {
+    fprintf(fp, "   del: delimitation model\n");
+  }
+  if (opt_method == METHOD_10 || opt_method == METHOD_11)
+  {
+    fprintf(fp, "  mldp: most likelely delimitation and probability\n");
+  }
+  if (mean_theta_count == 1)
+    fprintf(fp, "mthet1: root node mean theta\n");
+  else
+  {
+    for (i = 0; i < mean_theta_count; ++i)
+      fprintf(fp, "mthet%ld: mean theta of node %ld\n", i+1,i);
+  }
+  if (mean_tau_count == 1)
+    fprintf(fp, " mtau1: root node mean tau\n");
+  else
+  {
+    for (i = 0; i < mean_tau_count; ++i)
+      fprintf(fp," mtau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
+  }
+  if (opt_msci)
+    fprintf(fp, "log-PG: log-probability of gene trees (MSCi)\n");
+  else
+    fprintf(fp, "log-PG: log-probability of gene trees (MSC)\n");
+  fprintf(fp, " log-L: mean log-L of observing data\n");
+  fprintf(fp,"\n");
+
+  ap_width += 5*5;
+  ap_width += enabled_hrdt ? 5 : 0;
+  ap_width += enabled_lrht ? 5 : 0;
+  ap_width += enabled_mui ? 5 : 0;
+  ap_width += opt_clock != BPP_CLOCK_GLOBAL ? 10 : 0;
+  ap_width += enabled_mubar ? 5 : 0;
+  ap_width += enabled_nubar ? 5 : 0;
+  ap_width += opt_msci ? 5 : 0;
+  ap_width += enabled_prop_freqs ? 5 : 0;
+  ap_width += enabled_prop_qrates ? 5 : 0;
+  ap_width += enabled_prop_alpha ? 5 : 0;
+  ap_width += opt_method == METHOD_01 ? 7 : 0;
+  ap_width += opt_method == METHOD_10 ? 7 : 0;
+  ap_width += opt_method == METHOD_11 ? 14 : 0;
+  ap_width += 1;
+  
+  if (opt_method == METHOD_10)
+  {
+    delim_count = delimitation_getparam_count();
+  }
+  else if (opt_method == METHOD_11)
+    delim_count = delimitations_count(stree);
+
+  char * ap_title = xstrdup("Acceptance proportions (pjump)");
+  long titlelen = strlen(ap_title);
+  long prefix = (ap_width - titlelen)/2;
+  long suffix = ap_width - titlelen  - prefix;
+  fprintf(fp,"     |");
+  for (i = 0; i < prefix; ++i)
+    fprintf(fp," ");
+  fprintf(fp,"%s",ap_title);
+  for (i = 0; i < suffix; ++i)
+    fprintf(fp," ");
+  fprintf(fp,"|\n");
+  free(ap_title);
+
+  fprintf(fp,"Prgs |");     linewidth += 6;
+  fprintf(fp," Gage");      linewidth += 5;
+  fprintf(fp," Gspr");      linewidth += 5;
+  fprintf(fp," thet");      linewidth += 5;
+  fprintf(fp,"  tau");      linewidth += 5;
+  fprintf(fp,"  mix");      linewidth += 5;
+  if (enabled_hrdt)
+  {
+    fprintf(fp," hrdt");    linewidth += 5;
+  }
+  if (enabled_lrht)
+  {
+    fprintf(fp," lrht");    linewidth += 5;
+  }
+  if (enabled_mui)
+  {
+    fprintf(fp," mu_i");    linewidth += 5;
+  }
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    fprintf(fp," nu_i");    linewidth += 5;
+    fprintf(fp," brte");    linewidth += 5;
+  }
+  if (enabled_mubar)
+  {
+    fprintf(fp," mubr");    linewidth += 5;
+  }
+  if (enabled_nubar)
+  {
+    fprintf(fp," nubr");    linewidth += 5;
+  }
+  if (opt_msci)
+  {
+    fprintf(fp,"  phi");    linewidth += 5;
+  }
+  if (enabled_prop_freqs)
+  {
+    fprintf(fp,"   pi");    linewidth += 5;
+  }
+  if (enabled_prop_qrates)
+  {
+    fprintf(fp," qmat");    linewidth += 5;
+  }
+  if (enabled_prop_alpha)
+  {
+    fprintf(fp," alfa");    linewidth += 5;
+  }
+
+  if (opt_method == METHOD_01)
+  {
+    fprintf(fp,"   Sspr");  linewidth += 7;
+  }
+  else if (opt_method == METHOD_10)
+  {
+    fprintf(fp,"     rj");  linewidth += 7;
+  }
+  else if (opt_method == METHOD_11)
+  {
+    fprintf(fp,"   Sspr");  linewidth += 7;
+    fprintf(fp,"     rj");  linewidth += 7;
+  }
+  fprintf(fp," |");         linewidth += 2;
+
+    /* TODO */
+  if (opt_method == METHOD_10)
+  {
+    fprintf(fp," np");   linewidth += 3;
+    fprintf(fp," %*s", stree->inner_count > 3 ? stree->inner_count : 3, "del");
+    linewidth += stree->inner_count > 4 ? stree->inner_count+1 : 4;
+
+    /* TODO */
+    int digits = delim_count ? (int)floor(log10(abs(delim_count))) + 1 : 1;
+    fprintf(fp," %*s", 4+6+digits, "mldp");     linewidth += 1+10+digits;
+
+  }
+  else if (opt_method == METHOD_11)
+  {
+    int digits = delim_count ? (int)floor(log10(abs(delim_count))) + 1 : 1;
+    fprintf(fp," sp np %*s",4+6+digits,"mldp"); linewidth += 6+1+10+digits;
+
+    /* TODO */
+  }
+
+  if (opt_est_theta)
+    for (i = 0; i < mean_theta_count; ++i)
+    {
+      fprintf(fp," mthet%ld", i+1);         linewidth += 7;
+    }
+
+  fprintf(fp," ");          linewidth += 1;
+  for (i = 0; i < mean_tau_count; ++i)
+  {
+    fprintf(fp,"  mtau%ld", i+1);          linewidth += 7;
+  }
+
+  if (opt_msci)
+  {
+    fprintf(fp," mphi  ");  linewidth += 7;
+  }
+
+  fprintf(fp," ");          linewidth += 1;
+  fprintf(fp," %*s", prec_logpr,"log-PG");  linewidth += prec_logpr+1;
+  fprintf(fp," %*s", prec_logl,"log-L");    linewidth += prec_logl+1;
+  fprintf(fp,"\n");
+
+  /* TODO */
+  for (i = 0; i < linewidth; ++i)
+    fprintf(fp,"-");
+  fprintf(fp,"\n");
 }
 
 static stree_t * load_tree_or_network(void)
@@ -313,6 +620,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", opt_finetune_alpha);
     fprintf(fp[j], "\n");
   }
+  fprintf(fp[0],"\n");
   fprintf(fp_out, "\n");
 }
 
@@ -362,7 +670,11 @@ static char * cb_serialize_branch(const snode_t * node)
   return s;
 }
 
-static void status_print_pjump(FILE * fp, double * pjump)
+static void status_print_pjump(FILE * fp,
+                               double * pjump,
+                               long ft_round_spr,
+                               long pjump_slider,
+                               double mean_pjump_rj)
 {
   long j;
   int extra = (opt_est_heredity ||
@@ -398,7 +710,18 @@ static void status_print_pjump(FILE * fp, double * pjump)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_QRATES_INDEX]);
   if (enabled_prop_alpha)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
-  fprintf(fp, " ");
+
+  /* print pjump for species tree SPR */
+  if (opt_method == METHOD_01)
+    fprintf(fp," %5.4f", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+  else if (opt_method == METHOD_10)
+    fprintf(fp," %5.4f", mean_pjump_rj);
+  else if (opt_method == METHOD_11)
+  {
+    fprintf(fp," %5.4f", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+    fprintf(fp," %5.4f", mean_pjump_rj);
+  }
+  fprintf(fp, "  ");
 }
 
 static void mcmc_printheader(FILE * fp, stree_t * stree)
@@ -1064,7 +1387,9 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mean_tau,
                   ptr_mean_theta,
                   ptr_mean_tau_count,
-                  ptr_mean_theta_count);
+                  ptr_mean_theta_count,
+                  &prec_logpr,
+                  &prec_logl);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
@@ -1089,7 +1414,7 @@ static FILE * resume(stree_t ** ptr_stree,
   }
 
   /* truncate rate files if available */
-  if (opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_locusfile)
   {
     assert(rates_offset);
     
@@ -1948,8 +2273,10 @@ static FILE * init(stree_t ** ptr_stree,
   debug_print_network_node_attribs(stree);
   #endif
 
-  printf("\nInitial MSC density and log-likelihood of observing data:\n");
-  printf("log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
+  fprintf(stdout,"\nInitial MSC density and log-likelihood of observing data:\n");
+  fprintf(stdout,"log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
+  fprintf(fp_out,"\nInitial MSC density and log-likelihood of observing data:\n");
+  fprintf(fp_out,"log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
 
   /* free weights array */
   free(weights);
@@ -2176,7 +2503,7 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
-  if (opt_checkpoint && opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_checkpoint && opt_clock != BPP_CLOCK_GLOBAL && opt_print_locusfile)
     rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_exp_randomize)
     fprintf(stdout, "[EXPERIMENTAL] - Randomize nodes order on gtree SPR\n");
@@ -2199,6 +2526,37 @@ void cmd_run()
     }
   }
 
+  /* enable/disable variables for mcmc headerline */
+  if (opt_est_heredity &&
+      (opt_est_locusrate == MUTRATE_ESTIMATE &&
+       opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR))
+    enabled_lrht = 1;
+  else if (opt_est_heredity)
+    enabled_hrdt = 1;
+  else if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+           opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR)
+    enabled_mui = 1;
+
+  assert(!(enabled_hrdt && enabled_lrht));
+
+  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+      (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
+       opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
+  {
+    assert(!enabled_mui);
+    enabled_mui = 1;
+  }
+
+  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL && opt_est_mubar)
+    enabled_mubar = 1;
+  if (opt_clock != BPP_CLOCK_GLOBAL &&
+      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+    enabled_nubar = 1;
+
+  assert(!(enabled_mui && enabled_lrht));
+
+
   if (opt_threads > 1)
   {
     threads_init(locus);
@@ -2207,8 +2565,9 @@ void cmd_run()
 
   /* flush all open files */
   fflush(NULL);
-  timer_print("", " taken to read and process data..\nRestarting timer...\n",
-              fp_out);
+  if (!opt_resume)
+    timer_print("", " taken to read and process data..\nRestarting timer...\n\n",
+                fp_out);
   timer_start();
 
   #if 0
@@ -2237,6 +2596,20 @@ void cmd_run()
     opt_seed = 1;
     legacy_init();
   }
+
+  int delim_digit_count = 0;
+  if (opt_method == METHOD_10)
+    delim_digit_count = delimitation_getparam_count() ?
+                      (int)floor(log10(abs(delimitation_getparam_count())))+1 : 1;
+  else if (opt_method == METHOD_11)
+  {
+    long dels = delimitations_count(stree);
+    delim_digit_count = dels ? (int)floor(log10(abs(dels)))+1 : 1;
+  }
+
+  print_mcmc_headerline(stdout,stree,gtree);
+  if (!opt_resume)
+    print_mcmc_headerline(fp_out,stree,gtree);
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
@@ -2611,23 +2984,18 @@ void cmd_run()
       long print_newline = (printk >= 50 && (i+1) % (printk / 20) == 0);
 
       /* print progress percentage */
-      printf("\r%3.0f%%", (i + 1.499) / printk * 100.);
+      printf("\r%3.0f%%  ", (i + 1.499) / printk * 100.);
+
+      double mean_pjump_rj = 0;
+      if (opt_method == METHOD_10)
+        mean_pjump_rj = ft_round_rj ? pjump_rj / ft_round_rj : 0;
 
       /* print pjumps */
-      status_print_pjump(stdout, pjump);
+      status_print_pjump(stdout, pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
       if (print_newline)
       {
-        fprintf(fp_out, "%3.0f%%", (i + 1.499) / printk * 100.);
-        status_print_pjump(fp_out,pjump);
-      }
-
-      /* print pjump for species tree SPR */
-      if (opt_method == METHOD_01)
-      {
-        printf(" %5.4f ", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
-        if (print_newline)
-          fprintf(fp_out, " %5.4f ",
-                  ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+        fprintf(fp_out, "%3.0f%%  ", (i + 1.499) / printk * 100.);
+        status_print_pjump(fp_out,pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
       }
 
       /* species delimitation specific output */
@@ -2641,25 +3009,17 @@ void cmd_run()
         /* Number of parameters, pjump/finetune round ratio, current
            delimitation binary string, and support value of 'most-supported
            delimitation delimitation' */
-         printf(" %2ld %6.4f %s", dparam_count,
-                                  (ft_round_rj ? pjump_rj / ft_round_rj : 0),
-                                  delimitation_getparam_string());
-         printf(" P[%ld]=%6.4f",
-                //posterior[bmodel],
-                bmodel+1,
-                //delimitation_getcurindex()+1,
-                posterior[bmodel] / ft_round);
+         printf(" %2ld %s", dparam_count,
+                            delimitation_getparam_string());
+         char * stmp = NULL;
+         xasprintf(&stmp,"P[%ld]=%6.4f", bmodel+1, posterior[bmodel]/ft_round);
+         printf(" %*s",4+6+delim_digit_count, stmp);
          if (print_newline)
          {
-           fprintf(fp_out, " %2ld %6.4f %s", dparam_count,
-                   (ft_round_rj ? pjump_rj / ft_round_rj : 0),
-                   delimitation_getparam_string());
-         fprintf(fp_out, " P[%ld]=%6.4f",
-                //posterior[bmodel],
-                bmodel+1,
-                //delimitation_getcurindex()+1,
-                posterior[bmodel] / ft_round);
+           fprintf(fp_out, " %2ld %s", dparam_count, delimitation_getparam_string());
+           fprintf(fp_out, " %*s", 4+6+delim_digit_count, stmp);
          }
+         free(stmp);
 
       }
 
@@ -2669,21 +3029,16 @@ void cmd_run()
         for (j = 1; j < stree->tip_count; ++j)
           if (pspecies[j] > pspecies[ndspeciesbest]) ndspeciesbest = j;
        
-        printf(" %2ld %2ld %6.4f %6.4f P(%ld)=%6.4f",
-               ndspecies,
-               dparam_count,
-               ft_round_rj  ? pjump_rj  / ft_round_rj : 0.,
-               ft_round_spr ? pjump_slider / (double)ft_round_spr : 0.,
-               ndspeciesbest + 1,
-               pspecies[ndspeciesbest]);
+        char * stmp = NULL;
+        xasprintf(&stmp,"P[%ld]=%6.4f", ndspeciesbest+1,pspecies[ndspeciesbest]);
+        printf(" %2ld %2ld", ndspecies, dparam_count);
+        printf(" %*s", 4+6+delim_digit_count,stmp);
         if (print_newline)
-          fprintf(fp_out, " %2ld %2ld %6.4f %6.4f P(%ld)=%6.4f",
-                  ndspecies,
-                  dparam_count,
-                  ft_round_rj  ? pjump_rj  / ft_round_rj : 0.,
-                  ft_round_spr ? pjump_slider / (double)ft_round_spr : 0.,
-                  ndspeciesbest + 1,
-                  pspecies[ndspeciesbest]);
+        {
+          fprintf(fp_out, " %2ld %2ld", ndspecies, dparam_count);
+          fprintf(fp_out, " %*s", 4+6+delim_digit_count,stmp);
+        }
+        free(stmp);
       }
 
       if (opt_est_theta)
@@ -2733,15 +3088,15 @@ void cmd_run()
           logpr_sum += gtree[j]->logpr;
       else
         logpr_sum = stree->notheta_logpr;
-      printf(" %8.5f", logpr_sum);
+      printf(" %*.5f", prec_logpr, logpr_sum);
       if (print_newline)
-        fprintf(fp_out, " %8.5f", logpr_sum);
+        fprintf(fp_out, " %*.5f", prec_logpr, logpr_sum);
 
       if (opt_usedata)
       {
-        printf(" %8.5f", mean_logl);
+        printf(" %*.5f", prec_logl, mean_logl);
         if (print_newline)
-          fprintf(fp_out, " %8.5f", mean_logl);
+          fprintf(fp_out, " %*.5f", prec_logl, mean_logl);
       }
 
       if (print_newline)
@@ -2764,7 +3119,7 @@ void cmd_run()
             gtree_offset[j] = ftell(fp_gtree[j]);
 
         /* if relaxed clock is enabled get offsets for rates files */
-        if (opt_clock != BPP_CLOCK_GLOBAL)
+        if (opt_print_locusfile)
           for (j = 0; j < opt_locus_count; ++j)
             rates_offset[j] = ftell(fp_locus[j]);
 
@@ -2792,7 +3147,9 @@ void cmd_run()
                         mean_tau,
                         mean_theta,
                         mean_tau_count,
-                        mean_theta_count);
+                        mean_theta_count,
+                        prec_logpr,
+                        prec_logl);
       }
     }
 

@@ -21,6 +21,56 @@
 
 #include "bpp.h"
 
+const unsigned int bpp_nt_normal[256] =
+{
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, '-',   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, '?',
+   0, 'A', 'B', 'C', 'D',   0,   0, 'G', 'H',   0,   0, 'K',   0, 'M', 'N', 'O',
+   0,   0, 'R', 'S', 'T', 'T', 'V', 'W', 'X', 'Y',   0,   0,   0,   0,   0,   0,
+   0, 'A', 'B', 'C', 'D',   0,   0, 'G', 'H',   0,   0, 'K',   0, 'M', 'N', 'O',
+   0,   0, 'R', 'S', 'T', 'T', 'V', 'W', 'X', 'Y',   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+};
+
+
+static void print_pretty_phylip_dna(FILE * fp,
+                                    msa_t * msa,
+                                    int pad,
+                                    int every,
+                                    unsigned int * weights)
+{
+  long i,j;
+  if (!msa) return;
+
+  fprintf(fp, "%d %d P\n", msa->count, msa->length);
+  for (i = 0; i < msa->count; ++i)
+  {
+    fprintf(fp, "%-*s", pad, msa->label[i]);
+    for (j = 0; j < (long)(msa->length); ++j)
+    {
+      /* note: prints an extra space before the sequence */
+      if (j % every == 0)
+        fprintf(fp, " ");
+      fprintf(fp, "%c", (char)(bpp_nt_normal[(int)(msa->sequence[i][j])]));
+    }
+    fprintf(fp, "\n");
+  }
+  assert(weights);
+  fprintf(fp, "%d", weights[0]);
+  for (i = 1; i < msa->length; ++i)
+    fprintf(fp, " %d", weights[i]);
+  fprintf(fp, "\n");
+}
+
 static void print_pretty_phylip(FILE * fp,
                                 msa_t * msa,
                                 int pad,
@@ -29,6 +79,12 @@ static void print_pretty_phylip(FILE * fp,
 {
   long i,j;
   if (!msa) return;
+
+  if (msa->dtype == BPP_DATA_DNA)
+  {
+    print_pretty_phylip_dna(fp,msa,pad,every,weights);
+    return;
+  }
 
   fprintf(fp, "%d %d P\n", msa->count, msa->length);
   for (i = 0; i < msa->count; ++i)

@@ -223,6 +223,7 @@ void threads_init(locus_t ** locus)
 
 
   /* init and create worker threads */
+  printf("\nDistributing workload to threads:\n");
   for (t = 0; t < opt_threads; ++t)
   {
     thread_info_t * tip = ti + t;
@@ -244,7 +245,7 @@ void threads_init(locus_t ** locus)
     for (i = 0; i < tip->locus_count; ++i)
       patterns += locus[tip->locus_first+i]->sites;
       
-    printf("Starting thread %ld : loci [%ld-%ld), %ld patterns\n",
+    printf(" Thread %ld : loci [%ld-%ld), %ld patterns\n",
            t, tip->locus_first, tip->locus_first+tip->locus_count, patterns);
     
     pthread_mutex_init(&tip->mutex, NULL);

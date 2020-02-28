@@ -581,7 +581,7 @@ void fillheader()
 void show_header()
 {
   fprintf(stdout, "%s\n", progheader);
-  fprintf(stdout, "https://github.com/bpp\n");
+  fprintf(stdout, "https://github.com/bpp/bpp\n");
   fprintf(stdout,"\n");
 }
 

@@ -1486,7 +1486,9 @@ int checkpoint_dump(stree_t * stree,
                     double * mean_tau,
                     double * mean_theta,
                     long mean_tau_count,
-                    long mean_theta_count);
+                    long mean_theta_count,
+                    int prec_logpg,
+                    int prec_logl);
 
 /* functions in load.c */
 
@@ -1512,7 +1514,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** mean_tau,
                     double ** mean_theta,
                     long * mean_tau_count,
-                    long * mean_theta_count);
+                    long * mean_theta_count,
+                    int * prec_logpg,
+                    int * prec_logl);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
 
