@@ -184,7 +184,9 @@ static void dump_chk_section_1(FILE * fp,
                                double * mean_tau,
                                double * mean_theta,
                                long mean_tau_count,
-                               long mean_theta_count)
+                               long mean_theta_count,
+                               int prec_logpg,
+                               int prec_logl)
 {
   size_t i;
   unsigned int hoffset = stree->tip_count+stree->inner_count;
@@ -299,6 +301,9 @@ static void dump_chk_section_1(FILE * fp,
   /* whether locus mutation rate is estimated */
   DUMP(&opt_est_locusrate,1,fp);
 
+  /* whether mubar is estimated */
+  DUMP(&opt_est_mubar,1,fp);
+
   /* whether heredity scalers are estimated */
   DUMP(&opt_est_heredity,1,fp);
   DUMP(&opt_heredity_alpha,1,fp);
@@ -313,6 +318,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_vbar_beta,1,fp);
   DUMP(&opt_vi_alpha,1,fp);
   DUMP(&opt_rate_prior,1,fp);
+  DUMP(&opt_locusrate_prior,1,fp);
 
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
@@ -390,6 +396,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(mean_tau,mean_tau_count,fp);
   if (opt_est_theta)
     DUMP(mean_theta,mean_theta_count,fp);
+
+  DUMP(&prec_logpg,1,fp);
+  DUMP(&prec_logl,1,fp);
 }
 
 
@@ -716,7 +725,9 @@ int checkpoint_dump(stree_t * stree,
                     double * mean_tau,
                     double * mean_theta,
                     long mean_tau_count,
-                    long mean_theta_count)
+                    long mean_theta_count,
+                    int prec_logpg,
+                    int prec_logl)
 {
   FILE * fp;
   char * s = NULL;
@@ -760,7 +771,9 @@ int checkpoint_dump(stree_t * stree,
                      mean_tau,
                      mean_theta,
                      mean_tau_count,
-                     mean_theta_count);
+                     mean_theta_count,
+                     prec_logpg,
+                     prec_logl);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

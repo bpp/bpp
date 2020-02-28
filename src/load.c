@@ -116,9 +116,11 @@ void load_chk_header(FILE * fp)
                   (buffer[14] << 16) |
                   (buffer[15] << 24);
 
+  #if 0
   printf(" Magic: %c%c%c%c\n", magic[0],magic[1],magic[2],magic[3]);
   printf(" Version: %ld.%ld.%ld\n", version_major, version_minor, version_patch);
   printf(" CHKP version: %ld\n", version_chkp);
+  #endif
 
   if (memcmp(magic,BPP_MAGIC,BPP_MAGIC_BYTES))
     fatal("File %s is not a BPP checkpoint file...", opt_resume);
@@ -135,8 +137,10 @@ void load_chk_header(FILE * fp)
   chk_size_double = buffer[2];
 
   /* TODO: Note that MSVC supports the %z only from verison 2015 (cl v19) */
+  #if 0
   printf(" Type sizes: int(%zu) long(%zu) double(%zu)\n",
          chk_size_int, chk_size_long, chk_size_double);
+  #endif
 
   if (sizeof(int) != chk_size_int)
     fatal("Mismatching int size");
@@ -168,11 +172,15 @@ void load_chk_header(FILE * fp)
 
   if (!LOAD(&sections,1,fp))
     fatal("Cannot read number of sections");
+  #if 0
   printf(" Sections: %u\n", sections);
+  #endif
 
   if (!LOAD(&size_section,1,fp))
     fatal("Cannot read number of sections");
+  #if 0
   printf("   Section 1: %ld bytes\n\n", size_section);
+  #endif
 }
 
 int load_string(FILE * fp, char ** buffer)
@@ -230,7 +238,9 @@ static void load_chk_section_1(FILE * fp,
                                double ** mean_tau,
                                double ** mean_theta,
                                long * mean_tau_count,
-                               long * mean_theta_count)
+                               long * mean_theta_count,
+                               int * prec_logpg,
+                               int * prec_logl)
 {
   long i;
   long total_nodes;
@@ -310,10 +320,12 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read 'speciesdelimitation' tag");
     if (!LOAD(dummy,sizeof(double),fp))
       fatal("Cannot read 'speciesdelimitation' tag");
+    #if 0
     if (opt_est_delimit)
       printf(" Speciesdelimitation: %ld %ld %f\n", opt_est_delimit, opt_rjmcmc_method, opt_rjmcmc_epsilon);
     else
       printf(" Speciesdelimitation: Disabled\n");
+    #endif
   }
   else
   {
@@ -321,17 +333,21 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read 'speciesdelimitation' tag");
     if (!LOAD(&opt_rjmcmc_mean,1,fp))
       fatal("Cannot read 'speciesdelimitation' tag");
+    #if 0
     if (opt_est_delimit)
       printf(" Speciesdelimitation: %ld %ld %f %f\n", opt_est_delimit,
              opt_rjmcmc_method, opt_rjmcmc_alpha, opt_rjmcmc_mean);
     else
       printf(" Speciesdelimitation: Disabled\n");
+    #endif
   }
 
   /* read speciestree */
   if (!LOAD(&opt_est_stree,1,fp))
     fatal("Cannot read 'speciestree' tag");
+  #if 0
   printf(" Speciestree: %ld\n", opt_est_stree);
+  #endif
 
   if (!LOAD(dummy,3*sizeof(double),fp))
     fatal("Cannot read 'speciestree' tag");
@@ -339,7 +355,9 @@ static void load_chk_section_1(FILE * fp,
   /* read speciesmodelprior */
   if (!LOAD(&opt_delimit_prior,1,fp))
     fatal("Cannot read 'speciesmodelprior' tag");
+  #if 0
   printf(" Speciesmodelprior: %ld\n", opt_delimit_prior);
+  #endif
 
   /* read species&tree */
   unsigned int stree_tip_count;
@@ -367,6 +385,7 @@ static void load_chk_section_1(FILE * fp,
     if (!load_string(fp,labels+stree_tip_count+i))
       fatal("Cannot read species labels for 'species&tree' tag");
   }
+  #if 0
   printf(" Species&tree: %u species (", stree_tip_count);
   for (i = 0; i < stree_tip_count; ++i)
     printf(" %s", labels[i]);
@@ -378,17 +397,24 @@ static void load_chk_section_1(FILE * fp,
       printf(" %s\n", labels[stree_tip_count+i]);
     printf("\n");
   }
+  #endif
 
   /* read usedata, cleandata and nloci */
   if (!LOAD(&opt_usedata,1,fp))
     fatal("Cannot read 'usedata' tag");
+  #if 0
   printf(" usedata: %ld\n", opt_usedata);
+  #endif
   if (!LOAD(&opt_cleandata,1,fp))
     fatal("Cannot read 'cleandata' tag");
+  #if 0
   printf(" cleandata: %ld\n", opt_cleandata);
+  #endif
   if (!LOAD(&opt_locus_count,1,fp))
     fatal("Cannot read 'nloci' tag");
+  #if 0
   printf(" nloci: %ld\n", opt_locus_count);
+  #endif
 
   /* load print flags */
   if (!LOAD(&opt_print_samples,1,fp))
@@ -415,14 +441,18 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read beta 'theta' tag");
   if (!LOAD(&opt_est_theta,1,fp))
     fatal("Cannot read est 'theta' tag");
+  #if 0
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
+  #endif
   
   /* read tau prior */
   if (!LOAD(&opt_tau_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
   if (!LOAD(&opt_tau_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
+  #if 0
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
+  #endif
 
   /* laod phi prior */
   if (!LOAD(&opt_phi_alpha,1,fp))
@@ -443,6 +473,9 @@ static void load_chk_section_1(FILE * fp,
   /* load locus rate estimation flag */
   if (!LOAD(&opt_est_locusrate,1,fp))
     fatal("Cannot read locusrate tag"); 
+
+  if (!LOAD(&opt_est_mubar,1,fp))
+    fatal("Cannot read mubar estimation flag");
 
   /* load heredity scalers estimation flag */
   if (!LOAD(&opt_est_heredity,1,fp))
@@ -473,6 +506,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'vi_alpha'");
   if (!LOAD(&opt_rate_prior,1,fp))
     fatal("Cannot read rate prior");
+  if (!LOAD(&opt_locusrate_prior,1,fp))
+    fatal("Cannot read locus rate prior");
 
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
@@ -509,6 +544,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_max_species_count,1,fp))
     fatal("Cannot read max number of species");
 
+  #if 0
   printf(" Current finetune: %ld: %f %f %f %f %f",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
          opt_finetune_theta, opt_finetune_tau,opt_finetune_mix);
@@ -516,10 +552,14 @@ static void load_chk_section_1(FILE * fp,
     printf(" %f\n", opt_finetune_locusrate);
   else
     printf("\n");
+  #endif
 
-  if (!LOAD(&(stree->locusrate_mubar),1,fp))
+  double stree_locusrate_mubar = 0;
+  double stree_locusrate_sigma2bar = 0;
+
+  if (!LOAD(&stree_locusrate_mubar,1,fp))
     fatal("Cannot read locusrate_mubar value");
-  if (!LOAD(&(stree->locusrate_sigma2bar),1,fp))
+  if (!LOAD(&stree_locusrate_sigma2bar,1,fp))
     fatal("Cannot read locusrate_sigma2bar value");
 
   /* read diploid */
@@ -534,8 +574,11 @@ static void load_chk_section_1(FILE * fp,
   {
     free(opt_diploid);
     opt_diploid = NULL;
+    #if 0
     printf(" Diploid: None found\n");
+    #endif
   }
+  #if 0
   else
   {
     printf(" Diploid:");
@@ -543,6 +586,7 @@ static void load_chk_section_1(FILE * fp,
       printf(" %ld", opt_diploid[i]);
     printf("\n");
   }
+  #endif
 
   /* read MCMC run info  */
   if (!LOAD(&opt_burnin,1,fp))
@@ -648,6 +692,12 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read mean theta values"); 
   }
 
+  if (!LOAD(prec_logpg,1,fp))
+    fatal("Cannot read logPG digits precision");
+
+  if (!LOAD(prec_logl,1,fp))
+    fatal("Cannot read logL digits precision");
+
   #if 0
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -663,6 +713,8 @@ static void load_chk_section_1(FILE * fp,
   stree->hybrid_count = stree_hybrid_count;
   stree->edge_count = stree_edge_count;
   stree->locus_count = opt_locus_count;
+  stree->locusrate_mubar = stree_locusrate_mubar;
+  stree->locusrate_sigma2bar = stree_locusrate_sigma2bar;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
   stree->nodes = (snode_t **)xmalloc((size_t)total_nodes*sizeof(snode_t *));
@@ -1386,7 +1438,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** mean_tau,
                     double ** mean_theta,
                     long * mean_tau_count,
-                    long * mean_theta_count)
+                    long * mean_theta_count,
+                    int * prec_logpg,
+                    int * prec_logl)
 {
   long i;
   FILE * fp;
@@ -1399,11 +1453,15 @@ int checkpoint_load(gtree_t *** gtreep,
     fatal("Cannot open checkpoint file %s", opt_resume);
 
   /* read header */
+  #if 0
   fprintf(stdout,"HEADER:\n");
+  #endif
   load_chk_header(fp);
 
   /* load section 1 */
+  #if 0
   fprintf(stdout,"SECTION 1:\n");
+  #endif
 
   load_chk_section_1(fp,
                      pjump,
@@ -1425,7 +1483,9 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_tau,
                      mean_theta,
                      mean_tau_count,
-                     mean_theta_count);
+                     mean_theta_count,
+                     prec_logpg,
+                     prec_logl);
 
   /* load section 2 */
   load_chk_section_2(fp);
@@ -1470,6 +1530,11 @@ int checkpoint_load(gtree_t *** gtreep,
   *streep = stree;
   *gtreep = gtree;
   *locusp = locus;
+
+  #if 0
+  printf("opt_est_locusrate: %ld\n", opt_est_locusrate);
+  printf("opt_locusrate_prior: %ld\n", opt_locusrate_prior);
+  #endif
 
   return 1;
 }
