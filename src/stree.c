@@ -1511,12 +1511,12 @@ static void stree_reset_pptable_tree(stree_t * stree)
   }
 }
 
-int node_is_bidirection(snode_t * node)
+int node_is_bidirection(const snode_t * node)
 {
   assert(node && node->hybrid);
 
-  snode_t * hnode;    /* hybrid node */
-  snode_t * mnode;    /* mirror node */
+  const snode_t * hnode;    /* hybrid node */
+  const snode_t * mnode;    /* mirror node */
 
   if (!node->left && !node->right)
     mnode = node;
@@ -1535,7 +1535,7 @@ int node_is_bidirection(snode_t * node)
 
 /* TODO: A simpler way would be just to check whether node->node_index >=
    stree->tip_count + stree->inner_count */
-int node_is_mirror(snode_t * node)
+int node_is_mirror(const snode_t * node)
 {
   assert(node);
   assert(node->hybrid);
@@ -1547,7 +1547,7 @@ int node_is_mirror(snode_t * node)
   return 1;
 }
 
-int node_is_hybridization(snode_t * node)
+int node_is_hybridization(const snode_t * node)
 {
   assert(node && node->hybrid);
 
@@ -1793,10 +1793,16 @@ static void stree_reset_leaves_tree_recursive(snode_t * snode)
     return;
   }
 
-  stree_reset_leaves_tree_recursive(snode->left);
-  stree_reset_leaves_tree_recursive(snode->right);
+  if (snode->left)
+    stree_reset_leaves_tree_recursive(snode->left);
+  if (snode->right)
+    stree_reset_leaves_tree_recursive(snode->right);
 
-  snode->leaves = snode->left->leaves + snode->right->leaves;
+  snode->leaves = 0;
+  if (snode->left)
+    snode->leaves = snode->left->leaves;
+  if (snode->right)
+    snode->leaves += snode->right->leaves;
 }
 
 static void stree_reset_leaves_tree(stree_t * stree)

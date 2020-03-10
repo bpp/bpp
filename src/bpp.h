@@ -257,6 +257,12 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_BRANCHRATE_INDEX       14
 #define BPP_MOVE_INDEX_MAX              14
 
+#define BPP_MSCIDEFS_TREE               1
+#define BPP_MSCIDEFS_DEFINE             2
+#define BPP_MSCIDEFS_HYBRID             3
+#define BPP_MSCIDEFS_BIDIR              4
+#define BPP_MSCIDEFS_SHOWBL             5
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU   8
@@ -611,6 +617,22 @@ typedef struct mapping_s
   int lineno;
 } mapping_t;
 
+typedef struct mscidefs_s
+{
+  long type;
+  long lineno;
+  char * node1_1;
+  char * node1_2;
+  char * node2_1;
+  char * node2_2;
+  char * label1;
+  char * label2;
+  long has_tau1;
+  long has_tau2;
+  double phi1;
+  double phi2;
+} mscidefs_t;
+
 typedef struct list_item_s
 {
   void * data;
@@ -835,6 +857,7 @@ extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_msafile;
+extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
 extern char * opt_outfile;
 extern char * opt_partition_file;
@@ -1034,9 +1057,9 @@ void stree_alloc_internals(stree_t * stree,
                            unsigned int gtree_inner_sum,
                            long msa_count);
 
-int node_is_bidirection(snode_t * node);
-int node_is_mirror(snode_t * node);
-int node_is_hybridization(snode_t * node);
+int node_is_bidirection(const snode_t * node);
+int node_is_mirror(const snode_t * node);
+int node_is_hybridization(const snode_t * node);
 
 void print_network_table(stree_t * stree);
 void debug_print_network_node_attribs(stree_t * stree);
@@ -2125,3 +2148,7 @@ void stree_destroy(stree_t * tree, void (*cb_destroy)(void *));
 /* functions in parsemap.c */
 
 list_t * parse_mapfile(const char * mapfile);
+
+/* functions in msci_gen.c */
+
+void cmd_msci_create(void);

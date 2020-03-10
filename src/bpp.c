@@ -141,6 +141,7 @@ char * opt_mapfile;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_msafile;
+char * opt_mscifile;
 char * opt_outfile;
 char * opt_partition_file;
 char * opt_reorder;
@@ -181,6 +182,7 @@ static struct option long_options[] =
   {"exp_random", no_argument,       0, 0 },  /*  9 */
   {"rev_gspr",   no_argument,       0, 0 },  /* 10 */
   {"debugrates", no_argument,       0, 0 },  /* 11 */
+  {"msci-create",required_argument, 0, 0 },  /* 12 */
   { 0, 0, 0, 0 }
 };
 
@@ -360,6 +362,7 @@ void args_init(int argc, char ** argv)
   opt_modelparafile = NULL;
   opt_msafile = NULL;
   opt_msci = 0;
+  opt_mscifile = NULL;
   opt_onlysummary = 0;
   opt_outfile = NULL;
   opt_partition_count = 0;
@@ -467,6 +470,10 @@ void args_init(int argc, char ** argv)
         opt_debug_rates = 1;
         break;
 
+      case 12:
+        opt_mscifile = xstrdup(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -496,6 +503,8 @@ void args_init(int argc, char ** argv)
     commands++;
   if (opt_simulate)
     commands++;
+  if (opt_mscifile)
+    commands++;
 
   /* if more than one independent command, fail */
   if (commands > 1)
@@ -515,6 +524,7 @@ static void dealloc_switches()
   if (opt_mapfile) free(opt_mapfile);
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_msafile) free(opt_msafile);
+  if (opt_mscifile) free(opt_mscifile);
   if (opt_outfile) free(opt_outfile);
   if (opt_reorder) free(opt_reorder);
   if (opt_sp_seqcount) free(opt_sp_seqcount);
@@ -631,6 +641,10 @@ int main (int argc, char * argv[])
   else if (opt_simulate)
   {
     cmd_simulate();
+  }
+  else if (opt_mscifile)
+  {
+    cmd_msci_create();
   }
 
   legacy_fini();
