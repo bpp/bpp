@@ -1015,7 +1015,9 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    /* recursively set the speciation time for the remaining inner nodes. For
       networks it is not necessary to check if root has both left and right */
    if (opt_msci)
+   {
      network_init_tau_iterative(stree, prop, thread_index);
+   }
    else
    {
      stree_init_tau_recursive(stree->root->left, prop, thread_index);
@@ -1821,6 +1823,71 @@ void stree_reset_leaves(stree_t * stree)
     stree_reset_leaves_tree(stree);
 }
 
+static void msci_validate(stree_t * stree)
+{
+  unsigned int i;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    /* hybridizations */
+
+    snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    assert(node_is_mirror(mnode));
+    if (!node_is_hybridization(mnode)) continue;
+
+    snode_t * hnode = mnode->hybrid;
+
+    unsigned int nhindex = hnode->node_index;
+    unsigned int phindex = hnode->parent->node_index;
+    unsigned int pmindex = mnode->parent->node_index;
+
+    if (stree->pptable[phindex][nhindex] || stree->pptable[pmindex][nhindex])
+      fatal("[ERROR] "
+            "Parental nodes of hybridization %s cannot be descendants "
+            "(cannot hybridize from future past)", hnode->label);
+
+    if (!hnode->htau && stree->pptable[pmindex][phindex])
+      fatal("[ERROR] "
+            "Parental nodes of hybridization %s have an ancestor-descendent "
+            "relation, but the ancestor has no tau paremeter (tau-parent=no)",
+            hnode->label);
+
+    if (!mnode->htau && stree->pptable[phindex][pmindex])
+      fatal("[ERROR] "
+            "Parental nodes of hybridization %s have an ancestor-descendent "
+            "relation, but the ancestor has no tau paremeter (tau-parent=no)",
+            hnode->label);
+  }
+
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    /* bidirections */
+
+    snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    assert(node_is_mirror(mnode));
+    if (node_is_hybridization(mnode)) continue;
+
+    /* check for prop_tau, i.e. process each bidirection only once */
+    snode_t * h1node = mnode->hybrid;
+    if (!h1node->prop_tau) continue;
+
+    snode_t * h2node = mnode->parent;
+    assert(!h2node->prop_tau);
+
+    unsigned int h1index = h1node->node_index;
+    unsigned int h2index = h2node->node_index;
+
+    if (stree->pptable[h1index][h2index] || stree->pptable[h2index][h1index])
+      fatal("[ERROR] "
+            "The two end-point nodes of bidirection %s <-> %s have an "
+            "ancestor-descendent relation",
+            h1node->label, h2node->label);
+  }
+}
+
 void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
@@ -1838,6 +1905,11 @@ void stree_init(stree_t * stree,
   stree_init_pptable(stree);
   
   stree_reset_leaves(stree);
+
+  if (opt_msci)
+  {
+    msci_validate(stree);
+  }
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
