@@ -57,7 +57,8 @@ OBJ_BPP = \
   prop_gamma.obj \
   threads.obj \
   treeparse.obj \
-  parsemap.o
+  parsemap.obj \
+  msci_gen.obj
 
 all: $(PROG)
 

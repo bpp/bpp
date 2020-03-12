@@ -780,7 +780,7 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
       }
 
       /* skip using branch rates on horizontal edges in hybridization events */
-      if (!(pop->hybrid && start->htau == 0))
+      if (!(pop->hybrid && pop->htau == 0))
         x->length += (start->tau - t)*pop->rate;
       t = start->tau;
     }
@@ -1611,7 +1611,7 @@ static void assign_thetas(stree_t * stree)
       {
         /* node is hybridization: we assign a theta to the nodes that
            compose it that have a 'tau-parent' (htau) annotation */
-        if (node->parent->htau)
+        if (node->htau)
         {
           node->has_theta = 1;
           assert(node->theta > 0);
@@ -1622,7 +1622,7 @@ static void assign_thetas(stree_t * stree)
           node->has_theta = 0;
         }
 
-        if (node->hybrid->parent->htau)
+        if (node->hybrid->htau)
         {
           node->hybrid->has_theta = 1;
           assert(node->hybrid->theta > 0);
@@ -1670,21 +1670,21 @@ static void validate_and_set_taus(stree_t * stree)
       assert(hnode->parent);
       assert(mnode->parent);
 
-      if (tau && !hnode->parent->htau && hnode->parent->tau > 0 &&
+      if (tau && !hnode->htau && hnode->parent->tau > 0 &&
           hnode->parent->tau != tau)
         fatal("Conflicting tau for nodes %s and %s",
               hnode->parent->label, hnode->label);
 
-      if (tau && !mnode->parent->htau && mnode->parent->tau > 0 &&
+      if (tau && !mnode->htau && mnode->parent->tau > 0 &&
           mnode->parent->tau != tau)
         fatal("Conflicting tau for nodes %s and %s",
               mnode->parent->label, hnode->label);
 
       if (mnode->tau <= 0 && hnode->tau <= 0)
       {
-        if (hnode->parent->htau && mnode->parent->htau)
+        if (hnode->htau && mnode->htau)
           fatal("Missing tau for hybridization node %s", hnode->label);
-        else if (!hnode->parent->htau && !mnode->parent->htau)
+        else if (!hnode->htau && !mnode->htau)
         {
           if (hnode->parent->tau <= 0 && mnode->parent->tau <= 0)
             fatal("Missing tau for hybridization node %s", hnode->label);
@@ -1699,7 +1699,7 @@ static void validate_and_set_taus(stree_t * stree)
           else
             tau = hnode->parent->tau;
         }
-        else if (!hnode->parent->htau)
+        else if (!hnode->htau)
         {
           if (hnode->parent->tau <= 0)
             fatal("Missing tau for hybridization node %s", hnode->label);
@@ -1718,9 +1718,9 @@ static void validate_and_set_taus(stree_t * stree)
       assert(tau > 0);
 
       mnode->tau = hnode->tau = tau;
-      if (!mnode->parent->htau)
+      if (!mnode->htau)
         mnode->parent->tau = tau;
-      if (!hnode->parent->htau)
+      if (!hnode->htau)
         hnode->parent->tau = tau;
     }
     else

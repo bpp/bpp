@@ -2192,7 +2192,7 @@ static FILE * init(stree_t ** ptr_stree,
         /* Mirror nodes in bidirectional introgression */
         if (opt_msci && node->hybrid)
         {
-          if (node_is_hybridization(node) && !node->parent->htau) continue;
+          if (node_is_hybridization(node) && !node->htau) continue;
           if (node_is_bidirection(node) && node_is_mirror(node)) continue;
         }
 

@@ -932,9 +932,6 @@ static void annotate_hybridization(snode_t * hinner, snode_t * htip)
       fatal("Missing phi parameter annotation for hybridization event (%s)",
             hinner->label);
   }
-
-  hinner->parent->htau = hinner->htau;
-  hinner->hybrid->parent->htau = hinner->hybrid->htau;
 }
 
 static void resolve_hybridization(stree_t * stree, long * dups)
@@ -1957,47 +1954,80 @@ static stree_t * stree_from_ntree(ntree_t * ntree)
 
   if (opt_msci)
   {
-    /* for all nodes that are not hybridization events set htau to 1 */
+    /* for all nodes that are not hybridization events set prop_tau to 1 */
     for (i = 0; i < stree->inner_count; ++i)
     {
       snode_t * snode = stree->nodes[stree->tip_count+i];
 
-      if (!snode->hybrid) snode->htau = 1;
+      if (!snode->hybrid) snode->prop_tau = 1;
     }
 
-    /* now reset the 'htau' values for parents of hybridization events, and set
-       htau to hybridization nodes to 1 (inner nodes) and 0 (mirrored nodes) */
+    /* now set the prop_tau on hybridization events and bidirection events.
+       Hybridization nodes receive 1 (inner nodes) and 0 (mirored nodes).
+       On bidirections only one of the two inner nodes receives prop_tau=1,
+       the other node including the two mirror nodes receive 0 */
     for (i = 0; i < stree->hybrid_count; ++i)
     {
       snode_t * mnode = stree->nodes[stree->tip_count+stree->inner_count+i];
       snode_t * hnode = mnode->hybrid;
       assert(hnode);
 
-      /* bidirection  */
       if (node_is_bidirection(hnode))
       {
+        /* bidirection  */
+
         assert(hnode->node_index < stree->tip_count + stree->inner_count);
+
+        assert((hnode->htau  && !mnode->htau &&  mnode->parent->htau && !mnode->parent->hybrid->htau) ||
+               (!hnode->htau && !mnode->htau && !mnode->parent->htau && !mnode->parent->hybrid->htau));
+        /* this means the bidirection was already processed from the other end node */
+        if (hnode->htau) continue;
 
         /* if htau=0 for all four nodes involved in a bidirectional
            introgression then set htau=1 to inner node hnode. All other
            nodes keep htau=0 forever, and will share the tau of hnode */
         if (!hnode->htau && !mnode->htau && 
             !mnode->parent->htau && !mnode->parent->hybrid->htau)
+        {
+          /* Note: Changed the code to have both non-mirror nodes to htau=1.
+             This is important for computing gene tree branch lengths with
+             relaxed clock */
           hnode->htau = 1;
+          mnode->parent->htau = 1;
+
+          hnode->prop_tau = 1;
+          mnode->prop_tau = 0;
+          mnode->parent->prop_tau = 0;
+          mnode->parent->hybrid->prop_tau = 0;
+        }
+        else
+        {
+          /* This should never occur */
+          assert(0);
+        }
       }
       else
       {
-        hnode->parent->htau = hnode->htau;
-        mnode->parent->htau = mnode->htau;
+        /* hybridization */
 
-        hnode->htau = 1;
-        mnode->htau = 0;
+        if (!hnode->htau)
+          hnode->parent->prop_tau = 0;
+        if (!mnode->htau)
+          mnode->parent->prop_tau = 0;
 
+        hnode->prop_tau = 1;
+        mnode->prop_tau = 0;
       }
     }
   }
+  else
+  {
+    /* not msci */
+    for (i = 0; i < stree->inner_count; ++i)
+      stree->nodes[stree->tip_count+i]->prop_tau = 1;
+  }
 
-  if (opt_msci && stree->root->htau == 0)
+  if (opt_msci && stree->root->prop_tau == 0)
     fatal("Error: species tree root requires a tau parameter [tau-parent=yes]");
 
   return stree;

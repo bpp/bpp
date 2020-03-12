@@ -1121,7 +1121,7 @@ static void epoch_reorder(snode_t ** epoch,
     assert(!node_is_mirror(hnode));
 
     /* make sure parents are after hybridization event */
-    if (!epoch[hindex]->parent->htau ||
+    if (!epoch[hindex]->htau ||
         epoch[hindex]->parent->tau == epoch[hindex]->tau)
     {
       for (i = 0; i < hindex; ++i)
@@ -1135,7 +1135,7 @@ static void epoch_reorder(snode_t ** epoch,
       }
     }
 
-    if (!epoch[hindex]->hybrid->parent->htau ||
+    if (!epoch[hindex]->hybrid->htau ||
         epoch[hindex]->hybrid->parent->tau == epoch[hindex]->tau)
     {
       for (i = 0; i < hindex; ++i)

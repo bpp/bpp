@@ -352,6 +352,7 @@ typedef struct snode_s
   struct snode_s * parent;
   unsigned int leaves;
   unsigned int * gene_leaves;
+  int prop_tau;
   int * mark;
 
   void * data;

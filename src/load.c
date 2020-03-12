@@ -934,6 +934,12 @@ void load_chk_section_2(FILE * fp)
       fatal("Cannot read parent htau for node %ld", i);
   }
 
+  for (i = 0; i < total_nodes; ++i)
+  {
+    if (!LOAD(&(stree->nodes[i]->prop_tau),1,fp))
+      fatal("Cannot read parent prop_tau for node %ld", i);
+  }
+
   stree_label(stree);
 
   #if 0
