@@ -2101,7 +2101,7 @@ double reflect(double x, double a, double b, long thread_index)
   /* returns a variable in range (a,b) by reflecting x back into the range */
 
   if (b-a < EPSILON)
-    fatal("Internal error when proposing gene tree noge age");
+    fatal("Internal error when proposing gene tree node age");
 
 
   if (x < a)
