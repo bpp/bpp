@@ -446,6 +446,9 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->htau),1,fp);
 
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->prop_tau),1,fp);
+
 
   /* TODO: We do not need to write theta when !opt_est_theta */
   /* write theta */

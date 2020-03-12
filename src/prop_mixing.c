@@ -189,7 +189,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   {
     for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     {
-      if (stree->nodes[i]->tau > 0 && stree->nodes[i]->htau)
+      if (stree->nodes[i]->tau > 0 && stree->nodes[i]->prop_tau)
         tau_count++;
     }
   }
@@ -237,7 +237,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   {
     for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
-      if (snodes[i]->tau == 0 || snodes[i]->htau == 0) continue;
+      if (snodes[i]->tau == 0 || snodes[i]->prop_tau == 0) continue;
       snodes[i]->old_tau = snodes[i]->tau;
       snodes[i]->tau *= c;
       if (snodes[i]->hybrid)
@@ -246,9 +246,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         {
           assert(!node_is_mirror(snodes[i]));
           snodes[i]->hybrid->tau = snodes[i]->tau;
-          if (snodes[i]->parent->htau == 0)
+          if (snodes[i]->htau == 0)
             snodes[i]->parent->tau = snodes[i]->tau;
-          if (snodes[i]->hybrid->parent->htau == 0)
+          if (snodes[i]->hybrid->htau == 0)
             snodes[i]->hybrid->parent->tau = snodes[i]->tau;
         }
         else
@@ -257,7 +257,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
           assert(!node_is_mirror(snodes[i]));
 
           assert(snodes[i]->htau && !snodes[i]->hybrid->htau &&
-                 !snodes[i]->hybrid->parent->htau && !snodes[i]->right->htau);
+                 snodes[i]->hybrid->parent->htau && !snodes[i]->right->htau);
+          assert(snodes[i]->prop_tau && !snodes[i]->hybrid->parent->prop_tau);
           snodes[i]->hybrid->tau        = snodes[i]->tau;
           snodes[i]->right->tau         = snodes[i]->tau;
           snodes[i]->right->hybrid->tau = snodes[i]->tau;
@@ -369,7 +370,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     {
       for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
       {
-        if (snodes[i]->tau == 0 || snodes[i]->htau == 0) continue;
+        if (snodes[i]->tau == 0 || snodes[i]->prop_tau == 0) continue;
 
         snodes[i]->tau /= c;
         if (snodes[i]->hybrid)
@@ -379,15 +380,16 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
           {
             assert(!node_is_mirror(snodes[i]));
             snodes[i]->hybrid->tau = snodes[i]->tau;
-            if (snodes[i]->parent->htau == 0)
+            if (snodes[i]->htau == 0)
               snodes[i]->parent->tau = snodes[i]->tau;
-            if (snodes[i]->hybrid->parent->htau == 0)
+            if (snodes[i]->hybrid->htau == 0)
               snodes[i]->hybrid->parent->tau = snodes[i]->tau;
           }
           else
           {
             assert(node_is_bidirection(snodes[i]));
             assert(!node_is_mirror(snodes[i]));
+            assert(snodes[i]->prop_tau && !snodes[i]->hybrid->parent->prop_tau);
             snodes[i]->hybrid->tau        = snodes[i]->tau;
             snodes[i]->right->tau         = snodes[i]->tau;
             snodes[i]->right->hybrid->tau = snodes[i]->tau;
