@@ -53,6 +53,8 @@ static const char * template_ratesfile = "locus.%ld.sample.txt";
 static int prec_logl =  8;
 static int prec_logpr = 8;
 
+static int prec_ft = 6;
+
 static void timer_start()
 {
   time_start = time(NULL);
@@ -449,6 +451,25 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
   for (j = 0; j < 2; ++j)
   {
+    fprintf(fp[j], "\n                   ");
+    fprintf(fp[j],  "%*s", prec_ft+2, "Gage");    /*  0 */
+    fprintf(fp[j], " %*s", prec_ft+2, "Gspr");    /*  1 */
+    fprintf(fp[j], " %*s", prec_ft+2, "thet");    /*  2 */
+    fprintf(fp[j], " %*s", prec_ft+2, "tau");     /*  3 */
+    fprintf(fp[j], " %*s", prec_ft+2, "mix");     /*  4 */
+    fprintf(fp[j], " %*s", prec_ft+2, "lrht");    /*  5 */
+    fprintf(fp[j], " %*s", prec_ft+2, "phi");     /*  6 */
+    fprintf(fp[j], " %*s", prec_ft+2, "pi");      /*  7 */
+    fprintf(fp[j], " %*s", prec_ft+2, "qmat");    /*  8 */
+    fprintf(fp[j], " %*s", prec_ft+2, "alfa");    /*  9 */
+    fprintf(fp[j], " %*s", prec_ft+2, "mubr");    /* 10 */
+    fprintf(fp[j], " %*s", prec_ft+2, "nubr");    /* 11 */
+    fprintf(fp[j], " %*s", prec_ft+2, "mu_i");    /* 12 */
+    fprintf(fp[j], " %*s", prec_ft+2, "nu_i");    /* 13 */
+    fprintf(fp[j], " %*s", prec_ft+2, "brte");    /* 14 */
+  }
+  for (j = 0; j < 2; ++j)
+  {
     fprintf(fp[j], "\nCurrent Pjump:    ");
 
     for (i = 0; i < PROP_COUNT; ++i)
@@ -457,12 +478,51 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_LRHT_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    /* phi pjump */
+    if (opt_msci)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_PHI_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_FREQS_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_QRATES_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_ALPHA_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    /* mubar pjump */
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUBAR_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    
+    /* sigma2bar pjump */
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
 
     /* mu_i with conditional iid */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUI_INDEX]);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
 
     /* sigma2_i and branch rates pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -470,31 +530,15 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2I_INDEX]);
       fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
     }
+    else
+    {
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    }
 
-    /* mubar pjump */
-    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-        opt_est_mubar)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUBAR_INDEX]);
-    
-    /* sigma2bar pjump */
-    if (opt_clock != BPP_CLOCK_GLOBAL &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
-
-    /* phi pjump */
-    if (opt_msci)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_PHI_INDEX]);
-
-    if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_FREQS_INDEX]);
-    if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_QRATES_INDEX]);
-    if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_ALPHA_INDEX]);
-      
     fprintf(fp[j], "\n");
 
+    //printf("finetune_mui: %.15f", opt_finetune_mui);
     fprintf(fp[j], "Current finetune: ");
     fprintf(fp[j], " %8.5f", opt_finetune_gtage);
     fprintf(fp[j], " %8.5f", opt_finetune_gtspr);
@@ -505,12 +549,52 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
       fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    /* phi */
+    if (opt_msci)
+      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    /* mubar */
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
+      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    /* sigma2bar */
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
 
     /* mu_i with conditional iid */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
       fprintf(fp[j], " %8.5f", opt_finetune_mui);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
 
     /* sigma2_i and branch rates */
     if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -518,28 +602,11 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
       fprintf(fp[j], " %8.5f", opt_finetune_branchrate);
     }
-
-    /* mubar */
-    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-        opt_est_mubar)
-      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
-
-    /* sigma2bar */
-    if (opt_clock != BPP_CLOCK_GLOBAL &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
-
-    /* phi */
-    if (opt_msci)
-      fprintf(fp[j], " %8.5f", opt_finetune_phi);
-
-    if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
-    if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
-    if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+    else
+    {
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    }
 
     fprintf(fp[j], "\n");
   }
@@ -589,35 +656,57 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     if (extra)
       fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    if (opt_msci)
+      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
+      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
 
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
       fprintf(fp[j], " %8.5f", opt_finetune_mui);
+    else
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
       fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
       fprintf(fp[j], " %8.5f", opt_finetune_branchrate);
     }
+    else
+    {
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", prec_ft+2, "-");
+    }
 
-    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-        opt_est_mubar)
-      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
-
-    if (opt_clock != BPP_CLOCK_GLOBAL &&
-        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
-
-    if (opt_msci)
-      fprintf(fp[j], " %8.5f", opt_finetune_phi);
-    if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
-    if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
-    if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
     fprintf(fp[j], "\n");
   }
   fprintf(fp[0],"\n");
