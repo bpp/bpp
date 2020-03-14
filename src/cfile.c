@@ -1369,7 +1369,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 4. theta finetune param */
+  /* 4. tau finetune param */
   count = get_double(p, &opt_finetune_tau);
   if (!count) goto l_unwind;
 
@@ -1408,6 +1408,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
+  #if 0
   /* 7. sequence error finetune param */
   count = get_double(p, &opt_finetune_seqerr);
   if (!count) goto l_unwind;
@@ -1419,8 +1420,9 @@ static long parse_finetune(const char * line)
     ret = 1;
     goto l_unwind;
   }
+  #endif
 
-  /* 8. phi finetune */
+  /* 7. phi finetune */
   count = get_double(p, &opt_finetune_phi);
   if (!count) goto l_unwind;
 
@@ -1432,7 +1434,43 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 9. mubar finetune */
+  /* 8. freqs finetune */
+  count = get_double(p, &opt_finetune_freqs);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 9. qrates finetune */
+  count = get_double(p, &opt_finetune_qrates);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 10. alpha finetune */
+  count = get_double(p, &opt_finetune_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  /* 11. mubar finetune */
   count = get_double(p, &opt_finetune_mubar);
   if (!count) goto l_unwind;
 
@@ -1444,7 +1482,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 10. sigma2bar finetune */
+  /* 12. sigma2bar finetune */
   count = get_double(p, &opt_finetune_sigma2bar);
   if (!count) goto l_unwind;
 
@@ -1456,7 +1494,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 11. mu_i finetune */
+  /* 13. mu_i finetune */
   count = get_double(p, &opt_finetune_mui);
   if (!count) goto l_unwind;
 
@@ -1468,7 +1506,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 12. sigma2_i finetune */
+  /* 14. sigma2_i finetune */
   count = get_double(p, &opt_finetune_sigma2i);
   if (!count) goto l_unwind;
 
@@ -1480,7 +1518,7 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 13. branchrates finetune */
+  /* 15. branchrates finetune */
   count = get_double(p, &opt_finetune_branchrate);
   if (!count) goto l_unwind;
 
