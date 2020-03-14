@@ -4431,7 +4431,7 @@ double prop_locusrate_sigma2i(gtree_t ** gtree,
       }
     }
   }
-  return accepted / opt_locus_count;
+  return ((double)accepted / opt_locus_count);
 }
 
 double prop_locusrate_mui(gtree_t ** gtree,
@@ -4606,7 +4606,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
       }
     }
   }
-  return accepted / opt_locus_count;
+  return ((double)accepted / opt_locus_count);
 }
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
