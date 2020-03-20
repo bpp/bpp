@@ -2319,6 +2319,10 @@ static FILE * init(stree_t ** ptr_stree,
                                     locus[i]->param_indices,
                                     NULL);
     logl_sum += logl;
+    if (isinf(logl))
+      fatal("\n[ERROR] log-L for locus %d is -inf.\n"
+            "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
+            "\n  scaling = 1\n\nto the control file", i+1);
 
     /* store current log-likelihood in each gene tree structure */
     gtree[i]->logl = logl;
@@ -2366,6 +2370,11 @@ static FILE * init(stree_t ** ptr_stree,
   fprintf(stdout,"log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
   fprintf(fp_out,"\nInitial MSC density and log-likelihood of observing data:\n");
   fprintf(fp_out,"log-PG0 = %f   log-L0 = %f\n\n", logpr_sum, logl_sum);
+
+  if (isinf(logl_sum))
+    fatal("\n[ERROR] The sum of log-L for all loci is -inf.\n"
+          "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
+          "\n  scaling = 1\n\nto the control file");
 
   /* free weights array */
   free(weights);
@@ -3189,7 +3198,14 @@ void cmd_run()
       }
 
       if (print_newline)
+      {
         timer_print("  ","\n", fp_out);
+
+        if (isinf(mean_logl))
+          fatal("\n[ERROR] The mean log-L over loci is -inf.\n"
+                "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
+                "\n  scaling = 1\n\nto the control file");
+      }
     }
 
     curstep++;

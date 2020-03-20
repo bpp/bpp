@@ -64,9 +64,13 @@ static const long aa_model_index[] =
    BPP_AA_MODEL_STMTREV
  };
 
+static const char * rate_prior_option[] =
+ {
+   "DIR", "IID"
+ };
 static const char * rate_prior_name[] =
  {
-   "gamma-Dirichlet", "Conditional iid"
+   "Camma-Dirichlet", "Conditional iid"
  };
 
 static void reallocline(size_t newmaxsize)
@@ -564,6 +568,53 @@ static long get_dist(const char * line, long * dist)
   return ret;
 }
 
+static long get_priordist(const char * line, long * dist)
+{
+  int ret=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+  
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  /* invalidate return value */
+  *dist = BPP_BRATE_PRIOR_MAX+1;
+
+  ret = ws + end - start;
+  if (!strcasecmp(start,"DIR"))
+  {
+    *dist = BPP_LOCRATE_PRIOR_GAMMADIR;
+  }
+  else if (!strcasecmp(start,"IID"))
+  {
+    *dist = BPP_LOCRATE_PRIOR_HIERARCHICAL;
+  }
+  else
+  {
+    ret = 0;
+  }
+
+  free(s);
+
+  return ret;
+}
+
 static long parse_clock(const char * line)
 {
   long ret = 0;
@@ -616,6 +667,7 @@ static long parse_clock(const char * line)
   }
 
   /* get prior */
+  #if 0
   long temp = 0;
   count = get_long(p, &temp);
   if (!count) goto l_unwind;
@@ -635,6 +687,28 @@ static long parse_clock(const char * line)
   {
     opt_locusrate_prior = temp;
   }
+  #else
+  long temp = 0;
+  count = get_priordist(p,&temp);
+  if (!count) goto l_unwind;
+
+  if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+    fatal("ERROR: Invalid prior value (%ld) in 'locusrate' option", temp);
+
+  /* check whether prior was already specified in the locusrate option */
+  if (opt_locusrate_prior != -1)
+  {
+    if (temp != opt_locusrate_prior)
+      fatal("ERROR: prior = %s (%s) in 'clock' does not match prior = %s (%s)"
+            " in 'locusrate'", rate_prior_option[temp], rate_prior_name[temp],
+            rate_prior_option[opt_locusrate_prior],
+            rate_prior_name[opt_locusrate_prior]);
+  }
+  else
+  {
+    opt_locusrate_prior = temp;
+  }
+  #endif
 
   p += count;
 
@@ -714,6 +788,7 @@ static long parse_locusrate(const char * line)
     }
 
     /* get prior */
+    #if 0
     long temp = 0;
     count = get_long(p, &temp);
     if (!count) goto l_unwind;
@@ -733,6 +808,28 @@ static long parse_locusrate(const char * line)
     {
       opt_locusrate_prior = temp;
     }
+    #else
+    long temp = 0;
+    count = get_priordist(p,&temp);
+    if (!count) goto l_unwind;
+
+    if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
+      fatal("ERROR: Invalid prior value (%ld) in 'clock' option", temp);
+
+    /* check whether prior was already specified in the clock option */
+    if (opt_locusrate_prior != -1)
+    {
+      if (temp != opt_locusrate_prior)
+        fatal("ERROR: prior = %s (%s) in 'locusrate' does not match prior = "
+              "%s (%s) in 'clock'", rate_prior_option[temp], rate_prior_name[temp],
+              rate_prior_option[opt_locusrate_prior],
+              rate_prior_name[opt_locusrate_prior]);
+    }
+    else
+    {
+      opt_locusrate_prior = temp;
+    }
+    #endif
 
     p += count;
 
