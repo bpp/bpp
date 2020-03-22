@@ -28,6 +28,10 @@ static size_t line_maxsize = 0;
 
 static long species_count = 0;
 
+static const char * rate_prior_option[] =
+ {
+   "DIR", "IID"
+ };
 static const char * rate_prior_name[] =
  {
    "gamma-Dirichlet", "Conditional iid"
@@ -711,6 +715,100 @@ static long get_token(char * line, char ** token, char ** value)
   return p - *token + 1;
 }
 
+static long get_dist(const char * line, long * dist)
+{
+  int ret=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  /* invalidate return value */
+  *dist = BPP_BRATE_PRIOR_MAX+1;
+
+  ret = ws + end - start;
+  if (!strcasecmp(start,"G"))
+  {
+    *dist = BPP_BRATE_PRIOR_GAMMA;
+  }
+  else if (!strcasecmp(start,"LN"))
+  {
+    *dist = BPP_BRATE_PRIOR_LOGNORMAL;
+  }
+  else
+  {
+    ret = 0;
+  }
+
+  free(s);
+
+  return ret;
+}
+
+static long get_priordist(const char * line, long * dist)
+{
+  int ret=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+  
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  /* invalidate return value */
+  *dist = BPP_BRATE_PRIOR_MAX+1;
+
+  ret = ws + end - start;
+  if (!strcasecmp(start,"DIR"))
+  {
+    *dist = BPP_LOCRATE_PRIOR_GAMMADIR;
+  }
+  else if (!strcasecmp(start,"IID"))
+  {
+    *dist = BPP_LOCRATE_PRIOR_HIERARCHICAL;
+  }
+  else
+  {
+    ret = 0;
+  }
+
+  free(s);
+
+  return ret;
+}
+
 static long parse_locusrate(const char * line)
 {
   long ret = 0;
@@ -751,7 +849,7 @@ static long parse_locusrate(const char * line)
 
     /* get prior */
     long temp = 0;
-    count = get_long(p, &temp);
+    count = get_priordist(p, &temp);
     if (!count) goto l_unwind;
 
     if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
@@ -761,9 +859,12 @@ static long parse_locusrate(const char * line)
     if (opt_locusrate_prior != -1)
     {
       if (temp != opt_locusrate_prior)
-        fatal("ERROR: prior = %ld (%s) in 'locusrate' does not match prior = "
-              "%ld (%s) in 'clock'", temp, rate_prior_name[temp],
-              opt_locusrate_prior, rate_prior_name[opt_locusrate_prior]);
+        fatal("ERROR: prior = %s (%s) in 'locusrate' does not match prior = "
+              "%s (%s) in 'clock'",
+              rate_prior_option[temp],
+              rate_prior_name[temp],
+              rate_prior_option[opt_locusrate_prior],
+              rate_prior_name[opt_locusrate_prior]);
     }
     else
     {
@@ -898,7 +999,7 @@ static long parse_clock(const char * line)
 
   /* get prior */
   long temp = 0;
-  count = get_long(p, &temp);
+  count = get_priordist(p, &temp);
   if (!count) goto l_unwind;
 
   if (temp < BPP_LOCRATE_PRIOR_MIN || temp > BPP_LOCRATE_PRIOR_MAX)
@@ -908,8 +1009,9 @@ static long parse_clock(const char * line)
   if (opt_locusrate_prior != -1)
   {
     if (temp != opt_locusrate_prior)
-      fatal("ERROR: prior = %ld (%s) in 'clock' does not match prior = %ld (%s)"
-            " in 'locusrate'", temp, rate_prior_name[temp], opt_locusrate_prior,
+      fatal("ERROR: prior = %s (%s) in 'clock' does not match prior = %s (%s)"
+            " in 'locusrate'", rate_prior_option[temp], rate_prior_name[temp],
+            rate_prior_option[opt_locusrate_prior],
             rate_prior_name[opt_locusrate_prior]);
   }
   else
@@ -930,7 +1032,7 @@ static long parse_clock(const char * line)
   }
 
   /* get branch rate prior distribution */
-  count = get_long(p,&opt_rate_prior);
+  count = get_dist(p,&opt_rate_prior);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1119,7 +1221,11 @@ void load_cfile_sim()
       if (!strncasecmp(token,"clock",5))
       {
         if (!parse_clock(value))
-          fatal("Option 'clock' expects values '1', or '2 v_bar a_vi prior dist' (line %ld)",
+          fatal("Option 'clock' on line %ld expects either of the following "
+                "three formats:\n\n"
+                "  clock = 1                         # molecular (strict) clock\n"
+                "  clock = 2 v_bar a_vi prior dist   # relaxed clock (independent-rates model)\n"
+                "  clock = 3 v_bar a_vi prior dist   # relaxed clock (correlated-rates model)\n",
                 line_count);
         valid = 1;
       }
