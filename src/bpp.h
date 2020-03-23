@@ -1482,8 +1482,7 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                  msa_t ** msa_list,
                                  list_t * maplist,
                                  unsigned int ** weights,
-                                 int msa_count,
-                                 const unsigned int * map);
+                                 int msa_count);
 
 /* functions in dump.c */
 

@@ -581,11 +581,11 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                  msa_t ** msa_list,
                                  list_t * maplist,
                                  unsigned int ** weights,
-                                 int msa_count,
-                                 const unsigned int * map)
+                                 int msa_count)
 {
   long i;
   int * cleandata;
+  const unsigned int * map = NULL;
   unsigned long ** resolution_count;
 
   cleandata = (int *)xcalloc((size_t)msa_count,sizeof(int));
@@ -600,6 +600,17 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                                sizeof(unsigned long *));
   for (i = 0; i < msa_count; ++i)
   {
+    if (msa_list[i]->dtype == BPP_DATA_DNA)
+    {
+      map = pll_map_nt;
+    }
+    else if (msa_list[i]->dtype == BPP_DATA_AA)
+    {
+      map = pll_map_aa;
+    }
+    else
+      assert(0);
+
     resolution_count[i] = diploid_resolve_locus(msa_list[i],
                                                 (int)i,
                                                 weights[i],
