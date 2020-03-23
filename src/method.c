@@ -1823,6 +1823,7 @@ static FILE * init(stree_t ** ptr_stree,
         compress_method = COMPRESS_GENERAL;
       else
       {
+        /* TODO: Custom compression routines for the various models */
         compress_method = COMPRESS_GENERAL;
       }
     }
@@ -1936,8 +1937,7 @@ static FILE * init(stree_t ** ptr_stree,
                                        msa_list,
                                        map_list,
                                        weights,
-                                       msa_count,
-                                       pll_map_nt);
+                                       msa_count);
 
     /* TODO: KEEP WEIGHTS */
     //for (i = 0; i < msa_count; ++i) free(weights[i]);
@@ -1950,14 +1950,37 @@ static FILE * init(stree_t ** ptr_stree,
                                                       sizeof(unsigned int *));
     for (i = 0; i < msa_count; ++i)
     {
+      int compress_method;
+
       assert(msa_list[i]->dtype == BPP_DATA_DNA);
+      if (msa_list[i]->dtype == BPP_DATA_DNA)
+      {
+        pll_map = pll_map_nt;
+        if (msa_list[i]->model == BPP_DNA_MODEL_JC69)
+          compress_method = COMPRESS_JC69;
+        else if (msa_list[i]->model == BPP_DNA_MODEL_GTR)
+          compress_method = COMPRESS_GENERAL;
+        else
+        {
+          /* TODO: Custom compression routines for the various models */
+          compress_method = COMPRESS_GENERAL;
+        }
+      }
+      else if (msa_list[i]->dtype == BPP_DATA_AA)
+      {
+        pll_map = pll_map_aa;
+        compress_method = COMPRESS_GENERAL;
+      }
+      else
+        assert(0);
+
       /* compress again for JC69 and get mappings */
       mapping[i] = compress_site_patterns_diploid(msa_list[i]->sequence,
-                                                  pll_map_nt,
+                                                  pll_map,
                                                   msa_list[i]->count,
                                                   &(msa_list[i]->length),
                                                   tmpwgt+i,
-                                                  COMPRESS_JC69);
+                                                  compress_method);
     }
     fprintf(fp_out, "COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES\n\n");
     msa_print_phylip(fp_out,msa_list,msa_count,tmpwgt);

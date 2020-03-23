@@ -821,7 +821,9 @@ static long parse_locusrate(const char * line)
     {
       if (temp != opt_locusrate_prior)
         fatal("ERROR: prior = %s (%s) in 'locusrate' does not match prior = "
-              "%s (%s) in 'clock'", rate_prior_option[temp], rate_prior_name[temp],
+              "%s (%s) in 'clock'",
+              rate_prior_option[temp],
+              rate_prior_name[temp],
               rate_prior_option[opt_locusrate_prior],
               rate_prior_name[opt_locusrate_prior]);
     }
