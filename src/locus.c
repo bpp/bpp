@@ -2361,7 +2361,7 @@ void locus_update_matrices(locus_t * locus,
   for (n = 0; n < locus->rate_cats; ++n)
   {
     unsigned int param_index = param_indices[n];
-    if (!locus->eigen_decomp_valid[0])
+    if (!locus->eigen_decomp_valid[param_index])
     {
       pll_update_eigen(locus->eigenvecs[param_index],
                        locus->inv_eigenvecs[param_index],

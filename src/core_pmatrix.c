@@ -758,6 +758,7 @@ void bpp_core_update_pmatrix(locus_t * locus,
     for (n = 0; n < rate_cats; ++n)
     {
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
+      t *= locus->rates[n];
 
       evecs = eigenvecs[param_indices[n]];
       inv_evecs = inv_eigenvecs[param_indices[n]];
