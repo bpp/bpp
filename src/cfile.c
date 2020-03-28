@@ -2105,7 +2105,7 @@ void load_cfile()
         if (!get_string(value,&temp))
           fatal("Option %s expects a string (line %ld)", token, line_count);
 
-        if (!strcmp(temp,"cpu"))
+        if (!strcasecmp(temp,"cpu"))
           opt_arch = PLL_ATTRIB_ARCH_CPU;
         else if (!strcasecmp(temp,"sse"))
           opt_arch = PLL_ATTRIB_ARCH_SSE;

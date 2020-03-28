@@ -1154,7 +1154,6 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
   unsigned int rate_cats = locus->rate_cats;
   unsigned int attrib = locus->attributes;
   double t;
-  const double * rates = locus->rates;
   double * const * eigenvals = locus->eigenvals;
   double * const * eigenvecs = locus->eigenvecs;
   double * const * inv_eigenvecs = locus->inv_eigenvecs;
@@ -1188,14 +1187,14 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
   for (n = 0; n < rate_cats; ++n)
   {
     pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
 
     evecs = eigenvecs[param_indices[n]];
     inv_evecs = inv_eigenvecs[param_indices[n]];
     evals = eigenvals[param_indices[n]];
 
     /* if branch length is zero then set the p-matrix to identity matrix */
-    if (t < 1e-100)
+    if (bl < 1e-100)
     {
       for (j = 0; j < states; ++j)
         for (k = 0; k < states; ++k)
@@ -1211,7 +1210,7 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
 
       /* exponentiate eigenvalues */
       for (j = 0; j < states; ++j)
-        expd[j] = expm1(evals[j] * rates[n] * t);
+        expd[j] = expm1(evals[j] * bl);
 
       for (j = 0; j < states; ++j)
         for (k = 0; k < states; ++k)
@@ -1346,11 +1345,11 @@ static void locus_update_all_matrices_t92_recursive(locus_t * locus,
     qrates = locus->subst_params[locus->param_indices[n]];
     freqs = locus->frequencies[param_indices[n]];
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
 
     GC = freqs[3]+freqs[2];
-    e1 = expm1(-t);
-    e2 = expm1(-(qrates[0]/qrates[1] + 1)*t / 2);
+    e1 = expm1(-bl);
+    e2 = expm1(-(qrates[0]/qrates[1] + 1)*bl / 2);
 
     pmat[0]  = -(1-GC)/2*e1;
     pmat[1]  = GC/2*e1 - GC*e2;
@@ -1447,7 +1446,7 @@ static void locus_update_all_matrices_tn93_recursive(locus_t * locus,
     qrates = locus->subst_params[locus->param_indices[n]];
     freqs = locus->frequencies[param_indices[n]];
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
 
     A = freqs[0];
     C = freqs[1];
@@ -1460,14 +1459,14 @@ static void locus_update_all_matrices_tn93_recursive(locus_t * locus,
     {
       double kappa = qrates[0] / qrates[1];
       double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
-      bt = t*mr;
+      bt = bl*mr;
       a1t = a2t = kappa*bt;
     }
     else if (locus->model == BPP_DNA_MODEL_F84)
     {
       double kappa = qrates[0] / qrates[1];
       double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
-      bt = t*mr;
+      bt = bl*mr;
       a1t = (1 + kappa / Y)*bt;
       a2t = (1 + kappa / R)*bt;
     }
@@ -1475,7 +1474,7 @@ static void locus_update_all_matrices_tn93_recursive(locus_t * locus,
     {
       assert(locus->model == BPP_DNA_MODEL_TN93);
       double mr = 1 / (2*T*C*qrates[0]+ 2*A*G*qrates[1] + 2*Y*R);
-      bt = t*mr;
+      bt = bl*mr;
       a1t = (qrates[0]/qrates[2])*bt;
       a2t = (qrates[1]/qrates[2])*bt;
     }
@@ -1571,7 +1570,7 @@ static void locus_update_all_matrices_f81_recursive(locus_t * locus,
   {
     freqs = locus->frequencies[param_indices[n]];
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
 
     /* compute beta */
     for (beta=1,j = 0; j < 4; ++j)
@@ -1579,8 +1578,8 @@ static void locus_update_all_matrices_f81_recursive(locus_t * locus,
     beta = 1./beta;
 
     
-    e = exp(-beta*t);
-    em1 = expm1(-beta*t);
+    e = exp(-beta*bl);
+    em1 = expm1(-beta*bl);
 
     /* fill pmatrix */
     for (m=0,j = 0; j < 4; ++j)
@@ -1654,9 +1653,9 @@ static void locus_update_all_matrices_k80_recursive(locus_t * locus,
   {
     qrates = locus->subst_params[locus->param_indices[n]];
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
     kappa = qrates[0] / qrates[1];
-    e1 = expm1(-4*t / (kappa+2));
+    e1 = expm1(-4*bl / (kappa+2));
 
     if (fabs(kappa-1) < 1e-20)
     {
@@ -1669,7 +1668,7 @@ static void locus_update_all_matrices_k80_recursive(locus_t * locus,
     }
     else
     {
-      e2 = expm1(-2 * t*(kappa+1)/(kappa+2));
+      e2 = expm1(-2 * bl*(kappa+1)/(kappa+2));
 
       pmat[0]  = 1 + (e1 + 2*e2)/4;       /* AA */
       pmat[1]  = -e1/4;                   /* AC */
@@ -1751,9 +1750,9 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
   for (n = 0; n < locus->rate_cats; ++n)
   {
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
-    t *= locus->rates[n];
+    double bl = t*locus->rates[n];
 
-    if (t < 1e-100)
+    if (bl < 1e-100)
     {
       pmat[0]  = 1;
       pmat[1]  = 0;
@@ -1777,7 +1776,7 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
     }
     else
     {
-      double a =  (1 + 3*exp(-4*t/3) ) / 4;
+      double a =  (1 + 3*exp(-4*bl/3) ) / 4;
       double b = (1 - a) / 3;
 
       pmat[0]  = a;
@@ -1939,11 +1938,11 @@ static void locus_update_matrices_t92(locus_t * locus,
       qrates = locus->subst_params[locus->param_indices[n]];
       freqs = locus->frequencies[param_indices[n]];
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
 
       GC = freqs[3]+freqs[2];
-      e1 = expm1(-t);
-      e2 = expm1(-(qrates[0]/qrates[1] + 1)*t / 2);
+      e1 = expm1(-bl);
+      e2 = expm1(-(qrates[0]/qrates[1] + 1)*bl / 2);
 
       pmat[0]  = -(1-GC)/2*e1;
       pmat[1]  = GC/2*e1 - GC*e2;
@@ -2016,7 +2015,7 @@ static void locus_update_matrices_tn93(locus_t * locus,
       qrates = locus->subst_params[locus->param_indices[n]];
       freqs = locus->frequencies[param_indices[n]];
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
 
       A = freqs[0];
       C = freqs[1];
@@ -2029,14 +2028,14 @@ static void locus_update_matrices_tn93(locus_t * locus,
       {
         double kappa = qrates[0] / qrates[1];
         double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
-        bt = t*mr;
+        bt = bl*mr;
         a1t = a2t = kappa*bt;
       }
       else if (locus->model == BPP_DNA_MODEL_F84)
       {
         double kappa = qrates[0] / qrates[1];
         double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
-        bt = t*mr;
+        bt = bl*mr;
         a1t = (1 + kappa / Y)*bt;
         a2t = (1 + kappa / R)*bt;
       }
@@ -2044,7 +2043,7 @@ static void locus_update_matrices_tn93(locus_t * locus,
       {
         assert(locus->model == BPP_DNA_MODEL_TN93);
         double mr = 1 / (2*T*C*qrates[0]+ 2*A*G*qrates[1] + 2*Y*R);
-        bt = t*mr;
+        bt = bl*mr;
         a1t = (qrates[0]/qrates[2])*bt;
         a2t = (qrates[1]/qrates[2])*bt;
       }
@@ -2121,7 +2120,7 @@ static void locus_update_matrices_f81(locus_t * locus,
     {
       freqs = locus->frequencies[param_indices[n]];
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
 
       /* compute beta */
       for (beta=1,j = 0; j < 4; ++j)
@@ -2129,8 +2128,8 @@ static void locus_update_matrices_f81(locus_t * locus,
       beta = 1./beta;
 
       
-      e = exp(-beta*t);
-      em1 = expm1(-beta*t);
+      e = exp(-beta*bl);
+      em1 = expm1(-beta*bl);
 
       /* fill pmatrix */
       for (m=0,j = 0; j < 4; ++j)
@@ -2183,9 +2182,9 @@ static void locus_update_matrices_k80(locus_t * locus,
     {
       qrates = locus->subst_params[locus->param_indices[n]];
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
       kappa = qrates[0] / qrates[1];
-      e1 = expm1(-4*t / (kappa+2));
+      e1 = expm1(-4*bl / (kappa+2));
 
       if (fabs(kappa-1) < 1e-20)
       {
@@ -2198,7 +2197,7 @@ static void locus_update_matrices_k80(locus_t * locus,
       }
       else
       {
-        e2 = expm1(-2 * t*(kappa+1)/(kappa+2));
+        e2 = expm1(-2 * bl*(kappa+1)/(kappa+2));
 
         pmat[0]  = 1 + (e1 + 2*e2)/4;       /* AA */
         pmat[1]  = -e1/4;                   /* AC */
@@ -2260,9 +2259,9 @@ static void locus_update_matrices_jc69(locus_t * locus,
     for (n = 0; n < locus->rate_cats; ++n)
     {
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
 
-      if (t < 1e-100)
+      if (bl < 1e-100)
       {
         pmat[0]  = 1;
         pmat[1]  = 0;
@@ -2286,7 +2285,7 @@ static void locus_update_matrices_jc69(locus_t * locus,
       }
       else
       {
-        double a =  (1 + 3*exp(-4*t/3) ) / 4;
+        double a =  (1 + 3*exp(-4*bl/3) ) / 4;
         double b = (1 - a) / 3;
 
         pmat[0]  = a;
