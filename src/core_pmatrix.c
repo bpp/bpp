@@ -684,7 +684,6 @@ void bpp_core_update_pmatrix(locus_t * locus,
   unsigned int rate_cats = locus->rate_cats;
   unsigned int attrib = locus->attributes;
   double t;
-  const double * rates = locus->rates;
   double * const * eigenvals = locus->eigenvals;
   double * const * eigenvecs = locus->eigenvecs;
   double * const * inv_eigenvecs = locus->inv_eigenvecs;
@@ -758,14 +757,14 @@ void bpp_core_update_pmatrix(locus_t * locus,
     for (n = 0; n < rate_cats; ++n)
     {
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
-      t *= locus->rates[n];
+      double bl = t*locus->rates[n];
 
       evecs = eigenvecs[param_indices[n]];
       inv_evecs = inv_eigenvecs[param_indices[n]];
       evals = eigenvals[param_indices[n]];
 
       /* if branch length is zero then set the p-matrix to identity matrix */
-      if (t < 1e-100)
+      if (bl < 1e-100)
       {
         for (j = 0; j < states; ++j)
           for (k = 0; k < states; ++k)
@@ -781,7 +780,7 @@ void bpp_core_update_pmatrix(locus_t * locus,
 
         /* exponentiate eigenvalues */
         for (j = 0; j < states; ++j)
-          expd[j] = expm1(evals[j] * rates[n] * t);
+          expd[j] = expm1(evals[j] * bl);
 
         for (j = 0; j < states; ++j)
           for (k = 0; k < states; ++k)
