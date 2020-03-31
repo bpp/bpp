@@ -275,6 +275,49 @@ static long get_long(const char * line, long * value)
   return ws + end - start;
 }
 
+static long get_doubleordash(const char * line, double * value)
+{
+  int len=0;
+  long ret = 0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  if (!strcmp(start,"-"))
+  {
+    free(s);
+    return ws+end-start;
+  }
+
+  ret = sscanf(start, "%lf%n", value, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
+  {
+    free(s);
+    return 0;
+  }
+
+  free(s);
+  return ws + end - start;
+}
+
 static long get_double(const char * line, double * value)
 {
   int ret,len=0;
@@ -1431,7 +1474,7 @@ static long parse_finetune(const char * line)
   /* now read 7 values */
 
   /* 1. gene tree age finetune param */
-  count = get_double(p, &opt_finetune_gtage);
+  count = get_doubleordash(p, &opt_finetune_gtage);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1444,7 +1487,7 @@ static long parse_finetune(const char * line)
 
   
   /* 2. gene tree spr finetune param */
-  count = get_double(p, &opt_finetune_gtspr);
+  count = get_doubleordash(p, &opt_finetune_gtspr);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1457,7 +1500,7 @@ static long parse_finetune(const char * line)
 
 
   /* 3. theta finetune param */
-  count = get_double(p, &opt_finetune_theta);
+  count = get_doubleordash(p, &opt_finetune_theta);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1469,7 +1512,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 4. tau finetune param */
-  count = get_double(p, &opt_finetune_tau);
+  count = get_doubleordash(p, &opt_finetune_tau);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1481,7 +1524,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 5. mixing finetune param */
-  count = get_double(p, &opt_finetune_mix);
+  count = get_doubleordash(p, &opt_finetune_mix);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1496,7 +1539,7 @@ static long parse_finetune(const char * line)
   double opt_finetune_seqerr;
 
   /* 6. locusrate finetune param */
-  count = get_double(p, &opt_finetune_locusrate);
+  count = get_doubleordash(p, &opt_finetune_locusrate);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1509,7 +1552,7 @@ static long parse_finetune(const char * line)
 
   #if 0
   /* 7. sequence error finetune param */
-  count = get_double(p, &opt_finetune_seqerr);
+  count = get_doubleordash(p, &opt_finetune_seqerr);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1522,7 +1565,7 @@ static long parse_finetune(const char * line)
   #endif
 
   /* 7. phi finetune */
-  count = get_double(p, &opt_finetune_phi);
+  count = get_doubleordash(p, &opt_finetune_phi);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1534,7 +1577,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 8. freqs finetune */
-  count = get_double(p, &opt_finetune_freqs);
+  count = get_doubleordash(p, &opt_finetune_freqs);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1546,7 +1589,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 9. qrates finetune */
-  count = get_double(p, &opt_finetune_qrates);
+  count = get_doubleordash(p, &opt_finetune_qrates);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1558,7 +1601,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 10. alpha finetune */
-  count = get_double(p, &opt_finetune_alpha);
+  count = get_doubleordash(p, &opt_finetune_alpha);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1570,7 +1613,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 11. mubar finetune */
-  count = get_double(p, &opt_finetune_mubar);
+  count = get_doubleordash(p, &opt_finetune_mubar);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1582,7 +1625,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 12. sigma2bar finetune */
-  count = get_double(p, &opt_finetune_sigma2bar);
+  count = get_doubleordash(p, &opt_finetune_sigma2bar);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1594,7 +1637,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 13. mu_i finetune */
-  count = get_double(p, &opt_finetune_mui);
+  count = get_doubleordash(p, &opt_finetune_mui);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1606,7 +1649,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 14. sigma2_i finetune */
-  count = get_double(p, &opt_finetune_sigma2i);
+  count = get_doubleordash(p, &opt_finetune_sigma2i);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1618,7 +1661,7 @@ static long parse_finetune(const char * line)
   }
 
   /* 15. branchrates finetune */
-  count = get_double(p, &opt_finetune_branchrate);
+  count = get_doubleordash(p, &opt_finetune_branchrate);
   if (!count) goto l_unwind;
 
   p += count;
