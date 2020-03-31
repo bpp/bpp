@@ -284,12 +284,12 @@ void stree_show_pptable(stree_t * stree, int show_taus_and_thetas)
 
   printf(" ");
   for (i = 0; i < nodes_count; ++i)
-    printf("  %ld", i);
+    printf("  %ld", i+1);
   printf("\n");
 
   for (i = 0; i < nodes_count; ++i)
   {
-    printf("%*ld %-*s ", index_digits, i, (int)maxlen, stree->nodes[i]->label);
+    printf("%*ld %-*s ", index_digits, i+1, (int)maxlen, stree->nodes[i]->label);
 
     for (j = 0; j < nodes_count; ++j)
       printf("  %*d", longint_len(j), stree->pptable[i][j]);

@@ -237,7 +237,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   else
   {
     for (i = 0; i < mean_theta_count; ++i)
-      fprintf(fp, "mthet%ld: mean theta of node %ld\n", i+1,i);
+      fprintf(fp, "mthet%ld: mean theta of node %ld\n", i+1,i+1);
   }
   if (mean_tau_count == 1)
     fprintf(fp, " mtau1: root node mean tau\n");
@@ -440,6 +440,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 {
   int i,j;
   int extra;
+  int spacing = 1;
+  int empty = 4;  /* for entries not available */
   FILE * fp[2];
 
   fp[0] = stdout; fp[1] = fp_out;
@@ -452,160 +454,198 @@ static void reset_finetune(FILE * fp_out, double * pjump)
   for (j = 0; j < 2; ++j)
   {
     fprintf(fp[j], "\n                   ");
-    fprintf(fp[j],  "%*s", prec_ft+2, "Gage");    /*  0 */
-    fprintf(fp[j], " %*s", prec_ft+2, "Gspr");    /*  1 */
-    fprintf(fp[j], " %*s", prec_ft+2, "thet");    /*  2 */
-    fprintf(fp[j], " %*s", prec_ft+2, "tau");     /*  3 */
-    fprintf(fp[j], " %*s", prec_ft+2, "mix");     /*  4 */
-    fprintf(fp[j], " %*s", prec_ft+2, "lrht");    /*  5 */
-    fprintf(fp[j], " %*s", prec_ft+2, "phi");     /*  6 */
-    fprintf(fp[j], " %*s", prec_ft+2, "pi");      /*  7 */
-    fprintf(fp[j], " %*s", prec_ft+2, "qmat");    /*  8 */
-    fprintf(fp[j], " %*s", prec_ft+2, "alfa");    /*  9 */
-    fprintf(fp[j], " %*s", prec_ft+2, "mubr");    /* 10 */
-    fprintf(fp[j], " %*s", prec_ft+2, "nubr");    /* 11 */
-    fprintf(fp[j], " %*s", prec_ft+2, "mu_i");    /* 12 */
-    fprintf(fp[j], " %*s", prec_ft+2, "nu_i");    /* 13 */
-    fprintf(fp[j], " %*s", prec_ft+2, "brte");    /* 14 */
+    fprintf(fp[j],  "%*s", prec_ft+spacing, "Gage");      /*  0 */
+    fprintf(fp[j], " %*s", prec_ft+spacing, "Gspr");      /*  1 */
+    fprintf(fp[j], " %*s", prec_ft+spacing, "thet");      /*  2 */
+    fprintf(fp[j], " %*s", prec_ft+spacing, "tau");       /*  3 */
+    fprintf(fp[j], " %*s", prec_ft+spacing, "mix");       /*  4 */
+    if (extra)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "lrht");    /*  5 */
+    else
+      fprintf(fp[j], " %*s", empty, "lrht");
+    if (opt_msci)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "phi");     /*  6 */
+    else
+      fprintf(fp[j], " %*s", empty, "phi");
+    if (enabled_prop_freqs)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "pi");      /*  7 */
+    else
+      fprintf(fp[j], " %*s", empty, "pi");
+    if (enabled_prop_qrates)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "qmat");    /*  8 */
+    else
+      fprintf(fp[j], " %*s", empty, "qmat");
+    if (enabled_prop_alpha)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "alfa");    /*  9 */
+    else
+      fprintf(fp[j], " %*s", empty, "alfa");
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+        opt_est_mubar)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "mubr");    /* 10 */
+    else
+      fprintf(fp[j], " %*s", empty, "mubr");
+    if (opt_clock != BPP_CLOCK_GLOBAL &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp[j], " %*s", prec_ft+spacing, "nubr");    /* 11 */
+    else
+      fprintf(fp[j], " %*s", empty, "nubr");
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
+         opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
+      fprintf(fp[j], " %*s", prec_ft+spacing, "mu_i");    /* 12 */
+    else
+      fprintf(fp[j], " %*s", empty, "mu_i");
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      fprintf(fp[j], " %*s", prec_ft+spacing, "nu_i");    /* 13 */
+      fprintf(fp[j], " %*s", prec_ft+spacing, "brte");    /* 14 */
+    }
+    else
+    {
+      fprintf(fp[j], " %*s", empty, "nu_i");
+      fprintf(fp[j], " %*s", empty, "brte");
+    }
   }
   for (j = 0; j < 2; ++j)
   {
     fprintf(fp[j], "\nCurrent Pjump:    ");
 
     for (i = 0; i < PROP_COUNT; ++i)
-      fprintf(fp[j], " %8.5f", pjump[i]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[i]);
 
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_LRHT_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_LRHT_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* phi pjump */
     if (opt_msci)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_PHI_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_PHI_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_FREQS_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_FREQS_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_QRATES_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_QRATES_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_ALPHA_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_ALPHA_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* mubar pjump */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUBAR_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUBAR_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     
     /* sigma2bar pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
 
     /* mu_i with conditional iid */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_MUI_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUI_INDEX]);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* sigma2_i and branch rates pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_SIGMA2I_INDEX]);
-      fprintf(fp[j], " %8.5f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
+      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_SIGMA2I_INDEX]);
+      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_BRANCHRATE_INDEX]);
     }
     else
     {
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
+      fprintf(fp[j], " %*s", empty, "- ");
     }
 
     fprintf(fp[j], "\n");
 
     //printf("finetune_mui: %.15f", opt_finetune_mui);
-    fprintf(fp[j], "Current finetune: ");
-    fprintf(fp[j], " %8.5f", opt_finetune_gtage);
-    fprintf(fp[j], " %8.5f", opt_finetune_gtspr);
-    fprintf(fp[j], " %8.5f", opt_finetune_theta);
-    fprintf(fp[j], " %8.5f", opt_finetune_tau);
-    fprintf(fp[j], " %8.5f", opt_finetune_mix);
+    fprintf(fp[j], "Current finetune:");
+//    fprintf(fp[j], " %8.5f", opt_finetune_gtage);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
-      fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_locusrate);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* phi */
     if (opt_msci)
-      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_phi);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
 
     if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_freqs);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_qrates);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_alpha);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* mubar */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
-      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* sigma2bar */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2bar);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
 
     /* mu_i with conditional iid */
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-      fprintf(fp[j], " %8.5f", opt_finetune_mui);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mui);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     /* sigma2_i and branch rates */
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
-      fprintf(fp[j], " %8.5f", opt_finetune_branchrate);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2i);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_branchrate);
     }
     else
     {
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
+      fprintf(fp[j], " %*s", empty, "- ");
     }
 
     fprintf(fp[j], "\n");
@@ -647,64 +687,64 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
   for (j = 0; j < 2; ++j)
   {
-    fprintf(fp[j], "New finetune:     ");
-    fprintf(fp[j], " %8.5f", opt_finetune_gtage);
-    fprintf(fp[j], " %8.5f", opt_finetune_gtspr);
-    fprintf(fp[j], " %8.5f", opt_finetune_theta);
-    fprintf(fp[j], " %8.5f", opt_finetune_tau);
-    fprintf(fp[j], " %8.5f", opt_finetune_mix);
+    fprintf(fp[j], "New finetune:    ");
+    fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
     if (extra)
-      fprintf(fp[j], " %8.5f", opt_finetune_locusrate);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_locusrate);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty,  "- ");
 
     if (opt_msci)
-      fprintf(fp[j], " %8.5f", opt_finetune_phi);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_phi);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_freqs)
-      fprintf(fp[j], " %8.5f", opt_finetune_freqs);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_freqs);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_qrates)
-      fprintf(fp[j], " %8.5f", opt_finetune_qrates);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_qrates);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %8.5f", opt_finetune_alpha);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_alpha);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
-      fprintf(fp[j], " %8.5f", opt_finetune_mubar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2bar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2bar);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-      fprintf(fp[j], " %8.5f", opt_finetune_mui);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mui);
     else
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %8.5f", opt_finetune_sigma2i);
-      fprintf(fp[j], " %8.5f", opt_finetune_branchrate);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2i);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_branchrate);
     }
     else
     {
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
-      fprintf(fp[j], " %*s", prec_ft+2, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
+      fprintf(fp[j], " %*s", empty, "- ");
     }
 
     fprintf(fp[j], "\n");
@@ -2735,6 +2775,7 @@ void cmd_run()
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
   {
+    long print_newline = 0;
     #if 0
     /* update progress bar */
     if (!opt_quiet)
@@ -2761,7 +2802,12 @@ void cmd_run()
 
 
       if (opt_finetune_reset && opt_burnin >= 200)
+      {
+        /* If last MCMC status line did not end with a newline, print one */
+        if (!print_newline)
+          fprintf(stdout, "\n");
         reset_finetune(fp_out, pjump);
+      }
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
@@ -3102,7 +3148,7 @@ void cmd_run()
     /* print MCMC status on screen */
     if (printk <= 500 || (i+1) % (printk / 200) == 0)
     {
-      long print_newline = (printk >= 50 && (i+1) % (printk / 20) == 0);
+      print_newline = (printk >= 50 && (i+1) % (printk / 20) == 0);
 
       /* print progress percentage */
       printf("\r%3.0f%%  ", (i + 1.499) / printk * 100.);
