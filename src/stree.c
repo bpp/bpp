@@ -2443,12 +2443,16 @@ void propose_tau_update_gtrees(locus_t ** loci,
        //if (__mark_count[i] + __extra_count[i] >= 2*loci[i]->tips-1)
        //  assert(0);
 
-    if (opt_clock == BPP_CLOCK_CORR)
+    if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
     {
       double new_prior_rates = lnprior_rates(gtree[i],stree,i);
       logpr_diff += new_prior_rates - gtree[i]->lnprior_rates;
       gtree[i]->old_lnprior_rates = gtree[i]->lnprior_rates;
       gtree[i]->lnprior_rates = new_prior_rates;
+      #if 0
+      assert(new_prior_rates > gtree[i]->old_lnprior_rates - PLL_MISC_EPSILON &&
+             new_prior_rates < gtree[i]->old_lnprior_rates + PLL_MISC_EPSILON);
+      #endif
     }
   }
   *ret_logpr_diff = logpr_diff;
@@ -2807,7 +2811,14 @@ static long propose_tau(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
       logpr += affected[j]->notheta_logpr_contrib;
 
-    logpr_diff = logpr - stree->notheta_logpr;
+    /* Note: At this point logpr_diff must be 0 unless
+       we have a correlated clock with LN */
+    #if 0
+    if (opt_clock != BPP_CLOCK_CORR || opt_rate_prior != BPP_BRATE_PRIOR_LOGNORMAL)
+      assert(logpr_diff == 0);
+    #endif
+
+    logpr_diff += logpr - stree->notheta_logpr;
     stree->notheta_old_logpr = stree->notheta_logpr;
     stree->notheta_logpr = logpr;
   }
@@ -2884,7 +2895,7 @@ static long propose_tau(locus_t ** loci,
       for (j = 0; j < k; ++j)
         gt_nodesptr[j]->time = old_ageptr[j];
 
-      if (opt_clock == BPP_CLOCK_CORR)
+      if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
       {
         gtree[i]->lnprior_rates = gtree[i]->old_lnprior_rates;
       }
@@ -4797,6 +4808,19 @@ static double prior_logratio_rates_corr(snode_t * node,
     double beta = alpha / node->parent->brate[msa_index];
 
     logratio = -beta*(new_rate - old_rate) + (alpha-1)*log(new_rate / old_rate);
+
+    if (node->left)
+    {
+      assert(node->right);
+
+      double betanew = alpha / new_rate;
+      double betaold = alpha / old_rate;
+      double betadiff = betaold - betanew;
+
+      logratio += betadiff *
+                  (node->left->brate[msa_index]+node->right->brate[msa_index]);
+      logratio += 2*alpha*log(betanew/betaold);
+    }
   }
 
   return logratio;

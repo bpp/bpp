@@ -125,6 +125,18 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                               thread_index);
       }
     }
+
+    if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+    {
+      double new_prior_rates = lnprior_rates(gtree[i], stree, i);
+      lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
+      gtree[i]->old_lnprior_rates = gtree[i]->lnprior_rates;
+      gtree[i]->lnprior_rates = new_prior_rates;
+      #if 0
+      assert(new_prior_rates > gtree[i]->old_lnprior_rates - PLL_MISC_EPSILON &&
+             new_prior_rates < gtree[i]->old_lnprior_rates + PLL_MISC_EPSILON);
+      #endif
+    }
         
 
     if (opt_est_theta)
@@ -293,6 +305,10 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   /* update gene trees with either parallel or serial code */
   if (opt_threads > 1)
   {
+    /* TODO: It seems logpr_change is not used with multiple threads and 
+       integrated out thetas. This must be fixed. */
+    assert(opt_est_theta);
+
     thread_data_t td;
     td.locus = locus; td.gtree = gtree; td.stree = stree;
     td.c = c;
@@ -317,6 +333,11 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       logpr += logpr_change;
                               
   }
+
+  #if 0
+  if (opt_est_theta && !(opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL))
+    assert(logpr == 0);
+  #endif
 
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
@@ -437,6 +458,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         if (gtree[i]->nodes[j]->parent)
           gtree[i]->nodes[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
                                                               gtree[i]->nodes[j]->pmatrix_index);
+      
+      if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+        gtree[i]->lnprior_rates = gtree[i]->old_lnprior_rates;
     }
   }
   free(snodes);

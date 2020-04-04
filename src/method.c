@@ -3151,7 +3151,7 @@ void cmd_run()
       print_newline = (printk >= 50 && (i+1) % (printk / 20) == 0);
 
       /* print progress percentage */
-      printf("\r%3.0f%%  ", (i + 1.499) / printk * 100.);
+      printf("\r%4.0f%% ", (i + 1.499) / printk * 100.);
 
       double mean_pjump_rj = 0;
       if (opt_method == METHOD_10)
@@ -3161,7 +3161,7 @@ void cmd_run()
       status_print_pjump(stdout, pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
       if (print_newline)
       {
-        fprintf(fp_out, "%3.0f%%  ", (i + 1.499) / printk * 100.);
+        fprintf(fp_out, "%4.0f%% ", (i + 1.499) / printk * 100.);
         status_print_pjump(fp_out,pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
       }
 
