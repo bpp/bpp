@@ -2084,7 +2084,8 @@ static void update_locusrate_information()
         opt_locusrate_prior = BPP_LOCRATE_PRIOR_DIR;
     }
 
-    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+        opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     {
       /* if mubar_alpha = mubar_beta = 0 then fix (do not estimate) mubar */
       if (opt_mubar_alpha == 0 && opt_mubar_beta == 0)

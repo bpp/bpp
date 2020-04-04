@@ -3005,8 +3005,7 @@ void cmd_run()
       pjump[BPP_MOVE_SIGMA2I_INDEX] = (pjump[BPP_MOVE_SIGMA2I_INDEX]*(ft_round-1)+ratio) /
                                       (double)ft_round;
 
-      if (opt_est_locusrate == MUTRATE_ESTIMATE &&
-          opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       {
         ratio = prop_locusrate_sigma2bar(stree,gtree);
         pjump[BPP_MOVE_SIGMA2BAR_INDEX] = (pjump[BPP_MOVE_SIGMA2BAR_INDEX]*(ft_round-1)+ratio) /
