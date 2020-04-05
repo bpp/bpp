@@ -4532,8 +4532,11 @@ double prop_locusrate_mui(gtree_t ** gtree,
                       (opt_mui_alpha/stree->locusrate_mubar)*(new_mui-old_mui);
     }
 
-    if (opt_clock == BPP_CLOCK_GLOBAL)
+    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
     {
+      if (opt_clock == BPP_CLOCK_CORR)
+        stree->root->brate[i] = gtree[i]->rate_mui;
+
       /* if molecular clock then recompute pmatrices, CLVs and log-L */
       locus_update_all_matrices(locus[i],gtree[i],stree,i);
 
@@ -4558,12 +4561,10 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
       lnacceptance += logl - gtree[i]->logl;
     }
-    else
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
     {
       /* if relaxed clock then update rates prior */
-
-      if (opt_clock == BPP_CLOCK_CORR)
-        stree->root->brate[i] = gtree[i]->rate_mui;
 
       new_prior_rates = lnprior_rates(gtree[i],stree,i);
       lnacceptance += new_prior_rates - gtree[i]->lnprior_rates;
@@ -4574,12 +4575,13 @@ double prop_locusrate_mui(gtree_t ** gtree,
       /* accepted */
       accepted++;
 
-      if (opt_clock == BPP_CLOCK_GLOBAL)
+      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
       {
         /* update log-likelihood */
         gtree[i]->logl = logl;
       }
-      else
+
+      if (opt_clock != BPP_CLOCK_GLOBAL)
       {
         /* relaxed clock */
 
@@ -4597,7 +4599,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
       if (opt_clock == BPP_CLOCK_CORR)
         stree->root->brate[i] = old_mui;
 
-      if (opt_clock == BPP_CLOCK_GLOBAL)
+      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
       {
         /* reset selected locus */
         gnodeptr = gtree[i]->nodes;
