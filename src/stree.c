@@ -4720,6 +4720,7 @@ static double prior_logratio_rates_corr_ln(snode_t * node_changed,
   double tA,t1,t2;
   double rA,r1,r2,y1,y2;
   double detT;
+  double zz;
   double Tinv[4];
   double rates[2] = { old_rate, new_rate };
   double logterm[2] = {0,0};
@@ -4772,8 +4773,9 @@ static double prior_logratio_rates_corr_ln(snode_t * node_changed,
 
       y1 = log(r1/rA) + (tA+t1)*variance/2;
       y2 = log(r2/rA) + (tA+t2)*variance/2;
-      logterm[j] += (y1*y1*Tinv[0] + 2*y1*y2*Tinv[1] + y2*y2*Tinv[3]);
-      logterm[j] += logterm[j]/(2*variance) + log(r1*r2);
+      zz = (y1*y1*Tinv[0] + 2*y1*y2*Tinv[1] + y2*y2*Tinv[3]);
+      zz = zz/(2*variance) + log(r1*r2);
+      logterm[j] += zz;
     }
   }
 
