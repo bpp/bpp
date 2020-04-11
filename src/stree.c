@@ -4136,27 +4136,27 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
   if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
   {
     assert(!opt_msci);
-    mui = gtree->rate_mui;
-    sigma2i = gtree->rate_sigma2i;
-    alpha = mui * mui / sigma2i;
-    double term = 0;
 
-    for (i = 0; i < total_nodes; ++i)
+
+    /**** Ziheng-2020-04-06 ****/
+    /* need to rewrite this part of the code*/
+    double v = gtree->rate_sigma2i;
+
+    for (i = stree->tip_count; i < total_nodes; ++i)
     {
       snode = stree->nodes[i];
-      if (!snode->parent) continue;
+      if (!snode->parent)
+        assert(snode->brate[msa_index] == gtree->rate_mui);
 
-      r = snode->brate[msa_index];
-      beta = alpha / snode->parent->brate[msa_index];
-      logpr += -beta*r + (alpha-1)*log(r);
-      term += log(beta);
+      double m = snode->brate[msa_index];
+      double alpha = m*m / v;
+      double beta = alpha / m;
+      double r1 = snode->left->brate[msa_index];
+      double r2 = snode->right->brate[msa_index];
+      logpr += -2 * lgamma(alpha) + 2 * alpha*log(beta) - beta*(r1 + r2) + (alpha - 1)*log(r1*r2);
     }
-    term *= alpha;
-    term -= lgamma(alpha)*(total_nodes-1);
-    logpr += term;
   }
-
-  if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
+  else if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
   {
     double t1,t2,tA,detT;
     double Tinv[4];
@@ -4202,8 +4202,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
     assert(!opt_msci);
     logpr -= 0.5*log(2*BPP_PI*sigma2i) * stree->inner_count*2;
   }
-
-  if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
+  else if (opt_clock == BPP_CLOCK_IND && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
   {
     /* clock == BPP_CLOCK_IND and gamma rate prior */
 
@@ -4212,9 +4211,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
       
       Pr = \Prod_{i=1}^{k} \frac{\beta^\alpha}{\Gamma(\alpha)}
            r_{i}^{\alpha-1} e^{-\beta r_i}
-
       where k is the number of proposed rates (rates_count)
-
     */
 
     mui = gtree->rate_mui;
@@ -4491,7 +4488,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
-    if (opt_clock == BPP_CLOCK_GLOBAL)
+    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
     {
       /* if molecular clock then swap pmatrices */
 
@@ -4507,8 +4504,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
     old_mui = gtree[i]->rate_mui;
     old_logmui = log(old_mui);
 
-    double r = old_logmui + opt_finetune_mui *
-               legacy_rnd_symmetrical(thread_index);
+    double r = old_logmui + opt_finetune_mui * legacy_rnd_symmetrical(thread_index);
     new_logmui = reflect(r,-99,99,thread_index);
     gtree[i]->rate_mui = new_mui = exp(new_logmui);
 
@@ -4806,24 +4802,28 @@ static double prior_logratio_rates_corr(snode_t * node,
   else
   {
     /* gamma */
-    double mui = gtree->rate_mui;
-    double sigma2i = gtree->rate_sigma2i;
-    double alpha = mui*mui / sigma2i;
-    double beta = alpha / node->parent->brate[msa_index];
 
-    logratio = -beta*(new_rate - old_rate) + (alpha-1)*log(new_rate / old_rate);
+    /**** Ziheng-2020-04-06 ****/
+    double m = node->parent->brate[msa_index];
+    double v = gtree->rate_sigma2i;
+    double alpha = m*m / v;
+    double beta = alpha / m;
 
+    logratio = -beta*(new_rate - old_rate) + (alpha - 1)*log(new_rate / old_rate);
     if (node->left)
     {
       assert(node->right);
 
-      double betanew = alpha / new_rate;
-      double betaold = alpha / old_rate;
-      double betadiff = betaold - betanew;
+      double alpha = old_rate*old_rate / v;
+      double beta = alpha / old_rate;
+      double alphanew = new_rate*new_rate / v;
+      double betanew = alphanew / new_rate;
+      double r1 = node->left->brate[msa_index];
+      double r2 = node->right->brate[msa_index];
 
-      logratio += betadiff *
-                  (node->left->brate[msa_index]+node->right->brate[msa_index]);
-      logratio += 2*alpha*log(betanew/betaold);
+      logratio += -2*lgamma(alphanew) + 2*alphanew*log(betanew) - betanew*(r1+r2) + (alphanew-1)*log(r1*r2);
+      logratio -= -2*lgamma(alpha)    + 2*alpha*log(beta)       - beta*(r1+r2)    + (alpha-1)*log(r1*r2);
+
     }
   }
 
