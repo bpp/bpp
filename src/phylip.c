@@ -54,7 +54,6 @@ static int dfa_parse(phylip_t * fd,
           bpp_errno = ERROR_PHYLIP_LONGSEQ;
           snprintf(bpp_errmsg, 200, "Sequence %d (%.100s) longer than expected",
                    seqno+1, msa->label[seqno]);
-                   printf("Offset: %d j: %d msa->length: %d\n", offset, j, msa->length);
           return -1;
         }
         seqdata[j++] = c;
@@ -512,7 +511,7 @@ msa_t * phylip_parse_sequential(phylip_t * fd)
   int i,j;
   long headerlen;
 
-  msa_t * msa = (msa_t *)xmalloc(sizeof(msa_t));
+  msa_t * msa = (msa_t *)xcalloc(1,sizeof(msa_t));
 
   while (emptyline(fd->line)) getnextline(fd);
     
