@@ -547,10 +547,10 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     else
       fprintf(fp[j], " %*s", empty, "- ");
     
-    /* sigma2bar pjump */
+    /* nubar pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_NUBAR_INDEX]);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -563,10 +563,10 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
-    /* sigma2_i and branch rates pjump */
+    /* nu_i and branch rates pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_SIGMA2I_INDEX]);
+      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_NUI_INDEX]);
       fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_BRANCHRATE_INDEX]);
     }
     else
@@ -620,10 +620,10 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
-    /* sigma2bar */
+    /* nubar */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2bar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_nubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -636,10 +636,10 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
-    /* sigma2_i and branch rates */
+    /* nu_i and branch rates */
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2i);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_nui);
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_branchrate);
     }
     else
@@ -674,14 +674,14 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_MUBAR_INDEX], &opt_finetune_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    reset_finetune_onestep(pjump[BPP_MOVE_SIGMA2BAR_INDEX], &opt_finetune_sigma2bar);
+    reset_finetune_onestep(pjump[BPP_MOVE_NUBAR_INDEX], &opt_finetune_nubar);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
     reset_finetune_onestep(pjump[BPP_MOVE_MUI_INDEX], &opt_finetune_mui);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    reset_finetune_onestep(pjump[BPP_MOVE_SIGMA2I_INDEX], &opt_finetune_sigma2i);
+    reset_finetune_onestep(pjump[BPP_MOVE_NUI_INDEX], &opt_finetune_nui);
     reset_finetune_onestep(pjump[BPP_MOVE_BRANCHRATE_INDEX], &opt_finetune_branchrate);
   }
 
@@ -725,7 +725,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2bar);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_nubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -738,7 +738,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_sigma2i);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_nui);
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_branchrate);
     }
     else
@@ -820,7 +820,7 @@ static void status_print_pjump(FILE * fp,
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_MUI_INDEX]);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_SIGMA2I_INDEX]);
+    fprintf(fp, " %4.2f", pjump[BPP_MOVE_NUI_INDEX]);
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
   }
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -829,7 +829,7 @@ static void status_print_pjump(FILE * fp,
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_MUBAR_INDEX]);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_SIGMA2BAR_INDEX]);
+    fprintf(fp, " %4.2f", pjump[BPP_MOVE_NUBAR_INDEX]);
 
   if (opt_msci)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_PHI_INDEX]);
@@ -1082,7 +1082,7 @@ static void print_rates(FILE ** fp_locus,
       tab_required = 1;
     }
 
-    /* print mu_i and sigma2_i */
+    /* print mu_i and nu_i */
     if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
       fprintf(fp_locus[i],
@@ -1094,7 +1094,7 @@ static void print_rates(FILE ** fp_locus,
     {
       fprintf(fp_locus[i],
               "%s%.6f",
-              tab_required ? "\t" : "", gtree[i]->rate_sigma2i);
+              tab_required ? "\t" : "", gtree[i]->rate_nui);
       tab_required = 1;
     }
 
@@ -1289,7 +1289,7 @@ static void mcmc_logsample(FILE * fp,
     fprintf(fp,"\t%.6f",stree->locusrate_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    fprintf(fp,"\t%.6f", stree->locusrate_sigma2bar);
+    fprintf(fp,"\t%.6f", stree->locusrate_nubar);
 
   /* 5. print log-likelihood if usedata=1 */
   if (opt_usedata)
@@ -2220,7 +2220,7 @@ static FILE * init(stree_t ** ptr_stree,
       stree->locusrate_mubar = 1;
   }
   if (opt_clock != BPP_CLOCK_GLOBAL)
-    stree->locusrate_sigma2bar = opt_vbar_alpha / opt_vbar_beta;
+    stree->locusrate_nubar = opt_vbar_alpha / opt_vbar_beta;
 
   for (i = 0, pindex=0; i < msa_count; ++i)
   {
@@ -2324,18 +2324,19 @@ static FILE * init(stree_t ** ptr_stree,
       long thread_index = 0;
 
       gtree[i]->rate_mui  = stree->locusrate_mubar;
-      gtree[i]->rate_mui *= (.9 + .2*legacy_rndu(thread_index));
+      if (!opt_debug_rates)
+        gtree[i]->rate_mui *= (.9 + .2*legacy_rndu(thread_index));
     }
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
       long thread_index = 0;
 
-      gtree[i]->rate_sigma2i = stree->locusrate_sigma2bar;
+      gtree[i]->rate_nui = stree->locusrate_nubar;
 
       /* TODO: Remove if condition after debugging */
       if (!opt_debug_rates)
-        gtree[i]->rate_sigma2i *= (.9 + .2*legacy_rndu(thread_index));
+        gtree[i]->rate_nui *= (.9 + .2*legacy_rndu(thread_index));
 
       for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
       {
@@ -2521,14 +2522,6 @@ static FILE * init(stree_t ** ptr_stree,
   return fp_mcmc;
 
 }
-
-
-#if 0
-/***** Ziheng 2019-11-8 ************/
-char *MCMCMoveStrings[] = { "GTAGE", "GTSPR", "THETA", "TAU", "MIX", "LRHT", "PHI", "FREQS",
-"RATES", "ALPHA", "MUBAR", "SIGMA2BAR", "MUI", "SIGMA2I", "BRANCHRATE" };
-#endif
-
 
 void cmd_run()
 {
@@ -2788,19 +2781,6 @@ void cmd_run()
     {
       int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
 
-
-
-#if 0
-      /***** Ziheng 2019-11-8 ************/
-      printf ("\nMoves and Pjump\n");
-      int ii;
-      for (ii = 0; ii < 15; ii++)
-      {
-        printf("%-20s %12.9f\n", MCMCMoveStrings[ii], pjump[ii]);
-      }
-#endif
-
-
       if (opt_finetune_reset && opt_burnin >= 200)
       {
         /* If last MCMC status line did not end with a newline, print one */
@@ -3000,15 +2980,15 @@ void cmd_run()
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      
-      ratio = prop_locusrate_sigma2i(gtree,stree,locus,thread_index_zero);
-      pjump[BPP_MOVE_SIGMA2I_INDEX] = (pjump[BPP_MOVE_SIGMA2I_INDEX]*(ft_round-1)+ratio) /
-                                      (double)ft_round;
+
+      ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
+      pjump[BPP_MOVE_NUI_INDEX] = (pjump[BPP_MOVE_NUI_INDEX]*(ft_round-1)+ratio) /
+                                        (double)ft_round;
 
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       {
-        ratio = prop_locusrate_sigma2bar(stree,gtree);
-        pjump[BPP_MOVE_SIGMA2BAR_INDEX] = (pjump[BPP_MOVE_SIGMA2BAR_INDEX]*(ft_round-1)+ratio) /
+        ratio = prop_locusrate_nubar(stree,gtree);
+        pjump[BPP_MOVE_NUBAR_INDEX] = (pjump[BPP_MOVE_NUBAR_INDEX]*(ft_round-1)+ratio) /
                                           (double)ft_round;
       }
 
@@ -3328,16 +3308,6 @@ void cmd_run()
 
   }
   timer_print("\n", " spent in MCMC\n\n", fp_out);
-
-
-  #if 0
-  /***** Ziheng 2019-11-8 ************/
-  printf("\nMoves and Pjump\n");
-  for (i = 0; i < 15; i++)
-  {
-    printf("%-20s %12.9f\n", MCMCMoveStrings[i], pjump[i]);
-  }
-  #endif
 
   #if 0
   progress_done();

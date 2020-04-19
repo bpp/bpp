@@ -1624,8 +1624,8 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 12. sigma2bar finetune */
-  count = get_doubleordash(p, &opt_finetune_sigma2bar);
+  /* 12. nubar finetune */
+  count = get_doubleordash(p, &opt_finetune_nubar);
   if (!count) goto l_unwind;
 
   p += count;
@@ -1648,8 +1648,8 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* 14. sigma2_i finetune */
-  count = get_doubleordash(p, &opt_finetune_sigma2i);
+  /* 14. nu_i finetune */
+  count = get_doubleordash(p, &opt_finetune_nui);
   if (!count) goto l_unwind;
 
   p += count;

@@ -682,7 +682,7 @@ static void compute_relaxed_rates_recursive(snode_t * node, gtree_t * gtree)
     {
       /* gamma prior */
 
-      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_sigma2i;
+      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_nui;
       node->rate = legacy_rndgamma(thread_index_zero,a) /
                    a * node->parent->rate;
     }
@@ -691,7 +691,7 @@ static void compute_relaxed_rates_recursive(snode_t * node, gtree_t * gtree)
       /* log-normal prior */
 
       double nv = node->parent->rate +
-                  sqrt(gtree->rate_sigma2i)*rndNormal(thread_index_zero);
+                  sqrt(gtree->rate_nui)*rndNormal(thread_index_zero);
       node->rate = exp(nv);
     }
   }
@@ -722,7 +722,7 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
       for (i = 0; i < total_nodes; ++i)
       {
         double nv = gtree->rate_mui +
-                    sqrt(gtree->rate_sigma2i)*rndNormal(thread_index_zero);
+                    sqrt(gtree->rate_nui)*rndNormal(thread_index_zero);
         stree->nodes[i]->rate = exp(nv);
       }
     }
@@ -730,8 +730,8 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
     {
       assert(opt_rate_prior == BPP_BRATE_PRIOR_GAMMA);
       /* gamma distributed branch rates */
-      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_sigma2i;
-      double b = gtree->rate_mui / gtree->rate_sigma2i;
+      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_nui;
+      double b = gtree->rate_mui / gtree->rate_nui;
       for (i = 0; i < total_nodes; ++i)
         stree->nodes[i]->rate = legacy_rndgamma(thread_index_zero,a) / b;
     }
@@ -1373,7 +1373,7 @@ static void simulate(stree_t * stree)
       gtree[i]->rate_mui = 1;
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
-      gtree[i]->rate_sigma2i = vi_array[i];
+      gtree[i]->rate_nui = vi_array[i];
 
     tmrca += gtree[i]->root->time;
 
