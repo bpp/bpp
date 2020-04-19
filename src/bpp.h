@@ -251,9 +251,9 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_QRATES_INDEX           8
 #define BPP_MOVE_ALPHA_INDEX            9
 #define BPP_MOVE_MUBAR_INDEX            10
-#define BPP_MOVE_SIGMA2BAR_INDEX        11
+#define BPP_MOVE_NUBAR_INDEX            11
 #define BPP_MOVE_MUI_INDEX              12
-#define BPP_MOVE_SIGMA2I_INDEX          13
+#define BPP_MOVE_NUI_INDEX              13
 #define BPP_MOVE_BRANCHRATE_INDEX       14
 #define BPP_MOVE_INDEX_MAX              14
 
@@ -265,9 +265,9 @@ extern const char * global_freqs_strings[28];
 
 /* libpll related definitions */
 
-#define PLL_ALIGNMENT_CPU   8
-#define PLL_ALIGNMENT_SSE  16
-#define PLL_ALIGNMENT_AVX  32
+#define PLL_ALIGNMENT_CPU               8
+#define PLL_ALIGNMENT_SSE              16
+#define PLL_ALIGNMENT_AVX              32
 
 #define PLL_ATTRIB_ARCH_CPU            0
 #define PLL_ATTRIB_ARCH_SSE       (1 << 0)
@@ -432,7 +432,7 @@ typedef struct stree_s
 //  int mark;
   /* mean rate and variance across loci */
   double locusrate_mubar;
-  double locusrate_sigma2bar;
+  double locusrate_nubar;
 } stree_t;
 
 typedef struct gnode_s
@@ -490,7 +490,7 @@ typedef struct gtree_s
 
   /* locus rate */
   double rate_mui;
-  double rate_sigma2i;
+  double rate_nui;
   double lnprior_rates;
   double old_lnprior_rates;
 
@@ -823,8 +823,8 @@ extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
 extern double opt_finetune_qrates;
-extern double opt_finetune_sigma2bar;
-extern double opt_finetune_sigma2i;
+extern double opt_finetune_nubar;
+extern double opt_finetune_nui;
 extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
@@ -1283,12 +1283,12 @@ void prop_branch_rates_parallel(gtree_t ** gtree,
                                 long * p_accepted);
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree);
-long prop_locusrate_sigma2bar(stree_t * stree, gtree_t ** gtree);
+long prop_locusrate_nubar(stree_t * stree, gtree_t ** gtree);
 
-double prop_locusrate_sigma2i(gtree_t ** gtree,
-                              stree_t * stree,
-                              locus_t ** locus,
-                              long thread_index);
+double prop_locusrate_nui(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index);
 
 double prop_locusrate_mui(gtree_t ** gtree,
                           stree_t * stree,

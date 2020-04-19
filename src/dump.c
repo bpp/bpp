@@ -333,14 +333,14 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_alpha,1,fp);
   DUMP(&opt_finetune_mubar,1,fp);
   DUMP(&opt_finetune_mui,1,fp);
-  DUMP(&opt_finetune_sigma2bar,1,fp);
-  DUMP(&opt_finetune_sigma2i,1,fp);
+  DUMP(&opt_finetune_nubar,1,fp);
+  DUMP(&opt_finetune_nui,1,fp);
   DUMP(&opt_finetune_branchrate,1,fp);
 
   DUMP(&opt_max_species_count,1,fp);
 
   DUMP(&(stree->locusrate_mubar),1,fp);
-  DUMP(&(stree->locusrate_sigma2bar),1,fp);
+  DUMP(&(stree->locusrate_nubar),1,fp);
 
   /* write diploid */
   if (opt_diploid)
@@ -584,7 +584,7 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count
   DUMP(&(gtree->rate_mui),1,fp);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    DUMP(&(gtree->rate_sigma2i),1,fp);
+    DUMP(&(gtree->rate_nui),1,fp);
     DUMP(&(gtree->lnprior_rates),1,fp);
   }
 }

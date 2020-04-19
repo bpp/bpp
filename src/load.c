@@ -534,10 +534,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read mubar finetune parameter");
   if (!LOAD(&opt_finetune_mui,1,fp))
     fatal("Cannot read mui finetune parameter");
-  if (!LOAD(&opt_finetune_sigma2bar,1,fp))
-    fatal("Cannot read sigma2bar finetune parameter");
-  if (!LOAD(&opt_finetune_sigma2i,1,fp))
-    fatal("Cannot read sigma2i finetune parameter");
+  if (!LOAD(&opt_finetune_nubar,1,fp))
+    fatal("Cannot read nubar finetune parameter");
+  if (!LOAD(&opt_finetune_nui,1,fp))
+    fatal("Cannot read nui finetune parameter");
   if (!LOAD(&opt_finetune_branchrate,1,fp))
     fatal("Cannot read branchrate finetune parameter");
 
@@ -555,12 +555,12 @@ static void load_chk_section_1(FILE * fp,
   #endif
 
   double stree_locusrate_mubar = 0;
-  double stree_locusrate_sigma2bar = 0;
+  double stree_locusrate_nubar = 0;
 
   if (!LOAD(&stree_locusrate_mubar,1,fp))
     fatal("Cannot read locusrate_mubar value");
-  if (!LOAD(&stree_locusrate_sigma2bar,1,fp))
-    fatal("Cannot read locusrate_sigma2bar value");
+  if (!LOAD(&stree_locusrate_nubar,1,fp))
+    fatal("Cannot read locusrate_nubar value");
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
@@ -714,7 +714,7 @@ static void load_chk_section_1(FILE * fp,
   stree->edge_count = stree_edge_count;
   stree->locus_count = opt_locus_count;
   stree->locusrate_mubar = stree_locusrate_mubar;
-  stree->locusrate_sigma2bar = stree_locusrate_sigma2bar;
+  stree->locusrate_nubar = stree_locusrate_nubar;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
   stree->nodes = (snode_t **)xmalloc((size_t)total_nodes*sizeof(snode_t *));
@@ -1224,11 +1224,11 @@ static void load_gene_tree(FILE * fp, long index)
   if (!LOAD(&(gt->rate_mui),1,fp))
       fatal("Cannot read gene tree mu_%ld", index);
 
-  /* relaxed clock sigma2_i and logprior */
+  /* relaxed clock nu_i and logprior */
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    if (!LOAD(&(gt->rate_sigma2i),1,fp))
-      fatal("Cannot read gene tree sigma2_%ld", index);
+    if (!LOAD(&(gt->rate_nui),1,fp))
+      fatal("Cannot read gene tree nu_%ld", index);
     if (!LOAD(&(gt->lnprior_rates),1,fp))
       fatal("Cannot read gene tree %ld rate prior", index);
   }
