@@ -914,9 +914,13 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       opt_est_mubar)
     fprintf(fp, "\tmu_bar");
     
-  if (opt_clock != BPP_CLOCK_GLOBAL &&
-      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    fprintf(fp, "\tnu_bar");
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp, "\tnu_bar");
+    else
+      fprintf(fp, "\tnu");
+  }
 
   /* 5. Print log likelihood */
   if (opt_usedata)
@@ -1287,9 +1291,13 @@ static void mcmc_logsample(FILE * fp,
       opt_est_mubar &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     fprintf(fp,"\t%.6f",stree->locusrate_mubar);
-  if (opt_clock != BPP_CLOCK_GLOBAL &&
-      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    fprintf(fp,"\t%.6f", stree->locusrate_nubar);
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      fprintf(fp,"\t%.6f", stree->locusrate_nubar);
+    else
+      fprintf(fp,"\t%.6f", stree->nui_sum / opt_locus_count);
+  }
 
   /* 5. print log-likelihood if usedata=1 */
   if (opt_usedata)
@@ -2222,6 +2230,8 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_clock != BPP_CLOCK_GLOBAL)
     stree->locusrate_nubar = opt_vbar_alpha / opt_vbar_beta;
 
+  stree->nui_sum = 0;
+
   for (i = 0, pindex=0; i < msa_count; ++i)
   {
     int states = 0;
@@ -2363,6 +2373,8 @@ static FILE * init(stree_t ** ptr_stree,
         }
       }
       gtree[i]->lnprior_rates   = lnprior_rates(gtree[i],stree,i);
+
+      stree->nui_sum += gtree[i]->rate_nui;
     }
 
     /* compute the conditional probabilities for each inner node */

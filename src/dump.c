@@ -341,6 +341,7 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
+  DUMP(&(stree->nui_sum),1,fp);
 
   /* write diploid */
   if (opt_diploid)
