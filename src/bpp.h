@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 2
-#define VERSION_PATCH 8
+#define VERSION_PATCH 9
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -433,6 +433,7 @@ typedef struct stree_s
   /* mean rate and variance across loci */
   double locusrate_mubar;
   double locusrate_nubar;
+  double nui_sum;
 } stree_t;
 
 typedef struct gnode_s

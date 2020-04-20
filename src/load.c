@@ -556,11 +556,14 @@ static void load_chk_section_1(FILE * fp,
 
   double stree_locusrate_mubar = 0;
   double stree_locusrate_nubar = 0;
+  double stree_nui_sum = 0;
 
   if (!LOAD(&stree_locusrate_mubar,1,fp))
     fatal("Cannot read locusrate_mubar value");
   if (!LOAD(&stree_locusrate_nubar,1,fp))
     fatal("Cannot read locusrate_nubar value");
+  if (!LOAD(&stree_nui_sum,1,fp))
+    fatal("Cannot read nui_sum value");
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
@@ -715,6 +718,7 @@ static void load_chk_section_1(FILE * fp,
   stree->locus_count = opt_locus_count;
   stree->locusrate_mubar = stree_locusrate_mubar;
   stree->locusrate_nubar = stree_locusrate_nubar;
+  stree->nui_sum = stree_nui_sum;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
   stree->nodes = (snode_t **)xmalloc((size_t)total_nodes*sizeof(snode_t *));

@@ -452,9 +452,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_usedata)
     col_count++;
 
-  /* column for vbar */
-  if (opt_clock != BPP_CLOCK_GLOBAL &&
-      opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+  /* column for vbar (or nu for Gamma-Dirichlet) */
+  if (opt_clock != BPP_CLOCK_GLOBAL)
     ++col_count;
 
 
