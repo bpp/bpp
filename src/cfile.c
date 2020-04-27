@@ -36,7 +36,7 @@ static const long aa_model_count  = 19;
 /* Important: CUSTOM *MUST* be last in the list */
 static const char * dna_model_name[] = 
  {
-   "JC69", "K80", "F81", "HKY", "T92", "TN93", "F84", "GTR", "CUSTOM"
+   "JC69", "K80", "F81", "HKY", "T92", "TN93", "F84", "GTR"
  };
 
 static const char * aa_model_name[] =
@@ -48,9 +48,8 @@ static const char * aa_model_name[] =
 
 static const long dna_model_index[] =
  {
-   BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_K80, BPP_DNA_MODEL_F81, 
-   BPP_DNA_MODEL_HKY,  BPP_DNA_MODEL_T92, BPP_DNA_MODEL_TN93,
-   BPP_DNA_MODEL_F84,  BPP_DNA_MODEL_GTR, BPP_DNA_MODEL_CUSTOM
+   BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_K80, BPP_DNA_MODEL_F81, BPP_DNA_MODEL_HKY,
+   BPP_DNA_MODEL_T92, BPP_DNA_MODEL_TN93, BPP_DNA_MODEL_F84, BPP_DNA_MODEL_GTR
  };
 
 static const long aa_model_index[] =
@@ -998,10 +997,10 @@ static long parse_partition_line(const char * line, partition_t * part)
   if (part->dtype == BPP_DATA_DNA)
   {
     /* parse dna model (skip last entry which is CUSTOM) */
-    for (i = 0; i < dna_model_count-1; ++i)
+    for (i = 0; i < dna_model_count; ++i)
       if (!strcasecmp(model,dna_model_name[i]))
         break;
-    if (i == dna_model_count-1)
+    if (i == dna_model_count)
       goto l_unwind;
     part->model = dna_model_index[i];
   }
@@ -1151,38 +1150,50 @@ static long parse_model(const char * line)
   p += count;
 
   /* parse model */
+
+  /* check if DNA model */
   for (i = 0; i < dna_model_count; ++i)
   {
     if (!strcasecmp(model,dna_model_name[i]))
       break;
   }
-  if (i == dna_model_count)
-  {
-    for (i = 0; i < aa_model_count; ++i)
-    {
-      if (!strcasecmp(model,aa_model_name[i]))
-        break;
-    }
-    if (i == aa_model_count)
-      goto l_unwind;
-
-    opt_model = aa_model_index[i];
-  }
-  else
+  if (i < dna_model_count)
   {
     opt_model = dna_model_index[i];
-  }
+    if (is_emptyline(p)) ret = 1;
 
-  /* if model is set to CUSTOM, parse partition file */
-  if (opt_model == BPP_DNA_MODEL_CUSTOM)
+    goto l_unwind;
+  }
+  assert(i == dna_model_count);
+
+  /* check if AA model */
+  for (i = 0; i < aa_model_count; ++i)
   {
+    if (!strcasecmp(model,aa_model_name[i]))
+      break;
+  }
+  if (i < aa_model_count)
+  {
+    opt_model = aa_model_index[i];
+    if (is_emptyline(p)) ret = 1;
+
+    goto l_unwind;
+  }
+  assert(i == aa_model_count);
+
+  /* check if custom model */
+  if (!strcasecmp(model,"custom"))
+  {
+    opt_model = BPP_DNA_MODEL_CUSTOM;
+
     count = get_delstring(p," \t\r\n*#",&opt_partition_file);
     if (!count) goto l_unwind;
 
     p += count;
-  }
 
-  if (is_emptyline(p)) ret = 1;
+    if (is_emptyline(p)) ret = 1;
+    goto l_unwind;
+  }
 
 l_unwind:
   free(s);
