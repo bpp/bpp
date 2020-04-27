@@ -85,6 +85,8 @@ void set_legacy_rndu_status(long index, unsigned int x)
 
 void set_legacy_rndu_array(unsigned int * x)
 {
+  if (z_rndu)
+    free(z_rndu);
   z_rndu = x;
 }
 
