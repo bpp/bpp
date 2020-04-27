@@ -1811,6 +1811,12 @@ static FILE * init(stree_t ** ptr_stree,
       msa_list[i]->dtype = opt_partition_list[pindex]->dtype;
       msa_list[i]->model = opt_partition_list[pindex]->model;
     }
+
+    /* deallocate partition list */
+    for (i = 0; i < opt_partition_count; ++i)
+      free(opt_partition_list[i]);
+    free(opt_partition_list);
+    opt_partition_list = NULL;
   }
   else
   {
@@ -2669,7 +2675,7 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
-  if (opt_checkpoint && opt_clock != BPP_CLOCK_GLOBAL && opt_print_locusfile)
+  if (opt_checkpoint && opt_print_locusfile)
     rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_exp_randomize)
     fprintf(stdout, "[EXPERIMENTAL] - Randomize nodes order on gtree SPR\n");
@@ -3480,6 +3486,9 @@ void cmd_run()
 
   if (opt_diploid)
     free(opt_diploid);
+
+  if (opt_partition_file)
+    free(opt_partition_file);
 
   /* close output file */
   fclose(fp_out);
