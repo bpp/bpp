@@ -2,6 +2,126 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.2.9] - 2020-04-28
+### Fixed
+ - Acceptance ratio for nu_i proposal with Dirichlet prior
+ - nubar appears in summary statistics for Dirichlet prior
+ - Parsing of custom model in control file
+ - Memory leaks and segfault when checkpointing with molecular clock, GTR and
+   per-locus file printing
+
+## [4.2.8] - 2020-04-19
+### Fixed
+ - Conditions for enabling nubar estimation
+ - Recomputation of log-L for correlated clock when proposing mu_i (full 
+ - Computation of log prior ratio for branch rates with correlated clock and
+   log-normal distribution
+ - Branch rates prior for correlated clock and gamma distribution
+ - Swapping of pmatrices when proposing mu_i
+ - Deallocation problem when phylip alignment contains less sequences than
+   specified in header
+ - Acceptance ratio for correlated clock and log-normal distribution when
+   proposing nu_i (extra variance term)
+
+## [4.2.7] - 2020-04-04
+### Changed
+ - Species numbering in pptable starts from 1 instead of 0
+ - Reduced spacing in finetune adjustment output
+ - Finetune option now accepts dashes as entries indicating to use default the
+   default value for that step length
+### Fixed
+ - Log prior ratio for correlated clock with gamma distribution
+ - Update branch rate prior in mixing move when using correlated clock and gamma
+   distribution
+
+## [4.2.6] - 2020-03-28
+### Fixed
+ - Made arch option CPU to be case insensitive
+ - Computation of branch lengths for gamma rates heterogeneity
+
+## [4.2.5] - 2020-03-26
+### Changed
+ - Clock prior specification in (--simulate) from 0 and 1 to DIR and IID
+### Fixed
+ - Bug in compressing patterns when GTR and diploid sequences; compression was
+   still done as if JC69 was used, instead of compressing only unique patterns
+ - Nucleotide map was used to translate the characters of AA data when using
+   partitioned analyses
+ - pmatrix computation did not account for gamma rates heterogeneity
+
+## [4.2.4] - 2020-03-20
+### Added
+ - Checks for -inf log-L and prompt for enabling scaling to prevent numerical
+   underflow
+### Changed
+ - Clock and locusrate prior specification from 0 and 1 to DIR and IID
+
+
+## [4.2.3] - 2020-03-14
+### Added
+ - Header line on current pjump finetune and new finetune
+### Changed
+ - Rearranged order of finetune arguments in control file and included alpha,
+   freqs,qmat steplengths
+### Fixed
+ - Corrected typecasting of returned pjump for mu_i and nu_i proposals
+
+## [4.2.2] - 2020-03-12
+### Added
+ - Compatible relaxed clock models in the BPP simulator
+ - Screen output is now printed in output file as well
+ - Correlated relaxed clock models
+ - Parallelized branch rate proposal
+ - Implemented MSci notation generator from a species tree and a list of
+   edge (option --msci-create)
+### Changed
+ - New parser for Imap file (not using flex/bison anymore)
+ - mubar and vbar no longer printed in finetune output if not used
+ - Clock arguments for specifying branch rates distribution from 0 and 1 to
+   LN and G
+ - Renamed option diploid to phase
+ - Prettified screen output
+### Fixed
+ - Inconsistency between current finetune and pjump in output
+ - MSci model concerning nodes participating in two hybridization events with
+   conflicting htau causing the program to enter an infinite loop before
+   starting
+
+## [4.2.1] - 2020-01-31
+### Added
+ - Additional print flag for printing qmatrix parameters, frequencies and alpha
+   value into a locus specific file
+ - Custom pmatrix computation for different nucleotide models and output of
+   their in locus-specific files
+### Changed
+ - Implemented new general tree parser (not using flex/bison anymore)
+ - Starting values for phi are not needed anymore in inference mode, and are
+   used as starting values if specified
+ - Updated Anopheles example documentation
+ - Locus rates (mu_i) and heredity scalars are now printed in locus specific
+   files
+### Fixed
+ - branch rates prior computation
+ - Qrates and frequencies proposal acceptance ratio
+ - Branch length computation for relaxed clock
+
+## [4.2.0] - 2019-10-29
+### Added
+ - Rates proposal for nucleotide GTR model
+ - Computation of empirical frequencies
+ - Summary table for loci
+ - Option alphaprior=X Y Z and roposal for alpha parameter (site rate variation)
+ - Yeast dataset
+ - Relaxed clock (iid rates model) following gamma or lognormal
+ - Relaxed clock (Gamma-Dir model) following gamma or lognormal
+### Changed
+ - Finetune option now accepts arbitrary number of parameters (non-specified
+   are set to default values)
+ - Format of locusrate option
+### Fixed
+ - Checkpoint file now stores phi pjump
+ - Parsing of species tree with one species and hybridization when simulating
+
 ## [4.1.4] - 2019-05-22
 ### Added
  - All protein models are now activated and can be used with the 'model' option
