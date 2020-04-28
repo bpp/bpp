@@ -1551,7 +1551,7 @@ static FILE * resume(stree_t ** ptr_stree,
   }
 
   /* truncate rate files if available */
-  if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_locusfile)
+  if (opt_print_locusfile)
   {
     assert(rates_offset);
     

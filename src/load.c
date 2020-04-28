@@ -526,6 +526,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species mixing step finetune parameter");
   if (!LOAD(&opt_finetune_locusrate,1,fp))
     fatal("Cannot read species locusrate/heredity finetune parameter");
+  if (!LOAD(&opt_finetune_qrates,1,fp))
+    fatal("Cannot read qmatrix rates finetune parameter");
   if (!LOAD(&opt_finetune_freqs,1,fp))
     fatal("Cannot read base frequencies finetune parameter");
   if (!LOAD(&opt_finetune_alpha,1,fp))
@@ -624,7 +626,7 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read gtree file offsets");
   }
 
-  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_print_locusfile)
   {
     *rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
     if (!LOAD(*rates_offset,opt_locus_count,fp))
@@ -1328,6 +1330,14 @@ static void load_locus(FILE * fp, long index)
   /* load alpha */
   if (!LOAD(&(locus[index]->rates_alpha),1,fp))
     fatal("Cannot read alpha value");
+
+  /* load qrates param count */
+  if (!LOAD(&(locus[index]->qrates_param_count),1,fp))
+    fatal("Cannot read qrates param count");
+
+  /* load freqs param count */
+  if (!LOAD(&(locus[index]->freqs_param_count),1,fp))
+    fatal("Cannot read freqs param count");
 
   /* load category rates */
   if (!LOAD(locus[index]->rates,rate_cats,fp))
