@@ -126,17 +126,17 @@ typedef struct ntree_s
 } ntree_t;
 
 
-typedef struct token_s
+typedef struct ltoken_s
 {
   char * data;
   int type;
-} token_t;
+} ltoken_t;
 
 
 static long parse_attr(char * s, list_t * token_list)
 {
   long i = 0;
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
 
   assert(*s == '[');
   ++s;
@@ -158,7 +158,7 @@ static long parse_attr(char * s, list_t * token_list)
 
 static void token_clear(void * tokenptr)
 {
-  token_t * token = (token_t *)tokenptr;
+  ltoken_t * token = (ltoken_t *)tokenptr;
   if (token)
   {
     if (token->data)
@@ -169,7 +169,7 @@ static void token_clear(void * tokenptr)
 
 long parse_opar(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup("(");
   token->type = TOKEN_OPAR;
 
@@ -181,7 +181,7 @@ long parse_opar(char * s, list_t * token_list)
 
 static long parse_cpar(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(")");
   token->type = TOKEN_CPAR;
 
@@ -193,7 +193,7 @@ static long parse_cpar(char * s, list_t * token_list)
 
 static long parse_colon(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(":");
   token->type = TOKEN_COLON;
 
@@ -205,7 +205,7 @@ static long parse_colon(char * s, list_t * token_list)
 
 static long parse_semicolon(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(";");
   token->type = TOKEN_SEMICOLON;
 
@@ -217,7 +217,7 @@ static long parse_semicolon(char * s, list_t * token_list)
 
 static long parse_comma(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(",");
   token->type = TOKEN_COMMA;
 
@@ -229,7 +229,7 @@ static long parse_comma(char * s, list_t * token_list)
 
 static long parse_theta(char * s, list_t * token_list)
 {
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup("#");
   token->type = TOKEN_HASH;
 
@@ -242,7 +242,7 @@ static long parse_theta(char * s, list_t * token_list)
 static long parse_string(char * s, list_t * token_list)
 {
   long i = 0;
-  token_t * token = (token_t *)xmalloc(sizeof(token_t));
+  ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   
   /* match string */
   while (string_map[(int)(s[i])]) ++i;
@@ -578,7 +578,7 @@ list_t * parse_tree(char * s)
     list_item_t * li = token_list->head;
     while (li)
     {
-      token_t * token = (token_t *)(li->data);
+      ltoken_t * token = (ltoken_t *)(li->data);
 
       printf("%s : %s\n", token_names[token->type], token->data);
 
@@ -596,7 +596,7 @@ list_t * parse_tree(char * s)
 
   /* 2. First token must be either OPAR or STRING */
   list_item_t * li = token_list->head;
-  token_t * token = (token_t *)(li->data);
+  ltoken_t * token = (ltoken_t *)(li->data);
   if (token->type != TOKEN_OPAR && token->type != TOKEN_STRING)
     fatal("Newick string must start with '(' or a label");
     
@@ -607,7 +607,7 @@ list_t * parse_tree(char * s)
     li = li->next;
     while (li)
     {
-      token = (token_t *)(li->data);
+      token = (ltoken_t *)(li->data);
       if (token->type == TOKEN_OPAR || token->type == TOKEN_CPAR)
         break;
       li = li->next;
@@ -620,7 +620,7 @@ list_t * parse_tree(char * s)
   /* 4. If first token is OPAR, then check that there is no OPAR when the
      number of open OPARs is 0 */
   li = token_list->head;
-  token = (token_t *)(li->data);
+  token = (ltoken_t *)(li->data);
   if (token->type == TOKEN_OPAR)
   {
     opar_count++;
@@ -628,7 +628,7 @@ list_t * parse_tree(char * s)
     li = li->next;
     while (li)
     {
-      token = (token_t *)(li->data);
+      token = (ltoken_t *)(li->data);
       if (token->type == TOKEN_OPAR)
       {
         if (openpars == 0)
@@ -1483,7 +1483,7 @@ static ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count)
 
 static ntree_t * syntax_parse(list_t * token_list)
 {
-  token_t * token;
+  ltoken_t * token;
   list_item_t * li;
   long prev_token_type = TOKEN_NONE;
 
@@ -1500,7 +1500,7 @@ static ntree_t * syntax_parse(list_t * token_list)
 
   while (li)
   {
-    token = (token_t *)(li->data);
+    token = (ltoken_t *)(li->data);
 
     if (!syntax_table[prev_token_type][token->type])
     {
