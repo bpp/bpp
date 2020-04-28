@@ -329,6 +329,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
   DUMP(&opt_finetune_locusrate,1,fp);
+  DUMP(&opt_finetune_qrates,1,fp);
   DUMP(&opt_finetune_freqs,1,fp);
   DUMP(&opt_finetune_alpha,1,fp);
   DUMP(&opt_finetune_mubar,1,fp);
@@ -374,7 +375,7 @@ static void dump_chk_section_1(FILE * fp,
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
 
-  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
 
   DUMP(&dparam_count,1,fp);
@@ -627,6 +628,12 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
 
   /* write alpha */
   DUMP(&(locus->rates_alpha),1,fp);
+
+  /* write qrates param count */
+  DUMP(&(locus->qrates_param_count),1,fp);
+
+  /* write freqs param count */
+  DUMP(&(locus->freqs_param_count),1,fp);
 
   /* write category rates */
   DUMP(locus->rates,locus->rate_cats,fp);
