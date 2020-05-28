@@ -1364,7 +1364,7 @@ void load_cfile_sim()
           ++line_count;
           line_not_processed = 1;
 
-          if (!reached_eof && starts_with_opar(line))
+          if (!reached_eof)
           {
             if (!get_tree_string_with_thetas(line,&opt_streenewick))
               fatal("Expected newick string in 'species&tree' (line %ld) "
@@ -1374,6 +1374,8 @@ void load_cfile_sim()
           }
           else
           {
+            /* no third line with species tree in the case of one species only */
+
             opt_streenewick = (char *)xmalloc((size_t)(strlen(opt_reorder)+2) *
                                               sizeof(char));
             strcpy(opt_streenewick, opt_reorder);

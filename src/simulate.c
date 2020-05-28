@@ -103,9 +103,16 @@ static void print_settings(stree_t * stree)
   }
   else
   {
-    char * newick = stree_export_newick(stree->root, cb_serialize_branch);
-    printf("  %s\n", newick);
-    free(newick);
+    if (stree->tip_count == 1)
+    {
+      printf("  %s\n", stree->nodes[0]->label);
+    }
+    else
+    {
+      char * newick = stree_export_newick(stree->root, cb_serialize_branch);
+      printf("  %s\n", newick);
+      free(newick);
+    }
   }
 
   stree_show_pptable(stree, BPP_TRUE);

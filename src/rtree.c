@@ -75,15 +75,17 @@ static void print_tree_recurse(const snode_t * root,
     active_node_order[indent_level-1] = 0;
 
   active_node_order[indent_level] = 1;
-  print_tree_recurse(root->left,
-                     indent_level+1,
-                     active_node_order,
-                     options);
+  if (root->left)
+    print_tree_recurse(root->left,
+                       indent_level+1,
+                       active_node_order,
+                       options);
   active_node_order[indent_level] = 2;
-  print_tree_recurse(root->right,
-                     indent_level+1,
-                     active_node_order,
-                     options);
+  if (root->right)
+    print_tree_recurse(root->right,
+                       indent_level+1,
+                       active_node_order,
+                       options);
 
 }
 
