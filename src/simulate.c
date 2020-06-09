@@ -674,8 +674,52 @@ static list_t * create_maplist(stree_t * stree)
   return list;
 }
 
-/* correlated clock */
-static void compute_relaxed_rates_recursive(snode_t * node, gtree_t * gtree)
+/* correlated clock, lognormal */
+static void simulate_correlated_rates_logn_recursive(snode_t * node, gtree_t * gtree)
+{
+  /* We process inner nodes only. For each inner calculate y0 according to Eq. 3
+     in Rannala & Yang 2007 and then the rates for the two daughter nodes.
+     If node is a tip, return immediately */
+  if (!node->left && !node->right)
+    return;
+
+  if (node->tau == 0)
+    node->left->rate = node->right->rate = 0;
+  else
+  {
+
+    double y0,t1,t2,tA,nv;
+
+    /* if parent is root then y = log(mui) */
+    if (!node->parent)
+      y0 = log(gtree->rate_mui);
+    else
+    {
+      /* y0 | yA ~ N(yA - tA*nui/2, tA*nui) */
+      tA = (node->parent->tau - node->tau) / 2;
+      y0 = log(node->rate) - 0.5*tA*gtree->rate_nui +
+           sqrt(gtree->rate_nui*tA)*rndNormal(thread_index_zero);
+    }
+
+    t1 = (node->tau - node->left->tau)/2;
+    t2 = (node->tau - node->right->tau)/2;
+
+    nv = y0 - 0.5*t1*gtree->rate_nui +
+         sqrt(gtree->rate_nui*t1)*rndNormal(thread_index_zero);
+    node->left->rate = exp(nv);
+
+    nv = y0 - 0.5*t2*gtree->rate_nui +
+         sqrt(gtree->rate_nui*t2)*rndNormal(thread_index_zero);
+    node->right->rate = exp(nv);
+  }
+
+  simulate_correlated_rates_logn_recursive(node->left,gtree);
+  simulate_correlated_rates_logn_recursive(node->right,gtree);
+    
+}
+
+/* correlated clock, gamma */
+static void simulate_correlated_rates_gamma_recursive(snode_t * node, gtree_t * gtree)
 {
   if (!node) return;
 
@@ -685,26 +729,15 @@ static void compute_relaxed_rates_recursive(snode_t * node, gtree_t * gtree)
     node->rate = node->parent->rate;
   else
   {
-    if (opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
-    {
-      /* gamma prior */
+    /* gamma prior */
 
-      double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_nui;
-      node->rate = legacy_rndgamma(thread_index_zero,a) /
-                   a * node->parent->rate;
-    }
-    else
-    {
-      /* log-normal prior */
-
-      double nv = node->parent->rate +
-                  sqrt(gtree->rate_nui)*rndNormal(thread_index_zero);
-      node->rate = exp(nv);
-    }
+    double a = gtree->rate_mui * gtree->rate_mui / gtree->rate_nui;
+    node->rate = legacy_rndgamma(thread_index_zero,a) /
+                 a * node->parent->rate;
   }
 
-  compute_relaxed_rates_recursive(node->left,gtree);
-  compute_relaxed_rates_recursive(node->right,gtree);
+  simulate_correlated_rates_gamma_recursive(node->left,gtree);
+  simulate_correlated_rates_gamma_recursive(node->right,gtree);
     
 }
 
@@ -728,7 +761,7 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
       /* log-normal distributed branch rates */
       for (i = 0; i < total_nodes; ++i)
       {
-        double nv = gtree->rate_mui +
+        double nv = log(gtree->rate_mui) - 0.5*gtree->rate_nui +
                     sqrt(gtree->rate_nui)*rndNormal(thread_index_zero);
         stree->nodes[i]->rate = exp(nv);
       }
@@ -746,12 +779,22 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
   else
   {
     assert(opt_clock == BPP_CLOCK_CORR);
+    assert(!opt_msci);
 
     /* correlated clock */
     
     stree->root->rate = gtree->rate_mui;
-    compute_relaxed_rates_recursive(stree->root->left,gtree);
-    compute_relaxed_rates_recursive(stree->root->right,gtree);
+
+    if (opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
+    {
+      simulate_correlated_rates_gamma_recursive(stree->root->left,gtree);
+      simulate_correlated_rates_gamma_recursive(stree->root->right,gtree);
+    }
+    else
+    {
+      assert(opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL);
+      simulate_correlated_rates_logn_recursive(stree->root,gtree);
+    }
   }
 
   /* now update gene tree */
