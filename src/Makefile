@@ -60,7 +60,7 @@ OBJS=bpp.o rtree.o util.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
      gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o \
-     $(AVXOBJ) $(AVX2OBJ)
+     constraint.o $(AVXOBJ) $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

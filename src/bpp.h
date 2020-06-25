@@ -263,6 +263,10 @@ extern const char * global_freqs_strings[28];
 #define BPP_MSCIDEFS_BIDIR              4
 #define BPP_MSCIDEFS_SHOWBL             5
 
+#define BPP_CONSTDEFS_CONSTRAINT        1
+#define BPP_CONSTDEFS_DEFINE            2
+#define BPP_CONSTDEFS_OUTGROUP          3
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU               8
@@ -399,6 +403,10 @@ typedef struct snode_s
   double notheta_logpr_contrib;     /* MSC density contribution from pop */
   double notheta_old_logpr_contrib; /* storage space for rollback */
 
+  /* constraints */
+  long constraint;
+  long constraint_lineno;
+
   /* introgression */
   double hphi;                      /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
@@ -496,6 +504,35 @@ typedef struct gtree_s
   double old_lnprior_rates;
 
 } gtree_t;
+
+
+/* multifurcating tree structure */
+typedef struct node_s
+{
+  char * label;
+  char * attr;
+  double length;
+  double theta;
+  struct node_s ** children;
+  struct node_s * parent;
+  int children_count;
+  int mark;
+  int leaves;
+  long node_index;
+  double tau;
+
+  void * data;
+
+} node_t;
+
+typedef struct ntree_s
+{
+  int tip_count;
+  int inner_count;
+  node_t * root;
+  node_t ** leaves;
+  node_t ** inner;
+} ntree_t;
 
 typedef struct msa_s
 {
@@ -635,6 +672,14 @@ typedef struct mscidefs_s
   double phi2;
 } mscidefs_t;
 
+typedef struct constdefs_s
+{
+  long type;
+  long lineno;
+  char * arg1;
+  char * arg2;
+} constdefs_t;
+
 typedef struct list_item_s
 {
   void * data;
@@ -762,6 +807,7 @@ extern long opt_checkpoint_initial;
 extern long opt_checkpoint_step;
 extern long opt_cleandata;
 extern long opt_clock;
+extern long opt_constraint_count;
 extern long opt_debug;
 extern long opt_debug_rates;
 extern long opt_delimit_prior;
@@ -854,6 +900,7 @@ extern long * opt_sp_seqcount;
 extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
+extern char * opt_constfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
@@ -2144,7 +2191,11 @@ void threads_pin_master(void);
 /* functions in treeparse.c */
 
 stree_t * bpp_parse_newick_string(const char * line);
+ntree_t * bpp_parse_newick_string_ntree(const char * line);
 void stree_destroy(stree_t * tree, void (*cb_destroy)(void *));
+void ntree_destroy(ntree_t * tree, void (*cb_destroy)(void *));
+ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
+char * ntree_export_newick(ntree_t * tree, long print_bl);
 
 /* functions in parsemap.c */
 
@@ -2153,3 +2204,6 @@ list_t * parse_mapfile(const char * mapfile);
 /* functions in msci_gen.c */
 
 void cmd_msci_create(void);
+
+/* functions in constraint.c */
+void parse_and_set_constraints(stree_t * stree, FILE * fp_out);

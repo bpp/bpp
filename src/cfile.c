@@ -2352,6 +2352,12 @@ void load_cfile()
           fatal("Erroneous format of 'locusrate' (line %ld)", line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"constfile",9))
+      {
+        if (!get_string(value,&opt_constfile))
+          fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 10)
     {

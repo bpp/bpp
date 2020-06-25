@@ -44,6 +44,7 @@ long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_cleandata;
 long opt_clock;
+long opt_constraint_count;
 long opt_debug;
 long opt_debug_rates;
 long opt_delimit_prior;
@@ -135,6 +136,7 @@ long * opt_diploid;
 long * opt_sp_seqcount;
 char * opt_cfile;
 char * opt_concatfile;
+char * opt_constfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
@@ -306,6 +308,8 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_step = 0;
   opt_cleandata = 0;
   opt_concatfile = NULL;
+  opt_constfile = NULL;
+  opt_constraint_count = 0;
   opt_debug = 0;
   opt_debug_rates = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
@@ -521,6 +525,7 @@ void args_init(int argc, char ** argv)
 static void dealloc_switches()
 {
   if (opt_cfile) free(opt_cfile);
+  if (opt_constfile) free(opt_constfile);
   if (opt_mapfile) free(opt_mapfile);
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_msafile) free(opt_msafile);

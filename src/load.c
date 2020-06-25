@@ -263,6 +263,16 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read name of MSA file");
   printf(" MSA file: %s\n", opt_msafile);
 
+  /* read constraint filename */
+  if (!LOAD(&opt_constraint_count,1,fp))
+    fatal("Cannot read number of constraints");
+  if (opt_constraint_count)
+  {
+    if (!load_string(fp,&opt_constfile))
+      fatal("Cannot read name of constraint file");
+    printf(" Constraints file: %s\n", opt_constfile);
+  }
+
   long mapfile_present;
   opt_mapfile = NULL;
   if (!LOAD(&mapfile_present,1,fp))
@@ -971,6 +981,16 @@ void load_chk_section_2(FILE * fp)
   for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(stree->nodes[i]->support),1,fp))
       fatal("Cannot read species nodes support values");
+
+  /* read constraints */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(stree->nodes[i]->constraint),1,fp))
+      fatal("Cannot read species nodes constraints");
+
+  /* read constraints line numbers*/
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(stree->nodes[i]->constraint_lineno),1,fp))
+      fatal("Cannot read species nodes constraints line numbers");
 
   /* read number of coalescent events */
   for (i = 0; i < total_nodes; ++i)

@@ -200,6 +200,11 @@ static void dump_chk_section_1(FILE * fp,
   /* write seqfile */
   DUMP(opt_msafile,strlen(opt_msafile)+1,fp);
 
+  /* write constfile */
+  DUMP(&opt_constraint_count,1,fp);
+  if (opt_constraint_count)
+    DUMP(opt_constfile,strlen(opt_constfile)+1,fp);
+
   /* write whether we will write a map file */
   long mapfile_present = (opt_mapfile ? 1 : 0);
   DUMP(&mapfile_present,1,fp);
@@ -466,6 +471,14 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   /* write support */
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->support),1,fp);
+
+  /* write constraints */
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->constraint),1,fp);
+
+  /* write constraints line numbers */
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->constraint_lineno),1,fp);
 
   /* write number of coalescent events */
   assert(opt_locus_count == stree->locus_count);

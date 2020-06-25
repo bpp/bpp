@@ -98,34 +98,6 @@ const unsigned int syntax_table[9][9] =
    {  0, 1, 0, 1, 1, 1, 1, 1, 0 },   /* STRING */
  };
 
-typedef struct node_s
-{
-  char * label;
-  char * attr;
-  double length;
-  double theta;
-  struct node_s ** children;
-  struct node_s * parent;
-  int children_count;
-  int mark;
-  int leaves;
-  long node_index;
-  double tau;
-
-  void * data;
-
-} node_t;
-
-typedef struct ntree_s
-{
-  int tip_count;
-  int inner_count;
-  node_t * root;
-  node_t ** leaves;
-  node_t ** inner;
-} ntree_t;
-
-
 typedef struct ltoken_s
 {
   char * data;
@@ -393,9 +365,8 @@ void stree_destroy(stree_t * tree,
   free(tree);
 }
 
-#if 0
 int opt_precision = 6;
-static char * ntree_export_newick_recursive(node_t * root)
+static char * ntree_export_newick_recursive(node_t * root, long print_bl)
 {
   int i;
   char * newick;
@@ -404,32 +375,47 @@ static char * ntree_export_newick_recursive(node_t * root)
   if (!root) return NULL;
 
   if (!root->children_count)
-    asprintf(&newick,
-             "%s%s:%.*f",
-             root->label,
-             root->attr ? root->attr : "",
-             opt_precision,
-             root->length);
+  {
+    if (print_bl)
+      asprintf(&newick,
+               "%s%s:%.*f",
+               root->label,
+               root->attr ? root->attr : "",
+               opt_precision,
+               root->length);
+    else
+      asprintf(&newick,
+               "%s%s",
+               root->label,
+               root->attr ? root->attr : "");
+  }
   else
   {
-    char * subtree = ntree_export_newick_recursive(root->children[0]);
+    char * subtree = ntree_export_newick_recursive(root->children[0],print_bl);
     asprintf(&newick, "(%s", subtree);
     free(subtree);
     for (i = 1; i < root->children_count; ++i)
     {
-      subtree = ntree_export_newick_recursive(root->children[i]);
+      subtree = ntree_export_newick_recursive(root->children[i],print_bl);
       asprintf(&x, "%s,%s", newick, subtree);
       free(newick);
       free(subtree);
       newick = x;
     }
-    asprintf(&x,
-             "%s)%s%s:%.*f",
-             newick,
-             root->label ? root->label : "",
-             root->attr ? root->attr : "", 
-             opt_precision,
-             root->length);
+    if (print_bl)
+      asprintf(&x,
+               "%s)%s%s:%.*f",
+               newick,
+               root->label ? root->label : "",
+               root->attr ? root->attr : "", 
+               opt_precision,
+               root->length);
+    else
+      asprintf(&x,
+               "%s)%s%s",
+               newick,
+               root->label ? root->label : "",
+               root->attr ? root->attr : "");
     free(newick);
     newick = x;
   }
@@ -437,7 +423,7 @@ static char * ntree_export_newick_recursive(node_t * root)
   return newick;
 }
 
-char * ntree_export_newick(ntree_t * tree)
+char * ntree_export_newick(ntree_t * tree, long print_bl)
 {
   int i;
   char * newick;
@@ -449,40 +435,52 @@ char * ntree_export_newick(ntree_t * tree)
 
   if (!root->children_count)
   {
-    asprintf(&newick,
-             "%s%s:%.*f",
-             root->label,
-             root->attr ? root->attr : "",
-             opt_precision,
-             root->length);
+    if (print_bl)
+      asprintf(&newick,
+               "%s%s:%.*f",
+               root->label,
+               root->attr ? root->attr : "",
+               opt_precision,
+               root->length);
+    else
+      asprintf(&newick,
+               "%s%s",
+               root->label,
+               root->attr ? root->attr : "");
   }
   else
   {
-    char * subtree = ntree_export_newick_recursive(root->children[0]);
+    char * subtree = ntree_export_newick_recursive(root->children[0],print_bl);
     asprintf(&newick, "(%s", subtree);
     free(subtree);
     for (i = 1; i < root->children_count; ++i)
     {
-      subtree = ntree_export_newick_recursive(root->children[i]);
+      subtree = ntree_export_newick_recursive(root->children[i],print_bl);
       asprintf(&x, "%s,%s", newick, subtree);
       free(newick);
       free(subtree);
       newick = x;
     }
-    asprintf(&x,
-             "%s)%s%s:%.*f;",
-             newick,
-             root->label ? root->label : "",
-             root->attr ? root->attr : "",
-             opt_precision,
-             root->length);
+    if (print_bl)
+      asprintf(&x,
+               "%s)%s%s:%.*f;",
+               newick,
+               root->label ? root->label : "",
+               root->attr ? root->attr : "",
+               opt_precision,
+               root->length);
+    else
+      asprintf(&x,
+               "%s)%s%s",
+               newick,
+               root->label ? root->label : "",
+               root->attr ? root->attr : "");
     free(newick);
     newick = x;
   }
 
   return newick;
 }
-#endif
 
 list_t * parse_tree(char * s)
 {
@@ -1456,7 +1454,7 @@ static void fill_node_lists(node_t * node,
   innerlist[innercount++] = node;
 }
 
-static ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count)
+ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count)
 {
   long i;
 
@@ -1682,7 +1680,7 @@ static void node_destroy(node_t * root, void (*cb_data_destroy)(void *))
 }
 
 
-static void ntree_destroy(ntree_t * tree, void (*cb_data_destroy)(void *))
+void ntree_destroy(ntree_t * tree, void (*cb_data_destroy)(void *))
 {
   if (!tree) return;
 
@@ -2062,4 +2060,16 @@ stree_t * bpp_parse_newick_string(const char * line)
   #endif
 
   return stree;
+}
+
+ntree_t * bpp_parse_newick_string_ntree(const char * line)
+{
+  char * s = xstrdup(line);
+  list_t * token_list = parse_tree(s);
+  ntree_t * tree = syntax_parse(token_list);
+  list_clear(token_list,token_clear);
+  free(token_list);
+  free(s);
+
+  return tree;
 }

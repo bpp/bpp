@@ -2434,6 +2434,14 @@ static FILE * init(stree_t ** ptr_stree,
     logpr_sum = stree->notheta_logpr;
   }
 
+  /* Reading constraints file */
+  if (opt_constfile)
+  {
+    fprintf(stdout, "Reading constraint file %s\n", opt_constfile);
+    fprintf(fp_out, "Reading constraint file %s\n", opt_constfile);
+    parse_and_set_constraints(stree, fp_out);
+  }
+
   /* deallocate unnecessary arrays */
   free(locusrate);
   free(heredity);
