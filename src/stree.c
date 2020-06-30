@@ -324,6 +324,9 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->weight = snode->weight;
   clone->node_index = snode->node_index;
   clone->has_theta = snode->has_theta;
+  clone->constraint = snode->constraint;
+  clone->constraint_lineno = snode->constraint_lineno;
+  clone->outgroup = snode->outgroup;
 
   if (!clone->mark)
     clone->mark = (int *)xmalloc((size_t)opt_threads*sizeof(int));
@@ -3291,6 +3294,55 @@ long stree_propose_spr(stree_t ** streeptr,
     if (r < sum) break;
   }
   snode_t * c = target[i];
+
+  /* constraint check for the quick-and-dirty method of applying constraints */
+  if (a->constraint == c->constraint)
+  {
+    if (c->outgroup)
+    {
+      if (a->outgroup == BPP_OUTGROUP_FULL)
+      {
+        /* set the new outgroup flag of Y* to the value of outgroup(C) */
+        y->outgroup = c->outgroup;
+      }
+      else
+        return 3;
+    }
+    else 
+    {
+      assert(!a->outgroup || c->parent->outgroup);
+
+      if (a->outgroup)
+      {
+        assert(a->outgroup == BPP_OUTGROUP_FULL);
+        y->outgroup = BPP_OUTGROUP_PARTIAL;
+      }
+    }
+
+    if (y->constraint != a->constraint)
+    {
+      b->constraint = y->constraint;
+      y->constraint = a->constraint;
+    }
+  }
+  else
+  {
+    if (c->left &&
+        c->left->constraint == c->right->constraint &&
+        c->left->constraint == a->constraint &&
+        a->constraint == y->constraint)
+    {
+      /* if the move is accepted we need ot change the constraint id  of the new
+       * Y* and of C. Since we work on a copy, we set it now */
+      if (a->outgroup)
+        assert(a->outgroup == BPP_OUTGROUP_FULL);
+      SWAP(y->constraint,c->constraint);
+    }
+    else
+    {
+      return 3;
+    }
+  }
 
   lnacceptance -= log(target_weight[i]);
 

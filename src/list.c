@@ -85,3 +85,81 @@ void list_clear(list_t * list, void (*cb_dealloc)(void *))
   list->head = list->tail = NULL;
   list->count = 0;
 }
+
+long list_delitem(list_t * list, list_item_t * item, void (*cb_dealloc)(void *))
+{
+  list_item_t * li = list->head;
+  list_item_t * prev = NULL;
+
+  while (li)
+  {
+    if (li == item)
+      break;
+    prev = li;
+    li = li->next;
+  }
+
+  /* if item not found then error */
+  if (!li)
+    return 0;
+
+  if (prev)
+  {
+    prev->next = li->next;
+  }
+  else
+  {
+    /* if li is the first item set head */
+    list->head = li->next;
+  }
+
+  if (cb_dealloc)
+    cb_dealloc(item->data);
+  free(item);
+
+  list->count--;
+
+  return 1;
+}
+
+/* move item to the end of the list */
+long list_reposition_tail(list_t * list, list_item_t * item)
+{
+  /* check that item is indeed from list */
+  list_item_t * li = list->head;
+  list_item_t * prev = NULL;
+  while (li)
+  {
+    if (li == item)
+      break;
+    prev = li;
+    li = li->next;
+  }
+
+  /* if item not found then error */
+  if (!li)
+    return 0;
+
+
+  /* if item was already at the end return */
+  if (list->tail == li)
+    return 1;
+
+  /* from here on we know there is at least one more item after li */
+
+  if (prev)
+  {
+    prev->next = li->next;
+  }
+  else
+  {
+    /* if li is the first item set head */
+    list->head = li->next;
+  }
+
+  list->tail->next = li;
+  li->next = NULL;
+  list->tail = li;
+
+  return 1;
+}

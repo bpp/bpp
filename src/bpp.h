@@ -267,6 +267,10 @@ extern const char * global_freqs_strings[28];
 #define BPP_CONSTDEFS_DEFINE            2
 #define BPP_CONSTDEFS_OUTGROUP          3
 
+#define BPP_OUTGROUP_NONE               0
+#define BPP_OUTGROUP_FULL               1
+#define BPP_OUTGROUP_PARTIAL            2
+
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU               8
@@ -405,6 +409,7 @@ typedef struct snode_s
 
   /* constraints */
   long constraint;
+  long outgroup;
   long constraint_lineno;
 
   /* introgression */
@@ -1174,6 +1179,9 @@ void list_append(list_t * list, void * data);
 void list_prepend(list_t * list, void * data);
 
 void list_clear(list_t * list, void (*cb_dealloc)(void *));
+
+long list_reposition_tail(list_t * list, list_item_t * item);
+long list_delitem(list_t * list, list_item_t * item, void (*cb_dealloc)(void *));
 
 /* functions in dlist.c */
 
