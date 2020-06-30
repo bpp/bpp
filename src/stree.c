@@ -623,8 +623,15 @@ static void stree_label_recursive(snode_t * node)
   if (!node->left)
     return;
 
-  stree_label_recursive(node->left);
-  stree_label_recursive(node->right);
+  if (node->left)
+    stree_label_recursive(node->left);
+  else
+    fatal("Specified species tree is not binary");
+
+  if (node->right)
+    stree_label_recursive(node->right);
+  else
+    fatal("Specified species tree is not binary");
 
   if (node->label)
     free(node->label);
