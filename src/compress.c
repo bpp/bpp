@@ -465,7 +465,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
   /*first site in uncompressed alignment maps to first site in compressed */
   int compressed_length = 1;
   size_t ref = 0;
-  mapping[0] = 0;
+  mapping[oi[0]] = ref;
   weight[ref] = 1;
 
   /* find all unique columns and set their mappings A2->A3 */
