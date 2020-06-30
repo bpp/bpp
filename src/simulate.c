@@ -1414,6 +1414,16 @@ static void simulate(stree_t * stree)
           msa[i]->label[j][k] = xtolower(msa[i]->label[j][k]);
     }
 
+    for (j = 0; j < stree->tip_count; ++j)
+      if (opt_sp_seqcount[j] > 1 && stree->nodes[j]->theta == 0)
+        fatal("Missing theta value for species %s consisting of more than one "
+              "samples", stree->nodes[j]->label);
+
+    /* TODO: Check for hybridization nodes as well */
+    for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
+      if (stree->nodes[j]->theta == 0)
+        fatal("Missing theta values for some of the species tree inner nodes");
+
     /* simulate gene tree */
     gtree[i] = gtree_simulate(stree,msa[i],i);
 
