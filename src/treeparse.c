@@ -377,45 +377,45 @@ static char * ntree_export_newick_recursive(node_t * root, long print_bl)
   if (!root->children_count)
   {
     if (print_bl)
-      asprintf(&newick,
-               "%s%s:%.*f",
-               root->label,
-               root->attr ? root->attr : "",
-               opt_precision,
-               root->length);
+      xasprintf(&newick,
+                "%s%s:%.*f",
+                root->label,
+                root->attr ? root->attr : "",
+                opt_precision,
+                root->length);
     else
-      asprintf(&newick,
-               "%s%s",
-               root->label,
-               root->attr ? root->attr : "");
+      xasprintf(&newick,
+                "%s%s",
+                root->label,
+                root->attr ? root->attr : "");
   }
   else
   {
     char * subtree = ntree_export_newick_recursive(root->children[0],print_bl);
-    asprintf(&newick, "(%s", subtree);
+    xasprintf(&newick, "(%s", subtree);
     free(subtree);
     for (i = 1; i < root->children_count; ++i)
     {
       subtree = ntree_export_newick_recursive(root->children[i],print_bl);
-      asprintf(&x, "%s,%s", newick, subtree);
+      xasprintf(&x, "%s,%s", newick, subtree);
       free(newick);
       free(subtree);
       newick = x;
     }
     if (print_bl)
-      asprintf(&x,
-               "%s)%s%s:%.*f",
-               newick,
-               root->label ? root->label : "",
-               root->attr ? root->attr : "", 
-               opt_precision,
-               root->length);
+      xasprintf(&x,
+                "%s)%s%s:%.*f",
+                newick,
+                root->label ? root->label : "",
+                root->attr ? root->attr : "", 
+                opt_precision,
+                root->length);
     else
-      asprintf(&x,
-               "%s)%s%s",
-               newick,
-               root->label ? root->label : "",
-               root->attr ? root->attr : "");
+      xasprintf(&x,
+                "%s)%s%s",
+                newick,
+                root->label ? root->label : "",
+                root->attr ? root->attr : "");
     free(newick);
     newick = x;
   }
@@ -436,45 +436,45 @@ char * ntree_export_newick(ntree_t * tree, long print_bl)
   if (!root->children_count)
   {
     if (print_bl)
-      asprintf(&newick,
-               "%s%s:%.*f",
-               root->label,
-               root->attr ? root->attr : "",
-               opt_precision,
-               root->length);
+      xasprintf(&newick,
+                "%s%s:%.*f",
+                root->label,
+                root->attr ? root->attr : "",
+                opt_precision,
+                root->length);
     else
-      asprintf(&newick,
-               "%s%s",
-               root->label,
-               root->attr ? root->attr : "");
+      xasprintf(&newick,
+                "%s%s",
+                root->label,
+                root->attr ? root->attr : "");
   }
   else
   {
     char * subtree = ntree_export_newick_recursive(root->children[0],print_bl);
-    asprintf(&newick, "(%s", subtree);
+    xasprintf(&newick, "(%s", subtree);
     free(subtree);
     for (i = 1; i < root->children_count; ++i)
     {
       subtree = ntree_export_newick_recursive(root->children[i],print_bl);
-      asprintf(&x, "%s,%s", newick, subtree);
+      xasprintf(&x, "%s,%s", newick, subtree);
       free(newick);
       free(subtree);
       newick = x;
     }
     if (print_bl)
-      asprintf(&x,
-               "%s)%s%s:%.*f;",
-               newick,
-               root->label ? root->label : "",
-               root->attr ? root->attr : "",
-               opt_precision,
-               root->length);
+      xasprintf(&x,
+                "%s)%s%s:%.*f;",
+                newick,
+                root->label ? root->label : "",
+                root->attr ? root->attr : "",
+                opt_precision,
+                root->length);
     else
-      asprintf(&x,
-               "%s)%s%s",
-               newick,
-               root->label ? root->label : "",
-               root->attr ? root->attr : "");
+      xasprintf(&x,
+                "%s)%s%s",
+                newick,
+                root->label ? root->label : "",
+                root->attr ? root->attr : "");
     free(newick);
     newick = x;
   }
