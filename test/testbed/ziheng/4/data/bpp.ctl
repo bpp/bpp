@@ -6,7 +6,7 @@
       mcmcfile = testbed/ziheng/4/out/mcmc.txt
 
 
-*       diploid = 1        * 0: phased sequences, 1: unphased diploid sequences
+*       phase = 1        * 0: phased sequences, 1: unphased diploid sequences
 *    breakpoint = 0        * 0: nothing;  1 : save;  2: read
 
 * speciesdelimitation = 0                * fixed species tree

@@ -6,7 +6,7 @@
        outfile = testbed/ziheng/1/out/out.txt
       mcmcfile = testbed/ziheng/1/out/mcmc.txt
 
-*        diploid = 1        * 0: phased sequences, 1: unphased diploid sequences
+*        phase = 1        * 0: phased sequences, 1: unphased diploid sequences
 *     breakpoint = 2        * 0: nothing;  1 : save;  2: read
 
 * speciesdelimitation = 0 * fixed species tree
@@ -19,7 +19,7 @@ speciesmodelprior = 1  * 0: uniform LH; 1:uniform rooted trees; 2: uniformSLH; 3
   species&tree = 3  A  B  C
                     2  1  1
                   ((A, B), C);
-       diploid =    1  0  0         * 0: phased sequences, 1: unphased diploid sequences
+       phase =    1  0  0         * 0: phased sequences, 1: unphased diploid sequences
 
        usedata = 1    * 0: no data (prior); 1:seq like
          nloci = 1    * number of data sets in seqfile

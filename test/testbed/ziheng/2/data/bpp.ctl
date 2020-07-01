@@ -18,7 +18,7 @@ speciesmodelprior = 1  * 0: uniform LH; 1:uniform rooted trees; 2: uniformSLH; 3
   species&tree = 4  A  B  C  D
                     2  1  2  2
                  (((A, B), C), D);
-       diploid =    1  1  1  0       * 0: phased sequences, 1: unphased diploid sequences
+       phase =    1  1  1  0       * 0: phased sequences, 1: unphased diploid sequences
 
        usedata = 1 * 0: no data(prior); 1:seq Like
          nloci = 2 * number of data sets in seqfile
