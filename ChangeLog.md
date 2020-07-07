@@ -2,6 +2,17 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.3.0] - 2020-07-07
+### Fixed
+- Notation for simulating data with only one species
+- Simulations with relaxed clock and log-normal distribution
+- Mapping of sites from A2 to A3 in diploid compression which was causing the
+  program to crash
+- Crashes when user does not specify thetas in simulations. Error messages are
+  now printed
+### Added
+- Specification of topological constraints for species tree and of outgroup
+
 ## [4.2.9] - 2020-04-28
 ### Fixed
  - Acceptance ratio for nu_i proposal with Dirichlet prior
