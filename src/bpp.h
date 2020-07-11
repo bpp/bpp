@@ -409,7 +409,6 @@ typedef struct snode_s
 
   /* constraints */
   long constraint;
-  long outgroup;
   long constraint_lineno;
 
   /* introgression */

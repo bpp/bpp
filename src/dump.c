@@ -480,10 +480,6 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->constraint_lineno),1,fp);
 
-  /* write outgroup flags */
-  for (i = 0; i < total_nodes; ++i)
-    DUMP(&(stree->nodes[i]->outgroup),1,fp);
-
   /* write number of coalescent events */
   assert(opt_locus_count == stree->locus_count);
   for (i = 0; i < total_nodes; ++i)

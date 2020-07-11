@@ -992,11 +992,6 @@ void load_chk_section_2(FILE * fp)
     if (!LOAD(&(stree->nodes[i]->constraint_lineno),1,fp))
       fatal("Cannot read species nodes constraints line numbers");
 
-  /* read outgroup flag */
-  for (i = 0; i < total_nodes; ++i)
-    if (!LOAD(&(stree->nodes[i]->outgroup),1,fp))
-      fatal("Cannot read species nodes outgroup flags");
-
   /* read number of coalescent events */
   for (i = 0; i < total_nodes; ++i)
     if (!LOAD(stree->nodes[i]->event_count,opt_locus_count,fp))

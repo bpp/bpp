@@ -260,6 +260,11 @@ static long parse_constraint(const char * line, constdefs_t * defs)
 
   long count;
 
+  /* skip all whitespace and '=' if exists */
+  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
+  if (*p == '=')
+    ++p;
+
   /* get newick string forming the group */
   count = get_string(p,&tree);
   if (!count) goto l_unwind;
@@ -442,6 +447,7 @@ static hashtable_t * ntree_hash(ntree_t * ntree)
   return ht;
 }
 
+/* find LCA of tip nodes (labels) (n-tree version) */
 static node_t * ntree_lca_nodes(ntree_t * ntree,
                                 hashtable_t * ht,
                                 char ** labels,
@@ -551,6 +557,7 @@ l_unwind:
   return lca;
 }
 
+/* find LCA of tip nodes (labels) (binary tree version) */
 static snode_t * lca_nodes(stree_t * stree,
                            hashtable_t * ht,
                            char ** labels,
@@ -654,6 +661,7 @@ static void ntree_subtree_tiplabels_recursive(node_t * root,
     ntree_subtree_tiplabels_recursive(root->children[i],labels,index);
 }
 
+/* get the labels of tips in the subtree rooted at node 'root' */
 static char ** ntree_subtree_tiplabels(node_t * root)
 {
   long index = 0;
@@ -664,40 +672,9 @@ static char ** ntree_subtree_tiplabels(node_t * root)
   return labels;
 }
 
-
-int ntree_is_fullsubtree(ntree_t * ntree, ntree_t * subtree)
-{
-  long i,j;
-
-  if (subtree->tip_count > ntree->tip_count) return 0;
-
-  if (subtree->tip_count == 1)
-  {
-    for (i = 0; i < ntree->tip_count; ++i)
-      if (!strcmp(ntree->leaves[i]->label,subtree->leaves[0]->label))
-        break;
-    if (i == ntree->tip_count)
-      return 0;
-  }
-  
-  for (i = 0; i < subtree->inner_count; ++i)
-  {
-    char ** labels = ntree_subtree_tiplabels(subtree->inner[i]);
-    assert(labels);
-
-    node_t * lca = ntree_lca_nodes(ntree,NULL,labels,subtree->inner[i]->leaves);
-
-    for (j = 0; j < subtree->inner[i]->leaves; ++j)
-      free(labels[j]);
-    free(labels);
-
-    if (!lca || lca->leaves != subtree->inner[i]->leaves)
-      return 0;
-  }
-
-  return 1;
-}
-
+/* we are given a binary species tree and an n-ary constraint tree. Check if
+   the species tree has a subtree whose tips match exactly those of the
+   constraint */
 int is_subtree(stree_t * stree, ntree_t * ntree)
 {
   long i;
@@ -711,10 +688,11 @@ int is_subtree(stree_t * stree, ntree_t * ntree)
     labels[i] = ntree->leaves[i]->label;
 
   snode_t * lca = lca_nodes(stree,NULL,labels,ntree->tip_count);
+  assert(lca);
   if (!lca)
     goto l_unwind;
 
-  if (lca->leaves != (long)ntree->tip_count)
+  if (lca->leaves != ntree->tip_count)
     goto l_unwind;
 
   ret = 1;
@@ -733,6 +711,11 @@ static long tiplabel_exists(stree_t * stree, const char * label)
   return !(i == stree->tip_count);
 }
 
+/* given an n-ary constraint tree, a species tree and a list of definitions,
+   find all tips in the constraint that do not appear in the species tree.
+   Ensure that each such tip is actually a 'definition' that is an alias of
+   another n-ary tree/constraint. Replace those tips with the corresponding
+   trees */
 static void ntree_replace_aliases(stree_t * stree,
                                   ntree_t ** ptrd,
                                   long lineno,
@@ -875,35 +858,6 @@ void constraint_process_recursive(stree_t * t,
     constraint_mark_recursive(lca->right,*cvalue,lineno);
 }
 
-void constraint_process(stree_t * stree,
-                        ntree_t ** ptrc,
-                        constdefs_t * def,
-                        char ** def_label,
-                        char ** def_string,
-                        long def_count,
-                        long * cvalue)
-{
-  /* check that all d tips exist in species tree, and replace aliases with
-     previous definitions */
-  ntree_replace_aliases(stree,ptrc,def->lineno,def_label,def_string,def_count);
-
-  ntree_t * constraint = *ptrc;
-
-  /* check if constraint tree is a subtree of stree */
-  if (!is_subtree(stree,constraint))
-  {
-    if (def->type == BPP_CONSTDEFS_OUTGROUP)
-      fatal("Invalid outgroup in file %s (line %ld)",
-            opt_constfile, def->lineno);
-    else
-      fatal("Invalid constraint in file %s (line %ld)",
-            opt_constfile, def->lineno);
-  }
-
-  /* go through all inner nodes of the constraint in postorder */
-  constraint_process_recursive(stree,constraint->root,cvalue,def->lineno);
-}
-
 static int strip(char ** s)
 {
   size_t ws;
@@ -982,210 +936,193 @@ static char ** tokenize_csv(const char * csv, long * count)
   return tokens;
 }
 
-static int valid_outgroup_split_recursive(snode_t * node, snode_t * stop, int mark)
+static int constraints_merge(ntree_t ** t1ptr, ntree_t ** t2ptr)
 {
-  if (!node || node == stop) return 1;
+  long i,j,k;
+  char ** labels = NULL;
 
-  int m1 = valid_outgroup_split_recursive(node->left, stop, mark);
-  int m2 = valid_outgroup_split_recursive(node->right, stop, mark);
+  ntree_t * t1 = *t1ptr;
+  ntree_t * t2 = *t2ptr;
 
-  return ((node->mark[0] == mark) && m1 && m2);
-}
+  /* We go through each internal node u of t2. Each such node u has n>1 children
+     c1,c2,...,cn.
 
-void outgroup_process(stree_t * stree, constdefs_t * def, long * cvalue)
-{
-  long i,j;
-  snode_t * x;
-  snode_t * y;
-
-  /* remove trailing whitespace and semicolon */
-  size_t len = strlen(def->arg1);
-  if (len < 1)
-    fatal("Invalid outgroup definition (line %ld)", def->lineno);
-  char * p = def->arg1+len-1;
-  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')
-    --p;
-  if (*p != ';') 
-    ++p;
-  *p = 0;
-
-
-  /* read comma separated taxa names into an arrray of strings */
-  long count = 0;
-  char ** labels = tokenize_csv(def->arg1,&count);
-  if (!labels || !count)
-    fatal("No labels found in outgroup definition (line %ld)", def->lineno);
-
-  /* check that all taxa in the array appear in the species tree */
-  for (i = 0; i < count; ++i)
-    if (!tiplabel_exists(stree,labels[i]))
-      fatal("Invalid taxon %s in outgroup definition (line %ld)",
-            labels[i], def->lineno);
-
-  /* outgroup taxa must be at most one less than the tips in the tree */
-  if (count >= stree->tip_count)
-    fatal("Outgroup must consist of less taxa than the species tree (line %ld)",
-          def->lineno);
-  
-  /* go through the list of taxa and mark the rootpaths */
-  for (i = 0; i < count; ++i)
-  {
-    for (j = 0; j < stree->tip_count; ++j)
-      if (!strcmp(labels[i],stree->nodes[j]->label))
-        break;
-    assert(j < stree->tip_count);
-
-    /* mark rootpath */
-    x = stree->nodes[j];
-    while (x)
-    {
-      x->mark[0] = 1;
-      x = x->parent;
-    }
-  }
-
-  /* now check that the outgroup is valid, ie there exists a branch splitting
-     the tree into two connected components, one is made only of marked nodes
-     and includes the root, while the other consists only of unmarked nodes */
-  assert(!opt_msci);
-  int valid = 0;
-  snode_t * split = NULL;
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    split = stree->nodes[i];
-    if (!split->parent || (split->mark[0] == split->parent->mark[0])) continue;
-
-    /* invalid outgroup specification */
-    if (!split->parent->mark[0]) break;
-
-    /* candidate edge */
-    if (valid_outgroup_split_recursive(stree->root, split, 1) &&
-        valid_outgroup_split_recursive(split, NULL, 0))
-    {
-      valid = 1;
-      break;
-    }
-  }
-
-  if (!valid)
-    fatal("Invalid outgroup definition. Outgroup must be defined such that "
-          "there exists an edge splitting the tree into outgroup and ingroup");
-
-  /* Check #2. Constraints
-     Check that no constraint index in the ingroup appears in the outgroup. The
-     only exception is that if the root of ingroup has a constraint set, it must
-     be identical to its sister (part of the outgroup).
+     We mark all rootpaths from leaves in L(u). We find the LCA. If the number of leaves on all marked
+     children of the LCA equals to L(u) we are fine, otherwise error.
   */
 
-  assert(split && split->parent);
 
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  for (i = 0; i < t2->inner_count; ++i)
   {
-    /* select nodes part of the ingroup except the split */
-    x = stree->nodes[i];
-    if (x->mark[0] || x == split) continue;
+    node_t * node = t2->inner[i];
+    assert(node->leaves > 1);
 
-    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    labels = ntree_subtree_tiplabels(node);
+    node_t * lca = ntree_lca_nodes(t1,NULL,labels,node->leaves);
+    assert(lca && lca->children_count > 1);
+    
+    /* mark the children of LCA lying on the rootpaths */
+    for (j = 0; j < node->leaves; ++j)
     {
-      /* select nodes part of the outgroup */
-      y = stree->nodes[j];
-      if (!y->mark[0]) continue;
+      for (k = 0; k < t1->tip_count; ++k)
+        if (!strcmp(t1->leaves[k]->label,labels[j]))
+          break;
+      if (k == t1->tip_count)
+        fatal("Internal error");
 
-      if (y->constraint && y->constraint == x->constraint)
+      node_t * temp = t1->leaves[k];
+
+      /* mark children of LCA in rootpaths */
+      while (temp)
       {
-        valid = 0;
-        break;
+        if (temp->parent == lca)
+        {
+          temp->mark = 1;
+          break;
+        }
+
+        temp = temp->parent;
+      }
+      assert(temp && temp->parent && temp->parent == lca);
+    }
+    for (j = 0; j < node->leaves; ++j)
+      free(labels[j]);
+    free(labels);
+
+    /* now check compatibility. Leaves of marked children must be equal to the
+       leaves of t2->inner[i] */
+    long leaves = 0;
+    long marked_children_count = 0;
+    for (j = 0; j < lca->children_count; ++j)
+    {
+      if (lca->children[j]->mark)
+      {
+        leaves += lca->children[j]->leaves;
+        marked_children_count++;
       }
     }
-    if (!valid) break;
+    if (leaves != node->leaves)
+    {
+      for (j = 0; j < lca->children_count; ++j)
+        lca->children[j]->mark = 0;
+      return 0;                         /* incompatible */
+    }
+
+    /* further resolve multifurcation */
+    if (lca->children_count > marked_children_count)
+    {
+      node_t * new = (node_t *)xcalloc(1,sizeof(node_t));
+      new->children_count = marked_children_count;
+      new->children = (node_t **)xmalloc((size_t)marked_children_count *
+                                          sizeof(node_t *));
+      long dst = 0;
+      long src = 0;
+      for (j = 0; j < lca->children_count; ++j)
+      {
+        if (lca->children[j]->mark)
+        {
+          lca->children[j]->mark = 0;
+          new->children[dst++] = lca->children[j];
+          lca->children[j]->parent = new;
+        }
+        else
+        {
+          if (src != j)
+            lca->children[src] = lca->children[j];
+
+          src++;
+        }
+      }
+      assert(src == (lca->children_count - marked_children_count));
+
+      lca->children[src++] = new;
+      new->parent = lca;
+      lca->children_count = src;
+      new->children_count = marked_children_count;
+
+      free(t1->leaves); free(t1->inner);
+      ntree_t * newtree = ntree_wraptree(t1->root,t1->tip_count,t1->inner_count+1);
+      free(t1);
+      t1 = newtree;
+      ntree_set_leaves_count(t1);
+
+      *t1ptr = t1;
+    }
+    else
+    {
+      /* clean marks */
+      for (j = 0; j < lca->children_count; ++j)
+        lca->children[j]->mark = 0;
+    }
+
+  }
+  return 1;     /* compatible */
+}
+
+static int constraints_reduce(ntree_t ** t1ptr,
+                              ntree_t ** t2ptr,
+                              const char * c1,
+                              const char * c2,
+                              long line1,
+                              long line2)
+{
+  long i,j;
+  long common = 0;
+  long diff = 0;
+
+  ntree_t * t1 = *t1ptr;
+  ntree_t * t2 = *t2ptr;
+
+  /* compute union and difference */
+  for (i = 0; i < t1->tip_count; ++i)
+  {
+    for (j = 0; j < t2->tip_count; ++j)
+    {
+      if (!strcmp(t1->leaves[i]->label,t2->leaves[j]->label))
+        break;
+    }
+    if (j == t2->tip_count)
+      ++diff;
+    else
+      ++common;
   }
 
-  if (!valid)
+  if (common == t1->tip_count)
   {
-    assert(x && y);
-    assert(x->constraint_lineno == y->constraint_lineno);
-    fatal("Constraint on line %ld conflicts with outgroup definition",
-          x->constraint_lineno);
+    /* possibly compatible */
+    if (!constraints_merge(t2ptr,t1ptr))
+      fatal("Conflicting constraints found:\n"
+            "  Line %2ld: %s\n"
+            "  Line %2ld: %s",
+            line1,c1,line2,c2);
+    return 0;
   }
-
-  if (split->constraint)
+  else if (common == t2->tip_count)
   {
-    snode_t * sister = (split->parent->left == split) ?
-                         split->parent->right : split->parent->left;
-    if (sister->constraint != split->constraint)
-      fatal("Internal constraint error");  /* this case should never happen */
-
-    if (split->constraint == split->parent->constraint)
-      fatal("Constraint on line %ld conflicts with outgroup definition",
-            split->constraint_lineno);
+    /* possibly compatible */
+    if (!constraints_merge(t1ptr,t2ptr))
+      fatal("Conflicting constraints found:\n"
+            "  Line %2ld: %s\n"
+            "  Line %2ld: %s",
+            line1,c1,line2,c2);
+    return 1;
   }
-
-  /* checks passed */
-  if (!valid)
-    fatal("Invalid outgroup :-(\n");
-
-
-  /* set outgroup flags */
-  if (!split->parent->parent)
+  else if (common && diff)
   {
-    /* monophyletic outgroup */
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      if (stree->nodes[i]->mark[0])
-        stree->nodes[i]->outgroup = BPP_OUTGROUP_FULL;
+    /* conflicting */
+    return 2;
+  }
+  else if (!common && diff)
+  {
+    /* independent */
+      return 3;
   }
   else
   {
-    /* paraphyletic outgroup */
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-    {
-      x = stree->nodes[i];
-      if (!x->mark[0]) continue;
-
-      /* If x is an ancestor of 'split' then set BPP_OUTGROUP_PARTIAL flag */
-      y = split;
-      while (y)
-      {
-        if (y == x) break;
-        y = y->parent;
-      }
-      x->outgroup = y ? BPP_OUTGROUP_PARTIAL : BPP_OUTGROUP_FULL;
-    }
-  }
-  /* for consistency root received flag BPP_OUTGROUP_PARTIAL although root flag
-     is irrelevant */
-  stree->root->outgroup = BPP_OUTGROUP_PARTIAL;
-
-  *cvalue = *cvalue + 1;
-  /* set constraint identifier on unconstrained outgroup nodes */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-  {
-    x = stree->nodes[i];
-
-    if (x->mark[0] && !x->constraint)
-    {
-      x->constraint = *cvalue;
-      x->constraint_lineno = def->lineno;
-    }
+    assert(0);
   }
 
-  /* finally if the split (ingroup root) has no constraint, set its constraint
-     to cvalue. This is to allow unconstrained clades from outgroup to be
-     regrafted on 'split', but in the SPR algorithm we need to check the
-     'outgroup' constraint since the ingroup subtree cannot be regrafted
-     within the outgroup clade/clan even if they have the same constraint id */
-  if (!split->constraint)
-    split->constraint = *cvalue;
-
-  /* clear marks */
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-    stree->nodes[i]->mark[0] = 0;
-  
-  /* deallocate tokens list */
-  for (i = 0; i < count; ++i)
-    free(labels[i]);
-  free(labels);
-
-  
+  return 4;
 }
 
 void definition_process(stree_t * stree,
@@ -1240,8 +1177,12 @@ static void definitions_expand(list_t * constlist,
       def_count++;
       ntree_destroy(t,NULL);
 
-      fprintf(stdout, " * (%ld) Definition: %s = %s\n", def->lineno, def->arg1, def->arg2);
-      fprintf(fp_out, " * (%ld) Definition: %s = %s\n", def->lineno, def->arg1, def->arg2);
+      fprintf(stdout,
+              "Definition %2ld (line %ld): %s = %s\n",
+              def_count, def->lineno, def->arg1, def->arg2);
+      fprintf(fp_out,
+              "Definition %2ld (line %ld): %s = %s\n",
+              def_count, def->lineno, def->arg1, def->arg2);
 
       list_delitem(constlist,li,constdefs_dealloc);
     }
@@ -1250,64 +1191,29 @@ static void definitions_expand(list_t * constlist,
   }
 }
 
-
-static void constraints_apply(list_t * constlist,
-                              stree_t * stree,
-                              char ** def_labels,
-                              char ** def_string,
-                              long def_count,
-                              FILE * fp_out)
+static void constraints_validate(ntree_t * tree, long lineno)
 {
-  list_item_t * li;
+  long i,j;
 
-  long cvalue = 0;
-
-
-  li = constlist->head;
-  while (li)
-  {
-    constdefs_t * def = (constdefs_t *)(li->data);
-
-    if (def->type == BPP_CONSTDEFS_OUTGROUP)
-    {
-      outgroup_process(stree,def,&cvalue);
-
-      fprintf(stdout, " * (%ld) Outgroup: %s\n", def->lineno, def->arg1);
-      fprintf(fp_out, " * (%ld) Outgroup: %s\n", def->lineno, def->arg1);
-    }
-    else if (def->type == BPP_CONSTDEFS_CONSTRAINT)
-    {
-      ntree_t * t = bpp_parse_newick_string_ntree(def->arg1);
-      if (!t)
-        fatal("Error while parsing constraint (line %ld)", def->lineno);
-      
-
-      ntree_set_leaves_count(t);
-      constraint_process(stree,&t,def,def_labels,def_string,def_count,&cvalue);
-      ntree_destroy(t,NULL);
-
-      fprintf(stdout, " * (%ld) Constraint: %s\n", def->lineno, def->arg1);
-      fprintf(fp_out, " * (%ld) Constraint: %s\n", def->lineno, def->arg1);
-    }
-
-    li = li->next;
-  }
-
-  long i;
-  for (i = 0; i < def_count; ++i)
-  {
-    free(def_labels[i]);
-    free(def_string[i]);
-  }
-  free(def_labels);
-  free(def_string);
+  /* check for duplicate tips */
+  for (i = 0; i < tree->tip_count; ++i)
+    for (j = i+1; j < tree->tip_count; ++j)
+      if (!strcmp(tree->leaves[i]->label, tree->leaves[j]->label))
+        fatal("Constraint on line %ld contains duplicate taxon label (%s)",
+              lineno, tree->leaves[i]->label);
+  
+  /* check for unary nodes */
+  for (i = 0; i < tree->inner_count; ++i)
+    if (tree->inner[i]->children_count == 1)
+      fatal("Constraint on line %ld contrains an unary node", lineno);
 }
 
-static void remove_redundant_constraints(stree_t * stree,
-                                         list_t * constlist,
-                                         char ** def_label,
-                                         char ** def_string,
-                                         long def_count)
+static void constraints_process(stree_t * stree,
+                                list_t * constlist,
+                                char ** def_labels,
+                                char ** def_string,
+                                long def_count,
+                                FILE * fp_out)
 {
   long i,j;
   long const_count = 0;
@@ -1324,8 +1230,7 @@ static void remove_redundant_constraints(stree_t * stree,
       const_count++;
   }
 
-  if (const_count < 2) return;
-
+  /* serialize list of constraints */
   trees = (ntree_t **)xmalloc((size_t)const_count * sizeof(ntree_t *));
   liptr = (list_item_t **)xmalloc((size_t)const_count * sizeof(list_item_t *));
   lines = (long *)xmalloc((size_t)const_count * sizeof(long));
@@ -1341,38 +1246,98 @@ static void remove_redundant_constraints(stree_t * stree,
       liptr[i] = li;
       lines[i] = def->lineno;
       ntree_set_leaves_count(trees[i]);
-      ntree_replace_aliases(stree,trees+i,def->lineno,def_label,def_string,def_count);
+      ntree_replace_aliases(stree,
+                            trees+i,
+                            def->lineno,
+                            def_labels,
+                            def_string,
+                            def_count);
       ++i;
     }
   }
 
-  #if 0
+  /* check for duplicate tips or unary nodes */
+  for (i = 0; i < const_count; ++i)
+    constraints_validate(trees[i],lines[i]);
+
+  fprintf(stdout, "List of constraints in file %s\n", opt_constfile);
+  fprintf(fp_out, "List of constraints in file %s\n", opt_constfile);
   for (i = 0; i < const_count; ++i)
   {
-    printf("Constraint %ld: %s\n", i, ntree_export_newick(trees[i],0));
+    constdefs_t * def = (constdefs_t *)(liptr[i]->data);
+    fprintf(stdout, "Constraint %2ld (line %2ld): %s\n",
+           i+1, def->lineno, def->arg1);
+    fprintf(fp_out, "Constraint %2ld (line %2ld): %s\n",
+           i+1, def->lineno, def->arg1);
   }
-  #endif
 
+  /* pairwisely compare/reduce/merge constraints. Constraints removed due to
+     merging are delete from the arrays and replaced with NULL, hence the
+     break/continue in the loops */
+  for (i = 0; i < const_count ;++i)
+  {
+    for (j = i+1; j < const_count; ++j)
+    {
+      if (!trees[i]) break;
+      if (!trees[j]) continue;
+
+      char * c1 = ntree_export_newick(trees[i],0);
+      char * c2 = ntree_export_newick(trees[j],0);
+      char * mc = NULL;
+      int rc = constraints_reduce(trees+i,trees+j,c1,c2,lines[i],lines[j]);
+      switch (rc)
+      {
+        case 0:
+          mc = ntree_export_newick(trees[j],0);
+          fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          free(mc);
+          ntree_destroy(trees[i],NULL);
+          mc = NULL; trees[i] = NULL;
+          break;
+        case 1:
+          mc = ntree_export_newick(trees[i],0);
+          fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          free(mc);
+          ntree_destroy(trees[j],NULL);
+          mc = NULL; trees[j] = NULL;
+          break;
+        case 2:
+          #if 0
+          printf("Constraints %s and %s are conflicting\n", c1, c2);
+          #endif
+          break;
+        case 3:
+          #if 0
+          printf("Constraints %s and %s are independent\n", c1, c2);
+          #endif
+          break;
+        default:
+          fatal("Internal error - invalid code");
+          break;
+      }
+      free(c1);
+      free(c2);
+    }
+  }
+
+  long cvalue = 0;
+
+  /* apply constraints */
   for (i = 0; i < const_count; ++i)
   {
     if (!trees[i]) continue;
 
-    for (j = 0; j < const_count; ++j)
-    {
-      if (i == j) continue;
-      if (!trees[j]) continue;
+    if (!is_subtree(stree,trees[i]))
+      fatal("Invalid constraint in file %s (line %ld)", opt_constfile, lines[i]);
 
-      if (ntree_is_fullsubtree(trees[i],trees[j]))
-      {
-        fprintf(stdout,
-                "Removing constraint (line %ld) made redundant by line %ld\n",
-                lines[j], lines[i]);
-        list_delitem(constlist,liptr[j],constdefs_dealloc);
-        ntree_destroy(trees[j],NULL);
-        liptr[j] = NULL;
-        trees[j] = NULL;
-      }
-    }
+    char * stmp = ntree_export_newick(trees[i],0);
+    fprintf(stdout, "Applying constraint: %s\n", stmp);
+    fprintf(fp_out, "Applying constraint: %s\n", stmp);
+    free(stmp);
+    constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
+
   }
 
   for (i = 0; i < const_count; ++i)
@@ -1382,6 +1347,119 @@ static void remove_redundant_constraints(stree_t * stree,
   free(trees);
   free(liptr);
   free(lines);
+
+  for (i = 0; i < def_count; ++i)
+  {
+    free(def_labels[i]);
+    free(def_string[i]);
+  }
+  free(def_labels);
+  free(def_string);
+}
+
+static void convert_outgroup_to_constraint(list_item_t * li,
+                                           stree_t * stree,
+                                           FILE * fp_out)
+{
+  long i,j;
+  size_t len;
+  char * p;
+
+  constdefs_t * def = (constdefs_t *)(li->data);
+
+  assert(def->type == BPP_CONSTDEFS_OUTGROUP);
+
+  def->type = BPP_CONSTDEFS_CONSTRAINT;
+
+  /* remove trailing whitespace and semicolon */
+  len = strlen(def->arg1);
+  if (len < 1)
+    fatal("Invalid outgroup definition (line %ld)", def->lineno);
+  p = def->arg1+len-1;
+  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')
+    --p;
+  if (*p != ';') 
+    ++p;
+  *p = 0;
+  
+  long count = 0;
+  char ** labels = tokenize_csv(def->arg1,&count);
+  if (!labels || !count)
+    fatal("No labels found in outgroup definition (line %ld)", def->lineno);
+
+  /* check that all taxa in the array appear in the species tree */
+  for (i = 0; i < count; ++i)
+    if (!tiplabel_exists(stree,labels[i]))
+      fatal("Invalid taxon %s in outgroup definition (line %ld)",
+            labels[i], def->lineno);
+
+  /* outgroup taxa must be at most two less than the tips in the tree */
+  if (count >= stree->tip_count-1)
+    fatal("At least two taxa must be part of the ingroup (line %ld)",
+          def->lineno);
+
+  for (i = 0; i < count; ++i)
+  {
+    for (j = 0; j < stree->tip_count; ++j)
+      if (!strcmp(labels[i],stree->nodes[j]->label))
+      {
+        stree->nodes[j]->mark[0] = 1;
+        break;
+      }
+    assert(j < stree->tip_count);
+  }
+
+  /* now construct a comma-separated sequence of the complementary taxa */
+
+  /* first count the space we will need */
+  long taxa_count = 0;
+  long space = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (!stree->nodes[i]->mark[0])
+    {
+      space += strlen(stree->nodes[i]->label);
+      taxa_count++;
+    }
+  } 
+  /* one comma less than number of taxa plus start/end parenthesis plus
+     terminating zero */
+  space += taxa_count+2;
+  char * constraint = (char *)xcalloc((size_t)space,sizeof(char));
+
+  p = constraint;
+  taxa_count = 0;
+  *p++ = '(';
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (!stree->nodes[i]->mark[0])
+    {
+      if (taxa_count)
+        *p++ = ',';
+      
+      ++taxa_count;
+      len = strlen(stree->nodes[i]->label);
+      memcpy(p,stree->nodes[i]->label,len);
+      p += len;
+    }
+  }
+  *p++ = ')';
+  *p++ = '\0';
+  fprintf(stdout, "Outgroup: %s\n", def->arg1);
+  fprintf(fp_out, "Outgroup: %s\n", def->arg1);
+  fprintf(stdout, "Converting outgroup to constraint: %s\n", constraint);
+  fprintf(fp_out, "Converting outgroup to constraint: %s\n", constraint);
+  free(def->arg1);
+  def->arg1 = constraint;
+
+  /* reset marks */
+  for (i = 0; i < stree->tip_count; ++i)
+    stree->nodes[i]->mark[0] = 0;
+
+  for (i = 0; i < count; ++i)
+    free(labels[i]);
+  free(labels);
+
 }
 
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
@@ -1444,18 +1522,16 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
   
   /* we want the outgroup to be processed last */
   if (outgroup_li)
-    assert(list_reposition_tail(constlist,outgroup_li));
+    convert_outgroup_to_constraint(outgroup_li,stree,fp_out);
 
   char ** def_labels = (char **)xcalloc((size_t)def_count,sizeof(char *));
   char ** def_string = (char **)xcalloc((size_t)def_count,sizeof(char *));
   definitions_expand(constlist,stree,def_labels,def_string,fp_out);
 
   /* remove redundant constraints */
-  remove_redundant_constraints(stree,constlist,def_labels,def_string,def_count);
+  constraints_process(stree,constlist,def_labels,def_string,def_count,fp_out);
 
   /* set constraints */
-  constraints_apply(constlist,stree,def_labels,def_string,def_count,fp_out);
-
   list_clear(constlist,constdefs_dealloc);
   free(constlist);
 }
