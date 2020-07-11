@@ -1502,8 +1502,10 @@ static ntree_t * syntax_parse(list_t * token_list)
 
     if (!syntax_table[prev_token_type][token->type])
     {
+      #if 0
       printf("%ld %d\n", prev_token_type, token->type);
-      fatal("Invalid token type");
+      #endif
+      fatal("Invalid token type while parsing n-ary tree");
     }
 
     switch (token->type)

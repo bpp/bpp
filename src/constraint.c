@@ -1125,17 +1125,94 @@ static int constraints_reduce(ntree_t ** t1ptr,
   return 4;
 }
 
+static void complement_definition(stree_t * stree,
+                                  ntree_t ** ptrd,
+                                  constdefs_t * def)
+{
+  long i,j;
+  long taxa_count;
+  long space;
+  size_t len;
+  char * newdef;
+  char * p;
+
+  ntree_t * d = *ptrd;
+
+  /* mark tips in the species tree */
+  for (i = 0; i < d->tip_count; ++i)
+  {
+    for (j = 0; j < stree->tip_count; ++j)
+      if (!strcmp(d->leaves[i]->label,stree->nodes[j]->label))
+      {
+        stree->nodes[j]->mark[0] = 1;
+        break;
+      }
+    if (j == stree->tip_count)
+      fatal("Invalid definition in file %s (line %ld)",
+            opt_constfile, def->lineno);
+  }
+
+  space = taxa_count = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+    if (!stree->nodes[i]->mark[0])
+    {
+      space += strlen(stree->nodes[i]->label);
+      taxa_count++;
+    }
+  assert(taxa_count == stree->tip_count - d->tip_count);
+
+  /* one comma less than number of taxa plus start/end parenthesis plus
+     terminating zero plus semicolon */
+  space += taxa_count+3;
+  newdef = (char *)xcalloc((size_t)space,sizeof(char));
+
+  p = newdef;
+  taxa_count = 0;
+  *p++ = '(';
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (!stree->nodes[i]->mark[0])
+    {
+      if (taxa_count)
+        *p++ = ',';
+      
+      ++taxa_count;
+      len = strlen(stree->nodes[i]->label);
+      memcpy(p,stree->nodes[i]->label,len);
+      p += len;
+    }
+    else
+      stree->nodes[i]->mark[0] = 0;
+  }
+  *p++ = ')';
+  *p++ = ';';
+  *p++ = '\0';
+
+  /* delete old tree and definition */
+  free(def->arg2);
+  ntree_destroy(d,NULL);
+
+  def->arg2 = newdef;
+  d = bpp_parse_newick_string_ntree(def->arg2);
+  ntree_set_leaves_count(d);
+  *ptrd = d;
+}
+
 void definition_process(stree_t * stree,
                         ntree_t ** ptrd,
                         constdefs_t * def,
                         char ** def_label,
                         char ** def_string,
-                        long def_count)
+                        long def_count,
+                        int cpl)
 {
-
   /* check that all d tips exist in species tree, and replace aliases with
      previous definitions */
   ntree_replace_aliases(stree,ptrd,def->lineno,def_label,def_string,def_count);
+
+  /* complement */
+  if (cpl)
+    complement_definition(stree,ptrd,def);
 
   ntree_t * d = *ptrd;
 
@@ -1154,6 +1231,7 @@ static void definitions_expand(list_t * constlist,
                                FILE * fp_out)
 {
   list_item_t * li;
+  int cpl = 0;          /* complement */
   long def_count = 0;
 
   li = constlist->head;
@@ -1165,11 +1243,20 @@ static void definitions_expand(list_t * constlist,
 
     if (def->type == BPP_CONSTDEFS_DEFINE)
     {
-      ntree_t * t = bpp_parse_newick_string_ntree(def->arg2);
+      cpl = 0;
+      ntree_t * t = NULL;
+
+      if (strlen(def->arg2) > 3 && !strncasecmp(def->arg2, "not", 3))
+      {
+        t = bpp_parse_newick_string_ntree(def->arg2+3);
+        cpl = 1;
+      }
+      else
+        t = bpp_parse_newick_string_ntree(def->arg2);
       if (!t)
         fatal("Error while parsing definition (line %ld)", def->lineno);
       ntree_set_leaves_count(t);
-      definition_process(stree,&t,def,def_labels, def_expand, def_count);
+      definition_process(stree,&t,def,def_labels, def_expand,def_count,cpl);
       
       /* expanded form 
          printf("    alias: %s\n", def_string[def_count]);
@@ -1459,7 +1546,6 @@ static void convert_outgroup_to_constraint(list_item_t * li,
   for (i = 0; i < count; ++i)
     free(labels[i]);
   free(labels);
-
 }
 
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
@@ -1489,9 +1575,16 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
       if (tiplabel_exists(stree,def->arg1))
         fatal("Definition %s in %s (line %ld) already exists as a taxon",
               def->arg1, opt_constfile, def->lineno);
-      ntree_t * t = bpp_parse_newick_string_ntree(def->arg2);
+
+      ntree_t * t = NULL;
+      if (strlen(def->arg2) > 3 && !strncasecmp(def->arg2, "not", 3))
+        t = bpp_parse_newick_string_ntree(def->arg2+3);
+      else
+        t = bpp_parse_newick_string_ntree(def->arg2);
       if (!t)
-        fatal("Definition in %s (line %ld) is not a valid tree", def->lineno);
+        fatal("Definition in %s (line %ld) is not a valid tree",
+              opt_constfile, def->lineno);
+
       ntree_destroy(t,NULL);
 
       def_count++;
