@@ -1417,7 +1417,8 @@ static void constraints_process(stree_t * stree,
     if (!trees[i]) continue;
 
     if (!is_subtree(stree,trees[i]))
-      fatal("Invalid constraint in file %s (line %ld)", opt_constfile, lines[i]);
+      fatal("Starting species tree contradicts constraint in file %s (line %ld)",
+            opt_constfile, lines[i]);
 
     char * stmp = ntree_export_newick(trees[i],0);
     fprintf(stdout, "Applying constraint: %s\n", stmp);
