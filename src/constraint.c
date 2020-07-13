@@ -722,7 +722,8 @@ static void ntree_replace_aliases(stree_t * stree,
                                   long lineno,
                                   char ** def_label,
                                   char ** def_string,
-                                  long def_count)
+                                  long def_count,
+                                  long type)
 {
   int needs_rewrap = 0;
   int new_tip_count = 0;
@@ -743,8 +744,14 @@ static void ntree_replace_aliases(stree_t * stree,
         if (!strcmp(def_label[j],d->leaves[i]->label))
           break;
       if (j == def_count)
-        fatal("Definition in %s (line %ld) contains undefined taxon (%s)",
-               opt_constfile, lineno, d->leaves[i]->label);
+      {
+        if (type == BPP_CONSTDEFS_CONSTRAINT)
+          fatal("Constraint in %s (line %ld) contains undefined taxon (%s)",
+                 opt_constfile, lineno, d->leaves[i]->label);
+        else
+          fatal("Definition in %s (line %ld) contains undefined taxon (%s)",
+                 opt_constfile, lineno, d->leaves[i]->label);
+      }
 
       /* found definition. expand into a tree T */
       ntree_t * t = bpp_parse_newick_string_ntree(def_string[j]);
@@ -1209,7 +1216,13 @@ void definition_process(stree_t * stree,
 {
   /* check that all d tips exist in species tree, and replace aliases with
      previous definitions */
-  ntree_replace_aliases(stree,ptrd,def->lineno,def_label,def_string,def_count);
+  ntree_replace_aliases(stree,
+                        ptrd,
+                        def->lineno,
+                        def_label,
+                        def_string,
+                        def_count,
+                        BPP_CONSTDEFS_DEFINE);
 
   /* complement */
   if (cpl)
@@ -1339,7 +1352,8 @@ static void constraints_process(stree_t * stree,
                             def->lineno,
                             def_labels,
                             def_string,
-                            def_count);
+                            def_count,
+                            BPP_CONSTDEFS_CONSTRAINT);
       ++i;
     }
   }

@@ -3510,7 +3510,7 @@ void cmd_run()
   if (opt_constraint_count)
   {
     fprintf(stdout,
-            "Quick-and-dirty iterations summary: max: %ld avg: %f\n",
+            "Constraint (quick-and-dirty iterations) summary: max: %ld avg: %f\n",
             max_dirty_iters,
             (double)sum_dirty_iters / (opt_samples*opt_samplefreq+opt_burnin));
   }
