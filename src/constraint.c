@@ -677,27 +677,28 @@ static char ** ntree_subtree_tiplabels(node_t * root)
    constraint */
 int is_subtree(stree_t * stree, ntree_t * ntree)
 {
-  long i;
+  long i,j;
   int ret = 0;
   assert(!opt_msci);
   assert(ntree->tip_count > 0);
 
-  /* create a list of labels */
-  char ** labels = (char **)xmalloc((size_t)(ntree->tip_count)*sizeof(char *));
-  for (i = 0; i < ntree->tip_count; ++i)
-    labels[i] = ntree->leaves[i]->label;
+  for (i = 0; i < ntree->inner_count; ++i)
+  {
+    char ** labels = ntree_subtree_tiplabels(ntree->inner[i]); 
 
-  snode_t * lca = lca_nodes(stree,NULL,labels,ntree->tip_count);
-  assert(lca);
-  if (!lca)
-    goto l_unwind;
+    snode_t * lca = lca_nodes(stree,NULL,labels,ntree->inner[i]->leaves);
+    assert(lca);
 
-  if (lca->leaves != ntree->tip_count)
-    goto l_unwind;
+    for (j = 0; j < ntree->inner[i]->leaves; ++j)
+      free(labels[j]);
+    free(labels);
+
+    if (lca->leaves != ntree->inner[i]->leaves)
+      goto l_unwind;
+  }
 
   ret = 1;
 l_unwind:
-  free(labels);
   return ret;
 }
 
@@ -1356,6 +1357,10 @@ static void constraints_process(stree_t * stree,
            i+1, def->lineno, def->arg1);
     fprintf(fp_out, "Constraint %2ld (line %2ld): %s\n",
            i+1, def->lineno, def->arg1);
+
+    if (!is_subtree(stree,trees[i]))
+      fatal("Starting species tree contradicts constraint in file %s (line %ld)",
+            opt_constfile, lines[i]);
   }
 
   /* pairwisely compare/reduce/merge constraints. Constraints removed due to
@@ -1416,16 +1421,17 @@ static void constraints_process(stree_t * stree,
   {
     if (!trees[i]) continue;
 
-    if (!is_subtree(stree,trees[i]))
-      fatal("Starting species tree contradicts constraint in file %s (line %ld)",
-            opt_constfile, lines[i]);
-
     char * stmp = ntree_export_newick(trees[i],0);
     fprintf(stdout, "Applying constraint: %s\n", stmp);
     fprintf(fp_out, "Applying constraint: %s\n", stmp);
     free(stmp);
-    constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
 
+    /* TODO: This check is probably no longer necessary */
+    if (!is_subtree(stree,trees[i]))
+      fatal("Starting species tree contradicts constraint in file %s (line %ld)",
+            opt_constfile, lines[i]);
+
+    constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
   }
 
   for (i = 0; i < const_count; ++i)
