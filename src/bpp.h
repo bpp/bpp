@@ -905,6 +905,7 @@ extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
 extern char * opt_constfile;
+extern char * opt_debug_constraintfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;

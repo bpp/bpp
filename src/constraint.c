@@ -21,10 +21,14 @@
 
 #include "bpp.h"
 
+#define DEBUG_CONSTRAINTS
+
 static char buffer[LINEALLOC];
 static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
+
+static int is_subtree(stree_t * stree, ntree_t * ntree);
 
 static void reallocline(size_t newmaxsize)
 {
@@ -155,6 +159,101 @@ static long get_delstring(const char * line, const char * del, char ** value)
   return ws + end - start;
 }
 
+#ifdef DEBUG_CONSTRAINTS
+typedef struct dbg_treeinfo_s
+{
+  long count;
+  double freq;
+  double freqcum;
+  char * tree;
+} dbg_treeinfo_t;
+
+static long get_double(const char * line, double * value)
+{
+  int ret,len=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  ret = sscanf(start, "%lf%n", value, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
+  {
+    free(s);
+    return 0;
+  }
+
+  free(s);
+  return ws + end - start;
+}
+
+static long get_long(const char * line, long * value)
+{
+  int ret,len=0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  ret = sscanf(start, "%ld%n", value, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
+  {
+    free(s);
+    return 0;
+  }
+
+  free(s);
+  return ws + end - start;
+}
+
+void dbg_treeinfo_dealloc(void * data)
+{
+  if (data)
+  {
+    dbg_treeinfo_t * ti = (dbg_treeinfo_t *)data;
+
+    if (ti->tree)
+      free(ti->tree);
+
+    free(ti);
+  }
+}
+#endif
+
 static long get_string(const char * line, char ** value)
 {
   size_t ws;
@@ -204,6 +303,151 @@ void constdefs_dealloc(void * data)
     free(defs);
   }
 }
+
+#ifdef DEBUG_CONSTRAINTS
+static dbg_treeinfo_t * debug_parse_treeline(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  dbg_treeinfo_t * ti = (dbg_treeinfo_t *)xcalloc(1,sizeof(dbg_treeinfo_t));
+
+  count = get_long(p, &(ti->count));
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  count = get_double(p, &(ti->freq));
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  count = get_double(p, &(ti->freqcum));
+  if (!count) goto l_unwind;
+
+  p += count;
+  
+  count = get_string(p,&(ti->tree));
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
+l_unwind:
+  free(s);
+  if (!ret)
+  {
+    if (ti->tree)
+      free(ti->tree);
+    free(ti);
+    ti = NULL;
+  }
+  return ti;
+}
+
+static void debug_checktrees(ntree_t ** constraint, long const_count)
+{
+  long line_count = 0;
+  long found = 0;
+  FILE * fp;
+  dbg_treeinfo_t * ti;
+
+  fp = xopen(opt_debug_constraintfile,"r");
+
+  list_t * list = (list_t *)xcalloc(1,sizeof(list_t));
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    if (is_emptyline(line))
+    {
+      if (found)
+        break;
+      else
+        continue;
+    }
+
+    if (!found && strlen(line) > 14 && !strncmp(line,"(A) Best trees",14))
+    {
+      found = 1;
+      continue;
+    }
+
+    if (!found) continue;
+
+    if (is_emptyline(line)) break;
+
+    if (!(ti = debug_parse_treeline(line)))
+    {
+      fprintf(stderr,
+              "Invalid entry in %s (line %ld)\n",
+              opt_debug_constraintfile,
+              line_count);
+      goto l_unwind;
+    }
+
+    /* insert item into list */
+    list_append(list,(void *)ti);
+  }
+  if (line)
+  {
+    free(line);
+    line = NULL;
+  }
+
+  fprintf(stdout,
+         "\nChecking list of trees against constraints. "
+         "Asterisk (*) indicates compatibility\n");
+  list_item_t * li = list->head;
+  while (li)
+  {
+    long i = 0;
+    int conflict = 0;
+    dbg_treeinfo_t * ti = (dbg_treeinfo_t *)(li->data);
+
+    stree_t * t = bpp_parse_newick_string(ti->tree);
+    for (i = 0; i < t->tip_count + t->inner_count; ++i)
+      t->nodes[i]->mark = (int *)xcalloc(1,sizeof(int));
+
+    /* check constraints */
+    for (i = 0; i < const_count; ++i)
+    {
+      if (!constraint[i]) continue;
+
+      if (!is_subtree(t,constraint[i]))
+      {
+        conflict = 1;
+        break;
+      }
+    }
+
+    if (conflict)
+      fprintf(stdout, "   %8ld %8.5f %8.5f %s\n",
+              ti->count, ti->freq, ti->freqcum, ti->tree);
+    else
+      fprintf(stdout, "*  %8ld %8.5f %8.5f %s\n",
+              ti->count, ti->freq, ti->freqcum, ti->tree);
+
+    stree_destroy(t,NULL);
+
+    li = li->next;
+  }
+
+l_unwind:
+  fclose(fp);
+  if (list)
+  {
+    list_clear(list,dbg_treeinfo_dealloc);
+    free(list);
+    list = NULL;
+  }
+}
+#endif
 
 static long parse_define(const char * line, constdefs_t * defs)
 {
@@ -675,7 +919,7 @@ static char ** ntree_subtree_tiplabels(node_t * root)
 /* we are given a binary species tree and an n-ary constraint tree. Check if
    the species tree has a subtree whose tips match exactly those of the
    constraint */
-int is_subtree(stree_t * stree, ntree_t * ntree)
+static int is_subtree(stree_t * stree, ntree_t * ntree)
 {
   long i,j;
   int ret = 0;
@@ -1447,6 +1691,14 @@ static void constraints_process(stree_t * stree,
 
     constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
   }
+
+#ifdef DEBUG_CONSTRAINTS
+  if (opt_debug_constraintfile)
+  {
+    debug_checktrees(trees,const_count);
+    exit(1);
+  }
+#endif
 
   for (i = 0; i < const_count; ++i)
     if (trees[i])

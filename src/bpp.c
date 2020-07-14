@@ -137,6 +137,7 @@ long * opt_sp_seqcount;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constfile;
+char * opt_debug_constraintfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
@@ -311,6 +312,7 @@ void args_init(int argc, char ** argv)
   opt_constfile = NULL;
   opt_constraint_count = 0;
   opt_debug = 0;
+  opt_debug_constraintfile = NULL;
   opt_debug_rates = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
