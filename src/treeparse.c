@@ -37,6 +37,7 @@ const char * token_names[9] = {
   "TOKEN_COLON", "TOKEN_SEMICOLON", "TOKEN_HASH", "TOKEN_STRING"
 };
 
+static void node_destroy(node_t * root, void (*cb_data_destroy)(void *));
 
 const unsigned int attrib_map[256] = 
  {
@@ -484,20 +485,25 @@ char * ntree_export_newick(ntree_t * tree, long print_bl)
 
 list_t * parse_tree(char * s)
 {
+  int rc = 1;
   long count;
   long opar_count = 0;
   long cpar_count = 0;
+  list_t * token_list = NULL;
 
   /* skip all white-space */
   size_t ws = strspn(s, " \t\r\n");
 
   /* is it a blank line or comment ? */
   if (!s[ws] || s[ws] == '*' || s[ws] == '#')
-    return 0;
+  {
+    rc = 0;
+    goto l_unwind;
+  }
 
   char * start = s+ws;
 
-  list_t * token_list = (list_t *)xcalloc(1,sizeof(list_t));
+  token_list = (list_t *)xcalloc(1,sizeof(list_t));
 
   /* TODO: Find end by going backwards and set a zero char */
 
@@ -630,7 +636,14 @@ list_t * parse_tree(char * s)
       if (token->type == TOKEN_OPAR)
       {
         if (openpars == 0)
+        {
+          snprintf(bpp_errmsg, 200, "Invalid token type while parsing n-ary tree");
+          rc = 0;
+          goto l_unwind;
+          #if 0
           fatal("Cannot open new parenthesis");
+          #endif
+        }
         ++openpars;
         ++opar_count;
       }
@@ -647,9 +660,29 @@ list_t * parse_tree(char * s)
   }
 
   if (opar_count != cpar_count)
+  {
+    snprintf(bpp_errmsg,
+             200,
+             "Mismatching number of opening (%ld) and closing (%ld) parentheses)",
+             opar_count, cpar_count);
+    rc = 0;
+    goto l_unwind;
+    #if 0
     fatal("Mismatching number of opening (%ld) and closing (%ld) parentheses)",
           opar_count, cpar_count);
+    #endif
+  }
 
+l_unwind:
+  if (!rc)
+  {
+    if (token_list)
+    {
+      list_clear(token_list,token_clear);
+      free(token_list);
+      token_list = NULL;
+    }
+  }
   return token_list;
 }
 
@@ -1505,7 +1538,13 @@ static ntree_t * syntax_parse(list_t * token_list)
       #if 0
       printf("%ld %d\n", prev_token_type, token->type);
       #endif
+      #if 0
       fatal("Invalid token type while parsing n-ary tree");
+      #endif
+      snprintf(bpp_errmsg, 200, "Invalid token type while parsing n-ary tree");
+      if (root)
+        node_destroy(root,NULL);
+      return NULL;
     }
 
     switch (token->type)
@@ -1697,7 +1736,7 @@ void ntree_destroy(ntree_t * tree, void (*cb_data_destroy)(void *))
   free(tree);
 }
 
-static int ntree_check_rbinary(ntree_t * tree)
+int ntree_check_rbinary(ntree_t * tree)
 {
   int i;
   /* checks whether tree is binary rooted */
@@ -1714,7 +1753,7 @@ static int ntree_check_rbinary(ntree_t * tree)
   return 1;
 }
 
-static int ntree_check_ubinary(ntree_t * tree)
+int ntree_check_ubinary(ntree_t * tree)
 {
   int i;
   /* checks whether tree is unrooted binary */
@@ -1888,7 +1927,7 @@ static void fill_nodes_recursive(snode_t * snode,
     fill_nodes_recursive(snode->right, array, tip_index, inner_index);
 }
 
-static stree_t * stree_from_ntree(ntree_t * ntree)
+stree_t * stree_from_ntree(ntree_t * ntree)
 {
   /* assumes rooted binary ntree */
   unsigned int i;
@@ -2035,16 +2074,19 @@ static stree_t * stree_from_ntree(ntree_t * ntree)
 
 stree_t * bpp_parse_newick_string(const char * line)
 {
+  ntree_t * tree = NULL;
+  stree_t * stree = NULL;
+  list_t * token_list = NULL;
+
   #if 1
   /* old parser */
   char * s = xstrdup(line);
-  stree_t * stree = NULL;
 
-  list_t * token_list = parse_tree(s);
-  ntree_t * tree = syntax_parse(token_list);
+  if (!(token_list = parse_tree(s)))
+    goto l_unwind;
 
-  list_clear(token_list,token_clear);
-  free(token_list);
+  if (!(tree = syntax_parse(token_list)))
+    goto l_unwind;
 
   stree = stree_from_ntree(tree);
 
@@ -2052,25 +2094,45 @@ stree_t * bpp_parse_newick_string(const char * line)
   if (!opt_msci)
     stree_reset_leaves(stree);
 
-  ntree_destroy(tree,NULL);
-
-  free(s);
   #else
   /* old parser */
 
   stree_t * stree = stree_parse_newick_string(line);
   #endif
 
+l_unwind:
+  if (s)
+    free(s);
+  if (token_list)
+  {
+    list_clear(token_list,token_clear);
+    free(token_list);
+  }
+
+  if (tree)
+    ntree_destroy(tree,NULL);
+  
   return stree;
 }
 
 ntree_t * bpp_parse_newick_string_ntree(const char * line)
 {
+  ntree_t * tree = NULL;
+  list_t * token_list = NULL;
+
   char * s = xstrdup(line);
-  list_t * token_list = parse_tree(s);
-  ntree_t * tree = syntax_parse(token_list);
-  list_clear(token_list,token_clear);
-  free(token_list);
+
+  if (!(token_list = parse_tree(s)))
+    goto l_unwind;
+
+  tree = syntax_parse(token_list);
+
+l_unwind:
+  if (token_list)
+  {
+    list_clear(token_list,token_clear);
+    free(token_list);
+  }
   free(s);
 
   return tree;

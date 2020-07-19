@@ -21,12 +21,14 @@
 
 #include "bpp.h"
 
-#define DEBUG_CONSTRAINTS
-
 static char buffer[LINEALLOC];
 static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
+
+/* quick and dirty solution for indicating if tree complies to the constraints
+   when using the --comply switch */
+static int g_comply = 0;
 
 static int is_subtree(stree_t * stree, ntree_t * ntree);
 
@@ -159,100 +161,6 @@ static long get_delstring(const char * line, const char * del, char ** value)
   return ws + end - start;
 }
 
-#ifdef DEBUG_CONSTRAINTS
-typedef struct dbg_treeinfo_s
-{
-  long count;
-  double freq;
-  double freqcum;
-  char * tree;
-} dbg_treeinfo_t;
-
-static long get_double(const char * line, double * value)
-{
-  int ret,len=0;
-  size_t ws;
-  char * s = xstrdup(line);
-  char * p = s;
-
-  /* skip all white-space */
-  ws = strspn(p, " \t\r\n");
-
-  /* is it a blank line or comment ? */
-  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
-  {
-    free(s);
-    return 0;
-  }
-
-  /* store address of value's beginning */
-  char * start = p+ws;
-
-  /* skip all characters except star, hash and whitespace */
-  char * end = start + strcspn(start," \t\r\n*#");
-
-  *end = 0;
-
-  ret = sscanf(start, "%lf%n", value, &len);
-  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
-  {
-    free(s);
-    return 0;
-  }
-
-  free(s);
-  return ws + end - start;
-}
-
-static long get_long(const char * line, long * value)
-{
-  int ret,len=0;
-  size_t ws;
-  char * s = xstrdup(line);
-  char * p = s;
-
-  /* skip all white-space */
-  ws = strspn(p, " \t\r\n");
-
-  /* is it a blank line or comment ? */
-  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
-  {
-    free(s);
-    return 0;
-  }
-
-  /* store address of value's beginning */
-  char * start = p+ws;
-
-  /* skip all characters except star, hash and whitespace */
-  char * end = start + strcspn(start," \t\r\n*#");
-
-  *end = 0;
-
-  ret = sscanf(start, "%ld%n", value, &len);
-  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
-  {
-    free(s);
-    return 0;
-  }
-
-  free(s);
-  return ws + end - start;
-}
-
-void dbg_treeinfo_dealloc(void * data)
-{
-  if (data)
-  {
-    dbg_treeinfo_t * ti = (dbg_treeinfo_t *)data;
-
-    if (ti->tree)
-      free(ti->tree);
-
-    free(ti);
-  }
-}
-#endif
 
 static long get_string(const char * line, char ** value)
 {
@@ -304,150 +212,30 @@ void constdefs_dealloc(void * data)
   }
 }
 
-#ifdef DEBUG_CONSTRAINTS
-static dbg_treeinfo_t * debug_parse_treeline(const char * line)
+static void check_compliance(ntree_t ** constraint,
+                             long const_count,
+                             stree_t * stree)
 {
-  long ret = 0;
-  char * s = xstrdup(line);
-  char * p = s;
+  long i;
+  long conflict = 0;
 
-  long count;
-
-  dbg_treeinfo_t * ti = (dbg_treeinfo_t *)xcalloc(1,sizeof(dbg_treeinfo_t));
-
-  count = get_long(p, &(ti->count));
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  count = get_double(p, &(ti->freq));
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  count = get_double(p, &(ti->freqcum));
-  if (!count) goto l_unwind;
-
-  p += count;
-  
-  count = get_string(p,&(ti->tree));
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p)) ret = 1;
-
-l_unwind:
-  free(s);
-  if (!ret)
+  for (i = 0; i < const_count; ++i)
   {
-    if (ti->tree)
-      free(ti->tree);
-    free(ti);
-    ti = NULL;
+    if (!constraint[i]) continue;
+
+    if (!is_subtree(stree,constraint[i]))
+    {
+      conflict = 1;
+      break;
+    }
   }
-  return ti;
+
+  if (!conflict)
+    g_comply = 1;
+  else
+    g_comply = 0;
+   
 }
-
-static void debug_checktrees(ntree_t ** constraint, long const_count)
-{
-  long line_count = 0;
-  long found = 0;
-  FILE * fp;
-  dbg_treeinfo_t * ti;
-
-  fp = xopen(opt_debug_constraintfile,"r");
-
-  list_t * list = (list_t *)xcalloc(1,sizeof(list_t));
-
-  while (getnextline(fp))
-  {
-    ++line_count;
-
-    if (is_emptyline(line))
-    {
-      if (found)
-        break;
-      else
-        continue;
-    }
-
-    if (!found && strlen(line) > 14 && !strncmp(line,"(A) Best trees",14))
-    {
-      found = 1;
-      continue;
-    }
-
-    if (!found) continue;
-
-    if (is_emptyline(line)) break;
-
-    if (!(ti = debug_parse_treeline(line)))
-    {
-      fprintf(stderr,
-              "Invalid entry in %s (line %ld)\n",
-              opt_debug_constraintfile,
-              line_count);
-      goto l_unwind;
-    }
-
-    /* insert item into list */
-    list_append(list,(void *)ti);
-  }
-  if (line)
-  {
-    free(line);
-    line = NULL;
-  }
-
-  fprintf(stdout,
-         "\nChecking list of trees against constraints. "
-         "Asterisk (*) indicates compatibility\n");
-  list_item_t * li = list->head;
-  while (li)
-  {
-    long i = 0;
-    int conflict = 0;
-    dbg_treeinfo_t * ti = (dbg_treeinfo_t *)(li->data);
-
-    stree_t * t = bpp_parse_newick_string(ti->tree);
-    for (i = 0; i < t->tip_count + t->inner_count; ++i)
-      t->nodes[i]->mark = (int *)xcalloc(1,sizeof(int));
-
-    /* check constraints */
-    for (i = 0; i < const_count; ++i)
-    {
-      if (!constraint[i]) continue;
-
-      if (!is_subtree(t,constraint[i]))
-      {
-        conflict = 1;
-        break;
-      }
-    }
-
-    if (conflict)
-      fprintf(stdout, "   %8ld %8.5f %8.5f %s\n",
-              ti->count, ti->freq, ti->freqcum, ti->tree);
-    else
-      fprintf(stdout, "*  %8ld %8.5f %8.5f %s\n",
-              ti->count, ti->freq, ti->freqcum, ti->tree);
-
-    stree_destroy(t,NULL);
-
-    li = li->next;
-  }
-
-l_unwind:
-  fclose(fp);
-  if (list)
-  {
-    list_clear(list,dbg_treeinfo_dealloc);
-    free(list);
-    list = NULL;
-  }
-}
-#endif
 
 static long parse_define(const char * line, constdefs_t * defs)
 {
@@ -1446,17 +1234,18 @@ static void complement_definition(stree_t * stree,
 
   def->arg2 = newdef;
   d = bpp_parse_newick_string_ntree(def->arg2);
+  assert(d);
   ntree_set_leaves_count(d);
   *ptrd = d;
 }
 
-void definition_process(stree_t * stree,
-                        ntree_t ** ptrd,
-                        constdefs_t * def,
-                        char ** def_label,
-                        char ** def_string,
-                        long def_count,
-                        int cpl)
+int definition_process(stree_t * stree,
+                       ntree_t ** ptrd,
+                       constdefs_t * def,
+                       char ** def_label,
+                       char ** def_string,
+                       long def_count,
+                       int cpl)
 {
   /* check that all d tips exist in species tree, and replace aliases with
      previous definitions */
@@ -1476,17 +1265,23 @@ void definition_process(stree_t * stree,
 
   /* check if constraint tree is a subtree of stree */
   if (!is_subtree(stree,d))
+  {
+    if (opt_comply)
+      return 0;
     fatal("Invalid definition in file %s (line %ld)", opt_constfile, def->lineno);
+  }
 
   def_label[def_count]  = xstrdup(def->arg1);
   def_string[def_count] = ntree_export_newick(d,0);
+
+  return 1;
 }
 
-static void definitions_expand(list_t * constlist,
-                               stree_t * stree,
-                               char ** def_labels,
-                               char ** def_expand,
-                               FILE * fp_out)
+static int definitions_expand(list_t * constlist,
+                              stree_t * stree,
+                              char ** def_labels,
+                              char ** def_expand,
+                              FILE * fp_out)
 {
   list_item_t * li;
   int cpl = 0;          /* complement */
@@ -1514,7 +1309,11 @@ static void definitions_expand(list_t * constlist,
       if (!t)
         fatal("Error while parsing definition (line %ld)", def->lineno);
       ntree_set_leaves_count(t);
-      definition_process(stree,&t,def,def_labels, def_expand,def_count,cpl);
+      if (!definition_process(stree,&t,def,def_labels, def_expand,def_count,cpl))
+      {
+        ntree_destroy(t,NULL);
+        return 0;
+      }
       
       /* expanded form 
          printf("    alias: %s\n", def_string[def_count]);
@@ -1522,18 +1321,22 @@ static void definitions_expand(list_t * constlist,
       def_count++;
       ntree_destroy(t,NULL);
 
-      fprintf(stdout,
-              "Definition %2ld (line %ld): %s = %s\n",
-              def_count, def->lineno, def->arg1, def->arg2);
-      fprintf(fp_out,
-              "Definition %2ld (line %ld): %s = %s\n",
-              def_count, def->lineno, def->arg1, def->arg2);
+      if (fp_out)
+      {
+        fprintf(stdout,
+                "Definition %2ld (line %ld): %s = %s\n",
+                def_count, def->lineno, def->arg1, def->arg2);
+        fprintf(fp_out,
+                "Definition %2ld (line %ld): %s = %s\n",
+                def_count, def->lineno, def->arg1, def->arg2);
+      }
 
       list_delitem(constlist,li,constdefs_dealloc);
     }
 
     li = tmp;
   }
+  return 1;
 }
 
 static void constraints_validate(ntree_t * tree, long lineno)
@@ -1588,6 +1391,7 @@ static void constraints_process(stree_t * stree,
     if (def->type == BPP_CONSTDEFS_CONSTRAINT)
     {
       trees[i] = bpp_parse_newick_string_ntree(def->arg1);
+      assert(trees[i]);
       liptr[i] = li;
       lines[i] = def->lineno;
       ntree_set_leaves_count(trees[i]);
@@ -1606,19 +1410,30 @@ static void constraints_process(stree_t * stree,
   for (i = 0; i < const_count; ++i)
     constraints_validate(trees[i],lines[i]);
 
-  fprintf(stdout, "List of constraints in file %s\n", opt_constfile);
-  fprintf(fp_out, "List of constraints in file %s\n", opt_constfile);
+  if (fp_out)
+  {
+    fprintf(stdout, "List of constraints in file %s\n", opt_constfile);
+    fprintf(fp_out, "List of constraints in file %s\n", opt_constfile);
+  }
   for (i = 0; i < const_count; ++i)
   {
     constdefs_t * def = (constdefs_t *)(liptr[i]->data);
-    fprintf(stdout, "Constraint %2ld (line %2ld): %s\n",
-           i+1, def->lineno, def->arg1);
-    fprintf(fp_out, "Constraint %2ld (line %2ld): %s\n",
-           i+1, def->lineno, def->arg1);
+    if (fp_out)
+    {
+      fprintf(stdout, "Constraint %2ld (line %2ld): %s\n",
+             i+1, def->lineno, def->arg1);
+      fprintf(fp_out, "Constraint %2ld (line %2ld): %s\n",
+             i+1, def->lineno, def->arg1);
+    }
 
     if (!is_subtree(stree,trees[i]))
+    {
+      if (opt_comply)
+        goto l_unwind;
+
       fatal("Starting species tree contradicts constraint in file %s (line %ld)",
             opt_constfile, lines[i]);
+    }
   }
 
   /* pairwisely compare/reduce/merge constraints. Constraints removed due to
@@ -1639,16 +1454,22 @@ static void constraints_process(stree_t * stree,
       {
         case 0:
           mc = ntree_export_newick(trees[j],0);
-          fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
-          fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          if (fp_out)
+          {
+            fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+            fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          }
           free(mc);
           ntree_destroy(trees[i],NULL);
           mc = NULL; trees[i] = NULL;
           break;
         case 1:
           mc = ntree_export_newick(trees[i],0);
-          fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
-          fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          if (fp_out)
+          {
+            fprintf(stdout, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+            fprintf(fp_out, "Merged constraints %s and %s -> %s\n", c1, c2, mc);
+          }
           free(mc);
           ntree_destroy(trees[j],NULL);
           mc = NULL; trees[j] = NULL;
@@ -1672,34 +1493,35 @@ static void constraints_process(stree_t * stree,
     }
   }
 
-  long cvalue = 0;
-
-  /* apply constraints */
-  for (i = 0; i < const_count; ++i)
+  if (!opt_comply)
   {
-    if (!trees[i]) continue;
-
-    char * stmp = ntree_export_newick(trees[i],0);
-    fprintf(stdout, "Applying constraint: %s\n", stmp);
-    fprintf(fp_out, "Applying constraint: %s\n", stmp);
-    free(stmp);
-
-    /* TODO: This check is probably no longer necessary */
-    if (!is_subtree(stree,trees[i]))
-      fatal("Starting species tree contradicts constraint in file %s (line %ld)",
-            opt_constfile, lines[i]);
-
-    constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
+    long cvalue = 0;
+  
+    /* apply constraints */
+    for (i = 0; i < const_count; ++i)
+    {
+      if (!trees[i]) continue;
+  
+      char * stmp = ntree_export_newick(trees[i],0);
+      if (fp_out)
+      {
+        fprintf(stdout, "Applying constraint: %s\n", stmp);
+        fprintf(fp_out, "Applying constraint: %s\n", stmp);
+      }
+      free(stmp);
+  
+      /* TODO: This check is probably no longer necessary */
+      if (!is_subtree(stree,trees[i]))
+        fatal("Starting species tree contradicts constraint in file %s (line %ld)",
+              opt_constfile, lines[i]);
+  
+      constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
+    }
   }
+  else
+    check_compliance(trees,const_count,stree);
 
-#ifdef DEBUG_CONSTRAINTS
-  if (opt_debug_constraintfile)
-  {
-    debug_checktrees(trees,const_count);
-    exit(1);
-  }
-#endif
-
+l_unwind:
   for (i = 0; i < const_count; ++i)
     if (trees[i])
       ntree_destroy(trees[i],NULL);
@@ -1717,10 +1539,11 @@ static void constraints_process(stree_t * stree,
   free(def_string);
 }
 
-static void convert_outgroup_to_constraint(list_item_t * li,
-                                           stree_t * stree,
-                                           FILE * fp_out)
+static int convert_outgroup_to_constraint(list_item_t * li,
+                                          stree_t * stree,
+                                          FILE * fp_out)
 {
+  int rc = 0;
   long i,j;
   size_t len;
   char * p;
@@ -1750,8 +1573,13 @@ static void convert_outgroup_to_constraint(list_item_t * li,
   /* check that all taxa in the array appear in the species tree */
   for (i = 0; i < count; ++i)
     if (!tiplabel_exists(stree,labels[i]))
+    {
+      if (opt_comply)
+        goto l_unwind;
+
       fatal("Invalid taxon %s in outgroup definition (line %ld)",
             labels[i], def->lineno);
+    }
 
   /* outgroup taxa must be at most two less than the tips in the tree */
   if (count >= stree->tip_count-1)
@@ -1805,13 +1633,19 @@ static void convert_outgroup_to_constraint(list_item_t * li,
   }
   *p++ = ')';
   *p++ = '\0';
-  fprintf(stdout, "Outgroup: %s\n", def->arg1);
-  fprintf(fp_out, "Outgroup: %s\n", def->arg1);
-  fprintf(stdout, "Converting outgroup to constraint: %s\n", constraint);
-  fprintf(fp_out, "Converting outgroup to constraint: %s\n", constraint);
+  if (fp_out)
+  {
+    fprintf(stdout, "Outgroup: %s\n", def->arg1);
+    fprintf(fp_out, "Outgroup: %s\n", def->arg1);
+    fprintf(stdout, "Converting outgroup to constraint: %s\n", constraint);
+    fprintf(fp_out, "Converting outgroup to constraint: %s\n", constraint);
+  }
   free(def->arg1);
   def->arg1 = constraint;
 
+  rc = 1;
+
+l_unwind:
   /* reset marks */
   for (i = 0; i < stree->tip_count; ++i)
     stree->nodes[i]->mark[0] = 0;
@@ -1819,6 +1653,8 @@ static void convert_outgroup_to_constraint(list_item_t * li,
   for (i = 0; i < count; ++i)
     free(labels[i]);
   free(labels);
+
+  return rc;
 }
 
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
@@ -1826,6 +1662,8 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
   long def_count = 0;
   long og_count = 0;
   long const_count = 0;
+  char ** def_labels = NULL;
+  char ** def_string = NULL;
 
   list_item_t * outgroup_li = NULL;
 
@@ -1888,16 +1726,150 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
   
   /* we want the outgroup to be processed last */
   if (outgroup_li)
-    convert_outgroup_to_constraint(outgroup_li,stree,fp_out);
+  {
+    if (!convert_outgroup_to_constraint(outgroup_li,stree,fp_out))
+      goto l_unwind;
+  }
 
-  char ** def_labels = (char **)xcalloc((size_t)def_count,sizeof(char *));
-  char ** def_string = (char **)xcalloc((size_t)def_count,sizeof(char *));
-  definitions_expand(constlist,stree,def_labels,def_string,fp_out);
+  def_labels = (char **)xcalloc((size_t)def_count,sizeof(char *));
+  def_string = (char **)xcalloc((size_t)def_count,sizeof(char *));
+  if (definitions_expand(constlist,stree,def_labels,def_string,fp_out))
+  {
+    /* remove redundant constraints */
+    constraints_process(stree,constlist,def_labels,def_string,def_count,fp_out);
+  }
+  else
+  {
+    long i;
+    for (i = 0; i < def_count; ++i)
+    {
+      if (def_labels[i])
+        free(def_labels[i]);
+      if (def_string[i])
+      free(def_string[i]);
+    }
+    free(def_labels);
+    free(def_string);
+  }
 
-  /* remove redundant constraints */
-  constraints_process(stree,constlist,def_labels,def_string,def_count,fp_out);
-
+l_unwind:
   /* set constraints */
   list_clear(constlist,constdefs_dealloc);
   free(constlist);
+}
+
+void cmd_comply()
+{
+  long line_count = 0;
+  long max_line_count = 0;
+  FILE * fp;
+
+  long btree_count = 0;
+  long utree_count = 0;
+  long ntree_count = 0;
+  long comply_count = 0;
+
+  if (!opt_treefile)
+    fatal("Please specify tree file with --tree");
+  if (!opt_constfile)
+    fatal("Please specify constraint file with --constraint");
+
+  fp = xopen(opt_treefile,"r");
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    if (is_emptyline(line))
+      continue;
+
+    char * treeline = xstrchrnul(line,'(');
+    if (*treeline != '(')
+      continue;
+    
+//    printf("%s\n", treeline);
+    ntree_t * t = bpp_parse_newick_string_ntree(treeline);
+    if (!t)
+    {
+      continue;
+    }
+
+    if (ntree_check_rbinary(t))
+    {
+      max_line_count = line_count;
+      btree_count++;
+    }
+    else if (ntree_check_ubinary(t))
+      utree_count++;
+    else
+      ntree_count++;
+
+    ntree_destroy(t,NULL);
+  }
+
+  printf("Read %ld lines\n", line_count);
+  printf("Found %ld binary trees\n", btree_count);
+  if (utree_count)
+    printf("Skipped %ld binary unrooted trees\n", utree_count);
+  if (ntree_count)
+    printf("Skipped %ld n-ary trees\n", ntree_count);
+  
+  int lineno_digits = max_line_count ?
+                        (int)floor(log10(abs(max_line_count)))+1 : 1;
+
+  /* minimum four digits for line numbers */
+  if (lineno_digits < 4)
+    lineno_digits = 4;
+
+  printf("\n%*s  Comply  Tree\n", lineno_digits, "Line");
+
+  /* rewind */
+  (void)fseek(fp, 0L, SEEK_SET);
+
+  line_count = 0;
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    if (is_emptyline(line))
+      continue;
+
+    char * treeline = xstrchrnul(line,'(');
+    if (*treeline != '(')
+      continue;
+    
+    ntree_t * t = bpp_parse_newick_string_ntree(treeline);
+    if (!t)
+      continue;
+
+    if (ntree_check_rbinary(t))
+    {
+      g_comply = 0;
+      stree_t * stree = stree_from_ntree(t);
+      long i;
+      for (i = 0; i < t->tip_count + t->inner_count; ++i)
+        stree->nodes[i]->mark = (int *)xcalloc(1,sizeof(int));
+      stree_reset_leaves(stree);
+      char * newick = ntree_export_newick(t,0);
+      parse_and_set_constraints(stree,NULL);
+      printf("%*ld    %s     %s\n",
+             lineno_digits,
+             line_count,
+             g_comply ? "Y" : "-",
+             newick);
+      free(newick);
+      stree_destroy(stree,NULL);
+
+      if (g_comply)
+        comply_count++;
+    }
+
+    ntree_destroy(t,NULL);
+  }
+
+  printf("\n%ld out of %ld binary trees are compatible with the constraints\n",
+         comply_count, btree_count);
+
+  fclose(fp);
 }

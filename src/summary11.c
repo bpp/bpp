@@ -512,7 +512,11 @@ static stree_t * parse_tree(const char * s)
     t->tip_count = 1;
   }
   else
+  {
     t = bpp_parse_newick_string(s);
+    if (!t)
+      fatal("Internal error while parsing tree");
+  }
 
   /* restore opt_reorder */
   opt_reorder = debug_opt_reorder;
@@ -577,6 +581,8 @@ void mixed_summary(FILE * fp_out, unsigned int sp_count)
     if (opt_est_theta)
       strip_theta_attributes(line);
     stree_t * t = bpp_parse_newick_string(line);
+    if (!t)
+      fatal("Internal error while parsing tree");
     stree_sort(t);
 
     int64_t species_count;

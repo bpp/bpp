@@ -324,6 +324,8 @@ static void print_stree_with_support(FILE * fp_out,
   struct bipartition_s * bp;
 
   stree_t * stree = bpp_parse_newick_string(treestr);
+  if (!stree)
+    fatal("Internal error while parsing species tree");
 
   /* assign bitmasks to tree nodes (present bits indicate species in subtree) */
   assign_bitmasks(stree);
@@ -699,6 +701,8 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
   {
     strip_attributes(line);
     stree_t * t = bpp_parse_newick_string(line);
+    if (!t)
+      fatal("Internal error while parsing species tree");
     stree_sort(t);
     treelist[line_count++] = stree_export_newick(t->root,cb_serialize_none);
 

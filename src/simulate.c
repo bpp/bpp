@@ -1834,6 +1834,8 @@ void cmd_simulate()
   assert(opt_streenewick);
 
   stree = bpp_parse_newick_string(opt_streenewick);
+  if (!stree)
+    fatal("Cannot parse species tree");
 
   assert(opt_msci == !!stree->hybrid_count);
 

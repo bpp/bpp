@@ -44,6 +44,7 @@ long opt_checkpoint_initial;
 long opt_checkpoint_step;
 long opt_cleandata;
 long opt_clock;
+long opt_comply;
 long opt_constraint_count;
 long opt_debug;
 long opt_debug_rates;
@@ -137,7 +138,6 @@ long * opt_sp_seqcount;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constfile;
-char * opt_debug_constraintfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
@@ -186,6 +186,9 @@ static struct option long_options[] =
   {"rev_gspr",   no_argument,       0, 0 },  /* 10 */
   {"debugrates", no_argument,       0, 0 },  /* 11 */
   {"msci-create",required_argument, 0, 0 },  /* 12 */
+  {"comply",     no_argument,       0, 0 },  /* 13 */
+  {"tree",       required_argument, 0, 0 },  /* 14 */
+  {"constraint", required_argument, 0, 0 },  /* 15 */
   { 0, 0, 0, 0 }
 };
 
@@ -308,11 +311,11 @@ void args_init(int argc, char ** argv)
   opt_checkpoint_current = 0;
   opt_checkpoint_step = 0;
   opt_cleandata = 0;
+  opt_comply = 0;
   opt_concatfile = NULL;
   opt_constfile = NULL;
   opt_constraint_count = 0;
   opt_debug = 0;
-  opt_debug_constraintfile = NULL;
   opt_debug_rates = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
@@ -480,6 +483,18 @@ void args_init(int argc, char ** argv)
         opt_mscifile = xstrdup(optarg);
         break;
 
+      case 13:
+        opt_comply = 1;
+        break;
+
+      case 14:
+        opt_treefile = xstrdup(optarg);
+        break;
+
+      case 15:
+        opt_constfile = xstrdup(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -510,6 +525,8 @@ void args_init(int argc, char ** argv)
   if (opt_simulate)
     commands++;
   if (opt_mscifile)
+    commands++;
+  if (opt_comply)
     commands++;
 
   /* if more than one independent command, fail */
@@ -652,6 +669,10 @@ int main (int argc, char * argv[])
   else if (opt_mscifile)
   {
     cmd_msci_create();
+  }
+  else if (opt_comply)
+  {
+    cmd_comply();
   }
 
   legacy_fini();

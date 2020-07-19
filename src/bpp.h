@@ -811,6 +811,7 @@ extern long opt_checkpoint_initial;
 extern long opt_checkpoint_step;
 extern long opt_cleandata;
 extern long opt_clock;
+extern long opt_comply;
 extern long opt_constraint_count;
 extern long opt_debug;
 extern long opt_debug_rates;
@@ -905,7 +906,6 @@ extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
 extern char * opt_constfile;
-extern char * opt_debug_constraintfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
@@ -2198,12 +2198,15 @@ void threads_pin_master(void);
 
 /* functions in treeparse.c */
 
-stree_t * bpp_parse_newick_string(const char * line);
-ntree_t * bpp_parse_newick_string_ntree(const char * line);
+int ntree_check_rbinary(ntree_t * tree);
+int ntree_check_ubinary(ntree_t * tree);
 void stree_destroy(stree_t * tree, void (*cb_destroy)(void *));
 void ntree_destroy(ntree_t * tree, void (*cb_destroy)(void *));
-ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 char * ntree_export_newick(ntree_t * tree, long print_bl);
+stree_t * bpp_parse_newick_string(const char * line);
+ntree_t * bpp_parse_newick_string_ntree(const char * line);
+ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
+stree_t * stree_from_ntree(ntree_t * ntree);
 
 /* functions in parsemap.c */
 
@@ -2215,3 +2218,4 @@ void cmd_msci_create(void);
 
 /* functions in constraint.c */
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
+void cmd_comply();

@@ -2481,15 +2481,6 @@ void load_cfile()
         valid = 1;
       }
     }
-    else if (token_len == 16)
-    {
-      if (!strncasecmp(token,"debug_constraint",16))
-      {
-        if (!get_string(value, &opt_debug_constraintfile))
-          fatal("Option %s expects a string (line %ld)", token, line_count);
-        valid = 1;
-      }
-    }
     else if (token_len == 17)
     {
       if (!strncasecmp(token,"speciesmodelprior",17))
