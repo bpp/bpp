@@ -3149,13 +3149,19 @@ void stree_rootdist(stree_t * stree,
   free(pop);
 }
 
-static void init_weights(stree_t * stree)
+static void init_weights(stree_t * stree, int * feasible)
 {
   unsigned int i;
   double sum = 0;
 
   for (i = stree->tip_count; i < stree->inner_count + stree->tip_count; ++i)
   {
+    if (feasible && !feasible[i-stree->tip_count])
+    {
+      stree->nodes[i]->weight = 0;
+      continue;
+    }
+
     if (stree->nodes[i]->parent && stree->nodes[i]->tau > 0)
     {
       stree->nodes[i]->weight = 1.0 / sqrt(stree->nodes[i]->parent->tau -
@@ -3168,6 +3174,72 @@ static void init_weights(stree_t * stree)
   for (i = stree->tip_count; i < stree->inner_count + stree->tip_count; ++i)
     if (stree->nodes[i]->weight)
       stree->nodes[i]->weight /= sum;
+}
+
+static int check_age_feasibility_recursive(snode_t * c,
+                                           double tau,
+                                           long constraint)
+{
+  int rc1 = 0;
+  int rc2 = 0;
+
+  if (c->constraint != constraint) return 0;
+
+  if (c->parent->tau <= tau) return 0;
+
+  if (c->tau < tau && c->parent->tau > tau) return 1;
+
+  if (c->left)
+    rc1 = check_age_feasibility_recursive(c->left,tau,constraint);
+  if (c->right)
+    rc2 = check_age_feasibility_recursive(c->right,tau,constraint);
+
+  return (rc1 || rc2);
+}
+
+static int * fill_feasible_flags(stree_t * stree)
+{
+  unsigned int i;
+  int * feasible = NULL;
+
+  if (!opt_constraint_count) return NULL;
+  
+  feasible = (int *)xcalloc((size_t)(stree->inner_count), sizeof(int));
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode_t * y = stree->nodes[i];
+
+    if (!y->parent) continue;
+
+    snode_t * sister = (y->parent->left == y) ?
+                         y->parent->right : y->parent->left;
+
+
+    if (!(y->constraint == y->left->constraint &&
+          y->constraint == y->right->constraint &&
+          y->constraint == sister->constraint))
+      continue;
+
+    /* now check if there exists a target branch that whose time interval
+       overlaps with y->tau. Traverse the nodes on the path to the root and
+       visit all compatible branching clades on that path */
+    int flag = 0;
+    snode_t * p = y;
+    while (p->parent && !flag)
+    {
+      if (p->constraint != y->constraint) break;
+      sister = (p->parent->left == p) ? p->parent->right : p->parent->left;
+      assert(sister->constraint == y->constraint);
+
+      flag = check_age_feasibility_recursive(sister,y->tau,y->constraint);
+      p = p->parent; 
+    }
+
+    feasible[i-stree->tip_count] = flag;
+  }
+
+  return feasible;
 }
 
 /* Algorithm implemented according to Figure 1 in:
@@ -3210,9 +3282,13 @@ long stree_propose_spr(stree_t ** streeptr,
 
   double oldprior = lnprior_species_model(stree);
 
+  int * feasible = fill_feasible_flags(stree);
+
   /* calculate the weight of each branch as the reciprocal of the square root
    * of its length */
-  init_weights(stree);
+  init_weights(stree,feasible);
+  if (feasible)
+    free(feasible);  /* no longer required */
 
   /* randomly select a branch according to weights */
   r = legacy_rndu(thread_index);
@@ -3227,6 +3303,7 @@ long stree_propose_spr(stree_t ** streeptr,
 
   assert(y != stree->root);
 
+  if (opt_constraint_count && !stree->nodes[i]->weight) return 2;
   assert(stree->nodes[i]->weight);
   lnacceptance -= log(stree->nodes[i]->weight);
 
@@ -3261,13 +3338,15 @@ long stree_propose_spr(stree_t ** streeptr,
 
     c_cand = stree->nodes[i];
 
-    /* A C candidate node must fulfill the following three properties:
+    /* A C candidate node must fulfill the following FOUR properties:
        i) it is not a descendant of y,
        ii) is younger than y,
-       iii) its parent is older than y */
+       iii) its parent is older than y
+       iv) matching constraints between c and y */
     if (stree->pptable[i][y->node_index] ||
         c_cand->tau >= y->tau ||
-        c_cand->parent->tau <= y->tau) continue;
+        c_cand->parent->tau <= y->tau ||
+        c_cand->constraint != y->constraint) continue;
 
     /* compute z_cand as the lowest common ancestor of c_cand and y */
     for (z_cand = c_cand->parent; z_cand; z_cand = z_cand->parent)
@@ -3323,6 +3402,7 @@ long stree_propose_spr(stree_t ** streeptr,
     }
     else
     {
+      assert(0);
       return 3;
     }
   }
@@ -3957,7 +4037,10 @@ long stree_propose_spr(stree_t ** streeptr,
   reset_gene_leaves_count(stree,gtree_list);
   stree_reset_pptable(stree);
 
-  init_weights(stree);
+  feasible = fill_feasible_flags(stree);
+  init_weights(stree,feasible);
+  if (feasible)
+    free(feasible);
 
   /* probability of choosing focus branch in reverse move */
   lnacceptance += log(y->weight);
