@@ -3398,13 +3398,12 @@ long stree_propose_spr(stree_t ** streeptr,
     {
       /* if the move is accepted we need ot change the constraint id  of the new
        * Y* and of C. Since we work on a copy, we set it now */
-      SWAP(y->constraint,c->constraint);
+      long tmp_const = c->constraint;
+      c->constraint = y->constraint; y->constraint = tmp_const;
+      /* SWAP(y->constraint,c->constraint); */
     }
     else
-    {
       assert(0);
-      return 3;
-    }
   }
 
   lnacceptance -= log(target_weight[i]);

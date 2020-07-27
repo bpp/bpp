@@ -30,7 +30,6 @@
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
 #define MAX_TAU_OUTPUT          3
-#define DIRTY_ITERS             1000000
 
 const static int rate_matrices = 1;
 const static long thread_index_zero = 0;
@@ -55,9 +54,6 @@ static int prec_logl =  8;
 static int prec_logpr = 8;
 
 static int prec_ft = 6;
-
-static long max_dirty_iters = 0;  /* stats on maxnumber of dirty SPR iters */
-static long sum_dirty_iters = 0;  /* sum for computing average */
 
 static void timer_start()
 {
@@ -2861,15 +2857,8 @@ void cmd_run()
     {
       if (legacy_rndu(thread_index_zero) > 0)   /* bpp4 compatible results (RNG to next state) */
       {
-        /* quick-and-dirty way of applying constraints on species tree */
-        long ret = 3;
-        long dirty_iters = DIRTY_ITERS;
-        while (ret == 3)
-        {
-          if (!dirty_iters) break;
-          ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
-          --dirty_iters;
-        }
+        long ret;
+        ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
         if (ret == 1)
         {
           /* accepted */
@@ -2879,17 +2868,8 @@ void cmd_run()
           stree_label(stree);
           pjump_slider++;
         }
-        if (ret < 2)
+        if (ret != 2)
           ft_round_spr++;
-        /* keeping statistics for max dirty SPRs iters */
-        if (opt_constraint_count)
-        {
-          sum_dirty_iters += DIRTY_ITERS - (dirty_iters+1);
-          if (max_dirty_iters < (DIRTY_ITERS - (dirty_iters+1)))
-          {
-            max_dirty_iters = DIRTY_ITERS - (dirty_iters+1);
-          }
-        }
       }
     }
 
@@ -3505,13 +3485,6 @@ void cmd_run()
     for (i = 0; i < species_count; ++i)
       free(species_names[i]);
     free(species_names);
-  }
-  if (opt_constraint_count)
-  {
-    fprintf(stdout,
-            "Constraint (quick-and-dirty iterations) summary: max: %ld avg: %f\n",
-            max_dirty_iters,
-            (double)sum_dirty_iters / (opt_samples*opt_samplefreq+opt_burnin));
   }
 
   if (opt_est_theta)
