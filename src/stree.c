@@ -778,7 +778,8 @@ static int ** populations_seqcount(stree_t * stree,
                             hash_fnv(label),
                             cb_cmp_pairlabel);
       if (!pair)
-        fatal("Internal error in populations_count");
+        fatal("Cannot find a mapping to species for tag %s inside file %s",
+              label, opt_mapfile);
 
       node = (snode_t *)(pair->data);
 
