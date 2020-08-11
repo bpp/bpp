@@ -47,7 +47,12 @@ long opt_clock;
 long opt_comply;
 long opt_constraint_count;
 long opt_debug;
+long opt_debug_full;
+long opt_debug_gspr;
 long opt_debug_rates;
+long opt_debug_expand_count;
+long opt_debug_expshr_count;
+long opt_debug_shrink_count;
 long opt_delimit_prior;
 long opt_diploid_size;
 long opt_est_delimit;
@@ -119,6 +124,7 @@ double opt_locusrate_mubar;
 double opt_mubar_alpha;
 double opt_mubar_beta;
 double opt_mui_alpha;
+double opt_prop_shrink;
 double opt_phi_alpha;
 double opt_phi_beta;
 double opt_rjmcmc_alpha;
@@ -189,6 +195,10 @@ static struct option long_options[] =
   {"comply",     no_argument,       0, 0 },  /* 13 */
   {"tree",       required_argument, 0, 0 },  /* 14 */
   {"constraint", required_argument, 0, 0 },  /* 15 */
+  {"full",       no_argument,       0, 0 },  /* 16 */   /* debug */
+  {"gspr",       no_argument,       0, 0 },  /* 17 */   /* debug */
+  {"shrink",     required_argument, 0, 0 },  /* 18 */
+  {"debug",      no_argument,       0, 0 },  /* 19 */   /* debug */
   { 0, 0, 0, 0 }
 };
 
@@ -316,7 +326,12 @@ void args_init(int argc, char ** argv)
   opt_constfile = NULL;
   opt_constraint_count = 0;
   opt_debug = 0;
+  opt_debug_full = 0;
+  opt_debug_gspr = 0;
   opt_debug_rates = 0;
+  opt_debug_expand_count = 0;
+  opt_debug_expshr_count = 0;
+  opt_debug_shrink_count = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
   opt_diploid_size = 0;
@@ -386,6 +401,7 @@ void args_init(int argc, char ** argv)
   opt_print_qmatrix = 0;
   opt_print_rates = 0;
   opt_print_samples = 1;
+  opt_prop_shrink = 0.5;
   opt_qrates_fixed = -1;
   opt_qrates_params = NULL;
   opt_quiet = 0;
@@ -495,6 +511,23 @@ void args_init(int argc, char ** argv)
         opt_constfile = xstrdup(optarg);
         break;
 
+      case 16:
+        opt_debug_full = 1;
+        break;
+
+      case 17:
+        opt_debug_gspr = 1;
+        break;
+
+      case 18:
+        opt_prop_shrink = atof(optarg);
+        break;
+
+      case 19:
+        opt_debug = 1;
+        break;
+
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -532,6 +565,9 @@ void args_init(int argc, char ** argv)
   /* if more than one independent command, fail */
   if (commands > 1)
     fatal("More than one command specified");
+
+  if (opt_prop_shrink < 0 || opt_prop_shrink > 1)
+    fatal("Proportion of SHRINK moves must be between 0 and 1");
 
   /* if no command specified, turn on --help */
   if (!commands)

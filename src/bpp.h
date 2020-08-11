@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 3
-#define VERSION_PATCH 0
+#define VERSION_PATCH 1
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -814,7 +814,12 @@ extern long opt_clock;
 extern long opt_comply;
 extern long opt_constraint_count;
 extern long opt_debug;
+extern long opt_debug_full;
+extern long opt_debug_gspr;
 extern long opt_debug_rates;
+extern long opt_debug_expand_count;
+extern long opt_debug_expshr_count;
+extern long opt_debug_shrink_count;
 extern long opt_delimit_prior;
 extern long opt_diploid_size;
 extern long opt_est_heredity;
@@ -887,6 +892,7 @@ extern double opt_mubar_beta;
 extern double opt_mui_alpha;
 extern double opt_phi_alpha;
 extern double opt_phi_beta;
+extern double opt_prop_shrink;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
@@ -1089,6 +1095,11 @@ long stree_propose_spr(stree_t ** streeptr,
                        stree_t ** scloneptr,
                        gtree_t *** gclonesptr,
                        locus_t ** loci);
+long stree_propose_stree_snl(stree_t ** streeptr,
+                             gtree_t *** gtree_list_ptr,
+                             stree_t ** scloneptr,
+                             gtree_t *** gclonesptr,
+                             locus_t ** loci);
 
 gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * stree);
 

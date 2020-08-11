@@ -36,6 +36,9 @@
 #define NODE_SQUARE     64
 #define NODE_MOVED      256
 
+#define SNL_PUREA       16
+#define SNL_MOVED       32
+
 /* the variables below are used in the propose_tau move. They are allocated only
    once in stree_alloc_internals() before MCMC starts, and deallocate after MCMC
    finishes at stree_fini().
@@ -75,6 +78,12 @@ static unsigned int * snode_contrib_count;
 static gnode_t * pruned_nodes[10000];
 static gnode_t * gsources_list[10000];
 
+#define SHRINK          1
+#define EXPAND          2
+static double g_lambda_expand = 2;
+static double g_lambda_shrink = 2;
+
+static long debug_snl_counter = 0;
 /* hashtable for indexing species tree labels */
 hashtable_t * species_hash(stree_t * tree)
 {
@@ -5291,4 +5300,1281 @@ void prop_branch_rates_parallel(gtree_t ** gtree,
 
   *p_proposal_count = proposal_count;
   *p_accepted = accepted;
+}
+
+static double logpdf_power(double y, double b, double lambda)
+{
+  return log(lambda/b) + (lambda-1)*log(1-y/b);
+}
+
+long snl_scale_clade(gnode_t * node,
+                     snode_t ** rway,
+                     double ytaunew,
+                     double taufactor,
+                     long msa_index,
+                     long thread_index)
+{
+  long i, scaled_count = 1;
+  assert(node);
+  node->mark |= FLAG_BRANCH_UPDATE;
+
+  if (!node->left)
+    return 0;
+
+  assert(node->left && node->right);
+  node->time *= taufactor;
+  node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
+  
+  #if 1
+  //node->parent->mark |= FLAG_BRANCH_UPDATE;
+  //node->left->mark |= FLAG_BRANCH_UPDATE;
+  //node->right->mark |= FLAG_BRANCH_UPDATE;
+  node->mark |= FLAG_PARTIAL_UPDATE;
+  #endif
+
+  if (node->time > ytaunew)
+  {
+    for (i = 1; rway[i]; ++i)
+      if (node->time < rway[i]->tau)
+        break;
+    if (node->pop != rway[i-1])
+    {
+      /* remove gene node from list of coal events of its old population */
+      unlink_event(node,msa_index);
+      node->pop->event_count[msa_index]--;
+      if (!opt_est_theta)
+        node->pop->event_count_sum--;
+
+      node->pop = rway[i-1];
+      node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
+
+      dlist_item_append(node->pop->event[msa_index], node->event);
+      node->pop->event_count[msa_index]++;
+      if (!opt_est_theta)
+        node->pop->event_count_sum++;
+    }
+  }
+
+  scaled_count += snl_scale_clade(node->left,
+                                  rway,
+                                  ytaunew,
+                                  taufactor,
+                                  msa_index,
+                                  thread_index);
+  scaled_count += snl_scale_clade(node->right,
+                                  rway,
+                                  ytaunew,
+                                  taufactor,
+                                  msa_index,
+                                  thread_index);
+
+  return scaled_count;
+}
+
+static void snl_paint_nodes_recursive(stree_t * stree,
+                                      snode_t * a,
+                                      gnode_t * node)
+{
+  unsigned int pop_index;
+
+  assert(node);
+
+
+  if (!node->left)
+  {
+    assert(!node->right);
+    pop_index = node->pop->node_index;
+
+    if (stree->pptable[pop_index][a->node_index])
+      node->mark |= SNL_PUREA;
+
+    return;
+  }
+
+  snl_paint_nodes_recursive(stree,a,node->left);
+  snl_paint_nodes_recursive(stree,a,node->right);
+
+  if ((node->left->mark & SNL_PUREA) && (node->right->mark & SNL_PUREA))
+    node->mark |= SNL_PUREA;
+  else if ((node->left->mark & SNL_PUREA) || (node->right->mark & SNL_PUREA))
+  {
+    node->mark |= SNL_MOVED;
+    assert(node->time > a->parent->tau);
+  }
+}
+
+static char * debug_cb_bl(const snode_t * node)
+{
+  char * s = NULL;
+
+  /* inner node */
+  if (node->left)
+  {
+    if (node->parent)
+    {
+      if (opt_est_theta && node->theta > 0)
+        xasprintf(&s, " #%f: %f", node->theta, node->tau);
+      else
+        xasprintf(&s, ": %f", node->tau);
+    }
+    else
+    {
+      if (opt_est_theta && node->theta > 0)
+        xasprintf(&s, " #%f: %f", node->theta, node->tau);
+      else
+      {
+        xasprintf(&s, ": %f", node->tau);
+      }
+    }
+      
+  }
+  else
+  {
+    if (opt_est_theta && node->theta > 0)
+      xasprintf(&s, "%s #%f: %f",
+               node->label, node->theta, node->tau);
+    else
+      xasprintf(&s, "%s: %f", node->label, node->tau);
+  }
+    
+
+  return s;
+}
+
+static void debug_print_gtree_table(gtree_t * gtree, locus_t * locus)
+{
+  unsigned int i,j;
+
+  for (i = gtree->tip_count; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+    printf("%2d (%s) age: %f : %2d (%s)     %2d (%s)  %2d (%s)   | clv: %d  pmat: %d  ",
+           x->node_index,
+           x->pop->label,
+           x->time,
+           x->parent ? (int)(x->parent->node_index) : -1,
+           x->parent ? x->parent->pop->label : "-",
+           x->left ? (int)(x->left->node_index) : -1,
+           x->left ? x->left->pop->label : "-",
+           x->right ? (int)(x->right->node_index) : -1,
+           x->right ? x->right->pop->label : "-",
+           x->clv_index, x->pmatrix_index);
+    if (x->left)
+    {
+      for (j = 0; j < locus->sites; ++j)
+        printf(" %f", locus->clv[x->clv_index][j]);
+    }
+    printf("\n");
+  }
+  printf("CLV:\n");
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+    printf("node: %d   clv: %d    pmat: %d  length: %f    (true length: %f)\n", x->node_index, x->clv_index, x->pmatrix_index, x->length,
+    x->parent ? x->parent->time- x->time : 0);
+    pll_show_clv(locus, x->clv_index,x->scaler_index,9);
+    if (x->parent)
+      pll_show_pmatrix(locus, x->pmatrix_index,9);
+  }
+  printf("\n");
+}
+
+static void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
+{
+  long i,j;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree_t * gtree = gtree_list[i];
+  
+    for (j = 0; j < gtree->tip_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+      if (x->left || x->right)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld should be tip but has children",
+              i, gtree->tip_count, x->node_index);
+    }
+    for (j = gtree->tip_count; j < gtree->tip_count + gtree->inner_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+
+      if (x->time <= x->pop->tau)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its population (%s) starts at %f",
+              i, gtree->tip_count, x->node_index, x->time, x->pop->label, x->pop->tau);
+
+      if (x->pop->parent && x->pop->parent->tau <= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld [%s] has age %f but its population's parent (%s) starts at %f",
+              i, gtree->tip_count, x->node_index, x->pop->label, x->time, x->pop->parent->label, x->pop->parent->tau);
+      
+      if (x->parent && x->parent->time <= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its parent has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->parent->time);
+
+      if (x->left->time >= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its left daughter has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->left->time);
+      if (x->right->time >= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its right daughter has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->right->time);
+    }
+  }
+}
+
+static void all_partials_recursive(gnode_t * node,
+                                   unsigned int * trav_size,
+                                   gnode_t ** outbuffer)
+{
+  if (!node->left)
+    return;
+
+  all_partials_recursive(node->left,  trav_size, outbuffer);
+  all_partials_recursive(node->right, trav_size, outbuffer);
+
+  outbuffer[*trav_size] = node;
+  *trav_size = *trav_size + 1;
+}
+
+static void gtree_all_partials(gnode_t * root,
+                               gnode_t ** travbuffer,
+                               unsigned int * trav_size)
+{
+  *trav_size = 0;
+  if (!root->left) return;
+
+  all_partials_recursive(root, trav_size, travbuffer);
+}
+
+long snl_expand_and_shrink(stree_t * stree,
+                           stree_t * original_stree,
+                           gtree_t ** gtree_list,
+                           locus_t ** loci,
+                           long movetype,
+                           double ytaunew,
+                           double taufactor,
+                           double * lnacceptance,
+                           snode_t * a,
+                           snode_t * b,
+                           snode_t * c,
+                           snode_t * y,
+                           snode_t ** rway)
+{
+  unsigned int i,j,k;
+  long target_count = 0;
+  long source_count = 0;
+  long scaled_count = 0;
+  double tau0, tau0new;
+  long ndspecies;
+  gnode_t * gtarget;
+  long thread_index = 0;
+
+  double oldprior = lnprior_species_model(stree);
+
+
+  #if 1
+  char * dbg_newick_start = NULL;
+  if (opt_debug)
+    dbg_newick_start = stree_export_newick(stree->root, debug_cb_bl);
+  #endif
+
+  tau0 = stree->root->tau;
+  ndspecies = 1;
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    if (stree->nodes[i]->tau > 0) ndspecies++;
+  assert(ndspecies > 2);
+
+  gnode_t ** moved_nodes = moved_space;
+  gnode_t ** gtarget_list = gtarget_temp_space;
+  gnode_t ** gtarget_nodes = gtarget_space;
+  //gnode_t ** bl_list = __gt_nodes;                    /* TODO 5.8.2020 */
+  snode_t ** snode_contrib = snode_contrib_space;     /* TODO 5.8.2020 */
+
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    snode_contrib_count[i] = 0;
+
+#if 0
+     /* TODO: 6.8.2020 */
+    branch_update_count = 0;
+#endif
+    gtree_t * gtree = gtree_list[i];
+
+    /* paint gene tree nodes */
+    snl_paint_nodes_recursive(stree, a, gtree->root);
+
+    /* now identify Moved nodes */
+    moved_count[i] = 0;
+    for (j = gtree->tip_count; j < gtree->tip_count + gtree->inner_count; ++j)
+    {
+      gnode_t * node = gtree->nodes[j];
+
+      if (!(node->mark & SNL_MOVED)) continue;
+      assert(((node->left->mark & SNL_PUREA) && !(node->right->mark & SNL_PUREA)) ||
+             (!(node->left->mark & SNL_PUREA) && (node->right->mark & SNL_PUREA)));
+
+
+      /* now we need to ensure that only one child has descendants in A only */
+      gnode_t * pruned = NULL;
+      gnode_t * intact = NULL;
+      if (node->left->mark & SNL_PUREA)
+      {
+        pruned = node->left;
+        intact = node->right;
+      }
+      else
+      {
+        pruned = node->right;
+        intact = node->left;
+      }
+
+      moved_nodes[moved_count[i]] = node;
+      pruned_nodes[moved_count[i]++] = pruned;   /* TODO 4.8.2020 do we need it ? */
+
+      node->mark |= FLAG_PARTIAL_UPDATE;
+      if (node->parent)
+        node->parent->mark |= FLAG_PARTIAL_UPDATE; /* required as the parent will change */
+
+
+      /* find the new population for node */
+      double tnew = node->time*taufactor;
+      for (k = 1; rway[k]; ++k)
+        if (tnew < rway[k]->tau) break;
+      snode_t * newpop = rway[k-1];
+
+      /* 
+         List target branches on gene tree and sample one for reattachment.
+         Feasible target branch must pass newpop, but there are two
+         complications because newpop is for the new stree while pptable is for
+         the old stree.
+         if newpop = Y in new stree, branch must pass C on old stree (C->AC=Y)
+         if newpop = B in new stree, branch must pass AB on old stree (AB->B)
+      */
+
+      if (newpop == y) newpop = c;
+      else if (newpop == b) newpop = y;
+
+      target_count = 0;
+      for (k = 0; k < gtree->tip_count + gtree->inner_count; ++k)
+      {
+        gnode_t * tmp = gtree->nodes[k];
+
+        if (tmp->time >= tnew || (tmp->parent && tmp->parent->time <= tnew))
+          continue;
+
+        if (!(tmp->mark & SNL_PUREA) &&
+            stree->pptable[tmp->pop->node_index][newpop->node_index])
+          gtarget_list[target_count++] = tmp;
+      }
+
+      /* if no C seqs exist at the locus, there won't be target branch on gene
+         tree, and the move is disabled. This will never happen when tau_Y
+         increases, and may happen when tau_Y decreases in the move.
+      */
+      if (!target_count)
+      {
+        if (taufactor > 1)
+          fatal("Internal error - this should not happen for taufactor>1 - "
+                "please contact us");
+        return 2;
+      }
+      
+      gtarget = gtarget_list[(int)(target_count*legacy_rndu(thread_index))];
+
+      /* reset target, if it has flag SNL_MOVED, by tracing towards tips until
+         flag = BLACK */
+      while (gtarget->mark & SNL_MOVED)
+        gtarget = (gtarget->left->mark & SNL_PUREA) ?
+                    gtarget->right : gtarget->left;
+
+      /* save gtarget branch */
+      assert(gtarget && !(gtarget->mark & (SNL_MOVED | SNL_PUREA)));
+      gtarget_nodes[moved_count[i] - 1] = gtarget;
+
+      source_count = 1;
+      /* gsources_list[0] = intact; */
+      for (k = 0; k < gtree->tip_count + gtree->inner_count; ++k)
+      {
+        gnode_t * tmp = gtree->nodes[k];
+
+        if (tmp == intact || tmp == intact->parent)
+          continue;  /* intact->father equals node */
+
+        if (tmp->time >= node->time || 
+            (tmp->parent && tmp->parent->time <= node->time))
+          continue;
+
+        if (!(tmp->mark & SNL_PUREA) &&
+            stree->pptable[tmp->pop->node_index][node->pop->node_index])
+          source_count++;
+      }
+      *lnacceptance += log((double)target_count / source_count);
+    }
+
+    /* All moves nodes for current locus have been identified. Apply SPR on gene
+       tree. For each moved node, prune off its pureA child and reattach it at
+       gtarget
+    */
+    for (j = 0; j < moved_count[i]; ++j)
+    {
+      double tnew = moved_nodes[j]->time*taufactor;
+      for (k = 1; rway[k]; ++k)
+        if (tnew < rway[k]->tau) break;
+      snode_t * newpop = rway[k-1];
+
+      /* TODO: We probably don't need to keep the pruned nodes array above, but only check the 'mark' */
+      /* TODO: 5.8.2020 REMOVE PRUNED NODES ARRAY */
+      gnode_t * node = pruned_nodes[j]->parent;
+      assert(node == moved_nodes[j]);
+      node->time = tnew;
+      gnode_t * pruned = pruned_nodes[j];
+      gnode_t * intact = (node->left == pruned) ? node->right : node->left;
+
+      /* possibly many insertions on same branch */
+      for (gtarget = gtarget_nodes[j]; gtarget->parent; gtarget = gtarget->parent)
+        if (gtarget->parent->time > tnew)
+          break;
+
+
+      /* check whether gene tree topology changes */
+      if (gtarget != intact && gtarget != node)
+      {
+        /* topology changes */
+
+        intact->parent = node->parent;
+        if (node->parent)
+        {
+          if (node->parent->left == node)
+            node->parent->left = intact;
+          else
+            node->parent->right = intact;
+        }
+        else
+        {
+          gtree->root = intact;
+
+          /* TODO: This bug has led to serious headaches for many days.
+          The root node points to an invalid pmatrix_index (= edge_count) which
+          is not associated to a pmatrix. However, when we call SWAP_PMAT_INDEX
+          it is changed to 0, resulting to two nodes having the same indices */
+          SWAP(node->pmatrix_index,gtree->root->pmatrix_index);
+        }
+
+        if (gtarget->parent)
+        {
+          if (gtarget->parent->left == gtarget)
+            gtarget->parent->left = node;
+          else
+            gtarget->parent->right = node;
+        }
+        else
+        {
+          gtree->root = node;
+
+          SWAP(gtarget->pmatrix_index,gtree->root->pmatrix_index);
+        }
+
+        node->parent   = gtarget->parent;
+        gtarget->parent = node;
+        assert(gtarget->parent == node);
+
+        if (node->left == intact)
+          node->left = gtarget;
+        else
+          node->right = gtarget;
+      }
+
+      /* scaling ages of moved node PureA clades */
+      scaled_count++;           /* this is for the moved node */
+      scaled_count += snl_scale_clade(pruned,rway,ytaunew,taufactor,i,thread_index);
+        
+      gtarget->mark |= FLAG_BRANCH_UPDATE;
+      node->mark    |= FLAG_BRANCH_UPDATE;
+      intact->mark  |= FLAG_BRANCH_UPDATE;
+
+      /* remove  gene node from list of coalescent events of its old population */
+      unlink_event(node, i);
+      node->pop->event_count[i]--;
+
+      node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
+      if (!opt_est_theta)
+        node->pop->event_count_sum--;
+
+      node->pop = newpop;
+      node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
+
+      dlist_item_append(node->pop->event[i], node->event);
+
+      node->pop->event_count[i]++;
+      if (!opt_est_theta)
+        node->pop->event_count_sum++;
+
+      /* update leaf counts for moved node */
+      for (; node; node = node->parent)
+        node->leaves = node->left->leaves + node->right->leaves;
+
+      /* update leaf counts for intact node parent */
+      for (node = intact->parent; node; node = node->parent)
+        node->leaves = node->left->leaves + node->right->leaves;
+    }
+
+    /* rescale ages and reset populations if the whole tree is a pure-A clade */
+    if (gtree->root->mark & SNL_PUREA)
+      scaled_count += snl_scale_clade(gtree->root,rway,ytaunew,taufactor,i,thread_index);
+
+    /* Now process square nodes: AB -> B */
+    dlist_item_t * item = y->event[i]->head;
+    while (item)
+    {
+      gnode_t * node = (gnode_t *)(item->data);
+      item = item->next; 
+
+      if (node->mark & (SNL_MOVED | SNL_PUREA)) continue;
+
+      /* square node */
+      unlink_event(node,i);
+      node->pop->event_count[i]--;
+      if (!opt_est_theta)
+        node->pop->event_count_sum--;
+
+      node->pop = b;
+
+      dlist_item_append(node->pop->event[i], node->event);
+
+      node->pop->event_count[i]++;
+      if (!opt_est_theta)
+        node->pop->event_count_sum++;
+
+      y->mark[thread_index] |= FLAG_POP_UPDATE;
+      b->mark[thread_index] |= FLAG_POP_UPDATE;
+    }
+    
+    /* Now process diamond nodes: C -> AC */
+    item = c->event[i]->head;
+    while (item)
+    {
+      gnode_t * node = (gnode_t *)(item->data);
+      item = item->next; 
+
+      if (node->time <= ytaunew) continue;
+
+      /* diamond node */
+      unlink_event(node,i);
+      node->pop->event_count[i]--;
+      if (!opt_est_theta)
+        node->pop->event_count_sum--;
+
+      node->pop = y;
+
+      dlist_item_append(node->pop->event[i], node->event);
+
+      node->pop->event_count[i]++;
+      if (!opt_est_theta)
+        node->pop->event_count_sum++;
+
+      y->mark[thread_index] |= FLAG_POP_UPDATE;
+      c->mark[thread_index] |= FLAG_POP_UPDATE;
+    }
+
+
+    /* we must always recompute for Y */
+    y->mark[thread_index] |= FLAG_POP_UPDATE;
+
+    /* Flag populations Y,C and B for re-computing their contribution to the i-th gene tree probability only if:
+         (a) they have not been already flagged in a previous step
+         (b) there is more than one outgoing lineages (entering its parent population).
+    */
+
+    if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->event_count[i] > 1))
+      c->mark[thread_index] |= FLAG_POP_UPDATE;
+      //snode_contrib[snode_contrib_count[i]++] = c;
+    if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->event_count[i] > 1))
+      b->mark[thread_index] |= FLAG_POP_UPDATE;
+      //snode_contrib[snode_contrib_count[i]++] = b;
+
+    moved_nodes += gtree->inner_count;
+    gtarget_nodes += gtree->inner_count;
+    gtarget_list += gtree->tip_count + gtree->inner_count;
+
+    /* TODO: 6.8.2020 THIS HAS NOT BEEN CHECKED YET */
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      fatal("SNL and relaxed clock models don't like each other at the moment");
+      /* relaxed clock */
+      for (j = 0; j < gtree_list[i]->tip_count+gtree_list[i]->inner_count; ++j)
+      {
+        gnode_t * node = gtree_list[i]->nodes[j];
+
+        /* if root or parent already marked for branch update, skip */
+        if (!node->parent || (node->mark & FLAG_BRANCH_UPDATE)) continue;
+
+        if (stree->pptable[node->pop->node_index][b->node_index])
+        {
+          if (node->time >= y->tau)
+          {
+#if 0
+     /* TODO: 6.8.2020 */
+            bl_list[branch_update_count++] = node;
+#endif
+            node->mark |= FLAG_BRANCH_UPDATE;
+            node->parent->mark |= FLAG_PARTIAL_UPDATE;
+          }
+        }
+        else if (stree->pptable[node->pop->node_index][y->node_index] &&
+                 stree->pptable[y->node_index][node->parent->pop->node_index])
+        {
+#if 0
+     /* TODO: 6.8.2020 */
+          bl_list[branch_update_count++] = node;
+#endif
+          node->mark |= FLAG_BRANCH_UPDATE;
+          node->parent->mark |= FLAG_PARTIAL_UPDATE;
+        }
+      }
+    }
+
+    /* fill snode_contrib array */
+    for (j=0; j < stree->tip_count + stree->inner_count; ++j)
+    {
+      snode_t * stmp = stree->nodes[j];
+      if (stree->pptable[stmp->node_index][a->node_index])
+      {
+        /* if a population of clade A was not flagged for recomputing MSC
+          density, it means that it has no coalescent events (no nodes were
+          rescaled). However, if more than 1 sequences pass it, we must
+          recompute its density as its parent tau was changed */
+        if (!(stmp->mark[thread_index] & FLAG_POP_UPDATE) &&
+            stmp->seqin_count[i] > 1)
+        {
+          stmp->mark[thread_index] |= FLAG_POP_UPDATE;
+        }
+      }
+      if (stmp->mark[thread_index] & FLAG_POP_UPDATE)
+        snode_contrib[snode_contrib_count[i]++] = stmp;
+      
+      /* reset species tree marks */
+      stmp->mark[thread_index] = 0;
+    }
+        
+#if 0
+     /* TODO: 6.8.2020 */
+    __mark_count[i] = branch_update_count;
+    bl_list += branch_update_count;
+#endif
+    snode_contrib += stree->tip_count + stree->inner_count;
+
+  } /* end of locus */
+
+  /* update species tree */
+
+  if (!y->parent)
+  {
+    assert(y == stree->root); assert(movetype == SHRINK);
+    stree->root = b;
+  }
+  else
+  {
+    /* make b child of y->parent */
+    if (y->parent->left == y)
+      y->parent->left = b;
+    else
+      y->parent->right = b;
+  }
+  b->parent = y->parent;
+
+  /* make y child of c->parent */
+  if (!c->parent)
+  {
+    assert(c == stree->root); assert(movetype == EXPAND);
+    stree->root = y;
+  }
+  else
+  {
+    if (c->parent->left == c)
+      c->parent->left = y;
+    else
+      c->parent->right = y;
+  }
+  y->parent = c->parent;
+  c->parent = y;
+
+  /* make c child of y */
+  if (y->left == a)
+    y->right = c;
+  else
+    y->left = c;
+
+  /* set new tau */
+  y->tau = ytaunew;
+
+  /* scale nodes inside clade A on species tree by taufactor */
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    /* note, pptable is invalid at the moment, but does not affect A node
+     * ancestry */
+    if (stree->pptable[stree->nodes[i]->node_index][a->node_index] &&
+        stree->nodes[i]->tau)
+    {
+      stree->nodes[i]->tau *= taufactor;
+      ++scaled_count;   /* counts a but not y */
+    }
+  }
+
+  assert(!opt_msci);
+  for (i = 0; i < stree->locus_count; ++i)
+    fill_seqin_counts(stree,NULL,i);
+
+  /* TODO: Check whether reset_gene_leaves_count must operate on the whole gtree_list, or whether
+     we can separate the 'reset_hybrid_gene_leaves_count() call inside the function */
+  assert(!opt_msci);
+  reset_gene_leaves_count(stree,gtree_list);
+  stree_reset_pptable(stree);
+  stree_label(stree);
+
+  /* TODO: 5.8.2020 At the moment, no consraints */
+  assert(!opt_constraint_count);
+  init_weights(stree,NULL);
+
+  if (movetype == EXPAND)
+  {
+    *lnacceptance += log(c->weight);
+  }
+  else
+  {
+    *lnacceptance += log(y->weight);
+  }
+
+  *lnacceptance += scaled_count*log(taufactor);
+
+  double newprior = lnprior_species_model(stree);
+  *lnacceptance += newprior - oldprior;
+
+  /* prior on tau's (YR2010: Eq. 2) */
+  tau0new = stree->root->tau;
+  if (fabs(tau0new - tau0) > 1e-20)
+    *lnacceptance += (-opt_tau_alpha - 1 - (ndspecies - 2))*log(tau0new/tau0) -
+                     opt_tau_beta*(1/tau0new - 1/tau0);
+
+  snode_contrib = snode_contrib_space;
+  double logpr_notheta = stree->notheta_logpr;
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    gtree_list[i]->old_logl = gtree_list[i]->logl;
+
+    gnode_t ** bl_list = __gt_nodes;
+
+    if (opt_debug_full)
+    {
+        k=0;
+        for (j = 0; j < gtree_list[i]->tip_count + gtree_list[i]->inner_count; ++j)
+        {
+          gnode_t * tmp = gtree_list[i]->nodes[j];
+          if (tmp->parent)
+          {
+            tmp->pmatrix_index = SWAP_PMAT_INDEX(gtree_list[i]->edge_count,
+                                                 tmp->pmatrix_index);
+            bl_list[k++] = tmp;
+          }
+        }
+    
+    
+        locus_update_matrices(loci[i],gtree_list[i],bl_list,stree,i,k);
+    
+        gtree_all_partials(gtree_list[i]->root,bl_list,&k);
+        for (j = 0; j < k; ++j)
+        {
+          bl_list[j]->clv_index = SWAP_CLV_INDEX(gtree_list[i]->tip_count,
+                                                 bl_list[j]->clv_index);
+          if (opt_scaling)
+            bl_list[j]->scaler_index = SWAP_SCALER_INDEX(gtree_list[i]->tip_count,
+                                                         bl_list[j]->scaler_index);
+        }
+    
+        locus_update_partials(loci[i],bl_list,k);
+    
+        /* compute log-likelihood */
+        assert(!gtree_list[i]->root->parent);
+        gtree_list[i]->logl = locus_root_loglikelihood(loci[i],
+                                                       gtree_list[i]->root,
+                                                       loci[i]->param_indices,
+                                                       NULL);
+    }
+    else
+    {
+        k = 0;
+        for (j = 0; j < gtree_list[i]->tip_count + gtree_list[i]->inner_count; ++j)
+        {
+          gnode_t * tmp = gtree_list[i]->nodes[j];
+    
+          if (!tmp->parent) continue;
+    
+          if (tmp->mark & FLAG_BRANCH_UPDATE)
+          {
+            tmp->pmatrix_index = SWAP_PMAT_INDEX(gtree_list[i]->edge_count,
+                                                 tmp->pmatrix_index);
+            bl_list[k++] = tmp;
+          }
+        }
+    
+        if (k)
+        {
+          locus_update_matrices(loci[i], gtree_list[i], bl_list, stree, i, k);
+    
+          /* retrieve all nodes whose partials must be updated */
+          unsigned int partials_count;
+
+          assert(!gtree_list[i]->root->parent);
+          gnode_t ** partials = gtree_return_partials(gtree_list[i]->root,
+                                                      i,
+                                                      &partials_count);
+    
+          /* point to the double-buffered partials space */
+          for (j = 0; j < partials_count; ++j)
+          {
+            partials[j]->clv_index = SWAP_CLV_INDEX(gtree_list[i]->tip_count,
+                                                    partials[j]->clv_index);
+            if (opt_scaling)
+              partials[j]->scaler_index = SWAP_SCALER_INDEX(gtree_list[i]->tip_count,
+                                                            partials[j]->scaler_index);
+          }
+    
+          /* update conditional probabilities (partials) of affected nodes */
+          locus_update_partials(loci[i], partials, partials_count);
+    
+          /* evaluate log-likelihood */
+          assert(!gtree_list[i]->root->parent);
+          gtree_list[i]->logl = locus_root_loglikelihood(loci[i],
+                                                         gtree_list[i]->root,
+                                                         loci[i]->param_indices,
+                                                         NULL);
+        }
+    }
+
+    if (opt_est_theta)
+      gtree_list[i]->old_logpr = gtree_list[i]->logpr;
+
+    if (opt_debug_full)
+    {
+        /* This recomputes the gene tree probabilities from scratch. It can be used to verify that
+           the code below, which only computes the gene tree probability for the changed components,
+           is correct. */
+    
+        if (opt_est_theta)
+          gtree_list[i]->old_logpr = gtree_list[i]->logpr;
+    
+        double logpr = gtree_logprob(stree, loci[i]->heredity[0], i, thread_index);
+    
+    
+        if (opt_est_theta)
+          gtree_list[i]->logpr = logpr;
+        else
+        {
+          if (i == opt_locus_count - 1) 
+            logpr += stree->notheta_hfactor+stree->notheta_sfactor;
+          logpr_notheta = logpr;
+        }
+    
+    }      
+    else
+    {
+         /* locate additional populations that need to be updated */
+    
+         /* find and mark those populations whose number of incoming lineages has
+            changed due to the reset_gene_leaves_count() call, but were previously
+            not marked for log-probability contribution update */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+          snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
+        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+        {
+          snode_t * snode = stree->nodes[j];
+    
+          if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
+              (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
+            snode_contrib[snode_contrib_count[i]++] = snode;
+    
+    
+        }
+    
+        /* now update the log-probability contributions for the affected, marked
+           populations */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          if (opt_est_theta)
+            gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
+          else
+            logpr_notheta -= snode_contrib[j]->notheta_logpr_contrib;
+    
+          double xtmp = gtree_update_logprob_contrib(snode_contrib[j],
+                                                     loci[i]->heredity[0],
+                                                     i,
+                                                     thread_index);
+    
+          if (opt_est_theta)
+            gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
+          else
+            logpr_notheta += xtmp;
+        }
+    }
+
+    /* 
+       TODO: Several improvements can be made here
+       1. Call this function only for the gene trees that are modified
+       2. Only re-compute the prior for the affected gene tree nodes/edges
+    */
+    if (opt_clock == BPP_CLOCK_CORR)
+    {
+      double new_prior_rates = lnprior_rates(gtree_list[i],stree,i);
+      *lnacceptance += new_prior_rates - gtree_list[i]->lnprior_rates;
+      gtree_list[i]->lnprior_rates = new_prior_rates;
+    }
+
+    /* reset markings on affected populations */
+    for (j = 0; j < snode_contrib_count[i]; ++j)
+      snode_contrib[j]->mark[thread_index] = 0;
+
+    for (j = 0; j < gtree_list[i]->tip_count + gtree_list[i]->inner_count; ++j)
+      gtree_list[i]->nodes[j]->mark = 0;
+
+    snode_contrib += stree->tip_count + stree->inner_count;
+
+    if (opt_est_theta)
+      *lnacceptance += gtree_list[i]->logpr - gtree_list[i]->old_logpr +
+                       gtree_list[i]->logl - gtree_list[i]->old_logl;
+    else
+      *lnacceptance += gtree_list[i]->logl - gtree_list[i]->old_logl;
+
+    if (opt_debug)
+    {
+      if (opt_est_theta)
+        printf("[DBG Iter %ld] Locus %d:  LOGL: %f  %f  GProb: %f  %f\n",
+               debug_snl_counter, i,
+               gtree_list[i]->logl,  gtree_list[i]->old_logl,
+               gtree_list[i]->logpr, gtree_list[i]->old_logpr);
+      else
+        printf("[DBG Iter %ld] Locus %d:  LOGL: %f  %f\n",
+               debug_snl_counter, i,
+               gtree_list[i]->logl, gtree_list[i]->old_logl);
+    }
+  }
+
+  if (!opt_est_theta)
+  {
+    if (opt_debug)
+      printf("[DBG Iter %ld] logpr_notheta: %f  %f\n", debug_snl_counter++, logpr_notheta, stree->notheta_logpr);
+
+    *lnacceptance += logpr_notheta - stree->notheta_logpr;
+    stree->notheta_logpr = logpr_notheta;
+
+  }
+
+  if (opt_debug)
+  {
+    char * dbg_newick_end = stree_export_newick(stree->root, debug_cb_bl);
+    printf("SPR from     %s      ->      %s\n", dbg_newick_start, dbg_newick_end);
+    free(dbg_newick_start); free(dbg_newick_end);
+  }
+  #if 1
+  debug_consistency(stree, gtree_list);
+  #endif
+  if (opt_debug)
+    printf("[Debug] (GSPR) lnacceptance = %f\n", *lnacceptance);
+
+  return (*lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(*lnacceptance));
+}
+
+long stree_propose_stree_snl(stree_t ** streeptr,
+                             gtree_t *** gtree_list_ptr,
+                             stree_t ** scloneptr,
+                             gtree_t *** gclonesptr,
+                             locus_t ** loci)
+{
+  unsigned int i;
+  long movetype;
+  long thread_index = 0;
+  double r;
+  double sum = 0;
+  double lnacceptance = 0;
+  double delta;
+  double tau_new = 0;
+  double tau_factor = 0;
+  snode_t ** rway;
+
+
+  stree_t * original_stree = *streeptr;
+  gtree_t ** original_gtree_list = *gtree_list_ptr;
+
+  stree_t * stree = *scloneptr;
+  gtree_t ** gtree_list = *gclonesptr;
+
+  stree_clone(original_stree, stree);
+
+  for (i = 0; i < stree->locus_count; ++i)
+    gtree_clone(original_gtree_list[i], gtree_list[i], stree);
+  events_clone(original_stree, stree, gtree_list);
+
+  /* calculate the weight of each branch as the reciprocal of the square root
+   * of its length */
+  /* TODO: 31.7.2020 At the moment, no consraints */
+  assert(!opt_constraint_count);
+  init_weights(stree,NULL);
+
+  /* select move type */
+  if (legacy_rndu(thread_index) < opt_prop_shrink)
+    movetype = SHRINK;
+  else
+    movetype = EXPAND;
+  
+  /* randomly select a branch according to weights */
+  r = legacy_rndu(thread_index);
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count - 1; ++i)
+  {
+    sum += stree->nodes[i]->weight;
+    if (r < sum) break;
+  }
+
+  /* selected node */
+  snode_t * y;
+  snode_t * a;
+  snode_t * b;
+  snode_t * c = NULL;
+  snode_t * x = NULL;
+  snode_t * stmp;
+  snode_t * target, * nextnode, * prevnode;
+
+  if (movetype == EXPAND)       /* expand */
+    y = stree->nodes[i];
+  else
+    c = stree->nodes[i];        /* shrink */
+
+  assert(stree->nodes[i] != stree->root);
+  assert(stree->nodes[i]->weight);
+
+  lnacceptance -= log(stree->nodes[i]->weight);
+
+  /* parent of node */
+  if (movetype == EXPAND)       /* expand */
+    x = y->parent;
+  else                          /* shrink */
+    y = c->parent;
+
+  /* Randomly select children of y in randomly selected order */
+  if (movetype == EXPAND)
+  {
+    /* expand move */
+    if ((int)(2 * legacy_rndu(thread_index)) == 0)
+    {
+      a = y->left;
+      b = y->right;
+    }
+    else
+    {
+      a = y->right;
+      b = y->left;
+    }
+  }
+  else
+  {
+    /* shrink move */
+    assert(y->left == c || y->right == c);
+    if (y->left == c)
+    {
+      a = y->right;
+      b = y->left;
+    }
+    else
+    {
+      a = y->left;
+      b = y->right;
+    }
+  }
+
+  if (movetype == EXPAND)       /* expand */
+    delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1./g_lambda_expand));
+  else                          /* shrink */
+    delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1./g_lambda_shrink));
+
+
+  /* find the target branch where to regraft the edge y-a */
+  if (movetype == EXPAND)
+  {
+    target = x;
+    assert(y == x->left || y == x->right);
+  }
+  else
+  {
+    target = c;
+  }
+
+  /* only required for the first time an expand move takes a downward path, so
+     that we don't go back the same path we came from */
+  prevnode = y;  
+  
+  int downwards = 0;  /* if downwards once, then always downwards */
+  if (movetype == SHRINK)
+    downwards = 1;
+
+  /* In the following loop we find the target branch for regrafting. Code works
+     for both expand and shrink moves */
+  while (1)
+  {
+    /* chose whether to take upward or downward path */
+    if (!downwards && legacy_rndu(thread_index) < 0.5)
+    {
+      /* upwards */
+
+      if (target->parent)
+      {
+        double dist = target->parent->tau - target->tau;
+        if (dist > delta)
+        {
+          tau_new = target->tau + delta;
+          break;
+        }
+        else
+        {
+          prevnode = target;
+          target = target->parent;
+          delta -= dist;
+        }
+      }
+      else
+      {
+        /* we reached the root node, hence we just add delta to root's tau */
+        tau_new = target->tau + delta;
+        break;
+      }
+    }
+    else
+    {
+      /* downwards */
+
+      if (!downwards)
+      {
+        /* first time a downwards move is selected. Ensure we do not visit same
+           path again */
+        nextnode = (target->left == prevnode) ?  target->right : target->left;
+
+        /* all future steps will be downwards */
+        downwards = 1;
+      }
+      else
+      {
+        /* randomly select which of the two */
+        nextnode = (legacy_rndu(thread_index) < 0.5 ? target->left : target->right);
+      }
+
+      double dist = target->tau - nextnode->tau;
+      
+      if (dist > delta)
+      {
+        tau_new = target->tau - delta;
+        target = nextnode;
+        break;
+      }
+      else
+      {
+        prevnode = target;   /* only for consistency, but not needed anymore */
+        target = nextnode;
+        delta -= dist;
+      }
+    }
+  }
+
+  if ((movetype == EXPAND && !downwards) ||
+      movetype == SHRINK)
+  {
+    /* shrink or pure expand (no downward step) */
+
+    if (movetype == EXPAND)
+    {
+      /* pure expand no downward */ 
+      lnacceptance -= log(0.5);
+      lnacceptance -= logpdf_power(tau_new - x->tau,
+                                   x->tau,
+                                   g_lambda_expand);
+      lnacceptance += logpdf_power(target->tau - y->tau,
+                                   target->tau,
+                                   g_lambda_shrink);
+    }
+    else
+    {
+      /* shrink only */
+
+      lnacceptance -= logpdf_power(c->tau - tau_new,
+                                   c->tau,
+                                   g_lambda_shrink);
+
+
+      lnacceptance += logpdf_power(y->tau - target->parent->tau,
+                                   target->parent->tau,
+                                   g_lambda_expand);
+
+      lnacceptance += log(0.5);
+    }
+  }
+  else
+  {
+    /* expand with both upward and downward steps */
+    assert(movetype == EXPAND && downwards);
+
+    lnacceptance += logpdf_power(fabs(target->parent->tau - y->tau),
+                                 target->parent->tau,
+                                 g_lambda_expand);
+    lnacceptance -= logpdf_power(fabs(tau_new - x->tau),
+                                 x->tau,
+                                 g_lambda_expand);
+                                 
+  }
+
+  /* next */
+  tau_factor = tau_new / y->tau;
+  assert(tau_factor);
+
+  /* compute rway */
+
+  rway = (snode_t **)xcalloc((size_t)(stree->inner_count+1),sizeof(snode_t *));
+
+  rway[0] = y;  /* first in the list is Y*  */
+  for (i = 1, stmp = target->parent; stmp; stmp = stmp->parent)
+  {
+    if (stmp == y) continue;
+    rway[i++] = stmp;
+  }
+  rway[i] = NULL;
+
+  /* statistics for shrink/expand */
+  if (movetype == SHRINK)
+  {
+    ++opt_debug_shrink_count;
+  }
+  else
+  {
+    assert(movetype == EXPAND);
+    if (downwards)
+      ++opt_debug_expshr_count;
+    else
+      ++opt_debug_expand_count;
+  }
+  
+
+  if (opt_debug)
+    printf("GSPR : %s  with  Y: %s C: %s A: %s , tau_Y %f tau*_Y %f scaler %f\n",
+           movetype == EXPAND ? "EXPAND" : "SHRINK",
+           y->label,
+           target->label,
+           a->label,
+           y->tau,
+           tau_new,
+           tau_factor);
+
+  return snl_expand_and_shrink(stree,
+                               original_stree,
+                               gtree_list,
+                               loci,
+                               movetype,
+                               tau_new,
+                               tau_factor,
+                               &lnacceptance,
+                               a,
+                               b,
+                               target,
+                               y,
+                               rway);
 }

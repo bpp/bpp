@@ -212,8 +212,16 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
     fprintf(fp, "  qmat: instantaneous substitution rates proposal\n");
   if (enabled_prop_alpha)
     fprintf(fp, "  alfa: discretized gamma (rate variation among sites) alpha proposal\n");
-  if (opt_method == METHOD_01)
-    fprintf(fp, "  Sspr: species tree SPR proposal\n");
+  if (!opt_debug_gspr)
+  {
+    if (opt_method == METHOD_01)
+      fprintf(fp, "  Sspr: species tree SPR proposal\n");
+  }
+  else
+  {
+    if (opt_method == METHOD_01)
+      fprintf(fp, "  Dspr: *DEBUG* species tree general SPR proposal\n");
+  }
   if (opt_method == METHOD_10)
     fprintf(fp, "    rj: reversible-jump split/merge proposal\n");
   if (opt_method == METHOD_11)
@@ -339,7 +347,14 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
 
   if (opt_method == METHOD_01)
   {
-    fprintf(fp,"   Sspr");  linewidth += 7;
+    if (!opt_debug_gspr)
+    {
+      fprintf(fp,"   Sspr");  linewidth += 7;
+    }
+    else
+    {
+      fprintf(fp,"   Dspr");  linewidth += 7;
+    }
   }
   else if (opt_method == METHOD_10)
   {
@@ -347,7 +362,14 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   }
   else if (opt_method == METHOD_11)
   {
-    fprintf(fp,"   Sspr");  linewidth += 7;
+    if (!opt_debug_gspr)
+    {
+      fprintf(fp,"   Sspr");  linewidth += 7;
+    }
+    else
+    {
+      fprintf(fp,"   Dspr");  linewidth += 7;
+    }
     fprintf(fp,"     rj");  linewidth += 7;
   }
   fprintf(fp," |");         linewidth += 2;
@@ -2753,6 +2775,11 @@ void cmd_run()
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
   #endif
+  if (opt_debug_full)
+    fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
+                    "log-likelihood in GSPR/SPR moves\n");
+  if (opt_debug_gspr)
+    fprintf(stdout, "[DEBUG] Using general SPR move\n");
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -2858,7 +2885,10 @@ void cmd_run()
       if (legacy_rndu(thread_index_zero) > 0)   /* bpp4 compatible results (RNG to next state) */
       {
         long ret;
-        ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
+        if (!opt_debug_gspr)
+          ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
+        else
+          ret = stree_propose_stree_snl(&stree, &gtree, &sclone, &gclones, locus);
         if (ret == 1)
         {
           /* accepted */
@@ -3485,6 +3515,17 @@ void cmd_run()
     for (i = 0; i < species_count; ++i)
       free(species_names[i]);
     free(species_names);
+
+    if (opt_debug_gspr)
+    {
+      long opt_debug_sum = opt_debug_expand_count +
+                           opt_debug_expshr_count +
+                           opt_debug_shrink_count;
+      printf("[DEBUG] SHRINK: %ld (%.2f%%) EXPAND: %ld (%.2f%%) EXPSHR: %ld (%.2f%%)\n",
+             opt_debug_shrink_count, (opt_debug_shrink_count / (double)opt_debug_sum)*100,
+             opt_debug_expand_count, (opt_debug_expand_count / (double)opt_debug_sum)*100,
+             opt_debug_expshr_count, (opt_debug_expshr_count / (double)opt_debug_sum)*100);
+    }
   }
 
   if (opt_est_theta)
