@@ -27,6 +27,8 @@
 
 //#define DEBUG_GTR
 
+//#define CHECK_LOGL
+
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
 #define MAX_TAU_OUTPUT          3
@@ -2570,6 +2572,104 @@ static FILE * init(stree_t ** ptr_stree,
 
 }
 
+#ifdef CHECK_LOGL
+#define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
+#define SWAP_PMAT_INDEX(e,i) (((e)+(i))%((e)<<1))
+#define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2)) 
+#define GET_HINDEX(t,p) (((node_is_mirror((p)) ? \
+                          (p)->node_index : (p)->hybrid->node_index)) - \
+                        ((t)->tip_count+(t)->inner_count))
+static void all_partials_recursive(gnode_t * node,
+                                   unsigned int * trav_size,
+                                   gnode_t ** outbuffer)
+{
+  if (!node->left)
+    return;
+
+  all_partials_recursive(node->left,  trav_size, outbuffer);
+  all_partials_recursive(node->right, trav_size, outbuffer);
+
+  outbuffer[*trav_size] = node;
+  *trav_size = *trav_size + 1;
+}
+
+static void gtree_all_partials(gnode_t * root,
+                               gnode_t ** travbuffer,
+                               unsigned int * trav_size)
+{
+  *trav_size = 0;
+  if (!root->left) return;
+
+  all_partials_recursive(root, trav_size, travbuffer);
+}
+
+static double debug_full_lh(stree_t * stree, gtree_t * gtree, locus_t * locus, long msa_index)
+{
+  unsigned int j,k;
+  gnode_t ** buffer;
+  double logl = 0;
+
+  buffer = (gnode_t **)xcalloc((size_t)(gtree->tip_count+gtree->inner_count),
+                               sizeof(gnode_t *));
+  k=0;
+  for (j = 0; j < gtree->tip_count + gtree->inner_count; ++j)
+  {
+    gnode_t * tmp = gtree->nodes[j];
+    if (tmp->parent)
+    {
+      tmp->pmatrix_index = SWAP_PMAT_INDEX(gtree->edge_count,
+                                           tmp->pmatrix_index);
+      buffer[k++] = tmp;
+    }
+  }
+  
+  
+  locus_update_matrices(locus,gtree,buffer,stree,msa_index,k);
+  
+  gtree_all_partials(gtree->root,buffer,&k);
+  for (j = 0; j < k; ++j)
+  {
+    buffer[j]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                          buffer[j]->clv_index);
+    if (opt_scaling)
+      buffer[j]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                  buffer[j]->scaler_index);
+  }
+  
+  locus_update_partials(locus,buffer,k);
+  
+  /* compute log-likelihood */
+  assert(!gtree->root->parent);
+  logl = locus_root_loglikelihood(locus,
+                                  gtree->root,
+                                  locus->param_indices,
+                                  NULL);
+  //printf("LOGL: %f    OLDD LOGL: %f", gtree->logl, old_logl);  
+  free(buffer);
+  return logl;
+}
+
+static void check_logl(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long iter, const char * move)
+{
+  long i;
+  double logl, old_logl;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    logl = debug_full_lh(stree,gtree[i],locus[i],i);
+
+    old_logl = gtree[i]->logl;
+
+    if (fabs(logl - old_logl) > 1e-9)
+    {
+      printf("[FATAL iter %ld locus %ld] LOGL: %f   OLD_LOGL: %f\n", iter, i, logl, old_logl);
+      
+      fatal("Invalid logl iter: %ld locus: %ld move: %s    correct logl: %f   wrong logl: %f", iter, i, move, logl, old_logl);
+    }
+  }
+}
+#endif
+
 void cmd_run()
 {
   /* common variables for all methods */
@@ -2775,6 +2875,15 @@ void cmd_run()
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
   #endif
+  if (opt_debug_gspr && opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    if (!opt_debug_full)
+    {
+      fprintf(stdout, "[DEBUG] GSPR and relaxed clock requires full "
+                      "recomputation of log-L (turning on)\n");
+      opt_debug_full = 1;                 
+    }
+  }
   if (opt_debug_full)
     fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
                     "log-likelihood in GSPR/SPR moves\n");
@@ -2901,6 +3010,9 @@ void cmd_run()
         if (ret != 2)
           ft_round_spr++;
       }
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "SSPR");
+      #endif
     }
 
     /* perform proposals sequentially */   
@@ -2917,6 +3029,9 @@ void cmd_run()
     }
     pjump[BPP_MOVE_GTAGE_INDEX] = (pjump[BPP_MOVE_GTAGE_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "GAGE");
+      #endif
 
     /* propose gene tree topologies using SPR */
     if (opt_threads == 1)
@@ -2930,6 +3045,9 @@ void cmd_run()
     pjump[BPP_MOVE_GTSPR_INDEX] = (pjump[BPP_MOVE_GTSPR_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
 
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "GSPR");
+      #endif
 
     /* propose population sizes on species tree */
     if (opt_est_theta)
@@ -2937,6 +3055,9 @@ void cmd_run()
       ratio = stree_propose_theta(gtree,locus,stree);
       pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "THETA");
+      #endif
     }
 
     /* propose species tree taus */
@@ -2945,12 +3066,18 @@ void cmd_run()
       ratio = stree_propose_tau(gtree,stree,locus);
       pjump[BPP_MOVE_TAU_INDEX] = (pjump[BPP_MOVE_TAU_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "TAU");
+      #endif
     }
 
     /* mixing step */
     ratio = proposal_mixing(gtree,stree,locus);
     pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX]*(ft_round-1)+ratio) /
                                 (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "MIXING");
+      #endif
 
     if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR) || opt_est_heredity)
@@ -2958,6 +3085,9 @@ void cmd_run()
       ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_LRHT_INDEX] = (pjump[BPP_MOVE_LRHT_INDEX]*(ft_round-1)+ratio) /
                                    (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "LRHT");
+      #endif
     }
 
     /* phi proposal */
@@ -3025,11 +3155,18 @@ void cmd_run()
       pjump[BPP_MOVE_MUI_INDEX] = (pjump[BPP_MOVE_MUI_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
 
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "MUI");
+      #endif
+
       if (opt_est_mubar)
       {
         ratio = prop_locusrate_mubar(stree,gtree);
         pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
                                        (double)ft_round;
+        #ifdef CHECK_LOGL
+        check_logl(stree, gtree, locus, i, "MUBAR");
+        #endif
       }
     }
 
@@ -3039,12 +3176,18 @@ void cmd_run()
       ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_NUI_INDEX] = (pjump[BPP_MOVE_NUI_INDEX]*(ft_round-1)+ratio) /
                                         (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "NUI");
+      #endif
 
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       {
         ratio = prop_locusrate_nubar(stree,gtree);
         pjump[BPP_MOVE_NUBAR_INDEX] = (pjump[BPP_MOVE_NUBAR_INDEX]*(ft_round-1)+ratio) /
                                           (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "NUBAR");
+      #endif
       }
 
       if (opt_threads == 1)
@@ -3057,6 +3200,9 @@ void cmd_run()
       }
       pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
                                          (double)ft_round;
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "BRATE");
+      #endif
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
