@@ -5046,7 +5046,7 @@ static long prop_locusrate(gtree_t ** gtree,
      the likelihood, but there is no prior for branch rates.
 
      For relaxed clock, this changes mu_i, and consequently changes the rate
-     prior but not the likelihood */
+     prior but not the likelihood (with the exception of the correlated model)*/
 
   /* set reference locus as the one with the highest number of site patterns */
   for (i = 1, ref = 0; i < opt_locus_count; ++i)
@@ -5057,7 +5057,7 @@ static long prop_locusrate(gtree_t ** gtree,
   {
     if (i == ref) continue;
 
-    if (opt_clock == BPP_CLOCK_GLOBAL)
+    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
     {
       refnodes = gtree[ref]->nodes;
       for (j = 0; j < gtree[ref]->tip_count + gtree[ref]->inner_count; ++j)
@@ -5084,7 +5084,24 @@ static long prop_locusrate(gtree_t ** gtree,
     lnacceptance = (opt_mui_alpha - 1) *
                    log((new_locrate*new_refrate) / (old_locrate*old_refrate));
 
-    if (opt_clock == BPP_CLOCK_GLOBAL)
+
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
+      /* relaxed clock */
+
+      if (opt_clock == BPP_CLOCK_CORR)
+      {
+        stree->root->brate[i] = new_locrate;
+        stree->root->brate[ref] = new_refrate;
+      }
+      new_locprior = lnprior_rates(gtree[i],stree,i);
+      new_refprior = lnprior_rates(gtree[ref],stree,ref);
+
+      lnacceptance += new_locprior - gtree[i]->lnprior_rates +
+                      new_refprior - gtree[ref]->lnprior_rates;
+    }
+
+    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
     {
       /* update selected locus */
       locus_update_all_matrices(locus[i],gtree[i],stree,i);
@@ -5126,21 +5143,6 @@ static long prop_locusrate(gtree_t ** gtree,
 
       lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
     }
-    else
-    {
-      /* relaxed clock */
-
-      if (opt_clock == BPP_CLOCK_CORR)
-      {
-        stree->root->brate[i] = new_locrate;
-        stree->root->brate[ref] = new_refrate;
-      }
-      new_locprior = lnprior_rates(gtree[i],stree,i);
-      new_refprior = lnprior_rates(gtree[ref],stree,ref);
-
-      lnacceptance += new_locprior - gtree[i]->lnprior_rates +
-                      new_refprior - gtree[ref]->lnprior_rates;
-    }
 
     if (opt_debug)
       fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
@@ -5150,13 +5152,13 @@ static long prop_locusrate(gtree_t ** gtree,
       /* accept */
       accepted++;
 
-      if (opt_clock == BPP_CLOCK_GLOBAL)
+      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
       {
         /* update log-L */
         gtree[i]->logl = loc_logl;
         gtree[ref]->logl = ref_logl;
       }
-      else
+      if (opt_clock != BPP_CLOCK_GLOBAL)
       {
         /* update prior */
         gtree[i]->lnprior_rates   = new_locprior;
@@ -5175,7 +5177,7 @@ static long prop_locusrate(gtree_t ** gtree,
         stree->root->brate[ref] = old_refrate;
       }
 
-      if (opt_clock == BPP_CLOCK_GLOBAL)
+      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
       {
         /* reset selected locus */
         gnodeptr = gtree[i]->nodes;
