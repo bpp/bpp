@@ -566,7 +566,7 @@ void args_init(int argc, char ** argv)
   if (commands > 1)
     fatal("More than one command specified");
 
-  if (opt_prop_shrink < 0 || opt_prop_shrink > 1)
+  if (opt_prop_shrink <= 0 || opt_prop_shrink >= 1)
     fatal("Proportion of SHRINK moves must be between 0 and 1");
 
   /* if no command specified, turn on --help */
