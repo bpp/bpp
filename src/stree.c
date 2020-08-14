@@ -5651,6 +5651,7 @@ long snl_expand_and_shrink(stree_t * stree,
                            gtree_t ** gtree_list,
                            locus_t ** loci,
                            long movetype,
+                           int downwards,
                            double ytaunew,
                            double taufactor,
                            double * lnacceptance,
@@ -6047,6 +6048,8 @@ long snl_expand_and_shrink(stree_t * stree,
   {
     assert(y == stree->root); assert(movetype == SHRINK);
     stree->root = b;
+
+    /* TODO clock3 Dir LN */
   }
   else
   {
@@ -6063,6 +6066,7 @@ long snl_expand_and_shrink(stree_t * stree,
   {
     assert(c == stree->root); assert(movetype == EXPAND);
     stree->root = y;
+    /* TODO clock3 Dir LN */
   }
   else
   {
@@ -6113,7 +6117,10 @@ long snl_expand_and_shrink(stree_t * stree,
 
   if (movetype == EXPAND)
   {
-    *lnacceptance += log(c->weight);
+    if (downwards)
+      *lnacceptance += log(c->parent->weight);
+    else
+      *lnacceptance += log(c->weight);
   }
   else
   {
@@ -6547,6 +6554,8 @@ long stree_propose_stree_snl(stree_t ** streeptr,
       lnacceptance += logpdf_power(target->tau - y->tau,
                                    target->tau,
                                    g_lambda_shrink);
+
+      lnacceptance += log(opt_prop_shrink/(1-opt_prop_shrink));
     }
     else
     {
@@ -6562,6 +6571,8 @@ long stree_propose_stree_snl(stree_t ** streeptr,
                                    g_lambda_expand);
 
       lnacceptance += log(0.5);
+
+      lnacceptance += log((1-opt_prop_shrink)/opt_prop_shrink);
     }
   }
   else
@@ -6624,6 +6635,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
                                gtree_list,
                                loci,
                                movetype,
+                               downwards,
                                tau_new,
                                tau_factor,
                                &lnacceptance,
