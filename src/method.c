@@ -2888,7 +2888,15 @@ void cmd_run()
     fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
                     "log-likelihood in GSPR/SPR moves\n");
   if (opt_snl)
-    fprintf(stdout, "[DEBUG] Using general SPR move\n");
+  {
+    fprintf(stdout, "[DEBUG] Using general SPR (SNL) move\n");
+    if (opt_snl_repeat)
+      fprintf(stdout,
+              "[DEBUG] Using repeated sampling for SNL move (--snl_repeat)\n");
+    else
+      fprintf(stdout,
+              "[DEBUG] Using rejection sampling for SNL move (--snl_reject)\n");
+  }
 
   for (i = 0; i < opt_locus_count; ++i)
   {

@@ -83,6 +83,8 @@ long opt_est_theta;
 long opt_exp_randomize;
 long opt_finetune_reset;
 long opt_snl;
+long opt_snl_reject;
+long opt_snl_repeat;
 long opt_help;
 long opt_locusrate_prior;
 long opt_locus_count;
@@ -234,6 +236,8 @@ static struct option long_options[] =
   {"debug_start",  required_argument, 0, 0 },  /* 32 */
   {"debug_end",    required_argument, 0, 0 },  /* 33 */
   {"debug_abort",  required_argument, 0, 0 },  /* 34 */
+  {"snl_reject",   no_argument      , 0, 0 },  /* 35 */
+  {"snl_repeat",   no_argument      , 0, 0 },  /* 36 */
   { 0, 0, 0, 0 }
 };
 
@@ -417,6 +421,8 @@ void args_init(int argc, char ** argv)
   opt_finetune_tau = 0.001;
   opt_finetune_theta = 0.001;
   opt_snl = 0;
+  opt_snl_reject = 0;
+  opt_snl_repeat = 0;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -665,6 +671,14 @@ void args_init(int argc, char ** argv)
         opt_debug_abort = atol(optarg);
         break;
 
+      case 35:
+        opt_snl_reject = 1;
+        break;
+
+      case 36:
+        opt_snl_repeat = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -705,6 +719,14 @@ void args_init(int argc, char ** argv)
 
   if (opt_prop_shrink <= 0 || opt_prop_shrink >= 1)
     fatal("Proportion of SHRINK moves must be between 0 and 1");
+
+  if (opt_snl)
+  {
+    if (opt_snl_reject && opt_snl_repeat)
+      fatal("Use either --snl_reject or --snl_repeat but not both");
+    if (!opt_snl_reject && !opt_snl_repeat)
+      opt_snl_repeat = 1;
+  }
 
   /* if no command specified, turn on --help */
   if (!commands)

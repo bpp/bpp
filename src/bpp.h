@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 3
-#define VERSION_PATCH 1
+#define VERSION_PATCH 2
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -847,6 +847,8 @@ extern long opt_est_theta;
 extern long opt_exp_randomize;
 extern long opt_finetune_reset;
 extern long opt_snl;
+extern long opt_snl_reject;
+extern long opt_snl_repeat;
 extern long opt_help;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
