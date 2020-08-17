@@ -342,7 +342,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
-  if (opt_debug)
+  if (opt_debug_mix)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
 
 

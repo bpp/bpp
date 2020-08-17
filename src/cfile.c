@@ -2114,6 +2114,40 @@ static void set_print_locusfile()
     opt_print_locusfile = 1;
 }
 
+static void set_debug_flags()
+{
+  long * flagptr;
+  long i;
+
+  long * flags[] = {
+    &opt_debug_sim,   &opt_debug_gage, &opt_debug_gspr, &opt_debug_mui,
+    &opt_debug_hs,    &opt_debug_mix,  &opt_debug_rj,   &opt_debug_theta,
+    &opt_debug_tau,   &opt_debug_sspr, &opt_debug_br,   &opt_debug_snl,
+    &opt_debug_parser, NULL
+  };
+
+  if (opt_debug)
+  {
+    for (i = 0; flags[i]; ++i)
+    {
+      flagptr = flags[i];
+
+      if (!(*flagptr))
+        *flagptr = opt_debug;
+    }
+  }
+  else
+  {
+    long flag_set = 0;
+    for (i = 0; i < flags[i]; ++i)
+    {
+      flagptr = flags[i];
+      flag_set |= !!(*flagptr);
+    }
+    opt_debug = flag_set;
+  }
+}
+
 void load_cfile()
 {
   long line_count = 0;
@@ -2528,6 +2562,7 @@ void load_cfile()
 
   /* decide whether per-locus files for sampling are required */
   set_print_locusfile();
+  set_debug_flags();
 
   if (opt_diploid)
     update_sp_seqcount();

@@ -184,7 +184,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
 
   /* print legend */
   fprintf(fp, "\n");
-  fprintf(fp, "-*- Glossary of terms -*-\n\n");
+  fprintf(fp, "-*- Terms index -*-\n\n");
   fprintf(fp, "  Prgs: progress of MCMC run (negative progress means burnin)\n");
   fprintf(fp, "  Gage: gene-tree age proposal\n");
   fprintf(fp, "  Gspr: gene-tree SPR proposal\n");
@@ -214,7 +214,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
     fprintf(fp, "  qmat: instantaneous substitution rates proposal\n");
   if (enabled_prop_alpha)
     fprintf(fp, "  alfa: discretized gamma (rate variation among sites) alpha proposal\n");
-  if (!opt_debug_gspr)
+  if (!opt_snl)
   {
     if (opt_method == METHOD_01)
       fprintf(fp, "  Sspr: species tree SPR proposal\n");
@@ -222,7 +222,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   else
   {
     if (opt_method == METHOD_01)
-      fprintf(fp, "  Dspr: *DEBUG* species tree general SPR proposal\n");
+      fprintf(fp, "   SNL: *DEBUG* species tree general SPR proposal (SNL)\n");
   }
   if (opt_method == METHOD_10)
     fprintf(fp, "    rj: reversible-jump split/merge proposal\n");
@@ -349,7 +349,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
 
   if (opt_method == METHOD_01)
   {
-    if (!opt_debug_gspr)
+    if (!opt_snl)
     {
       fprintf(fp,"   Sspr");  linewidth += 7;
     }
@@ -364,7 +364,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   }
   else if (opt_method == METHOD_11)
   {
-    if (!opt_debug_gspr)
+    if (!opt_snl)
     {
       fprintf(fp,"   Sspr");  linewidth += 7;
     }
@@ -2875,7 +2875,7 @@ void cmd_run()
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
   #endif
-  if (opt_debug_gspr && opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_snl && opt_clock != BPP_CLOCK_GLOBAL)
   {
     if (!opt_debug_full)
     {
@@ -2887,7 +2887,7 @@ void cmd_run()
   if (opt_debug_full)
     fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
                     "log-likelihood in GSPR/SPR moves\n");
-  if (opt_debug_gspr)
+  if (opt_snl)
     fprintf(stdout, "[DEBUG] Using general SPR move\n");
 
   for (i = 0; i < opt_locus_count; ++i)
@@ -2924,7 +2924,14 @@ void cmd_run()
 
   print_mcmc_headerline(stdout,stree,gtree);
   if (!opt_resume)
+  {
     print_mcmc_headerline(fp_out,stree,gtree);
+    
+    if (!opt_debug_start)
+      opt_debug_start = 1;
+    if (!opt_debug_end)
+      opt_debug_end = opt_burnin+opt_samples*opt_samplefreq;
+  }
 
   /* *** start of MCMC loop *** */
   for (; i < opt_samples*opt_samplefreq; ++i)
@@ -2935,6 +2942,8 @@ void cmd_run()
     if (!opt_quiet)
       progress_update(curstep);
     #endif
+
+    ++opt_debug_counter;
 
     /* reset finetune parameters */
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
@@ -2994,7 +3003,7 @@ void cmd_run()
       if (legacy_rndu(thread_index_zero) > 0)   /* bpp4 compatible results (RNG to next state) */
       {
         long ret;
-        if (!opt_debug_gspr)
+        if (!opt_snl)
           ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
         else
           ret = stree_propose_stree_snl(&stree, &gtree, &sclone, &gclones, locus);
@@ -3506,7 +3515,8 @@ void cmd_run()
                         prec_logl);
       }
     }
-
+    if (opt_debug_abort == opt_debug_counter)
+      fatal("[DBG] Aborting debugging (reached step %ld)", opt_debug_abort);
   }
   timer_print("\n", " spent in MCMC\n\n", fp_out);
 
@@ -3662,7 +3672,7 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
 
-    if (opt_debug_gspr)
+    if (opt_snl)
     {
       long opt_debug_sum = opt_debug_expand_count +
                            opt_debug_expshr_count +

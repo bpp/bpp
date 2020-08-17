@@ -23,6 +23,143 @@
 
 static int indent_space = 4;
 
+char * cb_stree_print_none(const snode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    /* replacement to keep GCC warning from showing up when executing
+       the following:
+       
+       xasprintf(&s, "");
+    */
+
+    s = (char *)xmalloc(sizeof(char));
+    *s = 0;
+  }
+  else
+  {
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+char * cb_gtree_print_none(const gnode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    /* replacement to keep GCC warning from showing up when executing
+       the following:
+       
+       xasprintf(&s, "");
+    */
+
+    s = (char *)xmalloc(sizeof(char));
+    *s = 0;
+  }
+  else
+  {
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+
+char * cb_stree_print_tau(const snode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    if (!node->tau)
+    {
+      /* replacement to keep GCC warning from showing up when executing
+         the following:
+         
+         xasprintf(&s, "");
+      */
+
+      s = (char *)xmalloc(sizeof(char));
+      *s = 0;
+    }
+    else
+    {
+      xasprintf(&s, ":%f", node->tau);
+    }
+  }
+  else
+  {
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+
+char * cb_stree_print_node_tau(const snode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    if (!node->tau)
+    {
+      /* replacement to keep GCC warning from showing up when executing
+         the following:
+         
+         xasprintf(&s, "");
+      */
+
+      s = (char *)xmalloc(sizeof(char));
+      *s = 0;
+    }
+    else
+    {
+      xasprintf(&s, ":%d:%f", node->node_index, node->tau);
+    }
+  }
+  else
+  {
+    xasprintf(&s, "%s:%d", node->label, node->node_index);
+  }
+
+  return s;
+}
+
+char * cb_gtree_print_age(const gnode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    xasprintf(&s, ":%f", node->time);
+  }
+  else
+  {
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+
+char * cb_gtree_print_node_age(const gnode_t * node)
+{
+  char * s = NULL;
+
+  if (node->left)
+  {
+    xasprintf(&s, ":%d:%f", node->node_index, node->time);
+  }
+  else
+  {
+    xasprintf(&s, "%s:%d", node->label, node->node_index);
+  }
+
+  return s;
+}
+
 static void print_node_info(const snode_t * root, int options)
 {
   if (options & RTREE_SHOW_LABEL)

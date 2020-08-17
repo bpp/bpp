@@ -53,6 +53,25 @@ long opt_debug_rates;
 long opt_debug_expand_count;
 long opt_debug_expshr_count;
 long opt_debug_shrink_count;
+long opt_debug_start;
+long opt_debug_end;
+long opt_debug_abort;
+
+long opt_debug_sim;
+long opt_debug_gage;
+long opt_debug_gspr;
+long opt_debug_mui;
+long opt_debug_hs;
+long opt_debug_mix;
+long opt_debug_rj;
+long opt_debug_theta;
+long opt_debug_tau;
+long opt_debug_sspr;
+long opt_debug_snl;
+long opt_debug_br;
+long opt_debug_parser;
+long opt_debug_counter;
+
 long opt_delimit_prior;
 long opt_diploid_size;
 long opt_est_delimit;
@@ -63,6 +82,7 @@ long opt_est_stree;
 long opt_est_theta;
 long opt_exp_randomize;
 long opt_finetune_reset;
+long opt_snl;
 long opt_help;
 long opt_locusrate_prior;
 long opt_locus_count;
@@ -179,26 +199,41 @@ long altivec_present;
 
 static struct option long_options[] =
 {
-  {"help",       no_argument,       0, 0 },  /*  0 */
-  {"version",    no_argument,       0, 0 },  /*  1 */
-  {"quiet",      no_argument,       0, 0 },  /*  2 */
-  {"cfile",      required_argument, 0, 0 },  /*  3 */
-  {"arch",       required_argument, 0, 0 },  /*  4 */
-  {"exp_method", required_argument, 0, 0 },  /*  5 */
-  {"exp_debug",  no_argument,       0, 0 },  /*  6 */
-  {"resume",     required_argument, 0, 0 },  /*  7 */
-  {"simulate",   required_argument, 0, 0 },  /*  8 */
-  {"exp_random", no_argument,       0, 0 },  /*  9 */
-  {"rev_gspr",   no_argument,       0, 0 },  /* 10 */
-  {"debugrates", no_argument,       0, 0 },  /* 11 */
-  {"msci-create",required_argument, 0, 0 },  /* 12 */
-  {"comply",     no_argument,       0, 0 },  /* 13 */
-  {"tree",       required_argument, 0, 0 },  /* 14 */
-  {"constraint", required_argument, 0, 0 },  /* 15 */
-  {"full",       no_argument,       0, 0 },  /* 16 */   /* debug */
-  {"gspr",       no_argument,       0, 0 },  /* 17 */   /* debug */
-  {"shrink",     required_argument, 0, 0 },  /* 18 */
-  {"debug",      no_argument,       0, 0 },  /* 19 */   /* debug */
+  {"help",         no_argument,       0, 0 },  /*  0 */
+  {"version",      no_argument,       0, 0 },  /*  1 */
+  {"quiet",        no_argument,       0, 0 },  /*  2 */
+  {"cfile",        required_argument, 0, 0 },  /*  3 */
+  {"arch",         required_argument, 0, 0 },  /*  4 */
+  {"exp_method",   required_argument, 0, 0 },  /*  5 */
+  {"exp_debug",    no_argument,       0, 0 },  /*  6 */
+  {"resume",       required_argument, 0, 0 },  /*  7 */
+  {"simulate",     required_argument, 0, 0 },  /*  8 */
+  {"exp_random",   no_argument,       0, 0 },  /*  9 */
+  {"rev_gspr",     no_argument,       0, 0 },  /* 10 */
+  {"debugrates",   no_argument,       0, 0 },  /* 11 */
+  {"msci-create",  required_argument, 0, 0 },  /* 12 */
+  {"comply",       no_argument,       0, 0 },  /* 13 */
+  {"tree",         required_argument, 0, 0 },  /* 14 */
+  {"constraint",   required_argument, 0, 0 },  /* 15 */
+  {"full",         no_argument,       0, 0 },  /* 16 */
+  {"snl",          no_argument,       0, 0 },  /* 17 */
+  {"shrink",       required_argument, 0, 0 },  /* 18 */
+  {"debug",        optional_argument, 0, 0 },  /* 19 */
+  {"debug_gage",   optional_argument, 0, 0 },  /* 20 */
+  {"debug_gspr",   optional_argument, 0, 0 },  /* 21 */
+  {"debug_mui",    optional_argument, 0, 0 },  /* 22 */
+  {"debug_hs",     optional_argument, 0, 0 },  /* 23 */
+  {"debug_mix",    optional_argument, 0, 0 },  /* 24 */
+  {"debug_rj",     optional_argument, 0, 0 },  /* 25 */
+  {"debug_theta",  optional_argument, 0, 0 },  /* 26 */
+  {"debug_tau",    optional_argument, 0, 0 },  /* 27 */
+  {"debug_sspr",   optional_argument, 0, 0 },  /* 28 */
+  {"debug_br",     optional_argument, 0, 0 },  /* 29 */
+  {"debug_snl",    optional_argument, 0, 0 },  /* 30 */
+  {"debug_parser", optional_argument, 0, 0 },  /* 31 */
+  {"debug_start",  required_argument, 0, 0 },  /* 32 */
+  {"debug_end",    required_argument, 0, 0 },  /* 33 */
+  {"debug_abort",  required_argument, 0, 0 },  /* 34 */
   { 0, 0, 0, 0 }
 };
 
@@ -326,12 +361,28 @@ void args_init(int argc, char ** argv)
   opt_constfile = NULL;
   opt_constraint_count = 0;
   opt_debug = 0;
-  opt_debug_full = 0;
-  opt_debug_gspr = 0;
-  opt_debug_rates = 0;
+  opt_debug_abort = 0;
+  opt_debug_br = 0;
+  opt_debug_counter = 0;
+  opt_debug_end = 0;
   opt_debug_expand_count = 0;
   opt_debug_expshr_count = 0;
+  opt_debug_full = 0;
+  opt_debug_hs = 0;
+  opt_debug_gage = 0;
+  opt_debug_gspr = 0;
+  opt_debug_mix = 0;
+  opt_debug_mui = 0;
+  opt_debug_parser = 0;
+  opt_debug_rates = 0;
+  opt_debug_rj = 0;
   opt_debug_shrink_count = 0;
+  opt_debug_sim = 0;
+  opt_debug_snl = 0;
+  opt_debug_sspr = 0;
+  opt_debug_start = 0;
+  opt_debug_tau = 0;
+  opt_debug_theta = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
   opt_diploid_size = 0;
@@ -365,6 +416,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
   opt_finetune_theta = 0.001;
+  opt_snl = 0;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -516,7 +568,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 17:
-        opt_debug_gspr = 1;
+        opt_snl = 1;
         break;
 
       case 18:
@@ -525,8 +577,93 @@ void args_init(int argc, char ** argv)
 
       case 19:
         opt_debug = 1;
+        if (optarg)
+          opt_debug = atol(optarg);
         break;
 
+      case 20:
+        opt_debug_gage = 1;
+        if (optarg)
+          opt_debug_gage = atol(optarg);
+        break;
+
+      case 21:
+        opt_debug_gspr = 1;
+        if (optarg)
+          opt_debug_gspr = atol(optarg);
+        break;
+
+      case 22:
+        opt_debug_mui = 1;
+        if (optarg)
+          opt_debug_mui = atol(optarg);
+        break;
+
+      case 23:
+        opt_debug_hs = 1;
+        if (optarg)
+          opt_debug_hs = atol(optarg);
+        break;
+
+      case 24:
+        opt_debug_mix = 1;
+        if (optarg)
+          opt_debug_mix = atol(optarg);
+        break;
+
+      case 25:
+        opt_debug_rj = 1;
+        if (optarg)
+          opt_debug_rj = atol(optarg);
+        break;
+
+      case 26:
+        opt_debug_theta = 1;
+        if (optarg)
+          opt_debug_theta = atol(optarg);
+        break;
+
+      case 27:
+        opt_debug_tau = 1;
+        if (optarg)
+          opt_debug_tau = atol(optarg);
+        break;
+
+      case 28:
+        opt_debug_sspr = 1;
+        if (optarg)
+          opt_debug_sspr = atol(optarg);
+        break;
+
+      case 29:
+        opt_debug_br = 1;
+        if (optarg)
+          opt_debug_br = atol(optarg);
+        break;
+
+      case 30:
+        opt_debug_snl = 1;
+        if (optarg)
+          opt_debug_snl = atol(optarg);
+        break;
+
+      case 31:
+        opt_debug_parser = 1;
+        if (optarg)
+          opt_debug_parser = atol(optarg);
+        break;
+
+      case 32:
+        opt_debug_start = atol(optarg);
+        break;
+
+      case 33:
+        opt_debug_end = atol(optarg);
+        break;
+
+      case 34:
+        opt_debug_abort = atol(optarg);
+        break;
 
       default:
         fatal("Internal error in option parsing");

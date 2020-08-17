@@ -59,7 +59,8 @@ OBJ_BPP = \
   treeparse.obj \
   parsemap.obj \
   msci_gen.obj \
-  constraint.obj
+  constraint.obj \
+  debug.obj
 
 all: $(PROG)
 

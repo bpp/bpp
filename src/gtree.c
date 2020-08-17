@@ -1256,7 +1256,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         epoch_reorder(epoch,epoch_count,x);
     }
   }
-  if (opt_debug)
+  if (opt_debug_sim)
   {
     for (i = 0; i < epoch_count; ++i)
       printf("[Debug]: Epoch %d (%s) time - %f\n",
@@ -1417,7 +1417,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
          merge the lineages of the two populations into the current epoch */
       if (t > tmax && (pop_count != 1 || pop[0].snode != stree->root)) break;
 
-      if (opt_debug)
+      if (opt_debug_sim)
         fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
 
       /* TODO: Implement migration routine */
@@ -1448,7 +1448,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         else
           SWAP(k1,k2);
 
-        if (opt_debug)
+        if (opt_debug_sim)
         {
           fprintf(stdout, "[Debug]: Coalesce (%3d,%3d) into %3d (age: %f)\n",
                   pop[j].nodes[k1]->clv_index,
@@ -1617,7 +1617,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   }
 
   /* create a newick string from constructed gene tree and print it on screen */
-  if (opt_debug)
+  if (opt_debug_sim)
   {
     for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
       if (gtree->nodes[i] != gtree->root)
@@ -1642,7 +1642,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
      coalescent events that have occured */
   fill_seqin_counts(stree,gtree,msa_index);
 
-  if (opt_debug)
+  if (opt_debug_sim)
   {
     fprintf(stdout,
             "[Debug] # coalescent events, lineages coming in locus %d:\n", 
@@ -3198,7 +3198,7 @@ static long propose_ages(locus_t * locus,
     else
       lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
 
-    if (opt_debug)
+    if (opt_debug_gage)
       printf("[Debug] (gtage) lnacceptance = %f\n", lnacceptance);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -4674,8 +4674,8 @@ static long propose_spr(locus_t * locus,
     else
       lnacceptance += log((double)target_count / source_count);
 
-    if (opt_debug)
-      printf("[Debug] (spr) lnacceptance = %f\n", lnacceptance);
+    if (opt_debug_gspr)
+      printf("[Debug] (gspr) lnacceptance = %f\n", lnacceptance);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
@@ -5144,7 +5144,7 @@ static long prop_locusrate(gtree_t ** gtree,
       lnacceptance += loc_logl - gtree[i]->logl + ref_logl - gtree[ref]->logl;
     }
 
-    if (opt_debug)
+    if (opt_debug_mui)
       fprintf(stdout, "[Debug] (locusrate) lnacceptance = %f\n", lnacceptance);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -5282,7 +5282,7 @@ static long prop_heredity(gtree_t ** gtree,
     else
       lnacceptance += logpr - stree->notheta_logpr;
 
-    if (opt_debug)
+    if (opt_debug_hs)
       fprintf(stdout, "[Debug] (heredity) lnacceptance = %f\n", lnacceptance);
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {

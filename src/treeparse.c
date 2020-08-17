@@ -514,56 +514,56 @@ list_t * parse_tree(char * s)
 
     if (*start == '(')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing OPAR...\n");
       count = parse_opar(start,token_list);
       start += count;
     }
     else if (*start == ')')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing CPAR...\n");
       count = parse_cpar(start,token_list);
       start += count;
     }
     else if (*start == '[')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing ATTR...\n");
       count = parse_attr(start,token_list);
       start += count;
     }
     else if (*start == ':')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing COLON...\n");
       count = parse_colon(start,token_list);
       start += count;
     }
     else if (*start == ';')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing SEMICOLON...\n");
       count = parse_semicolon(start,token_list);
       start += count;
     }
     else if (*start == ',')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing COMMA...\n");
       count = parse_comma(start,token_list);
       start += count;
     }
     else if (*start == '#')
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing HASH...\n");
       count = parse_theta(start,token_list);
       start += count;
     }
     else if (string_map[(int)(*start)])
     {
-      if (opt_debug)
+      if (opt_debug_parser)
         printf("Parsing STRING...\n");
       /* TODO : eliminate starting with theta  */
       count = parse_string(start,token_list);
@@ -575,7 +575,7 @@ list_t * parse_tree(char * s)
     }
 
   }
-  if (opt_debug)
+  if (opt_debug_parser)
   {
     printf("Finished\nListing tokens:\n");
 

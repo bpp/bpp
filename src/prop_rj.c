@@ -629,7 +629,7 @@ long prop_split(gtree_t ** gtree,
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
-  if (opt_debug)
+  if (opt_debug_rj)
     printf("[Debug] (split) lnacceptance = %f\n", lnacceptance);
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -1034,7 +1034,7 @@ long prop_join(gtree_t ** gtree,
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
-  if (opt_debug)
+  if (opt_debug_rj)
     printf("[Debug] (join) lnacceptance = %f\n", lnacceptance);
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))

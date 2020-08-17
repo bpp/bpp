@@ -814,12 +814,28 @@ extern long opt_clock;
 extern long opt_comply;
 extern long opt_constraint_count;
 extern long opt_debug;
-extern long opt_debug_full;
-extern long opt_debug_gspr;
-extern long opt_debug_rates;
+extern long opt_debug_abort;
+extern long opt_debug_br;
+extern long opt_debug_counter;
+extern long opt_debug_end;
 extern long opt_debug_expand_count;
 extern long opt_debug_expshr_count;
+extern long opt_debug_full;
+extern long opt_debug_gage;
+extern long opt_debug_gspr;
+extern long opt_debug_hs;
+extern long opt_debug_mix;
+extern long opt_debug_mui;
+extern long opt_debug_parser;
+extern long opt_debug_rates;
+extern long opt_debug_rj;
 extern long opt_debug_shrink_count;
+extern long opt_debug_sim;
+extern long opt_debug_snl;
+extern long opt_debug_sspr;
+extern long opt_debug_start;
+extern long opt_debug_tau;
+extern long opt_debug_theta;
 extern long opt_delimit_prior;
 extern long opt_diploid_size;
 extern long opt_est_heredity;
@@ -830,6 +846,7 @@ extern long opt_est_stree;
 extern long opt_est_theta;
 extern long opt_exp_randomize;
 extern long opt_finetune_reset;
+extern long opt_snl;
 extern long opt_help;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
@@ -1050,7 +1067,7 @@ msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
-/* functions in stree.c */
+/* functions in rtree.c */
 
 void stree_show_ascii(const snode_t * root, int options);
 
@@ -1063,6 +1080,14 @@ int stree_traverse(snode_t * root,
                    snode_t ** outbuffer,
                    unsigned int * trav_size);
 
+char * cb_stree_print_tau(const snode_t * node);
+char * cb_stree_print_none(const snode_t * node);
+char * cb_stree_print_node_tau(const snode_t * node);
+char * cb_gtree_print_none(const gnode_t * node);
+char * cb_gtree_print_age(const gnode_t * node);
+char * cb_gtree_print_node_age(const gnode_t * node);
+
+/* functions in stree.c */
 stree_t ** stree_tipstring_nodes(stree_t * root,
                                  char * tipstring,
                                  unsigned int * tiplist_count);
@@ -2230,3 +2255,19 @@ void cmd_msci_create(void);
 /* functions in constraint.c */
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
+
+/* functions in debug.c */
+void debug_snl_stage1(stree_t * stree,
+                      gtree_t ** gtree_list,
+                      snode_t * y,
+                      snode_t * c,
+                      snode_t * a,
+                      long movetype,
+                      int downwards,
+                      double tauy,
+                      double newtauy);
+void debug_snl_stage2(stree_t * stree,
+                      gtree_t ** gtree,
+                      double logpr_notheta,
+                      double r,
+                      double lnacceptance);

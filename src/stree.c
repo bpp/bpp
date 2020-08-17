@@ -791,8 +791,10 @@ static int ** populations_seqcount(stree_t * stree,
 
       node = (snode_t *)(pair->data);
 
+      #if 0
       if (opt_debug)
         printf("Matched %s -> %s\n", label, node->label);
+      #endif
 
       /* increment sequence count for loci i in corresponding population */
       k = node->node_index;
@@ -1041,15 +1043,6 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    {
      stree_init_tau_recursive(stree->root->left, prop, thread_index);
      stree_init_tau_recursive(stree->root->right, prop, thread_index);
-   }
-
-   /* TODO: Remove after debugging */
-   if (opt_debug_rates)
-   {
-     /* this is for the case of three or four species */
-     for (i = stree->tip_count; i < total_nodes; ++i)
-       stree->nodes[i]->tau = .05;
-     stree->root->tau = .1;
    }
 
    /* check to see if everything is OK */
@@ -1500,18 +1493,6 @@ static void stree_init_theta(stree_t * stree,
   for (i = 0; i < stree->tip_count; ++i)
     free(seqcount[i]);
   free(seqcount);
-
-  /* TODO: Delete after debugging */
-  if (opt_debug_rates)
-  {
-    stree->nodes[0]->theta = stree->nodes[1]->theta = .1;
-    if (stree->tip_count > 2)
-    {
-      stree->nodes[3]->theta = .1;
-      stree->nodes[4]->theta = .1;
-    }
-    stree->root->theta = .1;
-  }
 }
 
 /* bottom up filling of pptable */
@@ -2094,7 +2075,7 @@ static int propose_theta(gtree_t ** gtree,
     lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
   }
 
-  if (opt_debug)
+  if (opt_debug_theta)
     printf("[Debug] (theta) lnacceptance = %f\n", lnacceptance);
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -2911,7 +2892,7 @@ static long propose_tau(locus_t ** loci,
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
 
-  if (opt_debug)
+  if (opt_debug_tau)
     printf("[Debug] (tau) lnacceptance = %f\n", lnacceptance);
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -4419,7 +4400,7 @@ long stree_propose_spr(stree_t ** streeptr,
     stree->notheta_logpr = logpr_notheta;
   }
 
-  if (opt_debug)
+  if (opt_debug_sspr)
     printf("[Debug] (SSPR) lnacceptance = %f\n", lnacceptance);
 
   /* in case of acceptance, cloned trees are substituted with the original ones,
@@ -5380,7 +5361,7 @@ static long prop_branch_rates(gtree_t * gtree,
 
     lnacceptance += diff;
 
-    if (opt_debug)
+    if (opt_debug_br)
       printf("[Debug] (br) lnacceptance = %f\n", lnacceptance);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -5643,6 +5624,34 @@ static void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
         fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its right daughter has older age %f",
               i, gtree->tip_count, x->node_index, x->time, x->right->time);
     }
+
+    /* chekc if each node is in the correct population */
+    for (j = 0; j < gtree->tip_count+gtree->inner_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+      snode_t * pop = gtree->nodes[j]->pop;
+
+      assert(x->time >= pop->tau);
+      if (pop->parent)
+        assert(x->time < pop->parent->tau);
+    }
+    int event_count = 0;
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      event_count += stree->nodes[j]->event_count[i];
+      dlist_item_t * item = stree->nodes[j]->event[i]->head;
+      int pop_event_count = 0;
+      while (item)
+      {
+        gnode_t * x = (gnode_t *)(item->data);
+        assert(x->pop == stree->nodes[j]);
+        ++pop_event_count;
+
+        item = item->next;
+      }
+      assert(pop_event_count == stree->nodes[j]->event_count[i]);
+    }
+    assert(event_count == gtree->inner_count);
   }
 }
 
@@ -6325,6 +6334,14 @@ long snl_expand_and_shrink(stree_t * stree,
     else
       *lnacceptance += gtree_list[i]->logl - gtree_list[i]->old_logl;
   }
+  #if 1
+  debug_consistency(stree, gtree_list);
+  #endif
+
+  double r = legacy_rndu(thread_index);
+
+  if (opt_debug_snl)
+    debug_snl_stage2(stree,gtree_list,logpr_notheta,r,*lnacceptance);
 
   if (!opt_est_theta)
   {
@@ -6332,13 +6349,7 @@ long snl_expand_and_shrink(stree_t * stree,
     stree->notheta_logpr = logpr_notheta;
   }
 
-  #if 0
-  debug_consistency(stree, gtree_list);
-  #endif
-  if (opt_debug)
-    printf("[Debug] (DSPR) lnacceptance = %f\n", *lnacceptance);
-
-  return (*lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(*lnacceptance));
+  return (*lnacceptance >= -1e-10 || r < exp(*lnacceptance));
 }
 
 long stree_propose_stree_snl(stree_t ** streeptr,
@@ -6620,28 +6631,32 @@ long stree_propose_stree_snl(stree_t ** streeptr,
   }
   
 
-  if (opt_debug)
-    printf("GSPR : %s  with  Y: %s C: %s A: %s , tau_Y %f tau*_Y %f scaler %f\n",
-           movetype == EXPAND ? "EXPAND" : "SHRINK",
-           y->label,
-           target->label,
-           a->label,
-           y->tau,
-           tau_new,
-           tau_factor);
+  if (opt_debug_snl)
+    debug_snl_stage1(stree,
+                     gtree_list,
+                     y,
+                     target,
+                     a,
+                     movetype,
+                     downwards,
+                     y->tau,
+                     tau_new);
 
-  return snl_expand_and_shrink(stree,
-                               original_stree,
-                               gtree_list,
-                               loci,
-                               movetype,
-                               downwards,
-                               tau_new,
-                               tau_factor,
-                               &lnacceptance,
-                               a,
-                               b,
-                               target,
-                               y,
-                               rway);
+  long rc = snl_expand_and_shrink(stree,
+                                  original_stree,
+                                  gtree_list,
+                                  loci,
+                                  movetype,
+                                  downwards,
+                                  tau_new,
+                                  tau_factor,
+                                  &lnacceptance,
+                                  a,
+                                  b,
+                                  target,
+                                  y,
+                                  rway);
+
+  free(rway);
+  return rc;
 }
