@@ -6577,7 +6577,13 @@ long stree_propose_stree_snl(stree_t ** streeptr,
                                      x->tau,
                                      g_lambda_expand);
 
-        assert((target->tau-y->tau)/target->tau < 1);
+        if ((target->tau-y->tau)/target->tau >= 1)
+        {
+          if (opt_snl_reject)
+            return 2;
+          else
+            continue;
+        }
         lnacceptance += logpdf_power(target->tau - y->tau,
                                      target->tau,
                                      g_lambda_shrink);
@@ -6595,10 +6601,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
                                      g_lambda_shrink);
 
 
-        #if 0
-        assert((y->tau-target->parent->tau)/target->parent->tau < 1);
-        #endif
-        if ((y->tau-target->parent->tau)/target->parent->tau < 1)
+        if ((y->tau-target->parent->tau)/target->parent->tau >= 1)
         {
           if (opt_snl_reject)
             return 2;
@@ -6622,7 +6625,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
       #if 0
       assert(fabs(target->parent->tau-y->tau)/target->parent->tau < 1);
       #endif
-      if(fabs(target->parent->tau-y->tau)/target->parent->tau < 1)
+      if(fabs(target->parent->tau-y->tau)/target->parent->tau >= 1)
       {
         if (opt_snl_reject)
           return 2;
