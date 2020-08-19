@@ -2896,6 +2896,9 @@ void cmd_run()
     else
       fprintf(stdout,
               "[DEBUG] Using rejection sampling for SNL move (--snl_reject)\n");
+    fprintf(stdout,
+            "[DEBUG] lambda_expand = %f   lambda_shrink = %f\n",
+            opt_lambda_expand, opt_lambda_shrink);
   }
 
   for (i = 0; i < opt_locus_count; ++i)

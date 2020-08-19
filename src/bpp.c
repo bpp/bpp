@@ -142,6 +142,8 @@ double opt_finetune_tau;
 double opt_finetune_theta;
 double opt_heredity_alpha;
 double opt_heredity_beta;
+double opt_lambda_expand;
+double opt_lambda_shrink;
 double opt_locusrate_mubar;
 double opt_mubar_alpha;
 double opt_mubar_beta;
@@ -236,8 +238,10 @@ static struct option long_options[] =
   {"debug_start",  required_argument, 0, 0 },  /* 32 */
   {"debug_end",    required_argument, 0, 0 },  /* 33 */
   {"debug_abort",  required_argument, 0, 0 },  /* 34 */
-  {"snl_reject",   no_argument      , 0, 0 },  /* 35 */
-  {"snl_repeat",   no_argument      , 0, 0 },  /* 36 */
+  {"snl_reject",   no_argument,       0, 0 },  /* 35 */
+  {"snl_repeat",   no_argument,       0, 0 },  /* 36 */
+  {"snl_le",       required_argument, 0, 0 },  /* 37 */
+  {"snl_ls",       required_argument, 0, 0 },  /* 38 */
   { 0, 0, 0, 0 }
 };
 
@@ -427,6 +431,8 @@ void args_init(int argc, char ** argv)
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
   opt_heredity_filename = NULL;
+  opt_lambda_expand = 2;
+  opt_lambda_shrink = 2;
   opt_locusrate_filename = NULL;
   opt_locusrate_prior = -1;
   opt_locusrate_mubar = 1;
@@ -677,6 +683,14 @@ void args_init(int argc, char ** argv)
 
       case 36:
         opt_snl_repeat = 1;
+        break;
+
+      case 37:
+        opt_lambda_expand = atof(optarg);
+        break;
+
+      case 38:
+        opt_lambda_shrink = atof(optarg);
         break;
 
       default:

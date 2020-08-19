@@ -80,8 +80,6 @@ static gnode_t * gsources_list[10000];
 
 #define SHRINK          1
 #define EXPAND          2
-static double g_lambda_expand = 2;
-static double g_lambda_shrink = 2;
 
 /* hashtable for indexing species tree labels */
 hashtable_t * species_hash(stree_t * tree)
@@ -6469,9 +6467,9 @@ long stree_propose_stree_snl(stree_t ** streeptr,
     }
 
     if (movetype == EXPAND)       /* expand */
-      delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1./g_lambda_expand));
+      delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1./opt_lambda_expand));
     else                          /* shrink */
-      delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1./g_lambda_shrink));
+      delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1./opt_lambda_shrink));
 
 
     /* find the target branch where to regraft the edge y-a */
@@ -6575,7 +6573,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         assert((tau_new-x->tau)/x->tau < 1);
         lnacceptance -= logpdf_power(tau_new - x->tau,
                                      x->tau,
-                                     g_lambda_expand);
+                                     opt_lambda_expand);
 
         if ((target->tau-y->tau)/target->tau >= 1)
         {
@@ -6586,7 +6584,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         }
         lnacceptance += logpdf_power(target->tau - y->tau,
                                      target->tau,
-                                     g_lambda_shrink);
+                                     opt_lambda_shrink);
 
         lnacceptance += log(opt_prop_shrink/(1-opt_prop_shrink));
       }
@@ -6598,7 +6596,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         assert((c->tau-tau_new)/c->tau < 1);
         lnacceptance -= logpdf_power(c->tau - tau_new,
                                      c->tau,
-                                     g_lambda_shrink);
+                                     opt_lambda_shrink);
 
 
         if ((y->tau-target->parent->tau)/target->parent->tau >= 1)
@@ -6610,7 +6608,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         }
         lnacceptance += logpdf_power(y->tau - target->parent->tau,
                                      target->parent->tau,
-                                     g_lambda_expand);
+                                     opt_lambda_expand);
 
         lnacceptance += log(0.5);
 
@@ -6634,11 +6632,11 @@ long stree_propose_stree_snl(stree_t ** streeptr,
       }
       lnacceptance += logpdf_power(fabs(target->parent->tau - y->tau),
                                    target->parent->tau,
-                                   g_lambda_expand);
+                                   opt_lambda_expand);
       assert(fabs(tau_new-x->tau)/x->tau < 1);
       lnacceptance -= logpdf_power(fabs(tau_new - x->tau),
                                    x->tau,
-                                   g_lambda_expand);
+                                   opt_lambda_expand);
                                    
     }
 

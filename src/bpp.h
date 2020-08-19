@@ -905,6 +905,8 @@ extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
+extern double opt_lambda_expand;
+extern double opt_lambda_shrink;
 extern double opt_locusrate_mubar;      /* used only in simulation */
 extern double opt_mubar_alpha;
 extern double opt_mubar_beta;
