@@ -2899,6 +2899,9 @@ void cmd_run()
     fprintf(stdout,
             "[DEBUG] lambda_expand = %f   lambda_shrink = %f\n",
             opt_lambda_expand, opt_lambda_shrink);
+    fprintf(stdout,
+            "[DEBUG] SHRINK move proportion: %f\n",
+            opt_prop_shrink);
   }
 
   for (i = 0; i < opt_locus_count; ++i)
