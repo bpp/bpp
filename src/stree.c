@@ -6374,6 +6374,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
   snode_t * stmp;
   snode_t * target, * nextnode, * prevnode;
   snode_t ** rway;
+  snode_t * lca = NULL;
 
 
   stree_t * original_stree = *streeptr;
@@ -6534,6 +6535,10 @@ long stree_propose_stree_snl(stree_t ** streeptr,
 
           /* all future steps will be downwards */
           downwards = 1;
+
+          /* store the common ancestor of x and target which we will need to
+             compute the delta for the reverse move */
+          lca = target;
         }
         else
         {
@@ -6563,19 +6568,16 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         movetype == SHRINK)
     {
       /* shrink or pure expand (no downward step) */
-
       if (movetype == EXPAND)
       {
         /* pure expand no downward */ 
-
         lnacceptance -= log(0.5);
-
-        assert((tau_new-x->tau)/x->tau < 1);
+        assert(tau_new - x->tau < x->tau);
         lnacceptance -= logpdf_power(tau_new - x->tau,
                                      x->tau,
                                      opt_lambda_expand);
 
-        if ((target->tau-y->tau)/target->tau >= 1)
+        if (target->tau - y->tau >= target->tau)
         {
           if (opt_snl_reject)
             return 2;
@@ -6585,21 +6587,18 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         lnacceptance += logpdf_power(target->tau - y->tau,
                                      target->tau,
                                      opt_lambda_shrink);
-
         lnacceptance += log(opt_prop_shrink/(1-opt_prop_shrink));
       }
       else
       {
         /* shrink only */
-
-
-        assert((c->tau-tau_new)/c->tau < 1);
+        assert(c->tau-tau_new < c->tau);
         lnacceptance -= logpdf_power(c->tau - tau_new,
                                      c->tau,
                                      opt_lambda_shrink);
 
 
-        if ((y->tau-target->parent->tau)/target->parent->tau >= 1)
+        if (y->tau - target->parent->tau >= target->parent->tau)
         {
           if (opt_snl_reject)
             return 2;
@@ -6609,9 +6608,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
         lnacceptance += logpdf_power(y->tau - target->parent->tau,
                                      target->parent->tau,
                                      opt_lambda_expand);
-
         lnacceptance += log(0.5);
-
         lnacceptance += log((1-opt_prop_shrink)/opt_prop_shrink);
       }
     }
@@ -6619,22 +6616,24 @@ long stree_propose_stree_snl(stree_t ** streeptr,
     {
       /* expand with both upward and downward steps */
       assert(movetype == EXPAND && downwards);
+      assert(lca);
 
-      #if 0
-      assert(fabs(target->parent->tau-y->tau)/target->parent->tau < 1);
-      #endif
-      if(fabs(target->parent->tau-y->tau)/target->parent->tau >= 1)
+      /* compute distance */
+      double dist     = lca->tau - x->tau + lca->tau - tau_new;
+      double dist_rev = lca->tau - y->tau + lca->tau - target->parent->tau;
+      if (dist_rev >= target->parent->tau)
       {
         if (opt_snl_reject)
           return 2;
         else
           continue;
       }
-      lnacceptance += logpdf_power(fabs(target->parent->tau - y->tau),
+
+      lnacceptance += logpdf_power(dist_rev,
                                    target->parent->tau,
                                    opt_lambda_expand);
       assert(fabs(tau_new-x->tau)/x->tau < 1);
-      lnacceptance -= logpdf_power(fabs(tau_new - x->tau),
+      lnacceptance -= logpdf_power(dist,
                                    x->tau,
                                    opt_lambda_expand);
                                    
