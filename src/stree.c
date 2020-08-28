@@ -6394,172 +6394,156 @@ long stree_propose_stree_snl(stree_t ** streeptr,
   assert(!opt_constraint_count);
   init_weights(stree, NULL);
 
+  lnacceptance = 0;
+  /* select move type */
+  if (legacy_rndu(thread_index) < opt_prop_shrink)
+    movetype = SHRINK;
+  else
+    movetype = EXPAND;
+
+  /* randomly select a branch according to weights */
+  sum = 0;
+  r = legacy_rndu(thread_index);
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count - 1; ++i)
+  {
+    sum += stree->nodes[i]->weight;
+    if (r < sum) break;
+  }
+  assert(stree->nodes[i] != stree->root);
+  assert(stree->nodes[i]->weight);
+  lnacceptance -= log(stree->nodes[i]->weight);
+
+  /* y-a for expand and y-c for shrink. Sample delta and set initial target for regrafting y-a */
+  y = NULL;  a = NULL;  b = NULL;  c = NULL;  x = NULL;
+  if (movetype == EXPAND)  /* (++ and +-) */
+  {
+    y = stree->nodes[i];
+    x = y->parent;
+    if ((int)(2 * legacy_rndu(thread_index)) == 0) { a = y->left;  b = y->right; }
+    else { a = y->right; b = y->left; }
+    delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_expand));
+    target = x;
+  }
+  else    /* (--) */
+  {
+    c = stree->nodes[i];
+    y = c->parent;
+    if (y->left == c) { a = y->right; b = y->left; }
+    else { a = y->left;  b = y->right; }
+    delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_shrink));
+    target = c;
+  }
+  /* only required for the first time an expand move takes a downward path, so
+     that we don't go back the same path we came from */
+  prevnode = y;
+  downwards = 0;  /* if downwards once, then always downwards */
+  if (movetype == SHRINK) downwards = 1;
+
+  /* Find target branch for regrafting. Code works for both expand and shrink moves */
   while (1)
   {
-    lnacceptance = 0;
-    /* select move type */
-    if (legacy_rndu(thread_index) < opt_prop_shrink)
-      movetype = SHRINK;
-    else
-      movetype = EXPAND;
-
-    /* randomly select a branch according to weights */
-    sum = 0;
-    r = legacy_rndu(thread_index);
-    for (i = stree->tip_count; i < stree->tip_count + stree->inner_count - 1; ++i)
+    /* chose whether to take upward or downward path */
+    if (!downwards && legacy_rndu(thread_index) < 0.5)  /* upwards */
     {
-      sum += stree->nodes[i]->weight;
-      if (r < sum) break;
-    }
-    assert(stree->nodes[i] != stree->root);
-    assert(stree->nodes[i]->weight);
-    lnacceptance -= log(stree->nodes[i]->weight);
-
-    /* y-a for expand and y-c for shrink. Sample delta and set initial target for regrafting y-a */
-    y = NULL;  a = NULL;  b = NULL;  c = NULL;  x = NULL;
-    if (movetype == EXPAND)  /* (++ and +-) */
-    {
-      y = stree->nodes[i];
-      x = y->parent;
-      if ((int)(2 * legacy_rndu(thread_index)) == 0) { a = y->left;  b = y->right; }
-      else { a = y->right; b = y->left; }
-      delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_expand));
-      target = x;
-    }
-    else    /* (--) */
-    {
-      c = stree->nodes[i];
-      y = c->parent;
-      if (y->left == c) { a = y->right; b = y->left; }
-      else { a = y->left;  b = y->right; }
-      delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_shrink));
-      target = c;
-    }
-    /* only required for the first time an expand move takes a downward path, so
-       that we don't go back the same path we came from */
-    prevnode = y;
-    downwards = 0;  /* if downwards once, then always downwards */
-    if (movetype == SHRINK) downwards = 1;
-
-    /* Find target branch for regrafting. Code works for both expand and shrink moves */
-    while (1)
-    {
-      /* chose whether to take upward or downward path */
-      if (!downwards && legacy_rndu(thread_index) < 0.5)  /* upwards */
+      if (target->parent)
       {
-        if (target->parent)
+        double dist = target->parent->tau - target->tau;
+        if (dist > delta)
         {
-          double dist = target->parent->tau - target->tau;
-          if (dist > delta)
-          {
-            tau_new = target->tau + delta;
-            break;
-          }
-          else
-          {
-            prevnode = target;
-            target = target->parent;
-            delta -= dist;
-          }
-        }
-        else
-        {
-          /* we reached the root node, hence we just add delta to root's tau */
           tau_new = target->tau + delta;
           break;
         }
-      }
-      else                  /* downwards */
-      {
-        if (!downwards)    /* (+-) */
-        {
-          /* first time a downwards move is selected. Ensure we do not visit same
-             path again */
-          nextnode = (target->left == prevnode) ? target->right : target->left;
-          /* all future steps will be downwards */
-          downwards = 1;
-          /* store the common ancestor of x and target which we will need to
-             compute the delta for the reverse move */
-          lca = target;
-        }
         else
         {
-          /* randomly select which of the two */
-          nextnode = legacy_rndu(thread_index) < 0.5 ? target->left : target->right;
-        }
-        double dist = target->tau - nextnode->tau;
-        if (dist > delta)
-        {
-          tau_new = target->tau - delta;
-          target = nextnode;
-          break;
-        }
-        else
-        {
-          /* prevnode = target; */  /* only for consistency, but not needed anymore */
-          target = nextnode;
+          prevnode = target;
+          target = target->parent;
           delta -= dist;
         }
       }
-    }  /* while (1), loop for finding target branch */
-
-    if ((movetype == EXPAND && !downwards) || movetype == SHRINK)
-    {
-      /* shrink or pure expand (no downward step) (-- or ++) */
-      if (movetype == EXPAND)
+      else
       {
-        /* pure expand (++): delta = tau_new - x->tau, delta* = target->tau - y->tau */
-        assert(tau_new - x->tau < x->tau);
-        if (target->tau - y->tau >= target->tau)
-        {
-          if (opt_snl_reject)
-            return 2;
-          else
-            continue;
-        }
-        lnacceptance += logpdf_power(target->tau - y->tau, target->tau, opt_lambda_shrink);
-        lnacceptance -= log(0.5);
-        lnacceptance -= logpdf_power(tau_new - x->tau, x->tau, opt_lambda_expand);
-        lnacceptance += log(opt_prop_shrink / (1 - opt_prop_shrink));
+        /* we reached the root node, hence we just add delta to root's tau */
+        tau_new = target->tau + delta;
+        break;
+      }
+    }
+    else                  /* downwards */
+    {
+      if (!downwards)    /* (+-) */
+      {
+        /* first time a downwards move is selected. Ensure we do not visit same
+           path again */
+        nextnode = (target->left == prevnode) ? target->right : target->left;
+        /* all future steps will be downwards */
+        downwards = 1;
+        /* store the common ancestor of x and target which we will need to
+           compute the delta for the reverse move */
+        lca = target;
       }
       else
       {
-        /* shrink only (--): delta = c->tau - tau_new, delta* = y->tau - target->parent->tau */
-        assert(c->tau - tau_new < c->tau);
-        if (y->tau - target->parent->tau >= target->parent->tau)
-        {
-          if (opt_snl_reject)
-            return 2;
-          else
-            continue;
-        }
-        lnacceptance += logpdf_power(y->tau - target->parent->tau, target->parent->tau, opt_lambda_expand);
-        lnacceptance += log(0.5);
-        lnacceptance -= logpdf_power(c->tau - tau_new, c->tau, opt_lambda_shrink);
-        lnacceptance += log((1 - opt_prop_shrink) / opt_prop_shrink);
+        /* randomly select which of the two */
+        nextnode = legacy_rndu(thread_index) < 0.5 ? target->left : target->right;
       }
+      double dist = target->tau - nextnode->tau;
+      if (dist > delta)
+      {
+        tau_new = target->tau - delta;
+        target = nextnode;
+        break;
+      }
+      else
+      {
+        /* prevnode = target; */  /* only for consistency, but not needed anymore */
+        target = nextnode;
+        delta -= dist;
+      }
+    }
+  }  /* while (1), loop for finding target branch */
+
+  if ((movetype == EXPAND && !downwards) || movetype == SHRINK)
+  {
+    /* shrink or pure expand (no downward step) (-- or ++) */
+    if (movetype == EXPAND)
+    {
+      /* pure expand (++): delta = tau_new - x->tau, delta* = target->tau - y->tau */
+      assert(tau_new - x->tau < x->tau);
+      if (target->tau - y->tau >= target->tau)
+        return 2;
+
+      lnacceptance += logpdf_power(target->tau - y->tau, target->tau, opt_lambda_shrink);
+      lnacceptance -= log(0.5);
+      lnacceptance -= logpdf_power(tau_new - x->tau, x->tau, opt_lambda_expand);
+      lnacceptance += log(opt_prop_shrink / (1 - opt_prop_shrink));
     }
     else
     {
-      /* expand with both upward and downward steps (+-) */
-      assert(movetype == EXPAND && downwards);
-      assert(lca);
-      /* compute distance */
-      double dist = lca->tau - x->tau + lca->tau - tau_new;
-      double dist_rev = lca->tau - y->tau + lca->tau - target->parent->tau;
-      if (dist_rev >= target->parent->tau)
-      {
-        if (opt_snl_reject)
-          return 2;
-        else
-          continue;
-      }
-      lnacceptance += logpdf_power(dist_rev, target->parent->tau, opt_lambda_expand);
-      assert(dist < x->tau);  /*** Ziheng ??? ***/
-      lnacceptance -= logpdf_power(dist, x->tau, opt_lambda_expand);
+      /* shrink only (--): delta = c->tau - tau_new, delta* = y->tau - target->parent->tau */
+      assert(c->tau - tau_new < c->tau);
+      if (y->tau - target->parent->tau >= target->parent->tau)
+        return 2;
+
+      lnacceptance += logpdf_power(y->tau - target->parent->tau, target->parent->tau, opt_lambda_expand);
+      lnacceptance += log(0.5);
+      lnacceptance -= logpdf_power(c->tau - tau_new, c->tau, opt_lambda_shrink);
+      lnacceptance += log((1 - opt_prop_shrink) / opt_prop_shrink);
     }
-    break;
-  }  /* while (1), loop for sampling movetype, sampling internal branch, finding target */
+  }
+  else
+  {
+    /* expand with both upward and downward steps (+-) */
+    assert(movetype == EXPAND && downwards);
+    assert(lca);
+    /* compute distance */
+    double dist = lca->tau - x->tau + lca->tau - tau_new;
+    double dist_rev = lca->tau - y->tau + lca->tau - target->parent->tau;
+    if (dist_rev >= target->parent->tau)
+      return 2;
+
+    lnacceptance += logpdf_power(dist_rev, target->parent->tau, opt_lambda_expand);
+    assert(dist < x->tau);  /*** Ziheng ??? ***/
+    lnacceptance -= logpdf_power(dist, x->tau, opt_lambda_expand);
+  }
 
   tau_factor = tau_new / y->tau;
   assert(tau_factor);

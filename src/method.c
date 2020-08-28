@@ -2890,12 +2890,6 @@ void cmd_run()
   if (opt_snl)
   {
     fprintf(stdout, "[DEBUG] Using general SPR (SNL) move\n");
-    if (opt_snl_repeat)
-      fprintf(stdout,
-              "[DEBUG] Using repeated sampling for SNL move (--snl_repeat)\n");
-    else
-      fprintf(stdout,
-              "[DEBUG] Using rejection sampling for SNL move (--snl_reject)\n");
     fprintf(stdout,
             "[DEBUG] lambda_expand = %f   lambda_shrink = %f\n",
             opt_lambda_expand, opt_lambda_shrink);
