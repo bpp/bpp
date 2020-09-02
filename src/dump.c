@@ -143,7 +143,9 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* ft_round_rj*/
   size_section += sizeof(double);                     /* pjump_rj*/
   size_section += sizeof(long);                       /* ft_round_spr */
-  size_section += sizeof(long);                       /* pjump_slider */
+  size_section += sizeof(long);                       /* ft_round_snl */
+  size_section += sizeof(long);                       /* pjump_spr */
+  size_section += sizeof(long);                       /* pjump_snl */
   size_section += sizeof(double);                     /* mean_logl */
   size_section += sizeof(double);                     /* mean_root_age */
   size_section += sizeof(double);                     /* mean_root_theta */
@@ -179,7 +181,9 @@ static void dump_chk_section_1(FILE * fp,
                                long ft_round_rj,
                                double pjump_rj,
                                long ft_round_spr,
-                               long pjump_slider,
+                               long ft_round_snl,
+                               long pjump_spr,
+                               long pjump_snl,
                                double mean_logl,
                                double * mean_tau,
                                double * mean_theta,
@@ -200,10 +204,10 @@ static void dump_chk_section_1(FILE * fp,
   /* write seqfile */
   DUMP(opt_msafile,strlen(opt_msafile)+1,fp);
 
-  /* write constfile */
+  /* write constraintfile */
   DUMP(&opt_constraint_count,1,fp);
   if (opt_constraint_count)
-    DUMP(opt_constfile,strlen(opt_constfile)+1,fp);
+    DUMP(opt_constraintfile,strlen(opt_constraintfile)+1,fp);
 
   /* write whether we will write a map file */
   long mapfile_present = (opt_mapfile ? 1 : 0);
@@ -395,7 +399,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round_rj,1,fp);
   DUMP(&pjump_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
-  DUMP(&pjump_slider,1,fp);
+  DUMP(&ft_round_snl, 1, fp);
+  DUMP(&pjump_spr, 1, fp);
+  DUMP(&pjump_snl,1,fp);
   DUMP(&mean_logl,1,fp);
   DUMP(&mean_tau_count,1,fp);
   if (opt_est_theta)
@@ -744,7 +750,9 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     double pjump_rj,
                     long ft_round_spr,
-                    long pjump_slider,
+                    long ft_round_snl,
+                    long pjump_spr,
+                    long pjump_snl,
                     double mean_logl,
                     double * mean_tau,
                     double * mean_theta,
@@ -790,7 +798,9 @@ int checkpoint_dump(stree_t * stree,
                      ft_round_rj,
                      pjump_rj,
                      ft_round_spr,
-                     pjump_slider,
+                     ft_round_snl,
+                     pjump_spr,
+                     pjump_snl,
                      mean_logl,
                      mean_tau,
                      mean_theta,

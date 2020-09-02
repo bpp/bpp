@@ -233,7 +233,9 @@ static void load_chk_section_1(FILE * fp,
                                long * ft_round_rj,
                                double * pjump_rj,
                                long * ft_round_spr,
-                               long * pjump_slider,
+                               long * ft_round_snl,
+                               long * pjump_spr,
+                               long * pjump_snl,
                                double * mean_logl,
                                double ** mean_tau,
                                double ** mean_theta,
@@ -268,9 +270,9 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read number of constraints");
   if (opt_constraint_count)
   {
-    if (!load_string(fp,&opt_constfile))
+    if (!load_string(fp,&opt_constraintfile))
       fatal("Cannot read name of constraint file");
-    printf(" Constraints file: %s\n", opt_constfile);
+    printf(" Constraints file: %s\n", opt_constraintfile);
   }
 
   long mapfile_present;
@@ -676,8 +678,14 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round_spr,1,fp))
     fatal("Cannot read finetune round for species tree SPR"); 
 
-  if (!LOAD(pjump_slider,1,fp))
-    fatal("Cannot read species tree SPR pjump"); 
+  if (!LOAD(ft_round_snl, 1, fp))
+    fatal("Cannot read finetune round for species tree SNL");
+
+  if (!LOAD(pjump_spr, 1, fp))
+    fatal("Cannot read species tree SPR pjump");
+
+  if (!LOAD(pjump_snl,1,fp))
+    fatal("Cannot read species tree SNL pjump"); 
 
   if (!LOAD(mean_logl,1,fp))
     fatal("Cannot read mean logl"); 
@@ -1473,7 +1481,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
-                    long * pjump_slider,
+                    long * ft_round_snl,
+                    long * pjump_spr,
+                    long * pjump_snl,
                     double * mean_logl,
                     double ** mean_tau,
                     double ** mean_theta,
@@ -1518,7 +1528,9 @@ int checkpoint_load(gtree_t *** gtreep,
                      ft_round_rj,
                      pjump_rj,
                      ft_round_spr,
-                     pjump_slider,
+                     ft_round_snl,
+                     pjump_spr,
+                     pjump_snl,
                      mean_logl,
                      mean_tau,
                      mean_theta,

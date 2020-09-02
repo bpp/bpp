@@ -389,7 +389,7 @@ l_unwind:
   return defs;
 }
 
-list_t * parse_constfile(const char * constfile)
+list_t * parse_constraintfile(const char * constraintfile)
 {
   long line_count = 0;
   long ret = 1;
@@ -397,7 +397,7 @@ list_t * parse_constfile(const char * constfile)
   list_t * list;
   constdefs_t * defs = NULL;
 
-  fp = xopen(constfile,"r");
+  fp = xopen(constraintfile,"r");
 
   list = (list_t *)xcalloc(1,sizeof(list_t));
 
@@ -410,7 +410,7 @@ list_t * parse_constfile(const char * constfile)
     if (!(defs = parse_constdefs(line)))
     {
       ret = 0;
-      fprintf(stderr, "Invalid entry in %s (line %ld)\n", constfile, line_count);
+      fprintf(stderr, "Invalid entry in %s (line %ld)\n", constraintfile, line_count);
       goto l_unwind;
     }
 
@@ -779,10 +779,10 @@ static void ntree_replace_aliases(stree_t * stree,
       {
         if (type == BPP_CONSTDEFS_CONSTRAINT)
           fatal("Constraint in %s (line %ld) contains undefined taxon (%s)",
-                 opt_constfile, lineno, d->leaves[i]->label);
+                 opt_constraintfile, lineno, d->leaves[i]->label);
         else
           fatal("Definition in %s (line %ld) contains undefined taxon (%s)",
-                 opt_constfile, lineno, d->leaves[i]->label);
+                 opt_constraintfile, lineno, d->leaves[i]->label);
       }
 
       /* found definition. expand into a tree T */
@@ -882,7 +882,7 @@ void constraint_process_recursive(stree_t * t,
   {
     if (lca->left->constraint != lca->right->constraint)
       fatal("Conflicting constraints in file %s (lines %ld and %ld)",
-            opt_constfile,
+            opt_constraintfile,
             lca->left->constraint ? 
               lca->left->constraint_lineno : lca->right->constraint_lineno,
             lineno);
@@ -1189,7 +1189,7 @@ static void complement_definition(stree_t * stree,
       }
     if (j == stree->tip_count)
       fatal("Invalid definition in file %s (line %ld)",
-            opt_constfile, def->lineno);
+            opt_constraintfile, def->lineno);
   }
 
   space = taxa_count = 0;
@@ -1268,7 +1268,7 @@ int definition_process(stree_t * stree,
   {
     if (opt_comply)
       return 0;
-    fatal("Invalid definition in file %s (line %ld)", opt_constfile, def->lineno);
+    fatal("Invalid definition in file %s (line %ld)", opt_constraintfile, def->lineno);
   }
 
   def_label[def_count]  = xstrdup(def->arg1);
@@ -1412,8 +1412,8 @@ static void constraints_process(stree_t * stree,
 
   if (fp_out)
   {
-    fprintf(stdout, "List of constraints in file %s\n", opt_constfile);
-    fprintf(fp_out, "List of constraints in file %s\n", opt_constfile);
+    fprintf(stdout, "List of constraints in file %s\n", opt_constraintfile);
+    fprintf(fp_out, "List of constraints in file %s\n", opt_constraintfile);
   }
   for (i = 0; i < const_count; ++i)
   {
@@ -1432,7 +1432,7 @@ static void constraints_process(stree_t * stree,
         goto l_unwind;
 
       fatal("Starting species tree contradicts constraint in file %s (line %ld)",
-            opt_constfile, lines[i]);
+            opt_constraintfile, lines[i]);
     }
   }
 
@@ -1513,7 +1513,7 @@ static void constraints_process(stree_t * stree,
       /* TODO: This check is probably no longer necessary */
       if (!is_subtree(stree,trees[i]))
         fatal("Starting species tree contradicts constraint in file %s (line %ld)",
-              opt_constfile, lines[i]);
+              opt_constraintfile, lines[i]);
   
       constraint_process_recursive(stree,trees[i]->root,&cvalue,lines[i]);
     }
@@ -1667,9 +1667,9 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
 
   list_item_t * outgroup_li = NULL;
 
-  list_t * constlist = parse_constfile(opt_constfile);
+  list_t * constlist = parse_constraintfile(opt_constraintfile);
   if (!constlist)
-    fatal("Invalid syntax found in file %s", opt_constfile);
+    fatal("Invalid syntax found in file %s", opt_constraintfile);
 
   if (constlist->count && stree->tip_count < 2)
     fatal("Constraints require  species tree of more than 2 species");
@@ -1685,7 +1685,7 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
     {
       if (tiplabel_exists(stree,def->arg1))
         fatal("Definition %s in %s (line %ld) already exists as a taxon",
-              def->arg1, opt_constfile, def->lineno);
+              def->arg1, opt_constraintfile, def->lineno);
 
       ntree_t * t = NULL;
       if (strlen(def->arg2) > 3 && !strncasecmp(def->arg2, "not", 3))
@@ -1694,7 +1694,7 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
         t = bpp_parse_newick_string_ntree(def->arg2);
       if (!t)
         fatal("Definition in %s (line %ld) is not a valid tree",
-              opt_constfile, def->lineno);
+              opt_constraintfile, def->lineno);
 
       ntree_destroy(t,NULL);
 
@@ -1722,7 +1722,7 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out)
 
   if (og_count > 1)
     fatal("Constraint file %s contains more than one outgroup definitions",
-          opt_constfile);
+          opt_constraintfile);
   
   /* we want the outgroup to be processed last */
   if (outgroup_li)
@@ -1771,7 +1771,7 @@ void cmd_comply()
 
   if (!opt_treefile)
     fatal("Please specify tree file with --tree");
-  if (!opt_constfile)
+  if (!opt_constraintfile)
     fatal("Please specify constraint file with --constraint");
 
   fp = xopen(opt_treefile,"r");

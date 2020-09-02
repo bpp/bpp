@@ -399,16 +399,42 @@ static int parse_speciestree(const char * line)
 
   long count;
 
+  /*** Ziheng 2020-9-1 ***/
+#if (0)  
   count = get_long(p, &opt_est_stree);
-  if (!count) goto l_unwind;
-
+  if (opt_est_stree == 0) goto l_unwind;
+  if (opt_est_stree != 1) goto l_unwind;
   p += count;
 
-  if (opt_est_stree == 0 || opt_est_stree == 1) ret = 1;
+  count = get_double(p, &opt_prob_snl);
+  if (!count) goto l_unwind;
+  p += count;
 
-  /* TODO: At the momemt we ignore the pslider/expandratio/shrinkratio */
+  count = get_double(p, &opt_prob_snl_shrink);
+  if (!count) goto l_unwind;
+  p += count;
+
+  count = get_double(p, &opt_snl_lambda_expand);
+  if (!count) goto l_unwind;
+  p += count;
+
+  count = get_double(p, &opt_snl_lambda_shrink);
+  if (!count) goto l_unwind;
+  p += count;
+
+#else
+  count = sscanf(p, "%ld%lf%lf%lf%lf", 
+    &opt_est_stree, &opt_prob_snl, &opt_prob_snl_shrink, &opt_snl_lambda_expand, &opt_snl_lambda_shrink);
+#endif
 
 l_unwind:
+  if (opt_est_stree == 0 || opt_est_stree == 1) ret = 1;
+  if (opt_snl_lambda_expand < 0 || opt_snl_lambda_expand>1)
+    fatal("opt_snl_lambda_expand should be between 0 and 1.");
+  if (opt_snl_lambda_shrink < 0 || opt_snl_lambda_shrink>1)
+    fatal("opt_snl_lambda_shrink should be between 0 and 1.");
+  opt_snl_lambda_expand = log(opt_snl_lambda_expand) / log(1 - opt_snl_lambda_expand);
+  opt_snl_lambda_shrink = log(opt_snl_lambda_shrink) / log(1 - opt_snl_lambda_shrink);
   free(s);
   return ret;
 }
@@ -2500,7 +2526,7 @@ void load_cfile()
     {
       if (!strncasecmp(token,"constraintfile",14))
       {
-        if (!get_string(value,&opt_constfile))
+        if (!get_string(value,&opt_constraintfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }

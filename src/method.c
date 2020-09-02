@@ -214,20 +214,13 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
     fprintf(fp, "  qmat: instantaneous substitution rates proposal\n");
   if (enabled_prop_alpha)
     fprintf(fp, "  alfa: discretized gamma (rate variation among sites) alpha proposal\n");
-  if (!opt_snl)
-  {
-    if (opt_method == METHOD_01)
-      fprintf(fp, "  Sspr: species tree SPR proposal\n");
-  }
-  else
-  {
-    if (opt_method == METHOD_01)
-      fprintf(fp, "   SNL: *DEBUG* species tree general SPR proposal (SNL)\n");
-  }
+  if (opt_method == METHOD_01)
+    fprintf(fp, " stree: Sspr (%6.4f) & Ssnl (%6.4f)\n", 1 - opt_prob_snl, opt_prob_snl);
   if (opt_method == METHOD_10)
     fprintf(fp, "    rj: reversible-jump split/merge proposal\n");
   if (opt_method == METHOD_11)
   {
+    fprintf(fp, "  stree proposal:  %6.4f for Ssnl, %6.4f for Sspr\n", opt_prob_snl, 1 - opt_prob_snl);
     fprintf(fp, "    sp: number of delimited specices\n");
   }
   if (opt_method == METHOD_10 || opt_method == METHOD_11)
@@ -290,7 +283,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   long titlelen = strlen(ap_title);
   long prefix = (ap_width - titlelen)/2;
   long suffix = ap_width - titlelen  - prefix;
-  fprintf(fp,"     |");
+  fprintf(fp,"           |");
   for (i = 0; i < prefix; ++i)
     fprintf(fp," ");
   fprintf(fp,"%s",ap_title);
@@ -349,14 +342,8 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
 
   if (opt_method == METHOD_01)
   {
-    if (!opt_snl)
-    {
-      fprintf(fp,"   Sspr");  linewidth += 7;
-    }
-    else
-    {
-      fprintf(fp,"   Dspr");  linewidth += 7;
-    }
+    fprintf(fp, "   Sspr");  linewidth += 7;
+    fprintf(fp,  "  Ssnl");  linewidth += 6;
   }
   else if (opt_method == METHOD_10)
   {
@@ -364,15 +351,9 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   }
   else if (opt_method == METHOD_11)
   {
-    if (!opt_snl)
-    {
-      fprintf(fp,"   Sspr");  linewidth += 7;
-    }
-    else
-    {
-      fprintf(fp,"   Dspr");  linewidth += 7;
-    }
-    fprintf(fp,"     rj");  linewidth += 7;
+    fprintf(fp, "   Sspr");  linewidth += 7;
+    fprintf(fp,  "  Ssnl");  linewidth += 6;
+    fprintf(fp, "     rj");  linewidth += 7;
   }
   fprintf(fp," |");         linewidth += 2;
 
@@ -825,7 +806,9 @@ static char * cb_serialize_branch(const snode_t * node)
 static void status_print_pjump(FILE * fp,
                                double * pjump,
                                long ft_round_spr,
-                               long pjump_slider,
+                               long ft_round_snl,
+                               long pjump_spr,
+                               long pjump_snl,
                                double mean_pjump_rj)
 {
   long j;
@@ -865,12 +848,16 @@ static void status_print_pjump(FILE * fp,
 
   /* print pjump for species tree SPR */
   if (opt_method == METHOD_01)
-    fprintf(fp," %5.4f", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+  {
+    fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
+    fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
+  }
   else if (opt_method == METHOD_10)
     fprintf(fp," %5.4f", mean_pjump_rj);
   else if (opt_method == METHOD_11)
   {
-    fprintf(fp," %5.4f", ft_round_spr ? (double)pjump_slider/ft_round_spr : 0.);
+    fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
+    fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
     fprintf(fp," %5.4f", mean_pjump_rj);
   }
   fprintf(fp, "  ");
@@ -1500,7 +1487,10 @@ static FILE * resume(stree_t ** ptr_stree,
                      double * ptr_pjump_rj,
 
                      long * ptr_ft_round_spr,
-                     long * ptr_pjump_slider,
+                     long * ptr_ft_round_snl,
+                     long * ptr_pjump_spr,
+                     long * ptr_pjump_snl,
+
                      double * ptr_mean_logl,
                      double ** ptr_mean_tau,
                      double ** ptr_mean_theta,
@@ -1542,7 +1532,9 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_ft_round_rj,
                   ptr_pjump_rj,
                   ptr_ft_round_spr,
-                  ptr_pjump_slider,
+                  ptr_ft_round_snl,
+                  ptr_pjump_spr,
+                  ptr_pjump_snl,
                   ptr_mean_logl,
                   ptr_mean_tau,
                   ptr_mean_theta,
@@ -1729,8 +1721,10 @@ static FILE * init(stree_t ** ptr_stree,
                    double ** ptr_posterior,
                    long * ptr_ft_round_rj,
                    double * ptr_pjump_rj,
-                   long * ptr_ft_round_spr,
-                   long * ptr_pjump_slider,
+                   long* ptr_ft_round_spr,
+                   long* ptr_ft_round_snl,
+                   long* ptr_pjump_spr,
+                   long* ptr_pjump_snl,
                    double * ptr_mean_logl,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones,
@@ -2458,10 +2452,10 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* Reading constraints file */
-  if (opt_constfile)
+  if (opt_constraintfile)
   {
-    fprintf(stdout, "Reading constraint file %s\n", opt_constfile);
-    fprintf(fp_out, "Reading constraint file %s\n", opt_constfile);
+    fprintf(stdout, "Reading constraint file %s\n", opt_constraintfile);
+    fprintf(fp_out, "Reading constraint file %s\n", opt_constraintfile);
     parse_and_set_constraints(stree, fp_out);
   }
 
@@ -2550,7 +2544,9 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* species tree inference relevant */
   *ptr_ft_round_spr = 0;
-  *ptr_pjump_slider = 0;
+  *ptr_ft_round_snl = 0;
+  *ptr_pjump_spr = 0;
+  *ptr_pjump_snl = 0;
   *ptr_mean_logl = 0;
 
   *ptr_sclone = sclone;
@@ -2697,8 +2693,8 @@ void cmd_run()
   double * pspecies = NULL;
 
   /* method 01 specific variables */
-  long ft_round_spr = 0;
-  long pjump_slider;
+  long ft_round_spr = 0, ft_round_snl = 0;
+  long pjump_spr, pjump_snl;
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
   double mean_phi = 0;
@@ -2751,7 +2747,9 @@ void cmd_run()
                      &ft_round_rj,
                      &pjump_rj,
                      &ft_round_spr,
-                     &pjump_slider,
+                     &ft_round_snl,
+                     &pjump_spr,
+                     &pjump_snl,
                      &mean_logl,
                      &mean_tau,
                      &mean_theta,
@@ -2775,7 +2773,9 @@ void cmd_run()
                    &ft_round_rj,
                    &pjump_rj,
                    &ft_round_spr,
-                   &pjump_slider,
+                   &ft_round_snl,
+                   &pjump_spr,
+                   &pjump_snl,
                    &mean_logl,
                    &sclone, 
                    &gclones,
@@ -2875,27 +2875,27 @@ void cmd_run()
   unsigned long total_steps = opt_samples * opt_samplefreq + opt_burnin;
   progress_init("Running MCMC...", total_steps);
   #endif
-  if (opt_snl && opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_prob_snl && opt_clock != BPP_CLOCK_GLOBAL)
   {
     if (!opt_debug_full)
     {
-      fprintf(stdout, "[DEBUG] GSPR and relaxed clock requires full "
+      fprintf(stdout, "[DEBUG] SNL and relaxed clock requires full "
                       "recomputation of log-L (turning on)\n");
       opt_debug_full = 1;                 
     }
   }
   if (opt_debug_full)
     fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
-                    "log-likelihood in GSPR/SPR moves\n");
-  if (opt_snl)
+                    "log-likelihood in SNL/SPR moves\n");
+  if (opt_prob_snl)
   {
-    fprintf(stdout, "[DEBUG] Using general SPR (SNL) move\n");
+    fprintf(stdout, "[DEBUG] Using SNL move\n");
     fprintf(stdout,
             "[DEBUG] lambda_expand = %f   lambda_shrink = %f\n",
-            opt_lambda_expand, opt_lambda_shrink);
+            opt_snl_lambda_expand, opt_snl_lambda_shrink);
     fprintf(stdout,
             "[DEBUG] SHRINK move proportion: %f\n",
-            opt_prop_shrink);
+            opt_prob_snl_shrink);
   }
 
   for (i = 0; i < opt_locus_count; ++i)
@@ -2981,8 +2981,8 @@ void cmd_run()
 
       if (opt_est_stree)
       {
-        ft_round_spr = 0;
-        pjump_slider = 0;
+        ft_round_spr = ft_round_snl = 0;
+        pjump_spr = pjump_snl = 0;
       }
       if (opt_method == METHOD_11)      /* species tree inference + delimitation */
         memset(pspecies,0,stree->tip_count*sizeof(double));
@@ -3011,10 +3011,20 @@ void cmd_run()
       if (legacy_rndu(thread_index_zero) > 0)   /* bpp4 compatible results (RNG to next state) */
       {
         long ret;
-        if (!opt_snl)
+        long stree_snl = 0;
+        if (opt_prob_snl == 0)      stree_snl = 0;
+        else if (opt_prob_snl == 1) stree_snl = 1;
+        else                        stree_snl = (legacy_rndu(thread_index_zero) < opt_prob_snl);
+        if (stree_snl==0) {
           ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
-        else
+          ft_round_spr++;
+          if (ret == 1) pjump_spr++;
+        }
+        else {
           ret = stree_propose_stree_snl(&stree, &gtree, &sclone, &gclones, locus);
+          ft_round_snl++;
+          if (ret==1) pjump_snl++;
+        }
         if (ret == 1)
         {
           /* accepted */
@@ -3022,10 +3032,7 @@ void cmd_run()
           SWAP(stree,sclone);
           SWAP(gtree,gclones);
           stree_label(stree);
-          pjump_slider++;
         }
-        if (ret != 2)
-          ft_round_spr++;
       }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "SSPR");
@@ -3063,7 +3070,7 @@ void cmd_run()
                                   (double)ft_round;
 
       #ifdef CHECK_LOGL
-      check_logl(stree, gtree, locus, i, "GSPR");
+      check_logl(stree, gtree, locus, i, "SNL");
       #endif
 
     /* propose population sizes on species tree */
@@ -3355,11 +3362,11 @@ void cmd_run()
         mean_pjump_rj = ft_round_rj ? pjump_rj / ft_round_rj : 0;
 
       /* print pjumps */
-      status_print_pjump(stdout, pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
+      status_print_pjump(stdout, pjump, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
       if (print_newline)
       {
         fprintf(fp_out, "%4.0f%% ", (i + 1.499) / printk * 100.);
-        status_print_pjump(fp_out,pjump, ft_round_spr, pjump_slider, mean_pjump_rj);
+        status_print_pjump(fp_out,pjump, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
       }
 
       /* species delimitation specific output */
@@ -3513,7 +3520,9 @@ void cmd_run()
                         ft_round_rj,
                         pjump_rj,
                         ft_round_spr,
-                        pjump_slider,
+                        ft_round_snl,
+                        pjump_spr,
+                        pjump_snl,
                         mean_logl,
                         mean_tau,
                         mean_theta,
@@ -3680,7 +3689,7 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
 
-    if (opt_snl)
+    if (opt_prob_snl)
     {
       long opt_debug_sum = opt_debug_expand_count +
                            opt_debug_expshr_count +

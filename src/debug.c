@@ -49,7 +49,7 @@ void debug_snl_stage1(stree_t * stree,
   if (opt_debug_snl > 1)
   {
     fprintf(stdout,
-            "\n[DBG-%ld] ------ Proposal: GSPR (SNL) Number: %ld ------\n",
+            "\n[DBG-%ld] ------ Proposal: SNL Number: %ld ------\n",
             opt_debug_snl,
             opt_debug_counter);
 
@@ -131,7 +131,7 @@ void debug_snl_stage2(stree_t * stree,
   {
     long rc = (lnacceptance >= -1e-10 || r < exp(lnacceptance));
     fprintf(stdout,
-            "[DBG-%ld] Proposal: GSPR (SNL) Number: %ld  lnacceptance: %f  |  %s\n",
+            "[DBG-%ld] Proposal: SNL Number: %ld  lnacceptance: %f  |  %s\n",
             opt_debug_snl, opt_debug_counter, lnacceptance,
             rc ? "ACCEPTED" : "REJECTED");
     return;
@@ -212,7 +212,7 @@ void debug_snl_stage2(stree_t * stree,
     }
 
     fprintf(stdout,
-            "[DBG-%ld] GSPR (SNL) log-acceptance ratio (lnacceptance): %f\n",
+            "[DBG-%ld] SNL log-acceptance ratio (lnacceptance): %f\n",
             opt_debug_snl, lnacceptance);
     long rc = (lnacceptance >= -1e-10 || r < exp(lnacceptance));
     if (rc)

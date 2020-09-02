@@ -6043,8 +6043,7 @@ long snl_expand_and_shrink(stree_t * stree,
       
       /* reset species tree marks */
       stmp->mark[thread_index] = 0;
-    }
-        
+    }    
     snode_contrib += stree->tip_count + stree->inner_count;
 
   } /* end of locus */
@@ -6396,7 +6395,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
 
   lnacceptance = 0;
   /* select move type */
-  if (legacy_rndu(thread_index) < opt_prop_shrink)
+  if (legacy_rndu(thread_index) < opt_prob_snl_shrink)
     movetype = SHRINK;
   else
     movetype = EXPAND;
@@ -6421,7 +6420,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
     x = y->parent;
     if ((int)(2 * legacy_rndu(thread_index)) == 0) { a = y->left;  b = y->right; }
     else { a = y->right; b = y->left; }
-    delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_expand));
+    delta = x->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_snl_lambda_expand));
     target = x;
   }
   else    /* (--) */
@@ -6430,7 +6429,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
     y = c->parent;
     if (y->left == c) { a = y->right; b = y->left; }
     else { a = y->left;  b = y->right; }
-    delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_lambda_shrink));
+    delta = c->tau * (1 - pow(legacy_rndu(thread_index), 1. / opt_snl_lambda_shrink));
     target = c;
   }
   /* only required for the first time an expand move takes a downward path, so
@@ -6511,10 +6510,10 @@ long stree_propose_stree_snl(stree_t ** streeptr,
       if (target->tau - y->tau >= target->tau)
         return 2;
 
-      lnacceptance += logpdf_power(target->tau - y->tau, target->tau, opt_lambda_shrink);
+      lnacceptance += logpdf_power(target->tau - y->tau, target->tau, opt_snl_lambda_shrink);
       lnacceptance -= log(0.5);
-      lnacceptance -= logpdf_power(tau_new - x->tau, x->tau, opt_lambda_expand);
-      lnacceptance += log(opt_prop_shrink / (1 - opt_prop_shrink));
+      lnacceptance -= logpdf_power(tau_new - x->tau, x->tau, opt_snl_lambda_expand);
+      lnacceptance += log(opt_prob_snl_shrink / (1 - opt_prob_snl_shrink));
     }
     else
     {
@@ -6523,10 +6522,10 @@ long stree_propose_stree_snl(stree_t ** streeptr,
       if (y->tau - target->parent->tau >= target->parent->tau)
         return 2;
 
-      lnacceptance += logpdf_power(y->tau - target->parent->tau, target->parent->tau, opt_lambda_expand);
+      lnacceptance += logpdf_power(y->tau - target->parent->tau, target->parent->tau, opt_snl_lambda_expand);
       lnacceptance += log(0.5);
-      lnacceptance -= logpdf_power(c->tau - tau_new, c->tau, opt_lambda_shrink);
-      lnacceptance += log((1 - opt_prop_shrink) / opt_prop_shrink);
+      lnacceptance -= logpdf_power(c->tau - tau_new, c->tau, opt_snl_lambda_shrink);
+      lnacceptance += log((1 - opt_prob_snl_shrink) / opt_prob_snl_shrink);
     }
   }
   else
@@ -6540,9 +6539,9 @@ long stree_propose_stree_snl(stree_t ** streeptr,
     if (dist_rev >= target->parent->tau)
       return 2;
 
-    lnacceptance += logpdf_power(dist_rev, target->parent->tau, opt_lambda_expand);
+    lnacceptance += logpdf_power(dist_rev, target->parent->tau, opt_snl_lambda_expand);
     assert(dist < x->tau);  /*** Ziheng ??? ***/
-    lnacceptance -= logpdf_power(dist, x->tau, opt_lambda_expand);
+    lnacceptance -= logpdf_power(dist, x->tau, opt_snl_lambda_expand);
   }
 
   tau_factor = tau_new / y->tau;

@@ -846,7 +846,6 @@ extern long opt_est_stree;
 extern long opt_est_theta;
 extern long opt_exp_randomize;
 extern long opt_finetune_reset;
-extern long opt_snl;
 extern long opt_help;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
@@ -903,15 +902,16 @@ extern double opt_finetune_tau;
 extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
-extern double opt_lambda_expand;
-extern double opt_lambda_shrink;
+extern double opt_snl_lambda_expand;
+extern double opt_snl_lambda_shrink;
 extern double opt_locusrate_mubar;      /* used only in simulation */
 extern double opt_mubar_alpha;
 extern double opt_mubar_beta;
 extern double opt_mui_alpha;
 extern double opt_phi_alpha;
 extern double opt_phi_beta;
-extern double opt_prop_shrink;
+extern double opt_prob_snl;            /* probability for SNL move, with 1 - opt_prob_snl for SPR */
+extern double opt_prob_snl_shrink;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
@@ -930,7 +930,7 @@ extern long * opt_sp_seqcount;
 extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
-extern char * opt_constfile;
+extern char * opt_constraintfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
@@ -1598,7 +1598,9 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     double pjump_rj,
                     long ft_round_spr,
-                    long pjump_slider,
+                    long ft_round_snl,
+                    long pjump_spr,
+                    long pjump_snl,
                     double mean_logl,
                     double * mean_tau,
                     double * mean_theta,
@@ -1626,7 +1628,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     double * pjump_rj,
                     long * ft_round_spr,
-                    long * pjump_slider,
+                    long * ft_round_snl,
+                    long * pjump_spr,
+                    long * pjump_snl,
                     double * mean_logl,
                     double ** mean_tau,
                     double ** mean_theta,
