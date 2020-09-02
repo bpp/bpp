@@ -218,23 +218,22 @@ static struct option long_options[] =
   {"tree",         required_argument, 0, 0 },  /* 14 */
   {"constraint",   required_argument, 0, 0 },  /* 15 */
   {"full",         no_argument,       0, 0 },  /* 16 */
-  {"shrink",       required_argument, 0, 0 },  /* 17 */
-  {"debug",        optional_argument, 0, 0 },  /* 18 */
-  {"debug_gage",   optional_argument, 0, 0 },  /* 19 */
-  {"debug_gspr",   optional_argument, 0, 0 },  /* 20 */
-  {"debug_mui",    optional_argument, 0, 0 },  /* 21 */
-  {"debug_hs",     optional_argument, 0, 0 },  /* 22 */
-  {"debug_mix",    optional_argument, 0, 0 },  /* 23 */
-  {"debug_rj",     optional_argument, 0, 0 },  /* 24 */
-  {"debug_theta",  optional_argument, 0, 0 },  /* 25 */
-  {"debug_tau",    optional_argument, 0, 0 },  /* 26 */
-  {"debug_sspr",   optional_argument, 0, 0 },  /* 27 */
-  {"debug_br",     optional_argument, 0, 0 },  /* 28 */
-  {"debug_snl",    optional_argument, 0, 0 },  /* 29 */
-  {"debug_parser", optional_argument, 0, 0 },  /* 30 */
-  {"debug_start",  required_argument, 0, 0 },  /* 31 */
-  {"debug_end",    required_argument, 0, 0 },  /* 32 */
-  {"debug_abort",  required_argument, 0, 0 },  /* 33 */
+  {"debug",        optional_argument, 0, 0 },  /* 17 */
+  {"debug_gage",   optional_argument, 0, 0 },  /* 18 */
+  {"debug_gspr",   optional_argument, 0, 0 },  /* 19 */
+  {"debug_mui",    optional_argument, 0, 0 },  /* 20 */
+  {"debug_hs",     optional_argument, 0, 0 },  /* 21 */
+  {"debug_mix",    optional_argument, 0, 0 },  /* 22 */
+  {"debug_rj",     optional_argument, 0, 0 },  /* 23 */
+  {"debug_theta",  optional_argument, 0, 0 },  /* 24 */
+  {"debug_tau",    optional_argument, 0, 0 },  /* 25 */
+  {"debug_sspr",   optional_argument, 0, 0 },  /* 26 */
+  {"debug_br",     optional_argument, 0, 0 },  /* 27 */
+  {"debug_snl",    optional_argument, 0, 0 },  /* 28 */
+  {"debug_parser", optional_argument, 0, 0 },  /* 29 */
+  {"debug_start",  required_argument, 0, 0 },  /* 30 */
+  {"debug_end",    required_argument, 0, 0 },  /* 31 */
+  {"debug_abort",  required_argument, 0, 0 },  /* 32 */
   { 0, 0, 0, 0 }
 };
 
@@ -571,96 +570,92 @@ void args_init(int argc, char ** argv)
         break;
 
       case 17:
-        opt_prob_snl_shrink = atof(optarg);
-        break;
-
-      case 18:
         opt_debug = 1;
         if (optarg)
           opt_debug = atol(optarg);
         break;
 
-      case 19:
+      case 18:
         opt_debug_gage = 1;
         if (optarg)
           opt_debug_gage = atol(optarg);
         break;
 
-      case 20:
+      case 19:
         opt_debug_gspr = 1;
         if (optarg)
           opt_debug_gspr = atol(optarg);
         break;
 
-      case 21:
+      case 20:
         opt_debug_mui = 1;
         if (optarg)
           opt_debug_mui = atol(optarg);
         break;
 
-      case 22:
+      case 21:
         opt_debug_hs = 1;
         if (optarg)
           opt_debug_hs = atol(optarg);
         break;
 
-      case 23:
+      case 22:
         opt_debug_mix = 1;
         if (optarg)
           opt_debug_mix = atol(optarg);
         break;
 
-      case 24:
+      case 23:
         opt_debug_rj = 1;
         if (optarg)
           opt_debug_rj = atol(optarg);
         break;
 
-      case 25:
+      case 24:
         opt_debug_theta = 1;
         if (optarg)
           opt_debug_theta = atol(optarg);
         break;
 
-      case 26:
+      case 25:
         opt_debug_tau = 1;
         if (optarg)
           opt_debug_tau = atol(optarg);
         break;
 
-      case 27:
+      case 26:
         opt_debug_sspr = 1;
         if (optarg)
           opt_debug_sspr = atol(optarg);
         break;
 
-      case 28:
+      case 27:
         opt_debug_br = 1;
         if (optarg)
           opt_debug_br = atol(optarg);
         break;
 
-      case 29:
+      case 28:
         opt_debug_snl = 1;
         if (optarg)
           opt_debug_snl = atol(optarg);
         break;
 
-      case 30:
+      case 29:
         opt_debug_parser = 1;
         if (optarg)
           opt_debug_parser = atol(optarg);
         break;
 
-      case 31:
+      case 30:
         opt_debug_start = atol(optarg);
         break;
 
-      case 32:
+      case 31:
         opt_debug_end = atol(optarg);
         break;
 
-      case 33:
+      case 32:
         opt_debug_abort = atol(optarg);
         break;
 

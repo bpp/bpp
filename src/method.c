@@ -2887,7 +2887,7 @@ void cmd_run()
   if (opt_debug_full)
     fprintf(stdout, "[DEBUG] Full recomputation of gene tree probabilities and "
                     "log-likelihood in SNL/SPR moves\n");
-  if (opt_prob_snl)
+  if (opt_prob_snl && opt_est_stree)
   {
     fprintf(stdout, "[DEBUG] Using SNL move\n");
     fprintf(stdout,
