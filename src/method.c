@@ -28,6 +28,7 @@
 //#define DEBUG_GTR
 
 //#define CHECK_LOGL
+//#define CHECK_LOGPR
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
@@ -267,9 +268,9 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   ap_width += enabled_prop_freqs ? 5 : 0;
   ap_width += enabled_prop_qrates ? 5 : 0;
   ap_width += enabled_prop_alpha ? 5 : 0;
-  ap_width += opt_method == METHOD_01 ? 7 : 0;
+  ap_width += opt_method == METHOD_01 ? 7*(1+!!opt_prob_snl) : 0;
   ap_width += opt_method == METHOD_10 ? 7 : 0;
-  ap_width += opt_method == METHOD_11 ? 14 : 0;
+  ap_width += opt_method == METHOD_11 ? 7*(2+!!opt_prob_snl) : 0;
   ap_width += 1;
   
   if (opt_method == METHOD_10)
@@ -283,7 +284,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   long titlelen = strlen(ap_title);
   long prefix = (ap_width - titlelen)/2;
   long suffix = ap_width - titlelen  - prefix;
-  fprintf(fp,"           |");
+  fprintf(fp,"     |");
   for (i = 0; i < prefix; ++i)
     fprintf(fp," ");
   fprintf(fp,"%s",ap_title);
@@ -343,7 +344,10 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   if (opt_method == METHOD_01)
   {
     fprintf(fp, "   Sspr");  linewidth += 7;
-    fprintf(fp,  "  Ssnl");  linewidth += 6;
+    if (opt_prob_snl)
+    {
+      fprintf(fp, "   Ssnl");  linewidth += 6;
+    }
   }
   else if (opt_method == METHOD_10)
   {
@@ -352,7 +356,10 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   else if (opt_method == METHOD_11)
   {
     fprintf(fp, "   Sspr");  linewidth += 7;
-    fprintf(fp,  "  Ssnl");  linewidth += 6;
+    if (opt_prob_snl)
+    {
+      fprintf(fp, "   Ssnl");  linewidth += 6;
+    }
     fprintf(fp, "     rj");  linewidth += 7;
   }
   fprintf(fp," |");         linewidth += 2;
@@ -378,12 +385,13 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
   }
 
   if (opt_est_theta)
+  {
     for (i = 0; i < mean_theta_count; ++i)
     {
       fprintf(fp," mthet%ld", i+1);         linewidth += 7;
     }
-
-  fprintf(fp," ");          linewidth += 1;
+    fprintf(fp," ");          linewidth += 1;
+  }
   for (i = 0; i < mean_tau_count; ++i)
   {
     fprintf(fp,"  mtau%ld", i+1);          linewidth += 7;
@@ -391,7 +399,7 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
 
   if (opt_msci)
   {
-    fprintf(fp," mphi  ");  linewidth += 7;
+    fprintf(fp,"  mphi ");  linewidth += 7;
   }
 
   fprintf(fp," ");          linewidth += 1;
@@ -850,14 +858,16 @@ static void status_print_pjump(FILE * fp,
   if (opt_method == METHOD_01)
   {
     fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
-    fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
+    if (opt_prob_snl)
+      fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
   }
   else if (opt_method == METHOD_10)
     fprintf(fp," %5.4f", mean_pjump_rj);
   else if (opt_method == METHOD_11)
   {
     fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
-    fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
+    if (opt_prob_snl)
+      fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
     fprintf(fp," %5.4f", mean_pjump_rj);
   }
   fprintf(fp, "  ");
@@ -2255,6 +2265,32 @@ static FILE * init(stree_t ** ptr_stree,
 
   stree->nui_sum = 0;
 
+  if (opt_msci && !opt_est_theta)
+  {
+    for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+      if (x->hybrid)
+      {
+        x->notheta_old_phi_contrib = (double *)xcalloc((size_t)opt_locus_count,
+                                                       sizeof(double));
+        x->notheta_phi_contrib = (double *)xcalloc((size_t)opt_locus_count,
+                                                   sizeof(double));
+      }
+      else
+        x->notheta_phi_contrib = x->notheta_old_phi_contrib = NULL;
+    }
+  }
+  else
+  {
+    for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+      x->notheta_old_phi_contrib = NULL;
+      x->notheta_phi_contrib = NULL;
+    }
+  }
+
   for (i = 0, pindex=0; i < msa_count; ++i)
   {
     int states = 0;
@@ -2433,7 +2469,7 @@ static FILE * init(stree_t ** ptr_stree,
     }
     else
     {
-      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
         logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],
                                                   locus[i]->heredity[0],
                                                   i,
@@ -2443,7 +2479,7 @@ static FILE * init(stree_t ** ptr_stree,
   if (!opt_est_theta)
   {
     logpr_sum = 0;
-    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+    for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
       logpr_sum += stree->nodes[j]->notheta_logpr_contrib;
     stree->notheta_logpr += logpr_sum;
     stree->notheta_old_logpr = 0;
@@ -2987,7 +3023,7 @@ void cmd_run()
       if (opt_method == METHOD_11)      /* species tree inference + delimitation */
         memset(pspecies,0,stree->tip_count*sizeof(double));
     }
-    
+
     ++ft_round;
 
     /* propose delimitation through merging/splitting of nodes */
@@ -3037,10 +3073,16 @@ void cmd_run()
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "SSPR");
       #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "SSPR");
+      #endif
     }
 
     /* perform proposals sequentially */   
 
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "GAGE-1");
+      #endif
 
     /* propose gene tree ages */
     if (opt_threads == 1)
@@ -3056,6 +3098,9 @@ void cmd_run()
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "GAGE");
       #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "GAGE");
+      #endif
 
     /* propose gene tree topologies using SPR */
     if (opt_threads == 1)
@@ -3070,7 +3115,10 @@ void cmd_run()
                                   (double)ft_round;
 
       #ifdef CHECK_LOGL
-      check_logl(stree, gtree, locus, i, "SNL");
+      check_logl(stree, gtree, locus, i, "GSPR");
+      #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "GSPR");
       #endif
 
     /* propose population sizes on species tree */
@@ -3081,6 +3129,9 @@ void cmd_run()
                                     (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
+      #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "THETA");
       #endif
     }
 
@@ -3093,6 +3144,9 @@ void cmd_run()
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "TAU");
       #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "TAU");
+      #endif
     }
 
     /* mixing step */
@@ -3101,6 +3155,9 @@ void cmd_run()
                                 (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "MIXING");
+      #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "MIXING");
       #endif
 
     if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -3112,6 +3169,9 @@ void cmd_run()
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "LRHT");
       #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "LRHT");
+      #endif
     }
 
     /* phi proposal */
@@ -3120,6 +3180,9 @@ void cmd_run()
       ratio = stree_propose_phi(stree,gtree);
       pjump[BPP_MOVE_PHI_INDEX] = (pjump[BPP_MOVE_PHI_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "PHI");
+      #endif
     }
 
     if (enabled_prop_freqs)
@@ -3181,6 +3244,9 @@ void cmd_run()
 
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "MUI");
+      #endif
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "MUI");
       #endif
 
       if (opt_est_mubar)

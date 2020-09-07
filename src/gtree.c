@@ -1964,6 +1964,12 @@ void logprob_revert_notheta(snode_t * snode, long msa_index)
   snode->t2h[msa_index] = snode->old_t2h[msa_index];
   snode->t2h_sum += snode->t2h[msa_index];
   snode->notheta_logpr_contrib = snode->notheta_old_logpr_contrib;
+  if (opt_msci && !opt_est_theta && snode->hybrid)
+  {
+    snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+    snode->notheta_phi_contrib[msa_index] = snode->notheta_old_phi_contrib[msa_index];
+    snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
+  }
 }
 
 double gtree_update_logprob_contrib(snode_t * snode,
@@ -2026,10 +2032,26 @@ double gtree_update_logprob_contrib(snode_t * snode,
 
     if (opt_msci && snode->hybrid)
     {
-      if (node_is_bidirection(snode) && !node_is_mirror(snode))
-        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
+      if (opt_est_theta)
+      {
+        if (node_is_bidirection(snode) && !node_is_mirror(snode))
+          logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
+        else
+          logpr += snode->seqin_count[msa_index] * log(snode->hphi);
+      }
       else
-        logpr += snode->seqin_count[msa_index] * log(snode->hphi);
+      {
+        double tmp = 0;
+        snode->notheta_old_phi_contrib[msa_index] = snode->notheta_phi_contrib[msa_index];
+        snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+        if (node_is_bidirection(snode) && !node_is_mirror(snode))
+          tmp = (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
+        else
+          tmp = snode->seqin_count[msa_index] * log(snode->hphi);
+        snode->notheta_phi_contrib[msa_index] = tmp;
+        snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
+        logpr += snode->hphi_sum;
+      }
     }
 
     /* now distinguish between estimating theta and analytical computation */

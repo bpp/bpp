@@ -24,6 +24,206 @@
 #define SHRINK 1
 #define EXPAND 2
 
+static void debug_validate_logpg_notheta(stree_t * stree,
+                                         gtree_t ** gtree,
+                                         locus_t ** locus,
+                                         const char * move)
+{
+  size_t hnodes_total;
+  long i,j;
+  double logpr, old_logpr;
+  const long thread_index = 0;
+
+  hnodes_total = (size_t)(2*stree->hybrid_count);
+  old_logpr = stree->notheta_logpr;
+  logpr = 0;
+
+  /* temporary storage */
+  double * phi_contrib = (double *)xmalloc(hnodes_total *
+                                           (size_t)opt_locus_count *
+                                           sizeof(double));
+  double * old_phi_contrib = (double *)xmalloc(hnodes_total *
+                                               (size_t)opt_locus_count *
+                                               sizeof(double));
+  double * phi_sum = (double *)xmalloc(hnodes_total * sizeof(double));
+
+  double * phi_tmp = phi_contrib;
+  double * old_phi_tmp = old_phi_contrib;
+  double * phi_sum_tmp = phi_sum;
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    /* copy old values from mirror hybrid node */
+    memcpy(phi_tmp, x->notheta_phi_contrib, opt_locus_count * sizeof(double));
+    memcpy(old_phi_tmp,
+           x->notheta_old_phi_contrib,
+           opt_locus_count * sizeof(double));
+    *phi_sum_tmp = x->hphi_sum;
+
+    /* zero-out the arrays */
+    memset(x->notheta_phi_contrib,0,opt_locus_count*sizeof(double));
+    memset(x->notheta_old_phi_contrib,0,opt_locus_count*sizeof(double));
+    x->hphi_sum = 0;
+
+    /* move storage pointers */
+    phi_tmp += opt_locus_count;
+    old_phi_tmp += opt_locus_count;
+    phi_sum_tmp++;
+
+    x = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
+
+    /* copy old values from hybrid node */
+    memcpy(phi_tmp, x->notheta_phi_contrib, opt_locus_count * sizeof(double));
+    memcpy(old_phi_tmp,
+           x->notheta_old_phi_contrib,
+           opt_locus_count * sizeof(double));
+    *phi_sum_tmp = x->hphi_sum;
+
+    /* zero-out the arrays */
+    memset(x->notheta_phi_contrib,0,opt_locus_count*sizeof(double));
+    memset(x->notheta_old_phi_contrib,0,opt_locus_count*sizeof(double));
+    x->hphi_sum = 0;
+
+    /* move storage pointers */
+    phi_tmp += opt_locus_count;
+    old_phi_tmp += opt_locus_count;
+    phi_sum_tmp++;
+  }
+
+
+  /* recompute population contributions */
+  for (i = 0; i < opt_locus_count; ++i)
+    logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+
+  /* add constant part */
+  logpr += stree->notheta_hfactor+stree->notheta_sfactor;
+
+  phi_sum_tmp = phi_sum;
+  phi_tmp = phi_contrib;
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    /* mirror hybrid node */
+    snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    /* validate phi contributions */
+    for (j = 0; j < opt_locus_count; ++j)
+      if (fabs(x->notheta_phi_contrib[j] - phi_tmp[j]) > 1e-9)
+        fatal("[FATAL-%ld] move: %s hybrid: %d mirror: YES    "
+              "phi_contrib[%ld]: %f  old_contrib[%ld]: %f    "
+              "seqin_count: %d phi: %f\n",
+              opt_debug_counter,
+              move,
+              i,
+              j,
+              x->notheta_phi_contrib[j],
+              j,
+              phi_tmp[j],
+              x->seqin_count[j],
+              x->hphi);
+
+
+    if (fabs(x->hphi_sum - *phi_sum_tmp) > 1e-9)
+    {
+      fatal("[FATAL-%ld] move: %s hybrid: %d mirror: YES    "
+            "hphi_sum (correct): %f  old hphi_sum (wrong): %f\n",
+            opt_debug_counter,
+            move,
+            x->hphi_sum,
+            *phi_sum_tmp);
+    }
+    ++phi_sum_tmp;
+    phi_tmp += opt_locus_count;
+
+    /* normal hybrid node */
+    x = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
+
+    /* validate phi contributions */
+    for (j = 0; j < opt_locus_count; ++j)
+      if (fabs(x->notheta_phi_contrib[j] - phi_tmp[j]) > 1e-9)
+        fatal("[FATAL-%ld] move: %s hybrid: %d mirror: NO    "
+              "phi_contrib[%ld]: %f  old_contrib[%ld]: %f    "
+              "seqin_count: %d phi: %f\n",
+              opt_debug_counter,
+              move,
+              i,
+              j,
+              x->notheta_phi_contrib[j],
+              j,
+              phi_tmp[j],
+              x->seqin_count[j],
+              x->hphi);
+
+    if (fabs(x->hphi_sum - *phi_sum_tmp) > 1e-9)
+    {
+      fatal("[FATAL-%ld] move: %s hybrid: %d mirror: YES    "
+            "hphi_sum (correct): %f  old hphi_sum (wrong): %f\n",
+            opt_debug_counter,
+            move,
+            x->hphi_sum,
+            *phi_sum_tmp);
+    }
+    ++phi_sum_tmp;
+    phi_tmp += opt_locus_count;
+  }
+
+  if (fabs(logpr - old_logpr) > 1e-5)
+    fatal("[FATAL-%ld] move: %s logpr (correct): %f  old logpr (wrong): %f\n",
+          opt_debug_counter, move, logpr, old_logpr);
+
+  /* restore */
+  phi_tmp = phi_contrib;
+  old_phi_tmp = old_phi_contrib;
+  phi_sum_tmp = phi_sum;
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    /* normal hybrid node */
+    snode_t * x = stree->nodes[stree->tip_count+stree->inner_count+i];
+
+    /* restore elements */
+    memcpy(x->notheta_phi_contrib, phi_tmp, opt_locus_count * sizeof(double));
+    memcpy(x->notheta_old_phi_contrib,
+           old_phi_tmp,
+           opt_locus_count * sizeof(double));
+    x->hphi_sum = *phi_sum_tmp;
+
+    /* move pointers */
+    phi_tmp += opt_locus_count;
+    old_phi_tmp += opt_locus_count;
+    phi_sum_tmp++;
+
+    /* mirror hybrid node */
+    x = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
+
+    /* restore elements */
+    memcpy(x->notheta_phi_contrib, phi_tmp, opt_locus_count * sizeof(double));
+    memcpy(x->notheta_old_phi_contrib,
+           old_phi_tmp,
+           opt_locus_count * sizeof(double));
+    x->hphi_sum = *phi_sum_tmp;
+
+    /* move pointers */
+    phi_tmp += opt_locus_count;
+    old_phi_tmp += opt_locus_count;
+    phi_sum_tmp++;
+  }
+
+  free(phi_contrib);
+  free(old_phi_contrib);
+  free(phi_sum);
+}
+
+void debug_validate_logpg(stree_t * stree,
+                          gtree_t ** gtree,
+                          locus_t ** locus,
+                          const char * move)
+{
+  if (!opt_est_theta)
+    debug_validate_logpg_notheta(stree,gtree,locus,move);
+  else
+    fatal("Testing of logPG with theta not implemented...");
+}
+
 void debug_snl_stage1(stree_t * stree,
                       gtree_t ** gtree_list,
                       snode_t * y,

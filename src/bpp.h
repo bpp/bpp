@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 3
-#define VERSION_PATCH 3
+#define VERSION_PATCH 4
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -403,9 +403,12 @@ typedef struct snode_s
   double * t2h;                     /* per-locus precomputed t2h */
   double * old_t2h;                 /* storage space for rollback */
   double t2h_sum;                   /* t2h sum for all loci */
+  double hphi_sum;                  /* hphi sum for all loci */
   long event_count_sum;             /* sum of coalencent events count */
   double notheta_logpr_contrib;     /* MSC density contribution from pop */
   double notheta_old_logpr_contrib; /* storage space for rollback */
+  double * notheta_phi_contrib;     /* per-locus phi contribution for hybrid */
+  double * notheta_old_phi_contrib; /* per-locus phi contribution for hybrid */
 
   /* constraints */
   long constraint;
@@ -2263,6 +2266,10 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_validate_logpg(stree_t * stree,
+                          gtree_t ** gtree,
+                          locus_t ** locus,
+                          const char * move);
 void debug_snl_stage1(stree_t * stree,
                       gtree_t ** gtree_list,
                       snode_t * y,

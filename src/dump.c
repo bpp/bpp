@@ -526,6 +526,20 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       DUMP(&(stree->nodes[i]->event_count_sum),1,fp);
       DUMP(&(stree->nodes[i]->notheta_logpr_contrib),1,fp);
     }
+
+    if (opt_msci)
+    {
+      for (i = 0; i < stree->hybrid_count; ++i)
+      {
+        unsigned int index = stree->tip_count+stree->inner_count;
+        snode_t * x = stree->nodes[index+i];
+
+        DUMP(x->notheta_phi_contrib, opt_locus_count, fp);
+        DUMP(x->hybrid->notheta_phi_contrib, opt_locus_count, fp);
+        DUMP(&(x->hphi_sum),1,fp);
+        DUMP(&(x->hybrid->hphi_sum),1,fp);
+      }
+    }
   }
 
   DUMP(&(stree->root_age),1,fp);

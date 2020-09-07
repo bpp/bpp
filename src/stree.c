@@ -1168,6 +1168,8 @@ static int propose_phi(stree_t * stree,
       stree->notheta_logpr -= snode->notheta_logpr_contrib;
       stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
 
+      snode->notheta_logpr_contrib -= snode->hphi_sum;
+      snode->hybrid->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
       /* compute new contributions */
       for (i = 0; i < stree->locus_count; ++i)
       {
@@ -1177,11 +1179,18 @@ static int propose_phi(stree_t * stree,
         if (node_is_bidirection(snode))
           sequp_count -= snode->right->seqin_count[i];
 
-        snode->notheta_logpr_contrib += sequp_count*lnphiratio;
-        snode->hybrid->notheta_logpr_contrib += snode->hybrid->seqin_count[i] * 
+        snode->hphi_sum -= snode->notheta_phi_contrib[i];
+        snode->hybrid->hphi_sum -= snode->hybrid->notheta_phi_contrib[i];
+
+        snode->notheta_phi_contrib[i] += sequp_count*lnphiratio;
+        snode->hybrid->notheta_phi_contrib[i] += snode->hybrid->seqin_count[i] *
                                                 lnphiratio1;
-        
+
+        snode->hphi_sum += snode->notheta_phi_contrib[i];
+        snode->hybrid->hphi_sum += snode->hybrid->notheta_phi_contrib[i];
       }
+      snode->notheta_logpr_contrib += snode->hphi_sum;
+      snode->hybrid->notheta_logpr_contrib += snode->hybrid->hphi_sum;
 
       /* add new contributions to total log-density */
       stree->notheta_logpr += snode->notheta_logpr_contrib;

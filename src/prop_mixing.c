@@ -83,7 +83,7 @@ void prop_mixing_update_gtrees(locus_t ** locus,
       {
         /* TODO: 28.1.2019 */
         gt->nodes[j]->pmatrix_index = SWAP_PMAT_INDEX(gt->edge_count,gt->nodes[j]->pmatrix_index);
-        gt->nodes[j]->length = gt->nodes[j]->parent->time - gt->nodes[j]->time;
+        /* gt->nodes[j]->length = gt->nodes[j]->parent->time - gt->nodes[j]->time; */
       }
     }
 
@@ -137,7 +137,7 @@ void prop_mixing_update_gtrees(locus_t ** locus,
              new_prior_rates < gtree[i]->old_lnprior_rates + PLL_MISC_EPSILON);
       #endif
     }
-        
+
 
     if (opt_est_theta)
       lnacceptance += logl - gt->logl + logpr - gt->logpr;

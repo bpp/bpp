@@ -783,6 +783,9 @@ static void load_chk_section_1(FILE * fp,
 
     node->t2h = NULL;
     node->old_t2h = NULL;
+    node->hphi_sum = 0;
+    node->notheta_phi_contrib = NULL;
+    node->notheta_old_phi_contrib = NULL;
     if (!opt_est_theta)
     {
       node->t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
@@ -1057,6 +1060,31 @@ void load_chk_section_2(FILE * fp)
         fatal("Cannot read MSC density contribution for node");
 
       stree->nodes[i]->notheta_old_logpr_contrib = 0;
+    }
+    if (opt_msci)
+    {
+      for (i = 0; i < stree->hybrid_count; ++i)
+      {
+        unsigned int index = stree->tip_count+stree->inner_count;
+        snode_t * x = stree->nodes[index+i];
+
+        x->notheta_phi_contrib = (double *)xmalloc((size_t)opt_locus_count *
+                                                   sizeof(double));
+        x->notheta_old_phi_contrib = (double *)xcalloc((size_t)opt_locus_count,
+                                                       sizeof(double));
+        x->hybrid->notheta_phi_contrib = (double *)xmalloc((size_t)opt_locus_count *
+                                                           sizeof(double));
+        x->hybrid->notheta_old_phi_contrib = (double *)xcalloc((size_t)opt_locus_count,
+                                                               sizeof(double));
+        if (!LOAD(x->notheta_phi_contrib, opt_locus_count, fp))
+          fatal("Cannot read per-locus phi contributions");
+        if (!LOAD(x->hybrid->notheta_phi_contrib, opt_locus_count, fp))
+          fatal("Cannot read per-locus phi contributions");
+        if (!LOAD(&(x->hphi_sum),1,fp))
+          fatal("Cannot read hphi sum");
+        if (!LOAD(&(x->hybrid->hphi_sum),1,fp))
+          fatal("Cannot read hphi sum");
+      }
     }
   }
 

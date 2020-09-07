@@ -433,8 +433,6 @@ l_unwind:
     fatal("opt_snl_lambda_expand should be between 0 and 1.");
   if (opt_snl_lambda_shrink < 0 || opt_snl_lambda_shrink>1)
     fatal("opt_snl_lambda_shrink should be between 0 and 1.");
-  opt_snl_lambda_expand = log(opt_snl_lambda_expand) / log(1 - opt_snl_lambda_expand);
-  opt_snl_lambda_shrink = log(opt_snl_lambda_shrink) / log(1 - opt_snl_lambda_shrink);
   free(s);
   return ret;
 }
@@ -2582,6 +2580,9 @@ void load_cfile()
     opt_method = METHOD_01;
   else
     opt_method = METHOD_11;
+
+  opt_snl_lambda_expand = log(opt_snl_lambda_expand) / log(1 - opt_snl_lambda_expand);
+  opt_snl_lambda_shrink = log(opt_snl_lambda_shrink) / log(1 - opt_snl_lambda_shrink);
 
   update_locusrate_information();
   check_validity();
