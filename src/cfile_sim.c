@@ -1236,6 +1236,13 @@ void load_cfile_sim()
                 BPP_DNA_MODEL_JC69, BPP_DNA_MODEL_GTR, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"phase",5))
+      {
+        if (!parse_diploid(value))
+          fatal("Option %s expects values 0 or 1 for each species (line %ld)",
+                token,line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 6)
     {
@@ -1253,13 +1260,6 @@ void load_cfile_sim()
       {
         if (!get_string(value, &opt_msafile))
           fatal("Option '%s' expects a string (line %ld)", token, line_count);
-        valid = 1;
-      }
-      else if (!strncasecmp(token,"diploid",7))
-      {
-        if (!parse_diploid(value))
-          fatal("Option %s expects values 0 or 1 for each species (line %ld)",
-                token,line_count);
         valid = 1;
       }
     }
