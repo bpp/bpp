@@ -196,6 +196,8 @@ void threads_init(locus_t ** locus)
   long t;
   long patterns;
 
+  if (opt_threads > opt_locus_count)
+    fatal("The number of threads cannot be greater than the number of loci");
   assert(opt_threads <= opt_locus_count);
 
 #if (defined(__linux__) && !defined(DISABLE_COREPIN))
