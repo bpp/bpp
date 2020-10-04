@@ -10,66 +10,62 @@ SRC_SSE=core_likelihood_sse.c core_partials_sse.c
 PROG = bpp.exe
 
 OBJ_LIBPLL = \
-  core_likelihood.obj \
-  core_partials.obj \
-  core_pmatrix.obj \
-  hardware.obj \
+	core_likelihood.obj \
+	core_partials.obj \
+	core_pmatrix.obj \
+	hardware.obj \
 
 SRC_LIBPLL = \
-  core_likelihood.c \
-  core_partials.c \
-  core_pmatrix.c \
-  hardware.c
+	core_likelihood.c \
+	core_partials.c \
+	core_pmatrix.c \
+	hardware.c
 
 OBJ_BPP = \
-  arch.obj \
-  allfixed.obj \
-  bpp.obj \
-  cfile.obj \
-  compress.obj \
-  delimit.obj \
-  dlist.obj \
-  dump.obj \
-  gtree.obj \
-  hash.obj \
-  list.obj \
-  locus.obj \
-  mapping.obj \
-  maps.obj \
-  method.obj \
-  msa.obj \
-  output.obj \
-  load.obj \
-  phylip.obj \
-  prop_mixing.obj \
-  prop_rj.obj \
-  random.obj \
-  rtree.obj \
-  stree.obj \
-  summary.obj \
-  util.obj \
-  revolutionary.obj \
-  diploid.obj \
-  summary11.obj \
-  simulate.obj \
-  cfile_sim.obj \
-  gamma.obj \
-  prop_gamma.obj \
-  threads.obj \
-  treeparse.obj \
-  parsemap.obj \
-  msci_gen.obj \
-  constraint.obj \
-  debug.obj
+	arch.obj \
+	allfixed.obj \
+	bpp.obj \
+	cfile.obj \
+	compress.obj \
+	delimit.obj \
+	dlist.obj \
+	dump.obj \
+	gtree.obj \
+	hash.obj \
+	list.obj \
+	locus.obj \
+	mapping.obj \
+	maps.obj \
+	method.obj \
+	msa.obj \
+	output.obj \
+	load.obj \
+	phylip.obj \
+	prop_mixing.obj \
+	prop_rj.obj \
+	random.obj \
+	rtree.obj \
+	stree.obj \
+	summary.obj \
+	util.obj \
+	revolutionary.obj \
+	diploid.obj \
+	summary11.obj \
+	simulate.obj \
+	cfile_sim.obj \
+	gamma.obj \
+	prop_gamma.obj \
+	threads.obj \
+	treeparse.obj \
+	parsemap.obj \
+	msci_gen.obj \
+	constraint.obj \
+	debug.obj
 
 all: $(PROG)
 
 $(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP) 
 	link /out:$@ $** libpthreadvc3.lib
-
-.c.obj::
-	@echo Compiling $<
-	cl -c -DYY_NO_UNISTD_H -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox $<
 
 $(OBJ_AVX2): $(SRC_AVX2)
 	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:AVX2 $**
@@ -79,3 +75,6 @@ $(OBJ_AVX): $(SRC_AVX)
 
 $(OBJ_SSE): $(SRC_SSE)
 	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:SSE2 $**
+
+clean:
+	del *.obj $(PROG)

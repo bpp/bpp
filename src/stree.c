@@ -179,26 +179,16 @@ void print_network_table(stree_t * stree)
     {
       printf("   Mirrored hybridization node");
       assert(stree->nodes[i]->hybrid);
-
       if (stree->nodes[i]->hybrid->label)
-        printf(" [Hybrid = %s (%d)]",
-               stree->nodes[i]->hybrid->label,
-               stree->nodes[i]->hybrid->node_index);
+        printf(" [Hybrid = %s (%d)]", stree->nodes[i]->hybrid->label, stree->nodes[i]->hybrid->node_index);
     }
 
     if (stree->nodes[i]->hybrid)
     {
-      printf("   [tau = %ld, phi = %f, prop_tau = %d]",
-             stree->nodes[i]->htau,
-             stree->nodes[i]->hphi,
-             stree->nodes[i]->prop_tau);
+      printf("   [tau = %ld, phi = %f, prop_tau = %d]", stree->nodes[i]->htau, stree->nodes[i]->hphi, stree->nodes[i]->prop_tau);
       if (i < stree->tip_count+stree->inner_count)
-      {
-        printf("  phi_%s : %s -> %s", stree->nodes[i]->label,
-               stree->nodes[i]->parent->label, stree->nodes[i]->label);
-      }
+        printf("  phi_%s : %s -> %s", stree->nodes[i]->label, stree->nodes[i]->parent->label, stree->nodes[i]->label);
     }
-
     printf("\n");
   }
   printf("\n");

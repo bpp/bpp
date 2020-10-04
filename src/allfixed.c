@@ -313,19 +313,15 @@ static char * cb_attributes(const snode_t * node)
     if (node->parent)
     {
       nodepinfo_t * pinfo = (nodepinfo_t *)(node->parent->data);
-
       if (opt_est_theta)
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f",
-                  info->lo, info->hi, info->theta, pinfo->age - info->age);
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f", info->lo, info->hi, info->theta, pinfo->age - info->age);
       else
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]: %f",
-                  info->lo, info->hi, pinfo->age - info->age);
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]: %f", info->lo, info->hi, pinfo->age - info->age);
     }
     else
     {
       if (opt_est_theta)
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]",
-                  info->lo, info->hi, info->theta);
+        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]", info->lo, info->hi, info->theta);
       else
         xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]", info->lo, info->hi);
     }
@@ -340,49 +336,94 @@ static char * cb_attributes(const snode_t * node)
   return s;
 }
 
-static void write_figtree(stree_t * stree,
-                          double * mean,
-                          double * hpd025,
-                          double * hpd975)
-{
-  long i;
-  FILE * fp_tree = NULL;
-  
-  fp_tree = xopen("FigTree.tre","w");
+/* Ziheng 2020-10-2 
+*  (i) Space for stree->nodes[i]->data is allocated for for snodes_total, including mirror nodes.
+*      Where is the space freed?
+*  (ii) I copied mean values for tau and theta into stree->nodes, so the old values are overwritten.
+*       Since this is after the mcmc sample is summarized, it is at the end of the run, 
+*       so stree probably does not have useful tau and theta values.
+*/
 
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+long opt_msci_faketree_binarize;
+
+static void write_figtree(stree_t * stree, double * mean, double * hpd025, double * hpd975)
+{
+  long i, theta_count = 0, tau_count = 0;
+  FILE * fp_tree = NULL;
+  unsigned int snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
+
+  fp_tree = xopen(opt_msci ? "FakeTree.tre" : "FigTree.tre", "w");
+
+  for (i = 0; i < snodes_total; ++i)
     stree->nodes[i]->data = (void *)xmalloc(sizeof(nodepinfo_t));
 
-  long theta_count = 0;
+  /* copy theta */
   if (opt_est_theta)
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (i = 0; i < snodes_total; ++i)
     {
-      nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
+      nodepinfo_t* info = (nodepinfo_t*)(stree->nodes[i]->data);
       if (stree->nodes[i]->theta >= 0)
+      {
         info->theta = mean[theta_count++];
+        /* Ziheng 2020-10-2 */
+        stree->nodes[i]->theta = info->theta;
+      }
       else
         info->theta = -1;
     }
-
-
   for (i = 0; i < stree->tip_count; ++i)
   {
     nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
     info->lo = info->hi = info->age = 0;
   }
 
-  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+  /* copy tau */
+  for (i = stree->tip_count; i < snodes_total; ++i)
     if (stree->nodes[i]->tau > 0)
     {
-      nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
-      info->lo  = hpd025[theta_count + i - stree->tip_count];
-      info->hi  = hpd975[theta_count + i - stree->tip_count];
-      info->age = mean[theta_count + i - stree->tip_count];
+      if (opt_msci && i >= stree->tip_count + stree->inner_count)  /* hybrid mirror node */
+        stree->nodes[i]->tau = stree->nodes[i]->hybrid->tau;
+      else 
+      {
+        nodepinfo_t* info = (nodepinfo_t*)(stree->nodes[i]->data);
+        info->lo = hpd025[theta_count - stree->tip_count + i];
+        info->hi = hpd975[theta_count - stree->tip_count + i];
+        info->age = mean[theta_count - stree->tip_count + i];
+        stree->nodes[i]->tau = info->age;
+        tau_count++;
+      }
     }
     else
       assert(0);
 
-  char * newick = stree_export_newick(stree->root,cb_attributes);
+  /* copy phi for msci model */
+  for (i = 0; i < stree->hybrid_count; i++)
+  {
+    snode_t *mnode = stree->nodes[stree->tip_count + stree->inner_count + i];
+    mnode->hphi = 1 - mean[theta_count + tau_count + i];
+    mnode->hybrid->hphi = mean[theta_count + tau_count + i];
+  }
+
+  /*** Ziheng 2020-10-2 ***/
+  for (i = 0; i < snodes_total; ++i) {
+    printf("snode age theta: %6d %6s %9.6f %9.6f\n", i, stree->nodes[i]->label, stree->nodes[i]->tau, stree->nodes[i]->theta);
+  }
+  char* newick;
+  if(!opt_msci)
+    newick = stree_export_newick(stree->root, cb_attributes);
+  else {
+    opt_msci_faketree_binarize = 0;
+    newick = msci_export_newick(stree->root, NULL);
+    printf("\n%s\n", newick);
+    free(newick);
+    newick = msci_export_newick(stree->root, cb_attributes);
+    printf("\n%s\n", newick);
+    free(newick);
+
+    opt_msci_faketree_binarize = 1;
+    newick = msci_export_newick(stree->root, cb_attributes);
+    opt_msci_faketree_binarize = 0;
+  }
 
   fprintf(fp_tree,
           "#NEXUS\n"
@@ -393,9 +434,7 @@ static void write_figtree(stree_t * stree,
           "In FigTree, choose 95%%HPD for Node Bars and label for Node Labels]\n",
           newick);
 
-
   free(newick);
-
   fclose(fp_tree);
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -404,23 +443,21 @@ static void write_figtree(stree_t * stree,
   return;
 }
 
+
 void allfixed_summary(FILE * fp_out, stree_t * stree)
 {
-  long i,j,count;
+  long i, j, count, theta_count = 0;
   long sample_num;
   long rc = 0;
   FILE * fp;
-  unsigned int snodes_total;
+  unsigned int snodes_total = stree->tip_count + stree->inner_count;
   
   if (opt_msci)
-    snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
-  else
-    snodes_total = stree->tip_count + stree->inner_count;
+    snodes_total += stree->hybrid_count;
 
   /* TODO: pretty-fy output */
 
   fp = xopen(opt_mcmcfile,"r");
-
   /* skip line containing header */
   getnextline(fp);
   assert(strlen(line) > 4);
@@ -434,7 +471,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     for (i = 0; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0)
         col_count++;
-
+  theta_count = col_count;
   /* compute number of tau parameters */
   for (i = 0; i < stree->inner_count; ++i)
     if (stree->nodes[stree->tip_count+i]->tau)
@@ -535,7 +572,6 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(stdout, "          %s\n", header+4);
   fprintf(fp_out, "          %s\n", header+4);
   free(header);
-
 
   /* compute means */
   fprintf(stdout, "mean    ");
@@ -703,15 +739,11 @@ l_unwind:
   if (rc && stree->tip_count > 1)
   {
     /* write figtree file */
+    write_figtree(stree, mean, hpd025, hpd975);
     if (!opt_msci)
-    {
-      write_figtree(stree,mean,hpd025,hpd975);
       fprintf(stdout, "FigTree tree is in FigTree.tre\n");
-    }
-    else
-    {
-      fprintf(stderr, "FigTree tree cannot be printed for networks yet\n");
-    }
+    else 
+      fprintf(stdout, "FigTree tree is in FakeTree.tre\n");
   }
 
   free(mean);
@@ -719,11 +751,8 @@ l_unwind:
   free(hpd975);
   free(tint);
   free(stdev);
-
   fclose(fp);
 
   if (!rc)
     fatal("Error while reading/summarizing %s", opt_mcmcfile);
-
 }
-

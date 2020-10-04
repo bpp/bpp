@@ -307,15 +307,12 @@ static char * stree_export_newick_recursive(const snode_t * root,
     free(subtree2);
   }
   if (size_alloced < 0)
-  {
     fatal("Memory allocation during newick export failed");
-  }
 
   return newick;
 }
 
-char * stree_export_newick(const snode_t * root,
-                           char * (*cb_serialize)(const snode_t *))
+char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *))
 {
   char * newick;
   int size_alloced;
@@ -329,9 +326,7 @@ char * stree_export_newick(const snode_t * root,
       size_alloced = strlen(newick);
     }
     else
-    {
       size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
-    }
   }
   else
   {
@@ -346,21 +341,12 @@ char * stree_export_newick(const snode_t * root,
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = xasprintf(&newick,
-                               "(%s, %s)%s;",
-                               subtree1,
-                               subtree2,
-                               temp);
+      size_alloced = xasprintf(&newick, "(%s, %s)%s;", subtree1, subtree2, temp);
       free(temp);
     }
     else
     {
-      size_alloced = xasprintf(&newick,
-                               "(%s, %s)%s:%f;",
-                               subtree1,
-                               subtree2,
-                               root->label ? root->label : "",
-                               root->length);
+      size_alloced = xasprintf(&newick, "(%s, %s)%s:%f;", subtree1, subtree2, root->label ? root->label : "", root->length);
     }
     free(subtree1);
     free(subtree2);

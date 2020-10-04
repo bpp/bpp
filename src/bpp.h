@@ -1076,8 +1076,9 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
 void stree_show_ascii(const snode_t * root, int options);
 
-char * stree_export_newick(const snode_t * root,
-                           char * (*cb_serialize)(const snode_t *));
+char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *));
+
+char* msci_export_newick(const snode_t* root, char* (*cb_serialize)(const snode_t*));
 
 int stree_traverse(snode_t * root,
                    int traversal,

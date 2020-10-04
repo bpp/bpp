@@ -2978,7 +2978,7 @@ void cmd_run()
   }
 
   /* *** start of MCMC loop *** */
-  for (; i < opt_samples*opt_samplefreq; ++i)
+  for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
     long print_newline = 0;
     #if 0
