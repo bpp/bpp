@@ -193,7 +193,7 @@ END;
 
 ## References
 
-Flouri T., Jiao X., Rannala B., Yang Z. (2020)
+* Flouri T., Jiao X., Rannala B., Yang Z. (2020)
 **A Bayesian Implementation of the Multispecies Coalescent Model with Introgression for Phylogenomic Analysis.**
 *Molecular Biology and Evolution*, 37(4):1211-1223.
 doi:[10.1093/molbev/msz296](https://doi.org/10.1093/molbev/msz296)
