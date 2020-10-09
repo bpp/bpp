@@ -169,6 +169,16 @@ multiple-hit correction, and the use of GTR is unnecessary.
 
 </td></tr> </table>
 
+
+**Note:** At the end of the MCMC run under the MSci model, BPP creates a file named
+i`FakeTree.tre`. This is a binary tree with "hybrid mirror nodes" converted into
+ghost tips, so the tree can be read into [FigTree](http://tree.bio.ed.ac.uk/software/figtree/).
+It will use the estimated node ages to draw branches and the 95% HPD CI for
+node ages as node bars. You can then save the tree into a vector graphics file,
+and import it into a graphics program for editing. Below is an example of the generated `FakeTree.tre`.
+
+![anopheles species network](https://raw.githubusercontent.com/xflouris/assets/master/bpp/anopheles/anopheles-faketree.png)
+
 ## References
 
 * Flouri T., Jiao X., Rannala B., Yang Z. (2019)
