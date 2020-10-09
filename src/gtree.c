@@ -1958,7 +1958,7 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-void logprob_revert_notheta(snode_t * snode, long msa_index)
+void logprob_revert_notheta(snode_t* snode, long msa_index)
 {
   snode->t2h_sum -= snode->t2h[msa_index];
   snode->t2h[msa_index] = snode->old_t2h[msa_index];
@@ -1972,134 +1972,134 @@ void logprob_revert_notheta(snode_t * snode, long msa_index)
   }
 }
 
-double gtree_update_logprob_contrib(snode_t * snode,
-                                    double heredity,
-                                    long msa_index,
-                                    long thread_index)
+double gtree_update_logprob_contrib(snode_t* snode,
+  double heredity,
+  long msa_index,
+  long thread_index)
 {
-    unsigned int j,k,n;
-    double logpr = 0;
-    double T2h = 0;
-    dlist_item_t * event;
+  unsigned int j, k, n;
+  double logpr = 0;
+  double T2h = 0;
+  dlist_item_t* event;
 
-    double * sortbuffer = sortbuffer_r[thread_index];
+  double* sortbuffer = sortbuffer_r[thread_index];
 
-    sortbuffer[0] = snode->tau;
-    j = 1;
-    for (event = snode->event[msa_index]->head; event; event = event->next)
-    {
-      gnode_t * gnode = (gnode_t *)(event->data);
-      sortbuffer[j++] = gnode->time;
-    }
-    if (snode->parent)
-      sortbuffer[j++] = snode->parent->tau;
+  sortbuffer[0] = snode->tau;
+  j = 1;
+  for (event = snode->event[msa_index]->head; event; event = event->next)
+  {
+    gnode_t* gnode = (gnode_t*)(event->data);
+    sortbuffer[j++] = gnode->time;
+  }
+  if (snode->parent)
+    sortbuffer[j++] = snode->parent->tau;
 
 
-    /* TODO: Probably split the following qsort case into two:
-       in case snode->parent then sort j-2 elements, otherwise
-       j-1 elements.
-    */
+  /* TODO: Probably split the following qsort case into two:
+     in case snode->parent then sort j-2 elements, otherwise
+     j-1 elements.
+  */
 
-    /* if there was at least one coalescent event, sort */
-    if (j > 1)
-      qsort(sortbuffer+1,j-1,sizeof(double),cb_cmp_double_asc);
+  /* if there was at least one coalescent event, sort */
+  if (j > 1)
+    qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
 
-    #if 0
-    printf("Population: %s tau: %f theta: %f events: %d seqin_count: %d\n",
-           snode->label, snode->tau, snode->theta,
-           snode->event_count[msa_index], snode->seqin_count[msa_index]);
+#if 0
+  printf("Population: %s tau: %f theta: %f events: %d seqin_count: %d\n",
+    snode->label, snode->tau, snode->theta,
+    snode->event_count[msa_index], snode->seqin_count[msa_index]);
 
-    if (snode->parent)
-      n = j-1;
-    else
-      n = j;
+  if (snode->parent)
+    n = j - 1;
+  else
+    n = j;
 
-    for (k = 1; k < n; ++k)
-    {
-      printf("\t t = %f\n", sortbuffer[k]);
-    }
-    if (snode->parent)
-      printf("\t tau = %f\n", sortbuffer[k]);
-    printf("\n");
-    #endif
+  for (k = 1; k < n; ++k)
+  {
+    printf("\t t = %f\n", sortbuffer[k]);
+  }
+  if (snode->parent)
+    printf("\t tau = %f\n", sortbuffer[k]);
+  printf("\n");
+#endif
 
-    /* skip the last step in case the last value of n was supposed to be 1 */
-    if ((unsigned int)(snode->seqin_count[msa_index]) == j-1) --j;
-    for (k=1,n=snode->seqin_count[msa_index]; k < j; ++k, --n)
-    {
-      T2h += n*(n-1)*(sortbuffer[k] - sortbuffer[k-1])/heredity;
-    }
+  /* skip the last step in case the last value of n was supposed to be 1 */
+  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
+  for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
+  {
+    T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+  }
 
-    if (opt_msci && snode->hybrid)
-    {
-      if (opt_est_theta)
-      {
-        if (node_is_bidirection(snode) && !node_is_mirror(snode))
-          logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
-        else
-          logpr += snode->seqin_count[msa_index] * log(snode->hphi);
-      }
-      else
-      {
-        double tmp = 0;
-        snode->notheta_old_phi_contrib[msa_index] = snode->notheta_phi_contrib[msa_index];
-        snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
-        if (node_is_bidirection(snode) && !node_is_mirror(snode))
-          tmp = (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
-        else
-          tmp = snode->seqin_count[msa_index] * log(snode->hphi);
-        snode->notheta_phi_contrib[msa_index] = tmp;
-        snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
-        logpr += snode->hphi_sum;
-      }
-    }
-
-    /* now distinguish between estimating theta and analytical computation */
+  if (opt_msci && snode->hybrid)
+  {
     if (opt_est_theta)
     {
-      if (snode->event_count[msa_index])
-        logpr += snode->event_count[msa_index] * log(2.0/snode->theta);
-
-      if (T2h)
-        logpr -= T2h/snode->theta;
-
-      /* TODO: Be careful about which functions update the logpr contribution 
-         and which do not */
-      snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
-      snode->logpr_contrib[msa_index] = logpr;
+      if (node_is_bidirection(snode) && !node_is_mirror(snode))
+        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
+      else
+        logpr += snode->seqin_count[msa_index] * log(snode->hphi);
     }
     else
     {
-      snode->old_t2h[msa_index] = snode->t2h[msa_index];
-
-      snode->t2h[msa_index] = T2h;
-
-      snode->t2h_sum -= snode->old_t2h[msa_index];
-      snode->t2h_sum += snode->t2h[msa_index];
-      
-
-      if (snode->event_count_sum)
-        logpr += opt_theta_alpha*log(opt_theta_beta) - lgamma(opt_theta_alpha) -
-                 (opt_theta_alpha + snode->event_count_sum) *
-                 log(opt_theta_beta + snode->t2h_sum) +
-                 lgamma(opt_theta_alpha + snode->event_count_sum);
+      double tmp = 0;
+      snode->notheta_old_phi_contrib[msa_index] = snode->notheta_phi_contrib[msa_index];
+      snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+      if (node_is_bidirection(snode) && !node_is_mirror(snode))
+        tmp = (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
       else
-        logpr -= opt_theta_alpha * log(1 + snode->t2h_sum / opt_theta_beta);
-
-      /* TODO: this always updates the 'notheta_old_logpr_contrib'. Sometimes we
-         do not want to this update because there could be multiple changes on
-         the 'notheta_logpr_contrib' before deciding whether to accept or reject
-         the proposal, e.g. by proposing new values on multiple loci. This leads
-         to the problem that the 'notheta_old_logpr_contrib' is no longer the
-         old value before any of the proposals started.  Currently this is fixed
-         in the caller functions by storing the 'notheta_old_logpr_contrib' in
-         some array allocated at the caller, but I should change this to only
-         update the value through a flag passed to this function */
-      snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
-      snode->notheta_logpr_contrib = logpr;
+        tmp = snode->seqin_count[msa_index] * log(snode->hphi);
+      snode->notheta_phi_contrib[msa_index] = tmp;
+      snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
+      logpr += snode->hphi_sum;
     }
+  }
 
-    return logpr;
+  /* now distinguish between estimating theta and analytical computation */
+  if (opt_est_theta)
+  {
+    if (snode->event_count[msa_index])
+      logpr += snode->event_count[msa_index] * log(2.0 / snode->theta);
+
+    if (T2h)
+      logpr -= T2h / snode->theta;
+
+    /* TODO: Be careful about which functions update the logpr contribution
+       and which do not */
+    snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
+    snode->logpr_contrib[msa_index] = logpr;
+  }
+  else
+  {
+    snode->old_t2h[msa_index] = snode->t2h[msa_index];
+
+    snode->t2h[msa_index] = T2h;
+
+    snode->t2h_sum -= snode->old_t2h[msa_index];
+    snode->t2h_sum += snode->t2h[msa_index];
+
+
+    if (snode->event_count_sum)
+      logpr += opt_theta_alpha * log(opt_theta_beta) - lgamma(opt_theta_alpha) -
+      (opt_theta_alpha + snode->event_count_sum) *
+      log(opt_theta_beta + snode->t2h_sum) +
+      lgamma(opt_theta_alpha + snode->event_count_sum);
+    else
+      logpr -= opt_theta_alpha * log(1 + snode->t2h_sum / opt_theta_beta);
+
+    /* TODO: this always updates the 'notheta_old_logpr_contrib'. Sometimes we
+       do not want to this update because there could be multiple changes on
+       the 'notheta_logpr_contrib' before deciding whether to accept or reject
+       the proposal, e.g. by proposing new values on multiple loci. This leads
+       to the problem that the 'notheta_old_logpr_contrib' is no longer the
+       old value before any of the proposals started.  Currently this is fixed
+       in the caller functions by storing the 'notheta_old_logpr_contrib' in
+       some array allocated at the caller, but I should change this to only
+       update the value through a flag passed to this function */
+    snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
+    snode->notheta_logpr_contrib = logpr;
+  }
+
+  return logpr;
 }
 
 double gtree_logprob(stree_t * stree, double heredity, long msa_index, long thread_index)

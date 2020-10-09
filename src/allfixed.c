@@ -314,16 +314,16 @@ static char * cb_attributes(const snode_t * node)
     {
       nodepinfo_t * pinfo = (nodepinfo_t *)(node->parent->data);
       if (opt_est_theta)
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f", info->lo, info->hi, info->theta, pinfo->age - info->age);
+        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f", node->label, info->lo, info->hi, info->theta, pinfo->age - info->age);
       else
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]: %f", info->lo, info->hi, pinfo->age - info->age);
+        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}]: %f", node->label, info->lo, info->hi, pinfo->age - info->age);
     }
     else
     {
       if (opt_est_theta)
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]", info->lo, info->hi, info->theta);
+        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]", node->label, info->lo, info->hi, info->theta);
       else
-        xasprintf(&s,"[&height_95%%_HPD={%.8f, %.8f}]", info->lo, info->hi);
+        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}]", node->label, info->lo, info->hi);
     }
   }
   else
@@ -382,7 +382,12 @@ static void write_figtree(stree_t * stree, double * mean, double * hpd025, doubl
     if (stree->nodes[i]->tau > 0)
     {
       if (opt_msci && i >= stree->tip_count + stree->inner_count)  /* hybrid mirror node */
+      {
         stree->nodes[i]->tau = stree->nodes[i]->hybrid->tau;
+        nodepinfo_t* info = (nodepinfo_t*)(stree->nodes[i]->data);
+        nodepinfo_t* tmp = (nodepinfo_t*)(stree->nodes[i]->hybrid->data);
+        info->age = tmp->age;
+      }
       else 
       {
         nodepinfo_t* info = (nodepinfo_t*)(stree->nodes[i]->data);
@@ -437,7 +442,7 @@ static void write_figtree(stree_t * stree, double * mean, double * hpd025, doubl
   free(newick);
   fclose(fp_tree);
 
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = 0; i < snodes_total; ++i)
     free(stree->nodes[i]->data);
 
   return;

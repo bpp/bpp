@@ -1475,7 +1475,7 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
 
   if (!(root->left) && !(root->right))
   {
-    /* tip or hybrid node */
+    /* tip or hybrid mirror node */
     if (root->hybrid)
     {
       /* hybrid mirror node */
@@ -1613,8 +1613,6 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
 
       if (cb_serialize)
       {
-        /* Ziheng 2020-10-2. */
-        /* assert(0); */
         char* temp = cb_serialize(root);
         size_alloced = xasprintf(&newick, "(%s, %s)%s", subtree1, subtree2, temp);
         free(temp);
