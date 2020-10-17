@@ -966,6 +966,49 @@ static void write_concat_seqs(FILE * fp, msa_t ** msa)
   free(x);
 }
 
+
+
+/*** Ziheng 2020-10-17
+* Calculation of average sequence distances (p-distance) over loci and sequnce pairs
+* for simulated data.  Sequences have to be fulled resolved/phased.
+***/
+double msa_mean_distance(long seq_count, long site_count, msa_t* msa)
+{
+  double md = 0;
+
+  assert(seq_count > 0 && site_count > 0);
+  for (long j1 = 0; j1 < seq_count; j1++)
+  {
+    for (long j2 = 0; j2 < j1; j2++)
+    {
+      for (long h = 0; h < site_count; h++)
+        if (msa->sequence[j1][h] != msa->sequence[j2][h]) md++;
+    }
+  }
+  md /= seq_count * (seq_count - 1.0) / 2.0 * site_count;
+  return(md);
+}
+
+double msa_mean_heterozygosity(long seq_count, long site_count, msa_t* msa)
+{
+  /* This calculates the mean heterozygosity for sequences in the alignment, 
+  assuming that all sequences are from the same species and each sequence is
+  diploid unphased.
+  The code needs to be changed if there are 2 or more species.
+  */
+  double H = 0;
+
+  assert(seq_count > 0 && site_count > 0);
+  for (long j = 0; j < seq_count; j++)
+  {
+    for (long h = 0; h < site_count; h++)
+      if (msa->sequence[j][h] != 1 && msa->sequence[j][h] != 2 && msa->sequence[j][h] != 4 && msa->sequence[j][h] != 8)
+        H++;
+  }
+  H /= seq_count * site_count;
+  return(H);
+}
+
 static void write_seqs(FILE * fp, msa_t * msa, long species_count)
 {
   long i,j;
@@ -979,8 +1022,7 @@ static void write_seqs(FILE * fp, msa_t * msa, long species_count)
 
   for (i = 0; i < msa->count; ++i)
   {
-
-    fprintf(fp, "%s%-*s ", "", 10, msa->label[i]);
+    fprintf(fp, "%-*s ", 10, msa->label[i]);
     for (j = 0; j < opt_locus_simlen; ++j)
     {
       if (j % 10 == 0) fprintf(fp, " ");
@@ -991,9 +1033,7 @@ static void write_seqs(FILE * fp, msa_t * msa, long species_count)
   fprintf(fp, "\n\n");
 }
 
-static void write_diploid_rand_seqs(FILE * fp_seqrand,
-                                    stree_t * stree,
-                                    msa_t * msa)
+static void write_diploid_rand_seqs(FILE * fp_seqrand, stree_t * stree, msa_t * msa, double *md_rand)
 {
   long i,j,k,m;
   char ** sequence;
@@ -1040,7 +1080,9 @@ static void write_diploid_rand_seqs(FILE * fp_seqrand,
   new_msa->sequence = sequence;
 
   write_seqs(fp_seqrand, new_msa, stree->tip_count);
-  
+  if(stree->tip_count == 1)
+    *md_rand = msa_mean_distance(new_msa->count, opt_locus_simlen, new_msa);
+
   for (i = 0; i < msa->count; ++i)
     free(sequence[i]);
   free(sequence);
@@ -1155,6 +1197,9 @@ static void simulate(stree_t * stree)
   FILE * fp_map = NULL;
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
+
+  double H = -1, md_full = -1, md_rand = -1;
+  double mH = 0, meand_full = 0, meand_rand = 0;
 
   /* open output files */
   if (opt_msafile)
@@ -1538,9 +1583,13 @@ static void simulate(stree_t * stree)
       {
         /* write full data first */
         if (fp_seqfull)
+        {
           write_seqs(fp_seqfull, msa[i], stree->tip_count);
+          if (stree->tip_count == 1)
+            md_full =  msa_mean_distance(msa[i]->count, opt_locus_simlen, msa[i]);
+        }
         if (fp_seqrand)
-          write_diploid_rand_seqs(fp_seqrand,stree,msa[i]);
+          write_diploid_rand_seqs(fp_seqrand,stree,msa[i], &md_rand);
 
         /* then collapse sequences */
         collapse_diploid(stree,gtree[i],msa[i],hets);
@@ -1548,18 +1597,27 @@ static void simulate(stree_t * stree)
 
       /* write sequences */
       write_seqs(fp_seq, msa[i], stree->tip_count);
+      H = msa_mean_heterozygosity(msa[i]->count, opt_locus_simlen, msa[i]);
 
       /* TODO: Instead of freeing and allocating, create siterates once and
          fill it with ones, and use rates4sites to alter it */
       if (siterates)
         free(siterates);
     }
-
+    if (stree->tip_count == 1)
+    {
+      mH += H;  meand_full += md_full;  meand_rand += md_rand;
+      printf("locus %3d, H md_full md_rand: %9.6f %9.6f %9.6f\n", i + 1, H, md_full, md_rand);
+    }
     if ((i+1) % 1000 == 0 || (opt_locus_count > 1000 && i == opt_locus_count-1))
       printf("%10ld replicates done... mean tMRCA = %9.6f\n", i+1, tmrca/(i+1));
-
   }  /* end of locus loop */
   
+  if (stree->tip_count == 1)
+  {
+    mH /= opt_locus_count;  meand_full /= opt_locus_count;  meand_rand /= opt_locus_count;
+    printf("average,   H md_full md_rand: %9.6f %9.6f %9.6f\n", mH, meand_full, meand_rand);
+  }
   if (opt_concatfile)
   {
     fprintf(stdout, "Generating concatenated sequence alignment...\n");
