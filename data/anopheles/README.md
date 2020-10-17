@@ -169,11 +169,34 @@ multiple-hit correction, and the use of GTR is unnecessary.
 
 </td></tr> </table>
 
+
+**Note:** At the end of the MCMC run under the MSci model, BPP creates a file named
+`FakeTree.tre`. This is a binary tree with "hybrid mirror nodes" converted into
+ghost tips, so the tree can be read into [FigTree](http://tree.bio.ed.ac.uk/software/figtree/).
+It will use the estimated node ages to draw branches and the 95% HPD CI for
+node ages as node bars. You can then save the tree into a vector graphics file,
+and import it into a graphics program for editing. Below is an example of the generated `FakeTree.tre`.
+
+![anopheles species network](https://raw.githubusercontent.com/xflouris/assets/master/bpp/anopheles/anopheles-faketree.png)
+
+Example `FakeTree.tre` file:
+
+```
+
+#NEXUS
+
+BEGIN TREES;
+        UTREE 1 = ((R: 0.006978, (Q: 0.006978, ghost_h :0.006978)h[&height_95%_HPD={0.00002400, 0.01377600}, theta=-1.0000000]: 0.000000)g[&height_95%_HPD={0.00002400, 0.01377600}, theta=0.0189369]: 0.014756, (f :0.018738, (((((G: 0.001570, C: 0.001570)b[&height_95%_HPD={0.00001200, 0.00376500}, theta=0.0147427]: 0.003392, ghost_f :0.004962)f[&height_95%_HPD={0.00108900, 0.00882000}, theta=-1.0000000]: 0.000000, A: 0.004962)e[&height_95%_HPD={0.00108900, 0.00882000}, theta=0.0108381]: 0.007289, h :0.012250)d[&height_95%_HPD={0.00580100, 0.01864700}, theta=0.0186650]: 0.003424, L: 0.015674)c[&height_95%_HPD={0.00920400, 0.02270300}, theta=0.0190814]: 0.003063)a[&height_95%_HPD={0.01148500, 0.02611200}, theta=0.0185349]: 0.002996)o[&height_95%_HPD={0.01503800, 0.02909800}, theta=0.0118272];
+END;
+
+```
+
 ## References
 
-* Flouri T., Jiao X., Rannala B., Yang Z. (2019)
-**A Bayesian multispecies coalescent model with introgression for comparative genomic analysis.**
-*Under review*
+* Flouri T., Jiao X., Rannala B., Yang Z. (2020)
+**A Bayesian Implementation of the Multispecies Coalescent Model with Introgression for Phylogenomic Analysis.**
+*Molecular Biology and Evolution*, 37(4):1211-1223.
+doi:[10.1093/molbev/msz296](https://doi.org/10.1093/molbev/msz296)
 
 * Cardona G., Rossello F., Valiente G. (2008)
 **Extended Newick: it is time for a standard representation of phylogenetic networks.**
