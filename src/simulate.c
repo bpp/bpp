@@ -974,14 +974,15 @@ static void write_concat_seqs(FILE * fp, msa_t ** msa)
 ***/
 double msa_mean_distance(long seq_count, long site_count, msa_t* msa)
 {
+  long j1,j2,h;
   double md = 0;
 
   assert(seq_count > 0 && site_count > 0);
-  for (long j1 = 0; j1 < seq_count; j1++)
+  for (j1 = 0; j1 < seq_count; j1++)
   {
-    for (long j2 = 0; j2 < j1; j2++)
+    for (j2 = 0; j2 < j1; j2++)
     {
-      for (long h = 0; h < site_count; h++)
+      for (h = 0; h < site_count; h++)
         if (msa->sequence[j1][h] != msa->sequence[j2][h]) md++;
     }
   }
@@ -996,13 +997,17 @@ double msa_mean_heterozygosity(long seq_count, long site_count, msa_t* msa)
   diploid unphased.
   The code needs to be changed if there are 2 or more species.
   */
+  long j,h;
   double H = 0;
 
   assert(seq_count > 0 && site_count > 0);
-  for (long j = 0; j < seq_count; j++)
+  for (j = 0; j < seq_count; j++)
   {
-    for (long h = 0; h < site_count; h++)
-      if (msa->sequence[j][h] != 1 && msa->sequence[j][h] != 2 && msa->sequence[j][h] != 4 && msa->sequence[j][h] != 8)
+    for (h = 0; h < site_count; h++)
+      if (msa->sequence[j][h] != 1 &&
+          msa->sequence[j][h] != 2 &&
+          msa->sequence[j][h] != 4 &&
+          msa->sequence[j][h] != 8)
         H++;
   }
   H /= seq_count * site_count;
@@ -1607,7 +1612,8 @@ static void simulate(stree_t * stree)
     if (stree->tip_count == 1)
     {
       mH += H;  meand_full += md_full;  meand_rand += md_rand;
-      printf("locus %3d, H md_full md_rand: %9.6f %9.6f %9.6f\n", i + 1, H, md_full, md_rand);
+      printf("locus %3ld, H md_full md_rand: %9.6f %9.6f %9.6f\n",
+             i + 1, H, md_full, md_rand);
     }
     if ((i+1) % 1000 == 0 || (opt_locus_count > 1000 && i == opt_locus_count-1))
       printf("%10ld replicates done... mean tMRCA = %9.6f\n", i+1, tmrca/(i+1));
