@@ -2707,6 +2707,8 @@ static void check_logl(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long
 static void check_lnprior(stree_t * stree, gtree_t ** gtree, long iter, const char * move)
 {
   long i;
+
+  if (opt_clock == BPP_CLOCK_GLOBAL) return;
   /* */
   for (i = 0; i < opt_locus_count; ++i)
   {
