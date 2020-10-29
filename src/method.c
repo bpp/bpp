@@ -27,9 +27,9 @@
 
 //#define DEBUG_GTR
 
-#define CHECK_LOGL
-#define CHECK_LOGPR
-#define CHECK_LNPRIOR
+//#define CHECK_LOGL
+//#define CHECK_LOGPR
+//#define CHECK_LNPRIOR
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
