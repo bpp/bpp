@@ -27,8 +27,9 @@
 
 //#define DEBUG_GTR
 
-//#define CHECK_LOGL
-//#define CHECK_LOGPR
+#define CHECK_LOGL
+#define CHECK_LOGPR
+#define CHECK_LNPRIOR
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_THETA_OUTPUT        3
@@ -2700,6 +2701,23 @@ static void check_logl(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long
     }
   }
 }
+
+#endif
+#ifdef CHECK_LNPRIOR
+static void check_lnprior(stree_t * stree, gtree_t ** gtree, long iter, const char * move)
+{
+  long i;
+  /* */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    double debug_new_prior_rates = lnprior_rates(gtree[i], stree, i);
+    if (fabs(debug_new_prior_rates - gtree[i]->lnprior_rates) > 1e-9)
+    {
+      printf("[FATAL iter %ld locus %ld] lnPrior: %f   OLD lnPrior: %f\n", iter, i, debug_new_prior_rates, gtree[i]->lnprior_rates);
+      fatal("Invalid lnprior iter: %ld locus: %ld move: %s    correct logl: %f   wrong logl: %f", iter, i, move, debug_new_prior_rates, gtree[i]->lnprior_rates);
+    }
+  }
+}
 #endif
 
 void cmd_run()
@@ -3076,6 +3094,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "SSPR");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "SSPR");
+      #endif
     }
 
     /* perform proposals sequentially */   
@@ -3101,6 +3122,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "GAGE");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "GAGE");
+      #endif
 
     /* propose gene tree topologies using SPR */
     if (opt_threads == 1)
@@ -3120,6 +3144,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "GSPR");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "GSPR");
+      #endif
 
     /* propose population sizes on species tree */
     if (opt_est_theta)
@@ -3132,6 +3159,9 @@ void cmd_run()
       #endif
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "THETA");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "THETA");
       #endif
     }
 
@@ -3147,6 +3177,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "TAU");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "TAU");
+      #endif
     }
 
     /* mixing step */
@@ -3158,6 +3191,9 @@ void cmd_run()
       #endif
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "MIXING");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "MIXING");
       #endif
 
     if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -3172,6 +3208,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "LRHT");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "LRHT");
+      #endif
     }
 
     /* phi proposal */
@@ -3182,6 +3221,9 @@ void cmd_run()
                                   (double)ft_round;
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "PHI");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "PHI");
       #endif
     }
 
@@ -3248,6 +3290,9 @@ void cmd_run()
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "MUI");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "MUI");
+      #endif
 
       if (opt_est_mubar)
       {
@@ -3256,6 +3301,9 @@ void cmd_run()
                                        (double)ft_round;
         #ifdef CHECK_LOGL
         check_logl(stree, gtree, locus, i, "MUBAR");
+        #endif
+        #ifdef CHECK_LNPRIOR
+        check_lnprior(stree, gtree, i, "MUBAR");
         #endif
       }
     }
@@ -3269,6 +3317,9 @@ void cmd_run()
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "NUI");
       #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "NUI");
+      #endif
 
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       {
@@ -3277,6 +3328,9 @@ void cmd_run()
                                           (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "NUBAR");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "NUBAR");
       #endif
       }
 
@@ -3292,6 +3346,9 @@ void cmd_run()
                                          (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "BRATE");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "BRATE");
       #endif
     }
 

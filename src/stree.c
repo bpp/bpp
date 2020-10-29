@@ -6054,7 +6054,13 @@ long snl_expand_and_shrink(stree_t * stree,
     assert(y == stree->root); assert(movetype == SHRINK);
     stree->root = b;
 
-    /* TODO clock3 Dir LN */
+    /* TODO clock3 test brate swap strategies */
+    if (opt_clock == BPP_CLOCK_CORR)
+    {
+      double * brate_tmp = y->brate;
+      y->brate = b->brate;
+      b->brate = brate_tmp;
+    }
   }
   else
   {
@@ -6071,7 +6077,14 @@ long snl_expand_and_shrink(stree_t * stree,
   {
     assert(c == stree->root); assert(movetype == EXPAND);
     stree->root = y;
-    /* TODO clock3 Dir LN */
+
+    /* TODO clock3 test brate swap strategies */
+    if (opt_clock == BPP_CLOCK_CORR)
+    {
+      double * brate_tmp = y->brate;
+      y->brate = c->brate;
+      c->brate = brate_tmp;
+    }
   }
   else
   {
