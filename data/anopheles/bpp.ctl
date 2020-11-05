@@ -8,7 +8,7 @@
   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * species delimitation rjMCMC algorithm0 and finetune(e)
 * speciesdelimitation = 1 1 2 1 * species delimitation rjMCMC algorithm1 finetune (a m)
-*          speciestree = 1        * species tree NNI/SPR
+*         speciestree = 1 0.1 0.1 0.2    * species tree SPR/SNL
 
 *   speciesmodelprior = 1  * 0: uniform LH; 1:uniform rooted trees; 2: uniformSLH; 3: uniformSRooted
 
@@ -32,3 +32,6 @@
         burnin = 16000
       sampfreq = 2
        nsample = 500000
+        burnin = 1600
+      sampfreq = 1
+       nsample = 5000
