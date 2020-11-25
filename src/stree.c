@@ -4129,6 +4129,14 @@ long stree_propose_spr(stree_t ** streeptr,
    printf("Z = %s\n", z->label);
 #endif
 
+  /* if move is NNI remap rates */
+  if (y->parent == c->parent)
+  {
+    double * cbrate_tmp = c->brate;
+    c->brate = b->brate;
+    b->brate = cbrate_tmp;
+  }
+
   /* make b child of y->parent */
   if (y->parent->left == y)
     y->parent->left = b;
@@ -6071,6 +6079,38 @@ long snl_expand_and_shrink(stree_t * stree,
       y->parent->right = b;
   }
   b->parent = y->parent;
+
+  /* if move is NNI remap rates */
+  if (movetype == EXPAND && downwards)
+  {
+    if (y->parent == c->parent)
+    {
+      double * cbrate_tmp = c->brate;
+      c->brate = b->brate;
+      b->brate = cbrate_tmp;
+    }
+  }
+  else if (movetype == EXPAND)
+  {
+    if (y->parent == c)
+    {
+      snode_t * cson = (c->left == y) ? c->right : c->left;
+      double * csbrate_tmp = cson->brate;
+      cson->brate = a->brate;
+      a->brate = csbrate_tmp;
+    }
+  }
+  else if (movetype == SHRINK)
+  {
+    if (c->parent == y->left || c->parent == y->right)
+    {
+      snode_t * csister = (c->parent->left == c) ?
+                            c->parent->right : c->parent->left;
+      double * csbrate_tmp = csister->brate;
+      csister->brate = a->brate;
+      a->brate = csbrate_tmp;
+    }
+  }
 
   /* make y child of c->parent */
   if (!c->parent)
