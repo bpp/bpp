@@ -113,6 +113,7 @@ long opt_scaling;
 long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
+long opt_snl_noswap;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -234,6 +235,7 @@ static struct option long_options[] =
   {"debug_start",  required_argument, 0, 0 },  /* 30 */
   {"debug_end",    required_argument, 0, 0 },  /* 31 */
   {"debug_abort",  required_argument, 0, 0 },  /* 32 */
+  {"snl_noswap",   no_argument,       0, 0 },  /* 33 */
   { 0, 0, 0, 0 }
 };
 
@@ -475,6 +477,7 @@ void args_init(int argc, char ** argv)
   opt_siterate_cats = 5;
   opt_snl_lambda_expand = 0.1;
   opt_snl_lambda_shrink = 0.2;
+  opt_snl_noswap = 0;
   opt_sp_seqcount = NULL;
   opt_streenewick = NULL;
   opt_tau_alpha = 0;
@@ -657,6 +660,10 @@ void args_init(int argc, char ** argv)
 
       case 32:
         opt_debug_abort = atol(optarg);
+        break;
+
+      case 33:
+        opt_snl_noswap = 1;
         break;
 
       default:

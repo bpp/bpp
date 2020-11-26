@@ -2713,10 +2713,10 @@ static void check_lnprior(stree_t * stree, gtree_t ** gtree, long iter, const ch
   for (i = 0; i < opt_locus_count; ++i)
   {
     double debug_new_prior_rates = lnprior_rates(gtree[i], stree, i);
-    if (fabs(debug_new_prior_rates - gtree[i]->lnprior_rates) > 1e-9)
+    if (fabs(debug_new_prior_rates - gtree[i]->lnprior_rates) > 1e-5)
     {
       printf("[FATAL iter %ld locus %ld] lnPrior: %f   OLD lnPrior: %f\n", iter, i, debug_new_prior_rates, gtree[i]->lnprior_rates);
-      fatal("Invalid lnprior iter: %ld locus: %ld move: %s    correct logl: %f   wrong logl: %f", iter, i, move, debug_new_prior_rates, gtree[i]->lnprior_rates);
+      fatal("Invalid lnprior iter: %ld locus: %ld move: %s    correct lnprior: %f   wrong lnprior: %f", iter, i, move, debug_new_prior_rates, gtree[i]->lnprior_rates);
     }
   }
 }
@@ -2952,6 +2952,13 @@ void cmd_run()
     fprintf(stdout,
             "[DEBUG] SHRINK move proportion: %f\n",
             opt_prob_snl_shrink);
+  }
+  if (opt_prob_snl && opt_clock == BPP_CLOCK_CORR)
+  {
+    if (!opt_snl_noswap)
+      fprintf(stdout, "[DEBUG] SNL swap strategy for correlated clock\n");
+    else
+      fprintf(stdout, "[DEBUG] SNL no-swap strategy for correlated clock\n");
   }
 
   for (i = 0; i < opt_locus_count; ++i)

@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 3
-#define VERSION_PATCH 6
+#define VERSION_PATCH 7
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -880,6 +880,7 @@ extern long opt_scaling;
 extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
+extern long opt_snl_noswap;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
