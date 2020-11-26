@@ -6065,9 +6065,19 @@ long snl_expand_and_shrink(stree_t * stree,
     /* TODO clock3 test brate swap strategies */
     if (opt_clock == BPP_CLOCK_CORR)
     {
-      double * brate_tmp = y->brate;
-      y->brate = b->brate;
-      b->brate = brate_tmp;
+      if (!opt_snl_noswap)
+      {
+        /* swap strategy */
+        double * brate_tmp = y->brate;
+        y->brate = b->brate;
+        b->brate = brate_tmp;
+      }
+      else
+      {
+        /* no-swap strategy */
+        for (i = 0; i < opt_locus_count; ++i)
+          b->brate[i] = gtree_list[i]->rate_mui;
+      }
     }
   }
   else
@@ -6121,9 +6131,19 @@ long snl_expand_and_shrink(stree_t * stree,
     /* TODO clock3 test brate swap strategies */
     if (opt_clock == BPP_CLOCK_CORR)
     {
-      double * brate_tmp = y->brate;
-      y->brate = c->brate;
-      c->brate = brate_tmp;
+      if (!opt_snl_noswap)
+      {
+        /* swap stretegy */
+        double * brate_tmp = y->brate;
+        y->brate = c->brate;
+        c->brate = brate_tmp;
+      }
+      else
+      {
+        /* no-swap stretegy */
+        for (i = 0; i < opt_locus_count; ++i)
+          y->brate[i] = gtree_list[i]->rate_mui;
+      }
     }
   }
   else
