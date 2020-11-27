@@ -1220,6 +1220,7 @@ static void stree_init_phi(stree_t * stree)
   long i;
 
   long offset = stree->tip_count + stree->inner_count;
+  long thread_index = 0;
 
   if (opt_phi_alpha <= 0)
     fatal("Alpha value for 'phiprior' must be larger than 0");
@@ -1235,8 +1236,48 @@ static void stree_init_phi(stree_t * stree)
     /* set phi parameter to the mean */
     if (fabs(mnode->hphi + mnode->hybrid->hphi - 1) > 1e-10)
     {
-      mnode->hybrid->hphi = (opt_phi_alpha / (opt_phi_alpha + opt_phi_beta));
-      mnode->hphi = 1 - mnode->hybrid->hphi;
+      if (node_is_bidirection(mnode->hybrid))
+      {
+        /* bidirection (model D) */
+
+        /* we set phi for the vertical branch to U|(0.7,0.9). The mnode is
+           the mirror node, hence it is the horizontal branch */
+        double a = 0.7; double b = 0.9;
+        double r = (b-a)*legacy_rndu(thread_index) + a;
+        
+        mnode->hybrid->hphi = r;
+        mnode->hphi = 1-r;
+      }
+      else
+      {
+        /* hybridization */
+
+        /* for models A and C draw the value of phi from U(0,1). For model B
+           set phi for the vertical branch to U(0.7,0.9) */
+        if ((!mnode->htau && !mnode->hybrid->htau) ||
+            (mnode->htau && mnode->hybrid->htau))
+        {
+          /* model A or C */
+          mnode->hphi = legacy_rndu(thread_index);
+          mnode->hybrid->hphi = 1 - mnode->hphi;
+        }
+        else
+        {
+          /* model B */
+          double a = 0.7; double b = 0.9;
+          double r = (b-a)*legacy_rndu(thread_index) + a;
+          if (mnode->htau)
+          {
+            mnode->hphi = r;
+            mnode->hybrid->hphi = 1 - r;
+          }
+          else
+          {
+            mnode->hybrid->hphi = r;
+            mnode->hphi = 1 - r;
+          }
+        }
+      }
     }
   }
 }

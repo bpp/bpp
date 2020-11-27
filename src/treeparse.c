@@ -1392,6 +1392,7 @@ static void set_phi_values(stree_t * stree)
 {
   unsigned int i;
   snode_t * snode;
+  long thread_index = 0;
 
   for (i=0; i < stree->tip_count+stree->inner_count; ++i)
   {
@@ -1401,8 +1402,48 @@ static void set_phi_values(stree_t * stree)
     {
       if (fabs(snode->hphi + snode->hybrid->hphi - 1) > 1e-10)
       {
-        snode->hphi         = opt_phi_alpha / (opt_phi_alpha + opt_phi_beta);
-        snode->hybrid->hphi = 1 - snode->hphi;
+        if (node_is_bidirection(snode))
+        {
+          /* bidirection (model D) */
+
+          /* we set phi for the vertical branch to U|(0.7,0.9). The snode is
+             not the mirror node, hence it is the vertical branch */
+          double a = 0.7; double b = 0.9;
+          double r = (b-a)*legacy_rndu(thread_index) + a;
+          
+          snode->hphi = r;
+          snode->hybrid->hphi = 1-r;
+        }
+        else
+        {
+          /* hybridization */
+
+          /* for models A and C draw the value of phi from U(0,1). For model B
+             set phi for the vertical branch to U(0.7,0.9) */
+          if ((!snode->htau && !snode->hybrid->htau) ||
+              (snode->htau && snode->hybrid->htau))
+          {
+            /* model A or C */
+            snode->hphi = legacy_rndu(thread_index);
+            snode->hybrid->hphi = 1 - snode->hphi;
+          }
+          else
+          {
+            /* model B */
+            double a = 0.7; double b = 0.9;
+            double r = (b-a)*legacy_rndu(thread_index) + a;
+            if (snode->htau)
+            {
+              snode->hphi = r;
+              snode->hybrid->hphi = 1 - r;
+            }
+            else
+            {
+              snode->hybrid->hphi = r;
+              snode->hphi = 1 - r;
+            }
+          }
+        }
       }
     }
   }
