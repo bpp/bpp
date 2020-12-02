@@ -1376,13 +1376,14 @@ static long * create_duplicate_indices(stree_t * stree)
     }
 
     if (freq > 2)
-      fatal("Node with label %s appears more %ld times (allowed twice)",
+      fatal("Node with label %s appears %ld times (allowed twice)",
             stree->nodes[i]->label, freq);
     else if (freq == 2)
     {
       /* if both are tips */
       if (i < stree->tip_count && dups[i] < stree->tip_count)
-        fatal("Tip node with label %s appears more than once in the tree");
+        fatal("Tip node with label %s appears more than once in the tree",
+              stree->nodes[i]->label);
     }
   }
   return dups;

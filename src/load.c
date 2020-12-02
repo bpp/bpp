@@ -631,6 +631,9 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(out_offset,1,fp))
     fatal("Cannot read output file offset");
 
+  if (!LOAD(&opt_bfbeta,1,fp))
+    fatal("Cannot read bfbeta");
+
   if (opt_print_genetrees)
   {
     *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));

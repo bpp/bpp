@@ -380,6 +380,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write output file offset */
   DUMP(&out_offset,1,fp);
 
+  /* write bfbeta */
+  DUMP(&opt_bfbeta,1,fp);
+
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
