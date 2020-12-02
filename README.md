@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
-[![Version](https://img.shields.io/badge/version-4.3.0-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.3.0)
+[![Version](https://img.shields.io/badge/version-4.3.8-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.3.8)
 
 ## Introduction
 
@@ -44,7 +44,7 @@ For more information on usage please see the [BPP manual](https://github.com/bpp
 
 **Update 2020-04-20**
 
-BPP v4.3.0 now implements the following:
+BPP v4.3.8 now implements the following:
 * Parallelized computation using POSIX threads.
 * Nucleotide substitution models JC69, K80, F81, HKY, T92, TN93, F84 and GTR.
 * 19 amino acid substition models (Dayhoff, LG, DCMUT, JTT, etc)
@@ -70,26 +70,26 @@ Download the appropriate executable for your system using the following
 commands if you are using a Linux x86_64 system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.3.0/bpp-4.3.0-linux-x86_64.tar.gz
-tar zxvf bpp-4.3.0-linux-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.3.8/bpp-4.3.8-linux-x86_64.tar.gz
+tar zxvf bpp-4.3.8-linux-x86_64.tar.gz
 ```
 
 Or these commands if you using a Mac:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.3.0/bpp-4.3.0-macos-x86_64.tar.gz
-tar zxvf bpp-4.3.0-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.3.8/bpp-4.3.8-macos-x86_64.tar.gz
+tar zxvf bpp-4.3.8-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
 
 ```
-https://github.com/bpp/bpp/releases/download/v4.3.0/bpp-4.3.0-win-x86_64.zip
+https://github.com/bpp/bpp/releases/download/v4.3.8/bpp-4.3.8-win-x86_64.zip
 ```
 
-Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.3.0-linux-x86_64` or `bpp-4.3.0-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.3.8-linux-x86_64` or `bpp-4.3.8-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
-Windows: You will now have the binary distribution in a folder called `bpp-4.3.0-win-x86_64`. The bpp executable is called `bpp.exe`.
+Windows: You will now have the binary distribution in a folder called `bpp-4.3.8-win-x86_64`. The bpp executable is called `bpp.exe`.
 
 
 **Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository*.
@@ -97,9 +97,9 @@ Windows: You will now have the binary distribution in a folder called `bpp-4.3.0
 **Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
 ```
-wget https://github.com/bpp/bpp/archive/v4.3.0.tar.gz
-tar zxvf v4.3.0.tar.gz
-cd bpp-4.3.0/src
+wget https://github.com/bpp/bpp/archive/v4.3.8.tar.gz
+tar zxvf v4.3.8.tar.gz
+cd bpp-4.3.8/src
 make
 ```
 
@@ -179,7 +179,7 @@ More documentation regarding control files, will be available soon on the [wiki]
 
 ## Documentation
 
-The most up-to-date documentation of BPP is [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.3.0/bppDOC.pdf) distribution together with BPP.
+The most up-to-date documentation of BPP is [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.3.8/bppDOC.pdf) distribution together with BPP.
 
 A tutorial on BPP was recently published as a book chapter:
 [A Tutorial on the Use of BPP for Species Tree Estimation and Species Delimitation](https://hal.inria.fr/PGE/hal-02536475)
@@ -262,7 +262,7 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 # Acknowledgements
 
-Special thanks to Yuttapong Thawornwattana and [Mario dos Reis Barros](http://www.sbcs.qmul.ac.uk/staff/mariodosreisbarros.html) for testing and bug reports.
+Special thanks to Yuttapong Thawornwattana, [Mario dos Reis Barros](http://www.sbcs.qmul.ac.uk/staff/mariodosreisbarros.html) and Paul M. Hime for testing and bug reports.
 
 # References
 
