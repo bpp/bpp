@@ -2,6 +2,80 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.3.8] - 2020-12-02
+### Changed
+ - Initialization of phi values
+### Fixed
+ - Loading correct beta value for bayes factor computation when resuming from a
+   checkpoint
+
+## [4.3.7] - 2020-11-26
+### Added
+ - Added option --snl_noswap to test the strategy of overwriting new root rates
+   when using correlated clock (SNL move)
+
+## [4.3.6] - 2020-11-25
+### Added
+ - New mapping of branch rates on species tree for moves that correspond to NNI
+### Changed
+ - 'diploid' to 'phase' in frogs example control file
+
+## [4.3.5] - 2020-10-29
+### Added
+ - Error message for number of threads
+ - Code to generate 'faketree' (MSCi graph model represented as binary tree)
+ - Swapping of branch rates (correlated clock) when SNL changes root node 
+### Changed
+ - Renamed 'diploid' to 'phase' in sumulation code
+ - Updated README.md file for anopheles example
+
+### Fixed
+ - Simulation code to set thetas for species with 1 sequence and phase flag set
+
+## [4.3.4] - 2020-09-07
+### Changed
+ - Removed command-line options for reject and repeat strategy (SNL move) and
+   kept the reject strategy
+ - All SNL command-line options were removed and made part of the control file
+   (speciestree option)
+ - Debugging function for validating log-PG
+### Fixed
+ - Acceptance proportion (SNL move)
+ - Notheta option when using the MSCi model
+ - Acceptance rate (pjump) output of SNL
+
+## [4.3.3] - 2020-08-21
+### Added
+ - Options --snl_le and --snl_ls for setting lambdas (SNL move)
+ - Printing of shrink proportion
+### Fixed
+ - Rejection and repeat options (SNL move)
+ - Acceptance proportion for expand with downwards path (SNL move)
+
+## [4.3.2] - 2020-08-17
+### Added
+ - Option for checking log-likelihood after each move
+ - Debugging system
+ - Options for repeated and rejection sampling for SNL move
+### Fixed
+ - Bug in locusrate proposal for correlated clock model using Dirichlet and when
+   mubar is fixed to 1
+ - Rules for detecting long branches in SSPR when using relaxed clocks
+ - Swapping of p-matrices in mu_i and nu_i proposals
+ - Acceptance ratio for SNL move
+ - Memory leak associated with SNL move
+
+## [4.3.1] - 2020-08-11
+### Added
+ - Added NOT keyword for defining topological constraints
+ - Added '--comply' switch for checking compatibility of constraints against
+   a tree
+ - Added an initial implementation of the snakes and ladders move
+### Changed
+ - Simplified constraints definition (multiple compatible constraints may be
+   specified)
+
+
 ## [4.3.0] - 2020-07-07
 ### Fixed
 - Notation for simulating data with only one species
