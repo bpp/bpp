@@ -5678,7 +5678,7 @@ static void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
       snode_t * pop = gtree->nodes[j]->pop;
 
       assert(x->time >= pop->tau);
-      if (pop->parent)
+      if (pop->parent && pop->parent->tau)
         assert(x->time < pop->parent->tau);
     }
     int event_count = 0;
@@ -6444,7 +6444,7 @@ long snl_expand_and_shrink(stree_t * stree,
     else
       *lnacceptance += gtree_list[i]->logl - gtree_list[i]->old_logl;
   }
-  #if 1
+  #if 0
   debug_consistency(stree, gtree_list);
   #endif
 
