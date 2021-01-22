@@ -340,6 +340,12 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
 {
   int size_alloced;
   char * s = NULL;
+  char * stheta = NULL;
+
+  if (node->theta > 0)
+    xasprintf(&stheta, "#%f", node->theta);
+  else
+    stheta = xstrdup("");
 
   if (!node->left && !node->right)
   {
@@ -353,46 +359,42 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
       {
         /* hybridization event */
         if (node->hphi >= 0)
-          xasprintf(&s,
-                                   "%s[&phi=%f,tau-parent=%s]:%f #%f",
+          size_alloced = xasprintf(&s,
+                                   "%s[&phi=%f,tau-parent=%s]:%f %s",
                                    node->label,
                                    node->hphi,
                                    node->htau ? "yes" : "no",
                                    node->tau,
-                                   node->theta);
+                                   stheta);
         else
           size_alloced = xasprintf(&s,
-                                   "%s[tau-parent=%s]:%f #%f",
+                                   "%s[tau-parent=%s]:%f %s",
                                    node->label,
                                    node->htau ? "yes" : "no",
                                    node->tau,
-                                   node->theta);
+                                   stheta);
       }
       else
       {
         /* bidirectional introgression */
         if (node->hphi >= 0)
           size_alloced = xasprintf(&s,
-                                   "%s[&phi=%f]:%f #%f",
+                                   "%s[&phi=%f]:%f %s",
                                    node->label,
                                    node->hphi,
                                    node->tau,
-                                   node->theta);
-        else   /* TODO */
+                                   stheta);
+        else
           size_alloced = xasprintf(&s, "%s", node->label);
       }
     }
     else
-    {
-      if (node->theta > 0)
-        size_alloced = xasprintf(&s, "%s #%f", node->label, node->theta);
-      else
-        size_alloced = xasprintf(&s, "%s", node->label);
-    }
+      size_alloced = xasprintf(&s, "%s %s", node->label, stheta);
   }
   else
   {
     /* inner or hybrid node */
+
     if (node->hybrid)
     {
       /* hybrid non-mirror node */
@@ -404,15 +406,19 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
 
         if (node->hphi >= 0)
             size_alloced = xasprintf(&s,
-                                     "%s[&phi=%f,tau-parent=%s]",
+                                     "%s[&phi=%f,tau-parent=%s]:%f %s",
                                      node->label ? node->label : "",
                                      node->hphi,
-                                     node->htau ? "yes" : "no");
+                                     node->htau ? "yes" : "no",
+                                     node->tau,
+                                     stheta);
           else
             size_alloced = xasprintf(&s,
-                                     "%s[tau-parent=%s]",
+                                     "%s[tau-parent=%s]:%f %s",
                                      node->label ? node->label : "",
-                                     node->htau ? "yes" : "no");
+                                     node->htau ? "yes" : "no",
+                                     node->tau,
+                                     stheta);
       }
       else
       {
@@ -422,31 +428,33 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
         if (node->hphi >= 0)
         {
           size_alloced = xasprintf(&s,
-                                   "%s[&phi=%f]:%f #%f",
+                                   "%s[&phi=%f]:%f %s",
                                    node->label,
                                    node->hphi,
                                    node->tau,
-                                   node->theta);
+                                   stheta);
         }
         else
         {
             size_alloced = xasprintf(&s,
-                                     "%s:%f #%f",
+                                     "%s:%f %s",
                                      node->label,
                                      node->tau,
-                                     node->theta);
+                                     stheta);
         }
       }
     }
     else
     {
       size_alloced = xasprintf(&s,
-                               "%s:%f #%f",
+                               "%s:%f %s",
                                node->label ? node->label : "",
                                node->tau,
-                               node->theta);
+                               stheta);
     }
   }
+  if (stheta)
+    free(stheta);
   return s;
 }
 
