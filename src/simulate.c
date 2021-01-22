@@ -1777,6 +1777,7 @@ static void validate_and_set_taus(stree_t * stree)
 
   for (i = 0; i < stree->hybrid_count; ++i)
   {
+    tau = 0;
     snode_t * mnode = stree->nodes[hoffset+i];
     snode_t * hnode = mnode->hybrid;
 

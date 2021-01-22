@@ -336,6 +336,120 @@ static char * cb_attributes(const snode_t * node)
   return s;
 }
 
+static char * cb_msci_thetasandtaus(const snode_t * node)
+{
+  int size_alloced;
+  char * s = NULL;
+
+  if (!node->left && !node->right)
+  {
+    /* tip or hybrid mirror node */
+    if (node->hybrid)
+    {
+      /* hybrid mirror node */
+      assert(node_is_mirror(node));
+
+      if (node_is_hybridization(node))
+      {
+        /* hybridization event */
+        if (node->hphi >= 0)
+          xasprintf(&s,
+                                   "%s[&phi=%f,tau-parent=%s]:%f #%f",
+                                   node->label,
+                                   node->hphi,
+                                   node->htau ? "yes" : "no",
+                                   node->tau,
+                                   node->theta);
+        else
+          size_alloced = xasprintf(&s,
+                                   "%s[tau-parent=%s]:%f #%f",
+                                   node->label,
+                                   node->htau ? "yes" : "no",
+                                   node->tau,
+                                   node->theta);
+      }
+      else
+      {
+        /* bidirectional introgression */
+        if (node->hphi >= 0)
+          size_alloced = xasprintf(&s,
+                                   "%s[&phi=%f]:%f #%f",
+                                   node->label,
+                                   node->hphi,
+                                   node->tau,
+                                   node->theta);
+        else   /* TODO */
+          size_alloced = xasprintf(&s, "%s", node->label);
+      }
+    }
+    else
+    {
+      if (node->theta > 0)
+        size_alloced = xasprintf(&s, "%s #%f", node->label, node->theta);
+      else
+        size_alloced = xasprintf(&s, "%s", node->label);
+    }
+  }
+  else
+  {
+    /* inner or hybrid node */
+    if (node->hybrid)
+    {
+      /* hybrid non-mirror node */
+      assert(!node_is_mirror(node));
+      if (node_is_hybridization(node))
+      {
+        /* hybridization event */
+        assert(node->left && !node->right);
+
+        if (node->hphi >= 0)
+            size_alloced = xasprintf(&s,
+                                     "%s[&phi=%f,tau-parent=%s]",
+                                     node->label ? node->label : "",
+                                     node->hphi,
+                                     node->htau ? "yes" : "no");
+          else
+            size_alloced = xasprintf(&s,
+                                     "%s[tau-parent=%s]",
+                                     node->label ? node->label : "",
+                                     node->htau ? "yes" : "no");
+      }
+      else
+      {
+        /* bidirectional introgression */
+        assert(node->left && node->right);
+        assert(node->right->hybrid && !node->right->left && !node->right->right);
+        if (node->hphi >= 0)
+        {
+          size_alloced = xasprintf(&s,
+                                   "%s[&phi=%f]:%f #%f",
+                                   node->label,
+                                   node->hphi,
+                                   node->tau,
+                                   node->theta);
+        }
+        else
+        {
+            size_alloced = xasprintf(&s,
+                                     "%s:%f #%f",
+                                     node->label,
+                                     node->tau,
+                                     node->theta);
+        }
+      }
+    }
+    else
+    {
+      size_alloced = xasprintf(&s,
+                               "%s:%f #%f",
+                               node->label ? node->label : "",
+                               node->tau,
+                               node->theta);
+    }
+  }
+  return s;
+}
+
 /* Ziheng 2020-10-2 
 *  (i) Space for stree->nodes[i]->data is allocated for for snodes_total, including mirror nodes.
 *      Where is the space freed?
@@ -346,7 +460,11 @@ static char * cb_attributes(const snode_t * node)
 
 long opt_msci_faketree_binarize;
 
-static void write_figtree(stree_t * stree, double * mean, double * hpd025, double * hpd975)
+static void write_figtree(FILE * fp_out,
+                          stree_t * stree,
+                          double * mean,
+                          double * hpd025,
+                          double * hpd975)
 {
   long i, theta_count = 0, tau_count = 0;
   FILE * fp_tree = NULL;
@@ -410,19 +528,47 @@ static void write_figtree(stree_t * stree, double * mean, double * hpd025, doubl
   }
 
   /*** Ziheng 2020-10-2 ***/
+  fprintf(fp_out, "List of nodes, taus and thetas:\n");
+  fprintf(fp_out, "Node (+1)     Theta        Tau    Label\n");
   for (i = 0; i < snodes_total; ++i) {
-    printf("snode age theta: %6d %6s %9.6f %9.6f\n", i, stree->nodes[i]->label, stree->nodes[i]->tau, stree->nodes[i]->theta);
+    fprintf(fp_out,
+            "%-9ld %9.6f  %9.6f    %s\n",
+            i,
+            stree->nodes[i]->tau,
+            stree->nodes[i]->theta,
+            stree->nodes[i]->label ? stree->nodes[i]->label : "-");
   }
-  char* newick;
+  char * newick;
   if(!opt_msci)
     newick = stree_export_newick(stree->root, cb_attributes);
-  else {
+  else
+  {
     opt_msci_faketree_binarize = 0;
+    fprintf(stdout, "\nSpecies tree network :\n");
+    fprintf(fp_out, "\nSpecies tree network :\n");
     newick = msci_export_newick(stree->root, NULL);
-    printf("\n%s\n", newick);
+    fprintf(stdout, "%s\n", newick);
+    fprintf(fp_out, "%s\n", newick);
     free(newick);
+
+    /* print network with attributes */
+    fprintf(stdout,
+            "\nSpecies tree network with attributes (thetas and tau 95%% HPD), "
+           "and branch lengths (tau difference):\n");
+    fprintf(fp_out,
+            "\nSpecies tree network with attributes (thetas and tau 95%% HPD), "
+           "and branch lengths (tau difference):\n");
     newick = msci_export_newick(stree->root, cb_attributes);
-    printf("\n%s\n", newick);
+    fprintf(stdout, "%s\n", newick);
+    fprintf(fp_out, "%s\n", newick);
+    free(newick);
+
+    /* print network suitable for running simulations */
+    fprintf(stdout, "\nSpecies tree network with taus and thetas:\n");
+    fprintf(fp_out, "\nSpecies tree network with taus and thetas:\n");
+    newick = msci_export_newick(stree->root, cb_msci_thetasandtaus);
+    fprintf(stdout, "%s\n", newick);
+    fprintf(fp_out, "%s\n", newick);
     free(newick);
 
     opt_msci_faketree_binarize = 1;
@@ -451,7 +597,7 @@ static void write_figtree(stree_t * stree, double * mean, double * hpd025, doubl
 
 void allfixed_summary(FILE * fp_out, stree_t * stree)
 {
-  long i, j, count, theta_count = 0;
+  long i, j, count;
   long sample_num;
   long rc = 0;
   FILE * fp;
@@ -476,7 +622,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     for (i = 0; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0)
         col_count++;
-  theta_count = col_count;
+
   /* compute number of tau parameters */
   for (i = 0; i < stree->inner_count; ++i)
     if (stree->nodes[stree->tip_count+i]->tau)
@@ -744,11 +890,11 @@ l_unwind:
   if (rc && stree->tip_count > 1)
   {
     /* write figtree file */
-    write_figtree(stree, mean, hpd025, hpd975);
+    write_figtree(fp_out, stree, mean, hpd025, hpd975);
     if (!opt_msci)
-      fprintf(stdout, "FigTree tree is in FigTree.tre\n");
+      fprintf(stdout, "\nFigTree tree is in FigTree.tre\n");
     else 
-      fprintf(stdout, "FigTree tree is in FakeTree.tre\n");
+      fprintf(stdout, "\nFigTree tree is in FakeTree.tre\n");
   }
 
   free(mean);

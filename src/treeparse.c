@@ -2027,7 +2027,7 @@ stree_t * stree_from_ntree(ntree_t * ntree)
   if (opt_diploid)
   {
     if (opt_diploid_size != stree->tip_count)
-      fatal("Number of 'diploid' assignments mismatch number of species");
+      fatal("Number of 'phase' assignments mismatch number of species");
 
     for (i = 0; i < stree->tip_count; ++i)
       stree->nodes[i]->diploid = opt_diploid[i];
