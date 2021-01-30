@@ -1973,9 +1973,9 @@ void logprob_revert_notheta(snode_t* snode, long msa_index)
 }
 
 double gtree_update_logprob_contrib(snode_t* snode,
-  double heredity,
-  long msa_index,
-  long thread_index)
+                                    double heredity,
+                                    long msa_index,
+                                    long thread_index)
 {
   unsigned int j, k, n;
   double logpr = 0;

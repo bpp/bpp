@@ -1262,7 +1262,7 @@ l_unwind:
   return ret;
 }
 
-static long parse_thetaprior(const char * line)
+static long parse_thetaprior_args(const char * line)
 {
   long ret = 0;
   char * s = xstrdup(line);
@@ -1273,6 +1273,7 @@ static long parse_thetaprior(const char * line)
   count = get_double(p, &opt_theta_alpha);
   if (!count) goto l_unwind;
 
+  /* invgamma using default option (i.e. thetaprior = alpha beta e) */
   p += count;
 
   /* now read second token */
@@ -1283,12 +1284,54 @@ static long parse_thetaprior(const char * line)
 
   if (is_emptyline(p)) ret = 1;
 
-  count = get_e(p, &opt_est_theta);
-  if (opt_est_theta > 1) goto l_unwind;
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  {
 
-  p += count;
+    count = get_e(p, &opt_est_theta);
+    if (opt_est_theta > 1) goto l_unwind;
 
-  if (is_emptyline(p)) ret = 1;
+    p += count;
+
+    if (is_emptyline(p)) ret = 1;
+  }
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
+static long parse_thetaprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  char * dist;
+
+  long count;
+
+  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+
+  /* peek at the first argument. If not a double then read distribution type
+     otherwise read the arguments of invgamma (default) */
+  count = get_double(p, &opt_theta_alpha);
+  if (!count)
+  {
+    count = get_delstring(p," \t\r\n*#,",&dist);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    if (!strcasecmp(dist,"invgamma"))
+      opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+    else if (!strcasecmp(dist,"gamma"))
+      opt_theta_dist = BPP_THETA_PRIOR_GAMMA;
+    else if (!strcasecmp(dist,"beta"))
+      opt_theta_dist = BPP_THETA_PRIOR_BETA;
+    else
+      goto l_unwind;
+  }
+
+  ret = parse_thetaprior_args(p);
   
 l_unwind:
   free(s);
@@ -2068,6 +2111,23 @@ static void check_validity()
     fatal("Cannot use multiple threads when *not* estimating theta parameters."
           " Please either estimate theta or set threads=1");
   
+  if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
+    fatal("Internal error: invalid theta prior distribution");
+  switch (opt_theta_dist)
+  {
+    case BPP_THETA_PRIOR_INVGAMMA:
+      break;
+    case BPP_THETA_PRIOR_GAMMA:
+      printf("Theta prior: Gamma(%f,%f)\n", opt_theta_alpha, opt_theta_beta);
+      fatal("Not yet implemented");
+      break;
+    case BPP_THETA_PRIOR_BETA:
+      printf("Beta prior: Beta(%f,%f)\n", opt_theta_alpha, opt_theta_beta);
+      fatal("Not yet implemented");
+      break;
+    default:
+      fatal("Internal error");
+  }
   double gammamean;
   gammamean = opt_theta_beta / (opt_theta_alpha - 1);
   if (gammamean > 1)
@@ -2163,7 +2223,7 @@ static void set_debug_flags()
   else
   {
     long flag_set = 0;
-    for (i = 0; i < flags[i]; ++i)
+    for (i = 0; flags[i]; ++i)
     {
       flagptr = flags[i];
       flag_set |= !!(*flagptr);

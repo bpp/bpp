@@ -228,6 +228,12 @@ extern const char * global_freqs_strings[28];
 #define BPP_BRATE_PRIOR_GAMMA           1
 #define BPP_BRATE_PRIOR_MAX             1
 
+#define BPP_THETA_PRIOR_MIN             0
+#define BPP_THETA_PRIOR_INVGAMMA        1
+#define BPP_THETA_PRIOR_GAMMA           2
+#define BPP_THETA_PRIOR_BETA            3
+#define BPP_THETA_PRIOR_MAX             3
+
 #define BPP_PI  3.1415926535897932384626433832795
 
 #define THREAD_WORK_GTAGE               1
@@ -881,6 +887,7 @@ extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_snl_noswap;
+extern long opt_theta_dist;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;

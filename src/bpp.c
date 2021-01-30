@@ -114,6 +114,7 @@ long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_snl_noswap;
+long opt_theta_dist;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -484,6 +485,7 @@ void args_init(int argc, char ** argv)
   opt_tau_beta = 0;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
+  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
   opt_threads = 1;
   opt_threads_start = 1;
   opt_threads_step = 1;
