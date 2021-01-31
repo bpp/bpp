@@ -1269,20 +1269,34 @@ static long parse_thetaprior_args(const char * line)
   char * p = s;
 
   long count;
+  double a,b;
+  a = b = 0;
 
-  count = get_double(p, &opt_theta_alpha);
+  count = get_double(p, &a);
   if (!count) goto l_unwind;
 
   /* invgamma using default option (i.e. thetaprior = alpha beta e) */
   p += count;
 
   /* now read second token */
-  count = get_double(p, &opt_theta_beta);
+  count = get_double(p, &b);
   if (!count) goto l_unwind;
 
   p += count;
 
-  if (is_emptyline(p)) ret = 1;
+  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  {
+    opt_theta_p = a;
+    opt_theta_q = b;
+  }
+  else
+  {
+    opt_theta_alpha = a;
+    opt_theta_beta = b;
+  }
+
+  if (is_emptyline(p) && (opt_theta_dist != BPP_THETA_PRIOR_BETA))
+    ret = 1;
 
   if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
   {
@@ -1293,6 +1307,21 @@ static long parse_thetaprior_args(const char * line)
     p += count;
 
     if (is_emptyline(p)) ret = 1;
+  }
+  else if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  {
+    count = get_double(p, &opt_theta_min);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    count = get_double(p, &opt_theta_max);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    if (is_emptyline(p))
+      ret = 1;
   }
 
 l_unwind:
@@ -2059,11 +2088,36 @@ static void check_validity()
   if (!opt_usedata && opt_bfbeta != 1)
     fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
 
-  if (opt_theta_alpha <= 1)
-    fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  {
+    if (opt_theta_alpha <= 1)
+      fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
 
-  if (opt_theta_beta <= 0)
-    fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
+    if (opt_theta_beta <= 0)
+      fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
+  }
+  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  {
+    if (opt_theta_alpha <= 0)
+      fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
+
+    if (opt_theta_beta <= 0)
+      fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
+  }
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+    if (opt_theta_p <= 0)
+      fatal("Theta prior Beta(p,q,min,max) requires p > 0");
+    if (opt_theta_q <= 0)
+      fatal("Theta prior Beta(p,q,min,max) requires q > 0");
+    if (opt_theta_min < 0)
+      fatal("Theta prior Beta(p,q,min,max) requires min >= 0");
+    if (opt_theta_max < 0)
+      fatal("Theta prior Beta(p,q,min,max) requires max >= 0");
+    if (opt_theta_max <= opt_theta_min)
+      fatal("Theta prior Beta(p,q,min,max) requires max > min");
+  }
 
   if (species_count > 1)
   {
@@ -2119,11 +2173,12 @@ static void check_validity()
       break;
     case BPP_THETA_PRIOR_GAMMA:
       printf("Theta prior: Gamma(%f,%f)\n", opt_theta_alpha, opt_theta_beta);
-      fatal("Not yet implemented");
+      fatal("Gamma prior for theta is not implemented yet.");
       break;
     case BPP_THETA_PRIOR_BETA:
-      printf("Beta prior: Beta(%f,%f)\n", opt_theta_alpha, opt_theta_beta);
-      fatal("Not yet implemented");
+      printf("Beta prior: p=%f q=%f min=%f max=%f\n",
+             opt_theta_p, opt_theta_q, opt_theta_min, opt_theta_max);
+      fatal("Beta prior for theta is not implemented yet.");
       break;
     default:
       fatal("Internal error");
@@ -2476,7 +2531,10 @@ void load_cfile()
       if (!strncasecmp(token,"thetaprior",10))
       {
         if (!parse_thetaprior(value))
-          fatal("Option 'thetaprior' expects two doubles (line %ld)",
+          fatal("Option 'thetaprior' (line %ld) expects the following syntax:\n"
+                "  thetaprior = invgamma alpha beta     # for inverse gamma prior\n"
+                "  thetaprior = gamma alpha beta        # for gamma prior\n"
+                "  thetaprior = beta p q min max        # for beta prior\n",
                 line_count);
         valid = 1;
       }
