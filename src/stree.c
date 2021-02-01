@@ -1458,9 +1458,18 @@ static void stree_init_theta(stree_t * stree,
        continue;
      }
 
-     /* otherwise set theta around the mean of the inverse gamma prior */
-     node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                   (0.9 + 0.2 * legacy_rndu(thread_index));
+     /* otherwise set theta around the mean of the prior */
+     if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+       node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                     (0.9 + 0.2 * legacy_rndu(thread_index));
+     else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+       node->theta = opt_theta_alpha / opt_theta_beta *
+                     (0.6+0.8*legacy_rndu(thread_index));
+     else
+     {
+       assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+       fatal("Beta prior not implemented yet");
+     }
    }
 #endif
 
@@ -1481,8 +1490,17 @@ static void stree_init_theta(stree_t * stree,
 
         if (node->htau)
         {
-          node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                        (0.9 + 0.2 * legacy_rndu(thread_index));
+          if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+            node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                          (0.9 + 0.2 * legacy_rndu(thread_index));
+          else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+            node->theta = opt_theta_alpha / opt_theta_beta *
+                          (0.6+0.8*legacy_rndu(thread_index));
+          else
+          {
+            assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+            fatal("Beta prior not implemented yet");
+          }
           node->has_theta = 1;
         }
         else
@@ -1493,8 +1511,17 @@ static void stree_init_theta(stree_t * stree,
         
         if (node->hybrid->htau)
         {
-          node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                                (0.9 + 0.2 * legacy_rndu(thread_index));
+          if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+            node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                                  (0.9 + 0.2 * legacy_rndu(thread_index));
+          else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+            node->hybrid->theta = opt_theta_alpha / opt_theta_beta *
+                                  (0.6+0.8*legacy_rndu(thread_index));
+          else
+          {
+            assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+            fatal("Beta prior not implemented yet");
+          }
           node->hybrid->has_theta = 1;
         }
         else
@@ -1507,8 +1534,17 @@ static void stree_init_theta(stree_t * stree,
       {
         /* bidirectional introgression */
 
-        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                      (0.9 + 0.2 * legacy_rndu(thread_index));
+        if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+          node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                        (0.9 + 0.2 * legacy_rndu(thread_index));
+        else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+          node->theta = opt_theta_alpha / opt_theta_beta *
+                        (0.6+0.8*legacy_rndu(thread_index));
+        else
+        {
+          assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+          fatal("Beta prior not implemented yet");
+        }
         node->has_theta = 1;
 
         /* the mirrored nodes do not have a theta */
@@ -1522,8 +1558,17 @@ static void stree_init_theta(stree_t * stree,
          case of inner nodes that have an incoming number of lineages equal to 1
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
-         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                       (0.9 + 0.2 * legacy_rndu(thread_index));
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                      (0.9 + 0.2 * legacy_rndu(thread_index));
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        node->theta = opt_theta_alpha / opt_theta_beta *
+                      (0.6+0.8*legacy_rndu(thread_index));
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
   }
 
@@ -2098,8 +2143,17 @@ static int propose_theta(gtree_t ** gtree,
 
   snode->theta = thetanew;
 
-  lnacceptance = (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
-                 opt_theta_beta*(1 / thetanew - 1 / thetaold);
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+    lnacceptance = (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
+                   opt_theta_beta*(1 / thetanew - 1 / thetaold);
+  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+    lnacceptance = (opt_theta_alpha-1) * log(thetanew / thetaold) -
+                   opt_theta_beta*(thetanew - thetaold);
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+    fatal("Beta prior not implemented yet");
+  }
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -2733,9 +2787,19 @@ static long propose_tau(locus_t ** loci,
         //snode->hybrid->theta = 
       }
 
-      lnacceptance += -log(thetafactor) +
-                      (-opt_theta_alpha - 1) * log(snode->theta / oldtheta) -
-                      opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += -log(thetafactor) +
+                        (-opt_theta_alpha - 1) * log(snode->theta / oldtheta) -
+                        opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += -log(thetafactor) +
+                        (opt_theta_alpha-1) * log(snode->theta / oldtheta) -
+                        opt_theta_beta*(snode->theta - oldtheta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
   }
 

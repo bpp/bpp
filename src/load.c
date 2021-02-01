@@ -447,10 +447,20 @@ static void load_chk_section_1(FILE * fp,
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
   /* read theta prior */
+  if (!LOAD(&opt_theta_dist,1,fp))
+    fatal("Cannot read type of theta prior");
   if (!LOAD(&opt_theta_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
   if (!LOAD(&opt_theta_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
+  if (!LOAD(&opt_theta_p,1,fp))
+    fatal("Cannot read p of 'theta' tag");
+  if (!LOAD(&opt_theta_q,1,fp))
+    fatal("Cannot read q of 'theta' tag");
+  if (!LOAD(&opt_theta_min,1,fp))
+    fatal("Cannot read min of 'theta' tag");
+  if (!LOAD(&opt_theta_max,1,fp))
+    fatal("Cannot read max of 'theta' tag");
   if (!LOAD(&opt_est_theta,1,fp))
     fatal("Cannot read est 'theta' tag");
   #if 0

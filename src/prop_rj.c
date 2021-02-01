@@ -34,6 +34,7 @@
 #define log_pdfbeta(x,p,q,b) (-lbeta(p,q) + (p-1)*log(x/b) + (q-1)*log(1-x/b) -\
         log(b))
 #define log_pdfinvgamma(x, a, b)  ( (a)*log(b) - lgamma(a) - (a+1)*log(x) - (b)/(x) )
+#define log_pdfgamma(x, a, b)  ( (a)*log(b) - lgamma(a) + ((a)-1)*log(x) - (b)*(x) )
 
 static gnode_t ** nodevec;
 static unsigned int * nodevec_offset;
@@ -468,9 +469,19 @@ long prop_split(gtree_t ** gtree,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
 
-      lnacceptance += log_pdfinvgamma(node->left->theta,
-                                      opt_theta_alpha,
-                                      opt_theta_beta);
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += log_pdfinvgamma(node->left->theta,
+                                        opt_theta_alpha,
+                                        opt_theta_beta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += log_pdfgamma(node->left->theta,
+                                     opt_theta_alpha,
+                                     opt_theta_beta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
 
     /* Store the right child theta, and update it according to RJ algorithm */
@@ -492,9 +503,19 @@ long prop_split(gtree_t ** gtree,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
 
-      lnacceptance += log_pdfinvgamma(node->right->theta,
-                                      opt_theta_alpha,
-                                      opt_theta_beta);
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += log_pdfinvgamma(node->right->theta,
+                                        opt_theta_alpha,
+                                        opt_theta_beta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += log_pdfgamma(node->right->theta,
+                                     opt_theta_alpha,
+                                     opt_theta_beta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
   }
 
@@ -864,9 +885,19 @@ long prop_join(gtree_t ** gtree,
                                  opt_rjmcmc_alpha,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
-      lnacceptance -= log_pdfinvgamma(node->left->theta,
-                                      opt_theta_alpha,
-                                      opt_theta_beta);
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance -= log_pdfinvgamma(node->left->theta,
+                                        opt_theta_alpha,
+                                        opt_theta_beta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance -= log_pdfgamma(node->left->theta,
+                                     opt_theta_alpha,
+                                     opt_theta_beta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
 
     /* Now store the right child theta, and update it according to RJ algorithm */
@@ -888,9 +919,19 @@ long prop_join(gtree_t ** gtree,
                                  opt_rjmcmc_alpha,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
-      lnacceptance -= log_pdfinvgamma(node->right->theta,
-                                      opt_theta_alpha,
-                                      opt_theta_beta);
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance -= log_pdfinvgamma(node->right->theta,
+                                        opt_theta_alpha,
+                                        opt_theta_beta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+          lnacceptance -= log_pdfgamma(node->right->theta,
+                                       opt_theta_alpha,
+                                       opt_theta_beta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
   }
 

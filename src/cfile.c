@@ -2167,29 +2167,31 @@ static void check_validity()
   
   if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
     fatal("Internal error: invalid theta prior distribution");
-  switch (opt_theta_dist)
+
+  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
   {
-    case BPP_THETA_PRIOR_INVGAMMA:
-      break;
-    case BPP_THETA_PRIOR_GAMMA:
-      printf("Theta prior: Gamma(%f,%f)\n", opt_theta_alpha, opt_theta_beta);
-      fatal("Gamma prior for theta is not implemented yet.");
-      break;
-    case BPP_THETA_PRIOR_BETA:
-      printf("Beta prior: p=%f q=%f min=%f max=%f\n",
-             opt_theta_p, opt_theta_q, opt_theta_min, opt_theta_max);
-      fatal("Beta prior for theta is not implemented yet.");
-      break;
-    default:
-      fatal("Internal error");
+    printf("Beta prior on theta: p=%f q=%f min=%f max=%f\n",
+           opt_theta_p, opt_theta_q, opt_theta_min, opt_theta_max);
+    fatal("Beta prior for theta is not implemented yet.");
   }
-  double gammamean;
-  gammamean = opt_theta_beta / (opt_theta_alpha - 1);
-  if (gammamean > 1)
-    fatal("Inverse gamma prior mean for thetas is > 1. Please make sure you "
-          "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
-          "<= 3.3)");
-  gammamean = opt_tau_beta / (opt_tau_alpha - 1);
+
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  {
+    double invgammamean = opt_theta_beta / (opt_theta_alpha - 1);
+    if (invgammamean > 1)
+      fatal("Inverse gamma prior mean for thetas is > 1.\nPlease make sure you "
+            "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
+            "<= 3.3)");
+  }
+  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  {
+    double gammamean = opt_theta_alpha / opt_theta_beta;
+    if (gammamean > 1)
+      fatal("Gamma prior mean for thetas is > 1.\nPlease make sure you "
+            "are indeed using Gamma as prior and not Inv-Gamma");
+  }
+
+  double gammamean = opt_tau_beta / (opt_tau_alpha - 1);
   if (gammamean > 1)
     fatal("Inverse gamma prior mean for taus is > 1. Please make sure you "
           "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "

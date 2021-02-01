@@ -287,8 +287,13 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_print_locusfile,1,fp);
 
   /* write theta prior */
+  DUMP(&opt_theta_dist,1,fp);
   DUMP(&opt_theta_alpha,1,fp);
   DUMP(&opt_theta_beta,1,fp);
+  DUMP(&opt_theta_p,1,fp);
+  DUMP(&opt_theta_q,1,fp);
+  DUMP(&opt_theta_min,1,fp);
+  DUMP(&opt_theta_max,1,fp);
   DUMP(&opt_est_theta,1,fp);
 
   /* write tau prior */

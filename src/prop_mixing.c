@@ -239,8 +239,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
       snodes[i]->old_theta = snodes[i]->theta;
       snodes[i]->theta *= c;
-      lnacceptance += (-opt_theta_alpha-1)*lnc -
+      
+      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += (-opt_theta_alpha-1)*lnc -
                      opt_theta_beta*(1/snodes[i]->theta-1/snodes[i]->old_theta);
+      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += (opt_theta_alpha-1)*lnc -
+                       opt_theta_beta*(snodes[i]->theta - snodes[i]->old_theta);
+      else
+      {
+        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        fatal("Beta prior not implemented yet");
+      }
     }
   }
 
