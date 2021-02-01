@@ -35,6 +35,7 @@
         log(b))
 #define log_pdfinvgamma(x, a, b)  ( (a)*log(b) - lgamma(a) - (a+1)*log(x) - (b)/(x) )
 #define log_pdfgamma(x, a, b)  ( (a)*log(b) - lgamma(a) + ((a)-1)*log(x) - (b)*(x) )
+#define log_pdfbeta4(x,p,q,a,b) ((p-1)*log(x-a) + (q-1)*log(b-x) - lbeta(p,q) - (p+q-1)*log(b-a))
 
 static gnode_t ** nodevec;
 static unsigned int * nodevec_offset;
@@ -480,7 +481,11 @@ long prop_split(gtree_t ** gtree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        lnacceptance += log_pdfbeta4(node->left->theta,
+                                     opt_theta_p,
+                                     opt_theta_q,
+                                     opt_theta_min,
+                                     opt_theta_max);
       }
     }
 
@@ -514,7 +519,11 @@ long prop_split(gtree_t ** gtree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        lnacceptance += log_pdfbeta4(node->right->theta,
+                                     opt_theta_p,
+                                     opt_theta_q,
+                                     opt_theta_min,
+                                     opt_theta_max);
       }
     }
   }
@@ -896,7 +905,11 @@ long prop_join(gtree_t ** gtree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        lnacceptance -= log_pdfbeta4(node->left->theta,
+                                     opt_theta_p,
+                                     opt_theta_q,
+                                     opt_theta_min,
+                                     opt_theta_max);
       }
     }
 
@@ -930,7 +943,11 @@ long prop_join(gtree_t ** gtree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        lnacceptance -= log_pdfbeta4(node->right->theta,
+                                     opt_theta_p,
+                                     opt_theta_q,
+                                     opt_theta_min,
+                                     opt_theta_max);
       }
     }
   }

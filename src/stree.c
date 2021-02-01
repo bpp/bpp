@@ -1468,7 +1468,9 @@ static void stree_init_theta(stree_t * stree,
      else
      {
        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-       fatal("Beta prior not implemented yet");
+       node->theta = opt_theta_min +
+                     opt_theta_p*(opt_theta_max-opt_theta_min) /
+                     (opt_theta_p+opt_theta_q);
      }
    }
 #endif
@@ -1499,7 +1501,9 @@ static void stree_init_theta(stree_t * stree,
           else
           {
             assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-            fatal("Beta prior not implemented yet");
+            node->theta = opt_theta_min +
+                          opt_theta_p*(opt_theta_max-opt_theta_min) /
+                          (opt_theta_p+opt_theta_q);
           }
           node->has_theta = 1;
         }
@@ -1520,7 +1524,9 @@ static void stree_init_theta(stree_t * stree,
           else
           {
             assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-            fatal("Beta prior not implemented yet");
+            node->hybrid->theta = opt_theta_min +
+                                  opt_theta_p*(opt_theta_max-opt_theta_min) /
+                                  (opt_theta_p+opt_theta_q);
           }
           node->hybrid->has_theta = 1;
         }
@@ -1543,7 +1549,9 @@ static void stree_init_theta(stree_t * stree,
         else
         {
           assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-          fatal("Beta prior not implemented yet");
+          node->theta = opt_theta_min +
+                        opt_theta_p*(opt_theta_max-opt_theta_min) /
+                        (opt_theta_p+opt_theta_q);
         }
         node->has_theta = 1;
 
@@ -1567,7 +1575,9 @@ static void stree_init_theta(stree_t * stree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        node->theta = opt_theta_min +
+                      opt_theta_p*(opt_theta_max-opt_theta_min) /
+                      (opt_theta_p+opt_theta_q);
       }
     }
   }
@@ -2152,7 +2162,10 @@ static int propose_theta(gtree_t ** gtree,
   else
   {
     assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-    fatal("Beta prior not implemented yet");
+    lnacceptance = (opt_theta_p - 1) *
+                   log((thetanew-opt_theta_min) / (thetaold-opt_theta_min)) +
+                   (opt_theta_q - 1) *
+                   log((opt_theta_max-thetanew) / (opt_theta_max-thetaold));
   }
 
   for (i = 0; i < opt_locus_count; ++i)
@@ -2798,7 +2811,10 @@ static long propose_tau(locus_t ** loci,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        fatal("Beta prior not implemented yet");
+        lnacceptance = -log(thetafactor) + (opt_theta_p - 1) *
+                       log((snode->theta-opt_theta_min) / (oldtheta-opt_theta_min)) +
+                       (opt_theta_q - 1) *
+                       log((opt_theta_max-snode->theta) / (opt_theta_max-oldtheta));
       }
     }
   }
