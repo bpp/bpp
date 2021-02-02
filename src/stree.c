@@ -1468,9 +1468,9 @@ static void stree_init_theta(stree_t * stree,
      else
      {
        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-       node->theta = opt_theta_min +
-                     opt_theta_p*(opt_theta_max-opt_theta_min) /
-                     (opt_theta_p+opt_theta_q);
+       double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
+       double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
+       node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
      }
    }
 #endif
@@ -1501,9 +1501,9 @@ static void stree_init_theta(stree_t * stree,
           else
           {
             assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-            node->theta = opt_theta_min +
-                          opt_theta_p*(opt_theta_max-opt_theta_min) /
-                          (opt_theta_p+opt_theta_q);
+            double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
+            double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
+            node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
           }
           node->has_theta = 1;
         }
@@ -1524,9 +1524,9 @@ static void stree_init_theta(stree_t * stree,
           else
           {
             assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-            node->hybrid->theta = opt_theta_min +
-                                  opt_theta_p*(opt_theta_max-opt_theta_min) /
-                                  (opt_theta_p+opt_theta_q);
+            double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
+            double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
+            node->hybrid->theta = opt_theta_min+r*(opt_theta_max-opt_theta_min);
           }
           node->hybrid->has_theta = 1;
         }
@@ -1549,9 +1549,9 @@ static void stree_init_theta(stree_t * stree,
         else
         {
           assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-          node->theta = opt_theta_min +
-                        opt_theta_p*(opt_theta_max-opt_theta_min) /
-                        (opt_theta_p+opt_theta_q);
+          double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
+          double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
+          node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
         }
         node->has_theta = 1;
 
@@ -1575,9 +1575,9 @@ static void stree_init_theta(stree_t * stree,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        node->theta = opt_theta_min +
-                      opt_theta_p*(opt_theta_max-opt_theta_min) /
-                      (opt_theta_p+opt_theta_q);
+        double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
+        double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
+        node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
       }
     }
   }
