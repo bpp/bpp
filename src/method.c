@@ -2868,6 +2868,8 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Revolutionary gene tree SPR algorithm\n");
   if (opt_revolutionary_spr_method)
     fprintf(stdout, "[EXPERIMENTAL] - Revolutionary species tree SPR algorithm\n");
+  if (opt_exp_theta)
+    fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
 
   /* enable proposals */
   if (opt_model != BPP_DNA_MODEL_JC69)

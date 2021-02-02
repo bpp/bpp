@@ -2140,32 +2140,59 @@ static int propose_theta(gtree_t ** gtree,
                          long thread_index)
 {
   long i;
-  double thetaold;
-  double thetanew;
-  double lnacceptance;
+  double thetaold, logthetaold;
+  double thetanew, logthetanew;
+  double lnacceptance = 0;
+  double minv = -99;
+  double maxv =  99;
 
   thetaold = snode->theta;
 
-  thetanew = thetaold + opt_finetune_theta*legacy_rnd_symmetrical(thread_index);
+  if (!opt_exp_theta)
+  {
+    /* original proposal for theta */
+    thetanew = thetaold + opt_finetune_theta*legacy_rnd_symmetrical(thread_index);
+    if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+      thetanew = reflect(thetanew, opt_theta_min, opt_theta_max, thread_index);
+    else
+    {
+      if (thetanew < 0)
+        thetanew = -thetanew;
+    }
+  }
+  else
+  {
+    /* proposal on log-scale */
 
-  if (thetanew < 0)
-    thetanew = -thetanew;
+    if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+    {
+      minv = log(opt_theta_min);
+      maxv = log(opt_theta_max);
+    }
+
+    logthetaold = log(thetaold);
+    logthetanew = logthetaold + opt_finetune_theta*legacy_rnd_symmetrical(thread_index);
+    logthetanew = reflect(logthetanew, minv, maxv, thread_index);
+
+    lnacceptance = logthetanew - logthetaold;
+    thetanew = exp(logthetanew);
+  }
 
   snode->theta = thetanew;
 
   if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
-    lnacceptance = (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
-                   opt_theta_beta*(1 / thetanew - 1 / thetaold);
+    lnacceptance += (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
+                    opt_theta_beta*(1 / thetanew - 1 / thetaold);
   else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
-    lnacceptance = (opt_theta_alpha-1) * log(thetanew / thetaold) -
-                   opt_theta_beta*(thetanew - thetaold);
+    lnacceptance += (opt_theta_alpha-1) * log(thetanew / thetaold) -
+                    opt_theta_beta*(thetanew - thetaold);
   else
   {
     assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-    lnacceptance = (opt_theta_p - 1) *
-                   log((thetanew-opt_theta_min) / (thetaold-opt_theta_min)) +
-                   (opt_theta_q - 1) *
-                   log((opt_theta_max-thetanew) / (opt_theta_max-thetaold));
+    lnacceptance += (opt_theta_p - 1) *
+                    log((thetanew-opt_theta_min) / (thetaold-opt_theta_min)) +
+                    (opt_theta_q - 1) *
+                    log((opt_theta_max-thetanew) / (opt_theta_max-thetaold));
   }
 
   for (i = 0; i < opt_locus_count; ++i)
