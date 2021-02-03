@@ -228,7 +228,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_BRATE_PRIOR_GAMMA           1
 #define BPP_BRATE_PRIOR_MAX             1
 
-#define BPP_THETA_PRIOR_MIN             0
+#define BPP_THETA_PRIOR_MIN             1
 #define BPP_THETA_PRIOR_INVGAMMA        1
 #define BPP_THETA_PRIOR_GAMMA           2
 #define BPP_THETA_PRIOR_BETA            3

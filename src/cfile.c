@@ -2168,13 +2168,6 @@ static void check_validity()
   if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
     fatal("Internal error: invalid theta prior distribution");
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
-  {
-    printf("Beta prior on theta: p=%f q=%f min=%f max=%f\n",
-           opt_theta_p, opt_theta_q, opt_theta_min, opt_theta_max);
-    fatal("Beta prior for theta is not implemented yet.");
-  }
-
   if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
   {
     double invgammamean = opt_theta_beta / (opt_theta_alpha - 1);
