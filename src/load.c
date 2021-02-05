@@ -63,6 +63,9 @@ static void alloc_gtree()
 
     gt->nodes = (gnode_t **)xmalloc((size_t)(2*gt->tip_count-1) *
                                     sizeof(gnode_t *));
+    size_t alloc_size = MAX(4,gtree[i]->tip_count + gtree[i]->inner_count);
+    /* TODO: Change to xmalloc for the first-touch numa policy */
+    gt->travbuffer = (gnode_t **)xcalloc(alloc_size, sizeof(gnode_t *));
     
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
     {
