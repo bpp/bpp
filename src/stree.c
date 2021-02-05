@@ -577,6 +577,7 @@ gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
   for (i = 0; i < nodes_count; ++i)
     gnode_clone(gtree->nodes[i], clone->nodes[i], clone, clone_stree);
 
+  clone->travbuffer = (gnode_t **)xcalloc((size_t)nodes_count,sizeof(gnode_t*));
   clone->root = clone->nodes[gtree->root->node_index];
 
   return clone;

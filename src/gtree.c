@@ -1905,7 +1905,6 @@ gtree_t ** gtree_init(stree_t * stree,
     */
     size_t alloc_size = MAX(4,gtree[i]->tip_count + gtree[i]->inner_count);
     /* TODO: Change to xmalloc for the first-touch numa policy */
-    printf("Alloc %d -> %ld\n", i, alloc_size);
     gtree[i]->travbuffer = (gnode_t **)xcalloc(alloc_size, sizeof(gnode_t *));
   }
   printf(" Done\n");
