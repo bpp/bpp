@@ -1931,6 +1931,8 @@ static FILE * init(stree_t ** ptr_stree,
     compute_base_freqs(msa_list[i], weights[i], pll_map);
   }
 
+  if (opt_diploid)
+    fprintf(stdout, "\nSummary of alignments *before* phasing sequences:");
   msa_summary(msa_list,msa_count);
 
   /* parse map file */
@@ -2072,6 +2074,8 @@ static FILE * init(stree_t ** ptr_stree,
       free(tmpwgt[i]);
     free(tmpwgt);
 
+    fprintf(stdout, "\nSummary of alignments *after* phasing sequences:");
+    msa_summary(msa_list,msa_count);
   }
 
   /* Pin master thread for NUMA first policy touch
