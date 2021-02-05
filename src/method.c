@@ -3833,7 +3833,7 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
 
-    if (opt_prob_snl)
+    if (opt_prob_snl && !opt_onlysummary)
     {
       long opt_debug_sum = opt_debug_expand_count +
                            opt_debug_expshr_count +
