@@ -504,6 +504,8 @@ typedef struct gtree_s
   gnode_t ** nodes;
   gnode_t * root;
 
+  gnode_t ** travbuffer;
+
   /* auxiliary space for traversals */
   double logl;
   double logpr;
@@ -1369,9 +1371,9 @@ double gtree_propose_spr_serial(locus_t ** locus,
                                 stree_t * stree);
 
 double reflect(double t, double minage, double maxage, long thread_index);
-gnode_t ** gtree_return_partials(gnode_t * root,
-                                 unsigned int msa_index,
-                                 unsigned int * trav_size);
+void gtree_return_partials(gnode_t * root,
+                           gnode_t ** trav,
+                           unsigned int * trav_size);
 void unlink_event(gnode_t * node, int msa_index);
 
 double prop_locusrate_and_heredity(gtree_t ** gtree,

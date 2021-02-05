@@ -42,7 +42,6 @@ static unsigned int * nodevec_offset;
 static unsigned int * nodevec_count;
 
 static int * feasible;
-static gnode_t *** partials;
 static unsigned int * partials_count;
 
 #if 0
@@ -91,7 +90,6 @@ void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count)
   }
   feasible = (int *)xmalloc((stree->tip_count + stree->inner_count) *
                             sizeof(int));
-  partials = (gnode_t ***)xmalloc(stree->locus_count * sizeof(gnode_t **));
   partials_count = (unsigned int *)xcalloc(stree->locus_count,sizeof(unsigned int));
 }
 void rj_fini()
@@ -100,7 +98,6 @@ void rj_fini()
   free(nodevec_offset);
   free(nodevec_count);
   free(feasible);
-  free(partials);
   free(partials_count);
 }
 
@@ -578,20 +575,22 @@ long prop_split(gtree_t ** gtree,
 
       /* TODO: Never call functions like propose_age that change travbuffer
          from gtree.c */
-      partials[i] = gtree_return_partials(gtree[i]->root,
-                                          i,
-                                          partials_count+i);
+
+      gnode_t ** partials = gtree[i]->travbuffer;
+      gtree_return_partials(gtree[i]->root,
+                            gtree[i]->travbuffer,
+                            partials_count+i);
       for (k = 0; k < partials_count[i]; ++k)
       {
-        partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                   partials[i][k]->clv_index);
+        partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                partials[k]->clv_index);
         if (opt_scaling)
-          partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                   partials[i][k]->scaler_index);
+          partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     partials[k]->scaler_index);
       }
 
       /* update partials */
-      locus_update_partials(locus[i],partials[i],partials_count[i]);
+      locus_update_partials(locus[i],partials,partials_count[i]);
 
       
       /* evaluate log-likelihood */
@@ -728,6 +727,7 @@ long prop_split(gtree_t ** gtree,
           
       if (gtree[i]->logl != gtree[i]->old_logl)
       {
+        gnode_t ** partials = gtree[i]->travbuffer;
         locus_update_matrices(locus[i],
                               gtree[i],
                               nodevec+nodevec_offset[i],
@@ -737,11 +737,11 @@ long prop_split(gtree_t ** gtree,
 
         for (k = 0; k < partials_count[i]; ++k)
         {
-          partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                     partials[i][k]->clv_index);
+          partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  partials[k]->clv_index);
           if (opt_scaling)
-            partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                             partials[i][k]->scaler_index);
+            partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     partials[k]->scaler_index);
         }
         gtree[i]->logl  = gtree[i]->old_logl;
       }
@@ -1009,21 +1009,22 @@ long prop_join(gtree_t ** gtree,
 
       /* TODO: Never call functions like propose_age that change travbuffer
          from gtree.c */
-      partials[i] = gtree_return_partials(gtree[i]->root,
-                                          i,
-                                          partials_count+i);
+      gnode_t ** partials = gtree[i]->travbuffer;
+      gtree_return_partials(gtree[i]->root,
+                            gtree[i]->travbuffer,
+                            partials_count+i);
 
       for (k = 0; k < partials_count[i]; ++k)
       {
-        partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                   partials[i][k]->clv_index);
+        partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                partials[k]->clv_index);
         if (opt_scaling)
-          partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                           partials[i][k]->scaler_index);
+          partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     partials[k]->scaler_index);
       }
 
       /* update partials */
-      locus_update_partials(locus[i],partials[i],partials_count[i]);
+      locus_update_partials(locus[i],partials,partials_count[i]);
 
       
       /* evaluate log-likelihood */
@@ -1170,13 +1171,14 @@ long prop_join(gtree_t ** gtree,
                               i,
                               nodevec_count[i]);
 
+        gnode_t ** partials = gtree[i]->travbuffer;
         for (k = 0; k < partials_count[i]; ++k)
         {
-          partials[i][k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                                     partials[i][k]->clv_index);
+          partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                  partials[k]->clv_index);
           if (opt_scaling)
-            partials[i][k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                             partials[i][k]->scaler_index);
+            partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                     partials[k]->scaler_index);
         }
 
         gtree[i]->logl = gtree[i]->old_logl;

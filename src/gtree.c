@@ -50,8 +50,6 @@ static hashtable_t * mht;
    computing MSC density) to avoid reallocation */
 static double ** sortbuffer_r = NULL;
 
-static gnode_t *** travbuffer = NULL;
-
 __THREAD gnode_t * dbg_msci_y = NULL;
 __THREAD gnode_t * dbg_msci_a = NULL;
 __THREAD gnode_t * dbg_msci_s = NULL;
@@ -144,18 +142,14 @@ static int return_partials_recursive(gnode_t * node,
   return (node->mark & FLAG_PARTIAL_UPDATE) | mark;
 }
 
-gnode_t ** gtree_return_partials(gnode_t * root,
-                                 unsigned int msa_index,
-                                 unsigned int * trav_size)
+void gtree_return_partials(gnode_t * root,
+                           gnode_t ** trav,
+                           unsigned int * trav_size)
 {
-  gnode_t ** trav = travbuffer[msa_index];
-
   *trav_size = 0;
-  if (!root->left) return NULL;
+  if (!root->left) return;
 
   return_partials_recursive(root, trav_size, trav);
-
-  return trav;
 }
 
 
@@ -268,6 +262,8 @@ void gtree_destroy(gtree_t * tree,
 
   /* deallocate tree structure */
   free(tree->nodes);
+  if (tree->travbuffer)
+    free(tree->travbuffer);
   free(tree);
 }
 
@@ -1811,7 +1807,6 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
 {
   long i;
-  size_t minsize;
 
   /* allocate sort buffer */
   int max_count = 0;
@@ -1842,27 +1837,6 @@ void gtree_alloc_internals(gtree_t ** gtree, long msa_count)
   for (i = 0; i < opt_threads; ++i)
     sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
   #endif
-  
-  /* allocate traversal buffers */
-  travbuffer = (gnode_t ***)xmalloc((size_t)msa_count * sizeof(gnode_t **));
-  for (i = 0; i < msa_count; ++i)
-  {
-    /* in the gene tree SPR it is possible that this scenario happens:
-
-                 *
-                / \
-       father  *   *
-              / \ / \
-             1  2 3  4
-
-       father moving to 3 or 4, in whih case we need to update 4 CLVs
-    */
-
-    minsize = MAX(gtree[i]->inner_count,4);
-    
-    travbuffer[i] = (gnode_t **)xmalloc(minsize*sizeof(gnode_t *));
-  }
-
 }
 
 void gtree_simulate_init(stree_t * stree, list_t * maplist)
@@ -1915,7 +1889,25 @@ gtree_t ** gtree_init(stree_t * stree,
   /* generate random starting gene trees for each alignment */
   printf("Generating gene trees....");
   for (i = 0; i < msa_count; ++i)
+  {
     gtree[i] = gtree_simulate(stree, msalist[i],i);
+
+    /* in the gene tree SPR it is possible that this scenario happens:
+
+                 *
+                / \
+       father  *   *
+              / \ / \
+             1  2 3  4
+
+       father moving to 3 or 4, in whih case we need to update 4 CLVs
+       TODO: 2.4.2021 - Check why/where we need the four CLVs 
+    */
+    size_t alloc_size = MAX(4,gtree[i]->tip_count + gtree[i]->inner_count);
+    /* TODO: Change to xmalloc for the first-touch numa policy */
+    printf("Alloc %d -> %ld\n", i, alloc_size);
+    gtree[i]->travbuffer = (gnode_t **)xcalloc(alloc_size, sizeof(gnode_t *));
+  }
   printf(" Done\n");
 
   /* destroy the hash tables */
@@ -1925,7 +1917,7 @@ gtree_t ** gtree_init(stree_t * stree,
     hashtable_destroy(mht,cb_dealloc_pairlabel);
   }
 
-  /* allocate static internal arrays sortbuffer and travbuffer */
+  /* allocate static internal arrays sortbuffer */
   gtree_alloc_internals(gtree,msa_count);
 
   /* reset number of gene leaves associated with each species tree subtree */
@@ -2738,6 +2730,8 @@ static long propose_ages(locus_t * locus,
 
   stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
+  gnode_t ** travbuffer = gtree->travbuffer;
+
   /* TODO: Instead of traversing the gene tree nodes this way, traverse the
      coalescent events for each population in the species tree instead. This
      will reduce the amount of required quick-sorts.
@@ -3177,20 +3171,20 @@ static long propose_ages(locus_t * locus,
     /* now update branch lengths and prob matrices */
     gnode_t * temp;
     k = 0;
-    travbuffer[msa_index][k++] = node->left;
-    travbuffer[msa_index][k++] = node->right;
+    travbuffer[k++] = node->left;
+    travbuffer[k++] = node->right;
     if (node->parent)
-      travbuffer[msa_index][k++] = node;
+      travbuffer[k++] = node;
     for (j = 0; j < k; ++j)
-      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
+      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
-    locus_update_matrices(locus,gtree,travbuffer[msa_index],stree,msa_index,k);
+    locus_update_matrices(locus,gtree,travbuffer,stree,msa_index,k);
       
 
     /* fill traversal buffer with root-path starting from current node */
     for (k=0, temp = node; temp; temp = temp->parent)
     {
-      travbuffer[msa_index][k++] = temp;
+      travbuffer[k++] = temp;
 
       /* swap clv index to compute partials in a new location. This is useful
          when the proposal gets rejected, as we only have swap clv indices */
@@ -3201,7 +3195,7 @@ static long propose_ages(locus_t * locus,
     }
 
     /* update partials */
-    locus_update_partials(locus,travbuffer[msa_index],k);
+    locus_update_partials(locus,travbuffer,k);
     
     /* compute log-likelihood */
     logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
@@ -3243,7 +3237,7 @@ static long propose_ages(locus_t * locus,
       /* need to reset clv indices to point to the old clv buffer */
       for (j = 0; j < k; ++j)
       {
-        temp = travbuffer[msa_index][j];
+        temp = travbuffer[j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
         if (opt_scaling)
           temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
@@ -3252,13 +3246,13 @@ static long propose_ages(locus_t * locus,
       /* now reset branch lengths and pmatrices */
       node->time = oldage;
       k = 0;
-      travbuffer[msa_index][k++] = node->left;
-      travbuffer[msa_index][k++] = node->right;
+      travbuffer[k++] = node->left;
+      travbuffer[k++] = node->right;
       if (node->parent)
-        travbuffer[msa_index][k++] = node;
+        travbuffer[k++] = node;
 
       for (j = 0; j < k; ++j)
-        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
+        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
       if (opt_msci)
       {
@@ -3668,10 +3662,6 @@ void gtree_fini(int msa_count)
     free(sortbuffer_r[i]);
   free(sortbuffer_r);
   #endif
-
-  for (i = 0; i < msa_count; ++i)
-    free(travbuffer[i]);
-  free(travbuffer);
 }
 
 static int branch_compat(stree_t * stree,
@@ -3725,7 +3715,7 @@ static int branch_compat(stree_t * stree,
 static gnode_t * network_fill_targets(stree_t * stree,
                                       gtree_t * gtree,
                                       locus_t * locus,
-                                      int msa_index,
+                                      gnode_t ** travbuffer,
                                       gnode_t * curnode,
                                       gnode_t * father,
                                       gnode_t * sibling,
@@ -3786,7 +3776,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
   *target_count = 0;
   if (tnew >= gtree->root->time)
   {
-    travbuffer[msa_index][*target_count] = gtree->root;
+    travbuffer[*target_count] = gtree->root;
     *target_count = *target_count + 1;
   }
   else
@@ -3804,7 +3794,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
             p->parent->time > tnew && stree->pptable[m][n] &&
             branch_compat(stree,curnode,p,tnew))
         {
-          travbuffer[msa_index][*target_count] = (p == father) ? sibling : p;
+          travbuffer[*target_count] = (p == father) ? sibling : p;
           *target_count = *target_count + 1;
           break;
         }
@@ -3889,7 +3879,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
   {
     /* REVOLUTIONARY SPR MOVE */
     double * tweight = (double *)xmalloc(*target_count * sizeof(double));
-    rev_spr_tselect(curnode, tnew, travbuffer[msa_index], *target_count, locus, tweight);
+    rev_spr_tselect(curnode, tnew, travbuffer, *target_count, locus, tweight);
     double maxw = tweight[0];
     for (j = 1; j < *target_count; ++j)
       if (maxw < tweight[j])
@@ -3909,7 +3899,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
       rsum += tweight[j];
       if (r < rsum) break;
     }
-    target = travbuffer[msa_index][j];
+    target = travbuffer[j];
 
     /* proposal distribution */
     *twgt = tweight[j] / sum;
@@ -3917,8 +3907,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
     free(tweight);
   }
   else
-    target = travbuffer[msa_index][(int)(*target_count *
-                                   legacy_rndu(thread_index))];
+    target = travbuffer[(int)(*target_count * legacy_rndu(thread_index))];
   assert(target);
 
   /* decide on the pop_target */
@@ -4013,6 +4002,8 @@ static long propose_spr(locus_t * locus,
   unsigned int * indices = NULL;
   double twgt = 0;
   double swgt = 0;
+
+  gnode_t ** travbuffer = gtree->travbuffer;
 
   /*          
 
@@ -4136,7 +4127,7 @@ static long propose_spr(locus_t * locus,
       target = network_fill_targets(stree,
                                     gtree,
                                     locus,
-                                    msa_index,
+                                    travbuffer,
                                     curnode,
                                     father,
                                     sibling,
@@ -4157,7 +4148,7 @@ static long propose_spr(locus_t * locus,
       target_count = 0;
       if (tnew >= gtree->root->time)
       {
-        travbuffer[msa_index][target_count++] = gtree->root;
+        travbuffer[target_count++] = gtree->root;
       }
       else
       {
@@ -4167,7 +4158,7 @@ static long propose_spr(locus_t * locus,
           m = p->pop->node_index;
           if (p != curnode && p != gtree->root && p->time <= tnew &&
               p->parent->time > tnew && stree->pptable[m][n])
-            travbuffer[msa_index][target_count++] = (p == father) ? sibling : p;
+            travbuffer[target_count++] = (p == father) ? sibling : p;
         }
       }
 
@@ -4238,7 +4229,7 @@ static long propose_spr(locus_t * locus,
       if (opt_rev_gspr)
       {
         double * tweight = (double *)xmalloc(target_count * sizeof(double));
-        rev_spr_tselect(curnode, tnew, travbuffer[msa_index], target_count, locus, tweight);
+        rev_spr_tselect(curnode, tnew, travbuffer, target_count, locus, tweight);
         double maxw = tweight[0];
         for (j = 1; j < target_count; ++j)
           if (maxw < tweight[j])
@@ -4258,7 +4249,7 @@ static long propose_spr(locus_t * locus,
           rsum += tweight[j];
           if (r < rsum) break;
         }
-        target = travbuffer[msa_index][j];
+        target = travbuffer[j];
 
         /* proposal distribution */
         twgt = tweight[j] / sum;
@@ -4266,8 +4257,7 @@ static long propose_spr(locus_t * locus,
         free(tweight);
       }
       else
-        target = travbuffer[msa_index][(int)(target_count *
-                                             legacy_rndu(thread_index))];
+        target = travbuffer[(int)(target_count * legacy_rndu(thread_index))];
     }
 
     if (opt_msci)
@@ -4597,24 +4587,24 @@ static long propose_spr(locus_t * locus,
     }
 
     k = 0;
-    travbuffer[msa_index][k++] = father->left;
-    travbuffer[msa_index][k++] = father->right;
+    travbuffer[k++] = father->left;
+    travbuffer[k++] = father->right;
     if (father->parent)
-      travbuffer[msa_index][k++] = father;
+      travbuffer[k++] = father;
     #if 0
     if (spr_required)
-      travbuffer[msa_index][k++] = sibling;
+      travbuffer[k++] = sibling;
     #else
     if (spr_required && father != sibling)
-      travbuffer[msa_index][k++] = sibling;
+      travbuffer[k++] = sibling;
     #endif
 
     /* swap pmatrix indices to compute matrices in a new location */
     //if (father == sibling) --k;
     for (j = 0; j < k; ++j)
-      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
+      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
-    locus_update_matrices(locus,gtree,travbuffer[msa_index],stree,msa_index,k);
+    locus_update_matrices(locus,gtree,travbuffer,stree,msa_index,k);
 
     /* locate all nodes  whose CLV need to be updated */
     k = 0;
@@ -4624,7 +4614,7 @@ static long propose_spr(locus_t * locus,
       gnode_t * temp;
       for (k=0, temp = father; temp; temp = temp->parent)
       {
-        travbuffer[msa_index][k++] = temp;
+        travbuffer[k++] = temp;
 
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
@@ -4650,7 +4640,7 @@ static long propose_spr(locus_t * locus,
       /* TODO: Should this also check for temp != NULL, in case father was root ? */
       for (temp=sibling->parent; !(temp->mark & FLAG_MISC); temp=temp->parent)
       {
-        travbuffer[msa_index][k++] = temp;
+        travbuffer[k++] = temp;
 
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
@@ -4664,7 +4654,7 @@ static long propose_spr(locus_t * locus,
       for (temp = father; temp; temp = temp->parent)
       {
         temp->mark &= ~FLAG_MISC;   /* unset FLAG_MISC */
-        travbuffer[msa_index][k++] = temp;
+        travbuffer[k++] = temp;
 
         /* swap clv index to compute partials in a new location. This is useful
            when the proposal gets rejected, as we only have swap clv indices */
@@ -4675,7 +4665,7 @@ static long propose_spr(locus_t * locus,
     }
 
     /* update partials */
-    locus_update_partials(locus,travbuffer[msa_index],k);
+    locus_update_partials(locus,travbuffer,k);
 
     /* compute log-likelihood */
     double logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
@@ -4718,7 +4708,7 @@ static long propose_spr(locus_t * locus,
       /* need to reset clv indices to point to the old clv buffer */
       for (j = 0; j < k; ++j)
       {
-        gnode_t * temp = travbuffer[msa_index][j];
+        gnode_t * temp = travbuffer[j];
         temp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,temp->clv_index);
         if (opt_scaling)
           temp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,temp->scaler_index);
@@ -4734,8 +4724,8 @@ static long propose_spr(locus_t * locus,
       father->time = oldage;
       k = 0;
 
-      travbuffer[msa_index][k++] = father->left;
-      travbuffer[msa_index][k++] = father->right;  /* target or sibling */
+      travbuffer[k++] = father->left;
+      travbuffer[k++] = father->right;  /* target or sibling */
 
       if (opt_msci)
       {
@@ -4776,20 +4766,20 @@ static long propose_spr(locus_t * locus,
       if (father->parent)
       {
         if (!root_changed || 
-            (father != travbuffer[msa_index][0] && father != travbuffer[msa_index][1]))
-          travbuffer[msa_index][k++] = father;
+            (father != travbuffer[0] && father != travbuffer[1]))
+          travbuffer[k++] = father;
       }
 
       if (spr_required)
       {
         sibling = (curnode->parent->left == curnode) ? 
                     curnode->parent->right : curnode->parent->left;
-        travbuffer[msa_index][k++] = sibling;
-        assert(sibling != father && sibling != travbuffer[msa_index][0] && sibling != travbuffer[msa_index][1]);
+        travbuffer[k++] = sibling;
+        assert(sibling != father && sibling != travbuffer[0] && sibling != travbuffer[1]);
       }
 
       for (j = 0; j < k; ++j)
-        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[msa_index][j]->pmatrix_index);
+        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
       /* TODO: FOR CONSISTENCY ALSO STORE OLD BRANCH-LENGTHS AND RESTORE THEM HERE */
 

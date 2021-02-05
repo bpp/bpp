@@ -2610,9 +2610,10 @@ void propose_tau_update_gtrees(locus_t ** loci,
 
       /* get list of nodes for which partials must be recomputed */
       unsigned int partials_count;
-      gnode_t ** partials = gtree_return_partials(gtree[i]->root,
-                                                  i,
-                                                  &partials_count);
+      gnode_t ** partials = gtree[i]->travbuffer;
+      gtree_return_partials(gtree[i]->root,
+                            gtree[i]->travbuffer,
+                            &partials_count);
 
       for (j = 0; j < partials_count; ++j)
       {
@@ -3134,9 +3135,10 @@ static long propose_tau(locus_t ** loci,
          nodes and all nodes whose left or right subtree has at least one marked
          node */
       unsigned int partials_count;
-      gnode_t ** partials = gtree_return_partials(gtree[i]->root,
-                                                  i,
-                                                  &partials_count);
+      gnode_t ** partials = gtree[i]->travbuffer;
+      gtree_return_partials(gtree[i]->root,
+                            gtree[i]->travbuffer,
+                            &partials_count);
 
       /* revert CLV indices */
       if (opt_debug_full)
@@ -4432,9 +4434,10 @@ long stree_propose_spr(stree_t ** streeptr,
 
       /* retrieve all nodes whose partials must be updates */
       unsigned int partials_count;
-      gnode_t ** partials = gtree_return_partials(gtree_list[i]->root,
-                                                  i,
-                                                  &partials_count);
+      gnode_t ** partials = gtree_list[i]->travbuffer;
+      gtree_return_partials(gtree_list[i]->root,
+                            gtree_list[i]->travbuffer,
+                            &partials_count);
 
       /* point to the double-buffered partials space */
       for (j = 0; j < partials_count; ++j)
@@ -5476,9 +5479,10 @@ static long prop_branch_rates(gtree_t * gtree,
       /* get the list of nodes for which CLVs must be reverted, i.e. all marked
          nodes and all nodes whose left or right subtree has at least one marked
          node */
-      partials = gtree_return_partials(gtree->root,
-                                       msa_index,
-                                       &partials_count);
+      gtree_return_partials(gtree->root,
+                            gtree->travbuffer,
+                            &partials_count);
+      partials = gtree->travbuffer;
       
       /* remove flags */
       for (k = 0 ; k < branch_count; ++k)
@@ -6433,9 +6437,10 @@ long snl_expand_and_shrink(stree_t * stree,
           unsigned int partials_count;
 
           assert(!gtree_list[i]->root->parent);
-          gnode_t ** partials = gtree_return_partials(gtree_list[i]->root,
-                                                      i,
-                                                      &partials_count);
+          gnode_t ** partials = gtree_list[i]->travbuffer;
+          gtree_return_partials(gtree_list[i]->root,
+                                gtree_list[i]->travbuffer,
+                                &partials_count);
     
           /* point to the double-buffered partials space */
           for (j = 0; j < partials_count; ++j)

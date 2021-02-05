@@ -1476,6 +1476,7 @@ static void simulate(stree_t * stree)
 
     /* simulate gene tree */
     gtree[i] = gtree_simulate(stree,msa[i],i);
+    gtree[i]->travbuffer = NULL;
 
     if (opt_est_locusrate)
       gtree[i]->rate_mui = mui_array[i];
