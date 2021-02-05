@@ -2215,6 +2215,12 @@ static void check_validity()
     assert(!opt_partition_file);
   }
 
+  /* if cleandata is set to 1 and the sequences for at least one species require
+     phasing then print an error */
+  if (opt_cleandata && opt_diploid)
+    fatal("ERROR: Cannot phase sequences while cleandata flag is set (remove "
+          "ambiguities).\nPlease set cleandata=0 when phasing.");
+
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");

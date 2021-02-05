@@ -20,7 +20,7 @@
        usedata = 1  * 0: no data (prior); 1:seq like
          nloci = 5  * number of data sets in seqfile
 
-     cleandata = 1    * remove sites with ambiguity data (1:yes, 0:no)?
+     cleandata = 0    * remove sites with ambiguity data (1:yes, 0:no)?
 
     thetaprior = 3 0.004 E  # invgamma(a, b) for theta
       tauprior = 3 0.002    # invgamma(a, b) for root tau & Dirichlet(a) for other tau's
