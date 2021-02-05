@@ -1410,10 +1410,13 @@ static void simulate(stree_t * stree)
 
       /* print parameters in parameter file */
       assert(opt_modelparafile);
-      for (j = 0; j < 6; ++j)
-        fprintf(fp_param," %9.6f", qrates[j]);
-      for (j = 0; j < 4; ++j)
-        fprintf(fp_param," %8.6f", freqs[j]);
+      if (opt_modelparafile)
+      {
+        for (j = 0; j < 6; ++j)
+          fprintf(fp_param," %9.6f", qrates[j]);
+        for (j = 0; j < 4; ++j)
+          fprintf(fp_param," %8.6f", freqs[j]);
+      }
 
       pll_update_eigen(eigenvecs,inv_eigenvecs,eigenvals,freqs,qrates,4,4);
     }
@@ -1425,10 +1428,13 @@ static void simulate(stree_t * stree)
       if (opt_modelparafile)
         fprintf(fp_param, " %9.6f", locus_siterate_alpha);
     }
-    if (opt_est_locusrate)
-      fprintf(fp_param, " %9.6f", mui_array[i]);
-    if (opt_clock != BPP_CLOCK_GLOBAL)
-      fprintf(fp_param, " %9.6f", vi_array[i]);
+    if (opt_modelparafile)
+    {
+      if (opt_est_locusrate)
+        fprintf(fp_param, " %9.6f", mui_array[i]);
+      if (opt_clock != BPP_CLOCK_GLOBAL)
+        fprintf(fp_param, " %9.6f", vi_array[i]);
+    }
 
     if (opt_msafile || opt_treefile)
     {
@@ -1506,10 +1512,10 @@ static void simulate(stree_t * stree)
     if (opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR)
     {
       relaxed_clock_branch_lengths(stree, gtree[i]);
-      assert(opt_modelparafile);
-      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      if (opt_modelparafile)
       {
-        fprintf(fp_param, " %.6f", stree->nodes[j]->rate);
+        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+          fprintf(fp_param, " %.6f", stree->nodes[j]->rate);
       }
     }
     if (opt_modelparafile)
