@@ -1217,7 +1217,7 @@ void msa_destroy(msa_t * msa);
 
 int msa_remove_ambiguous(msa_t * msa);
 
-void msa_summary(msa_t ** msa_list, int msa_count);
+void msa_summary(FILE * fp, msa_t ** msa_list, int msa_count);
 
 void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map);
 

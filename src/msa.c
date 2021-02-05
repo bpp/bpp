@@ -274,7 +274,7 @@ static int longint_len(long x)
   return x ? (int)floor(log10(abs(x)))+1 : 1;
 }
 
-void msa_summary(msa_t ** msa_list, int msa_count)
+void msa_summary(FILE * fp, msa_t ** msa_list, int msa_count)
 {
   long i,j,k;
 
@@ -340,38 +340,38 @@ void msa_summary(msa_t ** msa_list, int msa_count)
     k = MAX(k,(long)strlen(global_freqs_strings[msa_list[i]->model]));
   col_len[6] = MAX(col_len[6], k+2);
 
-  printf("\n");
+  fprintf(fp, "\n");
 
   /* print header column with labels centered */
   for (i = 0; i < COLUMNS; ++i)
   {
     long blanks = (col_len[i] - strlen(labels[i]))/2;
-    for (j = 0; j < blanks; ++j) printf(" ");
+    for (j = 0; j < blanks; ++j) fprintf(fp, " ");
 
-    printf("%s", labels[i]);
+    fprintf(fp, "%s", labels[i]);
 
     blanks = col_len[i] - blanks - strlen(labels[i]);
-    for (j = 0; j < blanks; ++j) printf(" ");
+    for (j = 0; j < blanks; ++j) fprintf(fp, " ");
 
     if (i != COLUMNS-1)
-      printf("|");
+      fprintf(fp, "|");
   }
-  printf("\n");
+  fprintf(fp, "\n");
 
   /* print separator */
   for (i = 0; i < COLUMNS; ++i)
   {
     for (j = 0; j < col_len[i]; ++j)
-      printf("-");
+      fprintf(fp, "-");
     if (i != COLUMNS-1)
-      printf("+");
+      fprintf(fp, "+");
   }
-  printf("\n");
+  fprintf(fp, "\n");
 
   /* print table rows */
   for (i = 0; i < msa_count; ++i)
   {
-    printf("%*ld |", col_len[0]-1, i+1);
+    fprintf(fp, "%*ld |", col_len[0]-1, i+1);
     if (opt_alpha_cats > 1)
     {
       char * tmp;
@@ -380,15 +380,16 @@ void msa_summary(msa_t ** msa_list, int msa_count)
                 global_model_strings[msa_list[i]->model],
                 sgamma,
                 opt_alpha_cats);
-      printf("%*s |", col_len[1]-1, tmp);
+      fprintf(fp, "%*s |", col_len[1]-1, tmp);
       free(tmp);
     }
     else
-      printf("%*s |", col_len[1]-1, global_model_strings[msa_list[i]->model]);
-    printf("%*d |", col_len[2]-1, msa_list[i]->count);
-    printf("%*d |", col_len[3]-1, msa_list[i]->original_length);
-    printf("%*d |", col_len[4]-1, msa_list[i]->amb_sites_count);
-    printf("%*d |", col_len[5]-1, msa_list[i]->length);
+      fprintf(fp,
+              "%*s |", col_len[1]-1, global_model_strings[msa_list[i]->model]);
+    fprintf(fp, "%*d |", col_len[2]-1, msa_list[i]->count);
+    fprintf(fp, "%*d |", col_len[3]-1, msa_list[i]->original_length);
+    fprintf(fp, "%*d |", col_len[4]-1, msa_list[i]->amb_sites_count);
+    fprintf(fp, "%*d |", col_len[5]-1, msa_list[i]->length);
 
     char * freqs;
     if (msa_list[i]->model == BPP_DNA_MODEL_GTR ||
@@ -407,9 +408,9 @@ void msa_summary(msa_t ** msa_list, int msa_count)
       freqs = xstrdup(global_freqs_strings[msa_list[i]->model]);
 
 
-    printf("%*s ", col_len[6]-1, freqs);
-    printf("\n");
+    fprintf(fp, "%*s ", col_len[6]-1, freqs);
+    fprintf(fp, "\n");
     free(freqs);
   }
-  printf("\n");
+  fprintf(fp, "\n");
 }

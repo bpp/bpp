@@ -1931,9 +1931,18 @@ static FILE * init(stree_t ** ptr_stree,
     compute_base_freqs(msa_list[i], weights[i], pll_map);
   }
 
+  if (!(fp_out = fopen(opt_outfile, "w")))
+    fatal("Cannot open file %s for writing...");
+  *ptr_fp_out = fp_out;
+  init_outfile(fp_out);
+
   if (opt_diploid)
+  {
     fprintf(stdout, "\nSummary of alignments *before* phasing sequences:");
-  msa_summary(msa_list,msa_count);
+    fprintf(fp_out, "\nSummary of alignments *before* phasing sequences:");
+  }
+  msa_summary(stdout, msa_list,msa_count);
+  msa_summary(fp_out, msa_list,msa_count);
 
   /* parse map file */
   if (stree->tip_count > 1)
@@ -1953,11 +1962,6 @@ static FILE * init(stree_t ** ptr_stree,
     if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
       fatal("Cannot open file %s for writing...");
   }
-
-  if (!(fp_out = fopen(opt_outfile, "w")))
-    fatal("Cannot open file %s for writing...");
-  *ptr_fp_out = fp_out;
-  init_outfile(fp_out);
 
   /* print compressed alignmens in output file */
   fprintf(fp_out, "COMPRESSED ALIGNMENTS\n\n");
@@ -2075,7 +2079,9 @@ static FILE * init(stree_t ** ptr_stree,
     free(tmpwgt);
 
     fprintf(stdout, "\nSummary of alignments *after* phasing sequences:");
-    msa_summary(msa_list,msa_count);
+    fprintf(fp_out, "\nSummary of alignments *after* phasing sequences:");
+    msa_summary(stdout, msa_list,msa_count);
+    msa_summary(fp_out, msa_list,msa_count);
   }
 
   /* Pin master thread for NUMA first policy touch
