@@ -310,6 +310,17 @@ void debug_snl_stage1(stree_t * stree,
   }
 }
 
+void debug_gage_stage2(stree_t * stree,
+                       gtree_t ** gtree,
+                       double logpr_notheta,
+                       double r,
+                       double lnacceptance)
+{
+  if (opt_debug_gage == 1)
+  {
+  }
+}
+
 void debug_snl_stage2(stree_t * stree,
                       gtree_t ** gtree,
                       double logpr_notheta,
@@ -422,5 +433,64 @@ void debug_snl_stage2(stree_t * stree,
     fprintf(stdout,
            "\n[DBG-%ld] ---------------------------------------------\n",
            opt_debug_snl);
+  }
+}
+
+/* callback function to print the population label for each inner gtree node */
+char * cb_gtree_print_pop(const gnode_t * node)
+{
+  char * s = NULL;
+  if (node->left)      /* has a child <=> inner node */
+  {
+    if (node->pop->label)
+      xasprintf(&s, "[%s]", node->pop->label);
+    else
+      xasprintf(&s, "[%d]", node->pop->node_index);
+  }
+  else
+  {
+    /* tip node */
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+
+/* alternative callback function to print the population label AND age for each
+   inner gtree node */
+char * cb_gtree_print_pop_and_age(const gnode_t * node)
+{
+  char * s = NULL;
+  if (node->left)      /* has a child <=> inner node */
+  {
+    if (node->pop->label)
+      xasprintf(&s, "[%s]:%f", node->pop->label, node->time);
+    else
+      xasprintf(&s, "[%d]:%f", node->pop->node_index, node->time);
+  }
+  else
+  {
+    /* tip node */
+    xasprintf(&s, "%s", node->label);
+  }
+
+  return s;
+}
+
+void debug_bruce(stree_t * stree,
+                 gtree_t ** gtree,
+                 const char * move,
+                 long iter,
+                 FILE * fp_out)
+{
+  long i;
+  char * newick;
+
+  fprintf(fp_out, "%ld - %s - Gene trees:\n", iter, move);
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    newick = gtree_export_newick(gtree[i]->root,cb_gtree_print_pop);
+    fprintf(fp_out, "  %s\n", newick);
+    free(newick);
   }
 }

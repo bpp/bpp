@@ -217,6 +217,8 @@
 extern const char * global_model_strings[28];
 extern const char * global_freqs_strings[28];
 
+/* Note: the XXX_PRIOR_DIR is after PRIOR_MAX as it's not available as input,
+   but instead BPP sets it if mubar is fixed to 1 */
 #define BPP_LOCRATE_PRIOR_MIN           0
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
@@ -827,6 +829,7 @@ extern long opt_constraint_count;
 extern long opt_debug;
 extern long opt_debug_abort;
 extern long opt_debug_br;
+extern long opt_debug_bruce;
 extern long opt_debug_counter;
 extern long opt_debug_end;
 extern long opt_debug_expand_count;
@@ -2300,3 +2303,8 @@ void debug_snl_stage2(stree_t * stree,
                       double logpr_notheta,
                       double r,
                       double lnacceptance);
+void debug_bruce(stree_t * stree,
+                 gtree_t ** gtree,
+                 const char * move,
+                 long iter,
+                 FILE * fp_out);

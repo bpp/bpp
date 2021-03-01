@@ -3016,6 +3016,8 @@ void cmd_run()
       opt_debug_end = opt_burnin+opt_samples*opt_samplefreq;
   }
 
+  FILE * fp_debug = stdout;
+
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3108,6 +3110,8 @@ void cmd_run()
           SWAP(gtree,gclones);
           stree_label(stree);
         }
+        if (opt_debug_bruce)
+          debug_bruce(stree,gtree,stree_snl == 0 ? "SSPR" : "SNL", i, fp_debug);
       }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "SSPR");
@@ -3146,6 +3150,8 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "GAGE");
       #endif
+      if (opt_debug_bruce)
+        debug_bruce(stree,gtree,"GAGE", i, fp_debug);
 
     /* propose gene tree topologies using SPR */
     if (opt_threads == 1)
@@ -3168,6 +3174,8 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "GSPR");
       #endif
+      if (opt_debug_bruce)
+        debug_bruce(stree,gtree,"GSPR", i, fp_debug);
 
     /* propose population sizes on species tree */
     if (opt_est_theta)

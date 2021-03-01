@@ -69,6 +69,7 @@ long opt_debug_tau;
 long opt_debug_sspr;
 long opt_debug_snl;
 long opt_debug_br;
+long opt_debug_bruce;
 long opt_debug_parser;
 long opt_debug_counter;
 
@@ -243,6 +244,7 @@ static struct option long_options[] =
   {"debug_abort",  required_argument, 0, 0 },  /* 32 */
   {"snl_noswap",   no_argument,       0, 0 },  /* 33 */
   {"exp_theta",    no_argument,       0, 0 },  /* 34 */
+  {"debug_bruce",  no_argument,       0, 0 },  /* 35 */
   { 0, 0, 0, 0 }
 };
 
@@ -372,6 +374,7 @@ void args_init(int argc, char ** argv)
   opt_debug = 0;
   opt_debug_abort = 0;
   opt_debug_br = 0;
+  opt_debug_bruce = 0;
   opt_debug_counter = 0;
   opt_debug_end = 0;
   opt_debug_expand_count = 0;
@@ -681,6 +684,10 @@ void args_init(int argc, char ** argv)
 
       case 34:
         opt_exp_theta = 1;
+        break;
+
+      case 35:
+        opt_debug_bruce = 1;
         break;
 
       default:
