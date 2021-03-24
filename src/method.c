@@ -2307,8 +2307,7 @@ static FILE * init(stree_t ** ptr_stree,
     int states = 0;
     unsigned int pmatrix_count = gtree[i]->edge_count;
     msa_t * msa = msa_list[i];
-    unsigned int scale_buffers = opt_scaling ?
-                                   2*gtree[i]->inner_count : 0;
+    unsigned int scale_buffers = opt_scaling ? 2*gtree[i]->inner_count : 0;
 
     /* activate twice as many transition probability matrices (for reverting in
        locusrate, species tree SPR and mixing proposals)  */
@@ -2965,13 +2964,6 @@ void cmd_run()
             "[DEBUG] SHRINK move proportion: %f\n",
             opt_prob_snl_shrink);
   }
-  if (opt_prob_snl && opt_clock == BPP_CLOCK_CORR)
-  {
-    if (!opt_snl_noswap)
-      fprintf(stdout, "[DEBUG] SNL swap strategy for correlated clock\n");
-    else
-      fprintf(stdout, "[DEBUG] SNL no-swap strategy for correlated clock\n");
-  }
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -3451,8 +3443,7 @@ void cmd_run()
       /* compute mean taus */
 
       /* 1. calculate number of taus to print */
-      max_param_count = MIN(stree->tip_count+stree->inner_count,
-                            MAX_TAU_OUTPUT);
+      max_param_count = MIN(stree->tip_count+stree->inner_count,MAX_TAU_OUTPUT);
 
       /* 2. calculate means */
       k = 0;

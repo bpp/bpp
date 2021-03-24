@@ -892,7 +892,6 @@ extern long opt_scaling;
 extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
-extern long opt_snl_noswap;
 extern long opt_theta_dist;
 extern long opt_threads;
 extern long opt_threads_start;
@@ -1110,6 +1109,7 @@ char * cb_stree_print_node_tau(const snode_t * node);
 char * cb_gtree_print_none(const gnode_t * node);
 char * cb_gtree_print_age(const gnode_t * node);
 char * cb_gtree_print_node_age(const gnode_t * node);
+char * cb_gtree_print_length(const gnode_t* node);
 
 /* functions in stree.c */
 stree_t ** stree_tipstring_nodes(stree_t * root,

@@ -144,6 +144,23 @@ char * cb_gtree_print_age(const gnode_t * node)
   return s;
 }
 
+char* cb_gtree_print_length(const gnode_t* node)
+{
+   char* s = NULL;
+
+   if (node->left)
+   {
+      xasprintf(&s, ":%f", node->length);
+   }
+   else
+   {
+      xasprintf(&s, "%s:%f", node->label, node->length);
+   }
+
+   return s;
+}
+
+
 char * cb_gtree_print_node_age(const gnode_t * node)
 {
   char * s = NULL;
