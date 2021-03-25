@@ -1241,23 +1241,29 @@ static void simulate(stree_t * stree)
   /* print model parameter file header */
   if (opt_modelparafile)
   {
+    fprintf(fp_param, "locus");
+
     if (opt_model == BPP_DNA_MODEL_JC69)
     {
       if (opt_est_locusrate)
-        fprintf(fp_param, "locus\tmu_i");
+        fprintf(fp_param, "\tmu_i");
     }
     else if (opt_model == BPP_DNA_MODEL_GTR)
     {
       if (opt_est_locusrate)
-        fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha\tmu_i");
+        fprintf(fp_param, "\tQrates_abcdef\tpi_TACG\talpha\tmu_i");
       else
-        fprintf(fp_param, "locus\tQrates_abcdef\tpi_TACG\talpha");
+        fprintf(fp_param, "\tQrates_abcdef\tpi_TACG\talpha");
     }
     else
       assert(0);
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
+    {
       fprintf(fp_param, "\tnu_i");
+      for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+        fprintf(fp_param, "\tr_%ld", i+1);
+    }
     
     fprintf(fp_param, "\n");
   }
