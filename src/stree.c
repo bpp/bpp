@@ -2842,7 +2842,7 @@ static long propose_tau(locus_t ** loci,
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
-        lnacceptance = -log(thetafactor) + (opt_theta_p - 1) *
+        lnacceptance += -log(thetafactor) + (opt_theta_p - 1) *
                        log((snode->theta-opt_theta_min) / (oldtheta-opt_theta_min)) +
                        (opt_theta_q - 1) *
                        log((opt_theta_max-snode->theta) / (opt_theta_max-oldtheta));
