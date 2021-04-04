@@ -115,6 +115,7 @@ long opt_scaling;
 long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
+long opt_tau_dist;
 long opt_theta_dist;
 long opt_threads;
 long opt_threads_start;
@@ -490,6 +491,7 @@ void args_init(int argc, char ** argv)
   opt_streenewick = NULL;
   opt_tau_alpha = 0;
   opt_tau_beta = 0;
+  opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
   opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;

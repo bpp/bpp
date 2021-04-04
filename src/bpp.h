@@ -230,6 +230,12 @@ extern const char * global_freqs_strings[28];
 #define BPP_BRATE_PRIOR_GAMMA           1
 #define BPP_BRATE_PRIOR_MAX             1
 
+#define BPP_TAU_PRIOR_MIN               1
+#define BPP_TAU_PRIOR_GAMMA             1
+#define BPP_TAU_PRIOR_INVGAMMA          2
+#define BPP_TAU_PRIOR_MAX               2
+
+
 #define BPP_THETA_PRIOR_MIN             1
 #define BPP_THETA_PRIOR_INVGAMMA        1
 #define BPP_THETA_PRIOR_GAMMA           2
@@ -804,6 +810,8 @@ typedef struct thread_data_s
 #endif
 
 #define legacy_rndexp(index,mean) (-(mean)*log(legacy_rndu(index)))
+#define QuantileGamma(prob,alpha,beta) QuantileChi2(prob,2.0*(alpha))/(2.0*(beta))
+
 
 #define FLAG_AGE_UPDATE                 1 
 #define FLAG_POP_UPDATE                 2
@@ -892,6 +900,7 @@ extern long opt_scaling;
 extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
+extern long opt_tau_dist;
 extern long opt_theta_dist;
 extern long opt_threads;
 extern long opt_threads_start;
@@ -2252,6 +2261,7 @@ void load_cfile_sim(void);
 /* functions in simulate.c */
 
 void cmd_simulate(void);
+double QuantileChi2(double prob, double v);
 
 /* functions in threads.c */
 

@@ -292,8 +292,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       }
       if (!snodes[i]->parent)
       {
-        lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
-                        opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+        if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+        {
+          /* inv-gamma prior */
+          lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
+                          opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+        }
+        else
+        {
+          /* gamma prior */
+          lnacceptance += (opt_tau_alpha-1 - tau_count+1)*lnc -
+                          opt_tau_beta*(snodes[i]->tau - snodes[i]->old_tau);
+        }
       }
     }
   }
@@ -306,8 +316,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       snodes[i]->tau *= c;
       if (!snodes[i]->parent)
       {
-        lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
-                        opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+        if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+        {
+          /* inv-gamma prior */
+          lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
+                          opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
+        }
+        else
+        {
+          /* gamma prior */
+          lnacceptance += (opt_tau_alpha-1 - tau_count+1)*lnc -
+                          opt_tau_beta*(snodes[i]->tau - snodes[i]->old_tau);
+        }
       }
     }
   }

@@ -353,7 +353,7 @@ static double QuantileNormal(double prob)
    return (p < 0.5 ? -z : z);
 }
 
-static double QuantileChi2(double prob, double v)
+double QuantileChi2(double prob, double v)
 {
    /* returns z so that Prob{x<z}=prob where x is Chi2 distributed with df=v
       returns -1 if in error.   0.000002<prob<0.999998
@@ -411,8 +411,6 @@ l4:
 
    return (ch);
 }
-
-#define QuantileGamma(prob,alpha,beta) QuantileChi2(prob,2.0*(alpha))/(2.0*(beta))
 
 static int DiscreteGamma(double freqK[], double rK[], double alpha, double beta, int K, int UseMedian)
 {

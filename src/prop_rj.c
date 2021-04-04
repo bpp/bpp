@@ -529,7 +529,12 @@ long prop_split(gtree_t ** gtree,
   lnacceptance += lnprior_species_model(stree) - oldprior;
 
   if (node == stree->root)
-    lnacceptance += log_pdfinvgamma(tau_new,opt_tau_alpha,opt_tau_beta);
+  {
+    if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+      lnacceptance += log_pdfinvgamma(tau_new,opt_tau_alpha,opt_tau_beta);
+    else
+      lnacceptance += log_pdfgamma(tau_new,opt_tau_alpha,opt_tau_beta);
+  }
   else
     lnacceptance += log(tau_count/stree->root->tau);    /* Eq 2 in YR2010 */
 
@@ -964,7 +969,12 @@ long prop_join(gtree_t ** gtree,
   lnacceptance += lnprior_species_model(stree) - oldprior;
 
   if (node == stree->root)
-    lnacceptance -= log_pdfinvgamma(node->old_tau,opt_tau_alpha,opt_tau_beta);
+  {
+    if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+      lnacceptance -= log_pdfinvgamma(node->old_tau,opt_tau_alpha,opt_tau_beta);
+    else
+      lnacceptance -= log_pdfgamma(node->old_tau,opt_tau_alpha,opt_tau_beta);
+  }
   else
     lnacceptance -= log((tau_count-1)/stree->root->tau);    /* Eq 2 in YR2010 */
   

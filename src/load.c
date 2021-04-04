@@ -471,6 +471,8 @@ static void load_chk_section_1(FILE * fp,
   #endif
   
   /* read tau prior */
+  if (!LOAD(&opt_tau_dist,1,fp))
+    fatal("Cannot read type of tau prior");
   if (!LOAD(&opt_tau_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
   if (!LOAD(&opt_tau_beta,1,fp))

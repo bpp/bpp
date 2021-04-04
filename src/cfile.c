@@ -401,6 +401,7 @@ static int parse_speciestree(const char * line)
 
   /*** Ziheng 2020-9-1 ***/
 #if (0)  
+
   count = get_long(p, &opt_est_stree);
   if (opt_est_stree == 0) goto l_unwind;
   if (opt_est_stree != 1) goto l_unwind;
@@ -1334,7 +1335,7 @@ static long parse_thetaprior(const char * line)
   long ret = 0;
   char * s = xstrdup(line);
   char * p = s;
-  char * dist;
+  char * dist = NULL;
 
   long count;
 
@@ -1363,6 +1364,8 @@ static long parse_thetaprior(const char * line)
   ret = parse_thetaprior_args(p);
   
 l_unwind:
+  if (dist)
+    free(dist);
   free(s);
   return ret;
 }
@@ -1423,10 +1426,31 @@ static long parse_tauprior(const char * line)
   long ret = 0;
   char * s = xstrdup(line);
   char * p = s;
+  char * dist = NULL;
 
   /* TODO: Add third options for dirichlet */
 
   long count;
+
+  opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
+
+  /* peak at the first argument. If not a double then read distribution type
+     otherwise read the arguments of invgamma (default) */
+  count = get_double(p, &opt_theta_alpha);
+  if (!count)
+  {
+    count = get_delstring(p, " \t\r\n*#,", &dist);
+    if (!count) goto l_unwind;
+
+    p += count;
+    
+    if (!strcasecmp(dist,"invgamma"))
+      opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
+    else if (!strcasecmp(dist, "gamma"))
+      opt_tau_dist = BPP_TAU_PRIOR_GAMMA;
+    else
+      goto l_unwind;
+  }
 
   count = get_double(p, &opt_tau_alpha);
   if (!count) goto l_unwind;
@@ -1457,6 +1481,8 @@ static long parse_tauprior(const char * line)
   
 l_unwind:
   free(s);
+  if (dist)
+    free(dist);
   return ret;
 }
 
@@ -2102,7 +2128,7 @@ static void check_validity()
       fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
 
     if (opt_theta_beta <= 0)
-      fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
+      fatal("Beta value of Gamma(a,b) of thetaprior must be > 0");
   }
   else
   {
@@ -2121,11 +2147,23 @@ static void check_validity()
 
   if (species_count > 1)
   {
-    if (opt_tau_alpha <= 1)
-      fatal("Alpha value of Inv-Gamma(a,b) of tauprior must be > 1");
+    if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+    {
+      if (opt_tau_alpha <= 1)
+        fatal("Alpha value of Inv-Gamma(a,b) of tauprior must be > 1");
 
-    if (opt_tau_beta <= 0)
-      fatal("Beta value of Inv-Gamma(a,b) of tauprior must be > 0");
+      if (opt_tau_beta <= 0)
+        fatal("Beta value of Inv-Gamma(a,b) of tauprior must be > 0");
+    }
+    else
+    {
+      assert(opt_tau_dist == BPP_TAU_PRIOR_GAMMA);
+      if (opt_tau_alpha <= 0)
+        fatal("Alpha value of Gamma(a,b) of tauprior must be > 0");
+
+      if (opt_tau_beta <= 0)
+        fatal("Beta value of Gamma(a,b) of tauprior must be > 0");
+    }
   }
 
   if (opt_samples < 1)
@@ -2184,11 +2222,22 @@ static void check_validity()
             "are indeed using Gamma as prior and not Inv-Gamma");
   }
 
-  double gammamean = opt_tau_beta / (opt_tau_alpha - 1);
-  if (gammamean > 1)
-    fatal("Inverse gamma prior mean for taus is > 1. Please make sure you "
-          "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
-          "<= 3.3)");
+  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+  {
+    double gammamean = opt_tau_beta / (opt_tau_alpha - 1);
+    if (gammamean > 1)
+      fatal("Inverse gamma prior mean for taus is > 1. Please make sure you "
+            "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
+            "<= 3.3)");
+  }
+  else
+  {
+    assert(opt_tau_dist == BPP_TAU_PRIOR_GAMMA);
+    double gammamean = opt_tau_alpha / opt_tau_beta;
+    if (gammamean > 1)
+      fatal("Gamma prior mean for taus is > 1. Please make sure you "
+            "are indeed using Gamma as prior");
+  }
 
   if (opt_model == BPP_DNA_MODEL_CUSTOM)
   {
@@ -2479,7 +2528,9 @@ void load_cfile()
       else if (!strncasecmp(token,"tauprior",8))
       {
         if (!parse_tauprior(value))
-          fatal("Option 'tauprior' expects two doubles (line %ld)",
+          fatal("Option 'tauprior' (line %ld) expects the following syntax:\n"
+                "  tauprior = invgamma alpha beta     # for inverse gamma prior\n"
+                "  tauprior = gamma alpha beta        # for gamma prior\n",
                 line_count);
         valid = 1;
       }

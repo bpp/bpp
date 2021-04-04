@@ -297,6 +297,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_est_theta,1,fp);
 
   /* write tau prior */
+  DUMP(&opt_tau_dist,1,fp);
   DUMP(&opt_tau_alpha,1,fp);
   DUMP(&opt_tau_beta,1,fp);
 

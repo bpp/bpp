@@ -1021,8 +1021,14 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 
    /* set the speciation time for root */
    if (stree->root->tau)
-     stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
-                        (0.9 + 0.2*legacy_rndu(thread_index));
+   {
+     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+       stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
+                          (0.9 + 0.2*legacy_rndu(thread_index));
+     else
+       stree->root->tau = opt_tau_alpha / opt_tau_beta *
+                          (0.9 + 0.2*legacy_rndu(thread_index));
+   }
 
    /* recursively set the speciation time for the remaining inner nodes. For
       networks it is not necessary to check if root has both left and right */
@@ -2803,8 +2809,14 @@ static long propose_tau(locus_t ** loci,
   /* if we are dealing with the root population, add the following factor to
      the acceptance ratio */
   if (snode == stree->root)
-    lnacceptance = (-opt_tau_alpha - 1 - candidate_count + 1)*log(newage / oldage) -
-                   opt_tau_beta*(1 / newage - 1 / oldage);
+  {
+    if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+      lnacceptance = (-opt_tau_alpha - 1 - candidate_count + 1) *
+                     log(newage / oldage) - opt_tau_beta*(1/newage - 1/oldage);
+    else
+      lnacceptance = (opt_tau_alpha-1 - candidate_count + 1) *
+                     log(newage/oldage) - opt_tau_beta*(newage-oldage);
+  }
 
   /* change theta as well */
   if (opt_est_theta)
@@ -3270,7 +3282,9 @@ void stree_rootdist(stree_t * stree,
 
   assert(msa_count);
 
-  stree->root_age = opt_tau_beta / (opt_tau_alpha - 1) * 4;
+  stree->root_age = (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA) ?
+                      opt_tau_beta / (opt_tau_alpha - 1) * 4 :
+                      QuantileGamma(0.9, opt_tau_alpha, opt_tau_beta);
 
   if (!opt_usedata) return;
 
@@ -6310,8 +6324,14 @@ long snl_expand_and_shrink(stree_t * stree,
   /* prior on tau's (YR2010: Eq. 2) */
   tau0new = stree->root->tau;
   if (fabs(tau0new - tau0) > 1e-20)
-    *lnacceptance += (-opt_tau_alpha - 1 - (ndspecies - 2))*log(tau0new/tau0) -
-                     opt_tau_beta*(1/tau0new - 1/tau0);
+  {
+    if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+      *lnacceptance += (-opt_tau_alpha - 1 - (ndspecies - 2))*log(tau0new/tau0) -
+                       opt_tau_beta*(1/tau0new - 1/tau0);
+    else
+      *lnacceptance += (opt_tau_alpha - 1 - (ndspecies - 2))*log(tau0new/tau0) -
+                       opt_tau_beta*(tau0new - tau0);
+  }
 
   snode_contrib = snode_contrib_space;
   double logpr_notheta = stree->notheta_logpr;
