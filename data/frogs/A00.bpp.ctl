@@ -1,36 +1,42 @@
-          seed =  -1
+seed =  -1
 
-       seqfile = frogs.txt
-      Imapfile = frogs.Imap.txt
-       outfile = out.txt
-      mcmcfile = mcmc.txt
+seqfile = frogs.txt
+Imapfile = frogs.Imap.txt
+outfile = out.txt
+mcmcfile = mcmc.txt
 
-  speciesdelimitation = 0 * fixed species tree
-* speciesdelimitation = 1 0 2    * species delimitation rjMCMC algorithm0 and finetune(e)
-* speciesdelimitation = 1 1 2 1 * species delimitation rjMCMC algorithm1 finetune (a m)
-         speciestree = 0
+# fixed number of species/populations 
+speciesdelimitation = 0
 
-*   speciesmodelprior = 1  * 0: uniform LH; 1:uniform rooted trees; 2: uniformSLH; 3: uniformSRooted
+# fixed species tree
+speciestree = 0
 
-  species&tree = 4  K  C  L  H
-                    9  7 14  2
+species&tree = 4  K  C  L  H
+                  9  7 14  2
                  (((K, C), L), H);
-         phase =   1  1  1  1
-                  
-       usedata = 1  * 0: no data (prior); 1:seq like
-         nloci = 5  * number of data sets in seqfile
 
-     cleandata = 0    * remove sites with ambiguity data (1:yes, 0:no)?
+# unphased data for all 4 populations
+phase =   1  1  1  1
 
-    thetaprior = 3 0.004 E  # invgamma(a, b) for theta
-      tauprior = 3 0.002    # invgamma(a, b) for root tau & Dirichlet(a) for other tau's
+# use sequence likelihood
+usedata = 1
 
-*     heredity = 1 4 4
-*    locusrate = 1 5
+nloci = 5
 
-      finetune =  1: 5 0.001 0.001  0.001 0.3 0.33 1.0  # finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+# do not remove sites with ambiguity data
+cleandata = 0
 
-         print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
-        burnin = 8000
-      sampfreq = 2
-       nsample = 100000
+# gamma(a, b) for theta (estimate theta)
+thetaprior = gamma 0.001 1
+
+# invgamma(a, b) for root tau & Dirichlet(a) for other tau's
+tauprior = invgamma 3 0.002
+
+# finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+finetune =  1: 5 0.001 0.001  0.001 0.3 0.33 1.0  
+
+# MCMC samples, locusrate, heredityscalars, Genetrees
+print = 1 0 0 0   * 
+burnin = 8000
+sampfreq = 2
+nsample = 100000
