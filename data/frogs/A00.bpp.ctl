@@ -27,7 +27,7 @@ nloci = 5
 cleandata = 0
 
 # gamma(a, b) for theta (estimate theta)
-thetaprior = gamma 0.001 1
+thetaprior = gamma 2 2000
 
 # invgamma(a, b) for root tau & Dirichlet(a) for other tau's
 tauprior = invgamma 3 0.002
