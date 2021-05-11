@@ -868,6 +868,7 @@ extern long opt_est_stree;
 extern long opt_est_theta;
 extern long opt_exp_randomize;
 extern long opt_exp_theta;
+extern long opt_exp_sim;
 extern long opt_finetune_reset;
 extern long opt_help;
 extern long opt_locusrate_prior;
@@ -2295,6 +2296,9 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_print_gtree(gtree_t * gtree);
+void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index);
+void debug_check_leaves(gtree_t ** gtree);
 void debug_validate_logpg(stree_t * stree,
                           gtree_t ** gtree,
                           locus_t ** locus,

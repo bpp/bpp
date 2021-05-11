@@ -24,6 +24,183 @@
 #define SHRINK 1
 #define EXPAND 2
 
+void debug_print_gtree(gtree_t * gtree)
+{
+  long i;
+
+  printf("Label        Node-index  Child1-index  Child2-index  Parent-index  "
+         "Pmat-index    Pop     time\n");
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    char * label;
+    if (gtree->nodes[i]->label)
+      label = xstrdup(gtree->nodes[i]->label);
+    else
+      label = xstrdup("N/A");
+
+    /* shorten label if over 12 characters */
+    if (strlen(label) > 12)
+    {
+      label[9] = '.'; label[10] = '.'; label[11] = '.'; label[12] = 0;
+    }
+
+    printf("%-12s", label);
+    free(label);
+    printf("  %9d", gtree->nodes[i]->node_index);
+
+    if (gtree->nodes[i]->left)
+      printf("  %12d", gtree->nodes[i]->left->node_index);
+    else
+      printf("  %12s", "N/A");
+
+    if (gtree->nodes[i]->right)
+      printf("  %12d", gtree->nodes[i]->right->node_index);
+    else
+      printf("  %12s", "N/A");
+
+
+    if (gtree->nodes[i]->parent)
+      printf("  %12d", gtree->nodes[i]->parent->node_index);
+    else
+      printf("  %12s", "N/A");
+
+    printf("  %10d", gtree->nodes[i]->pmatrix_index);
+
+    printf(" %5s", gtree->nodes[i]->pop->label);
+    printf(" %.12f", gtree->nodes[i]->time);
+    printf("\n");
+  }
+}
+
+void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index)
+{
+  long i,j;
+
+  assert(gtree->root && !gtree->root->parent);
+
+  /* marks */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    if (!gtree->nodes[i]->parent)
+      assert(gtree->nodes[i] == gtree->root);
+    assert(!gtree->nodes[i]->mark);
+  }
+
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    while (x && !x->mark)
+    {
+      x->mark = 1;
+      
+      if (x->parent)
+      {
+        assert(x->parent->left && x->parent->right);
+        assert(x->parent->left == x || x->parent->right == x);
+      }
+      x = x->parent;
+    }
+  }
+
+  /* marks */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    assert(gtree->nodes[i]->mark);
+    gtree->nodes[i]->mark = 0;
+  }
+
+  /* check leaves */
+  for (i = 0; i < gtree->tip_count; ++i)
+    assert(gtree->nodes[i]->leaves == 1);
+  for (i = gtree->tip_count; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+    assert(x->leaves == x->left->leaves + x->right->leaves);
+  }
+
+  /* check seqin count, coalescences etc */
+  long sum = 0;
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    sum += stree->nodes[i]->seqin_count[msa_index];
+  }
+  assert(sum == gtree->tip_count);
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+
+    long lout = snode->left->seqin_count[msa_index] -
+                snode->left->event_count[msa_index];
+    long rout = snode->right->seqin_count[msa_index] -
+                snode->right->event_count[msa_index];
+
+    assert(snode->seqin_count[msa_index] == lout+rout);
+  }
+  snode_t * sroot = stree->root;
+  assert(sroot->seqin_count[msa_index] - sroot->event_count[msa_index] == 1);
+
+  /* check ages */
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    if (!x->parent)
+    {
+      assert(x->left->time < x->time && x->right->time < x->time);
+    }
+    else
+    {
+      assert(x->parent->time > x->time);
+
+      if (x->left)
+      {
+        assert(x->left->time < x->time && x->right->time < x->time);
+      }
+    }
+
+    if (x->pop->parent)
+      assert(x->time < x->pop->parent->tau);
+    if (x->left)
+      assert(x->time > x->pop->tau);
+  }
+
+  /* check for duplicate pmatrix index */
+  /* TODO: Also check for the corresponding index, i.e. pmatindex+edge_count */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    for (j = i+1; j < gtree->tip_count+gtree->inner_count; ++j)
+    {
+      if (gtree->nodes[i]->parent && gtree->nodes[j]->parent)
+        assert(gtree->nodes[i]->pmatrix_index != gtree->nodes[j]->pmatrix_index);
+    }
+  }
+}
+
+void debug_check_leaves(gtree_t ** gtree)
+{
+  long i,j;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    {
+      gnode_t * node = gtree[i]->nodes[j];
+
+      if (node->left)
+      {
+        /* inner */
+        assert(node->leaves == node->left->leaves + node->right->leaves);
+      }
+      else
+      {
+        /* tip */
+        assert(node->leaves == 1);
+      }
+    }
+  }
+}
+
 static void debug_validate_logpg_notheta(stree_t * stree,
                                          gtree_t ** gtree,
                                          locus_t ** locus,

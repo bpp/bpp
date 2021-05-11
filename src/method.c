@@ -2964,6 +2964,11 @@ void cmd_run()
             "[DEBUG] SHRINK move proportion: %f\n",
             opt_prob_snl_shrink);
   }
+  if (opt_exp_sim)
+  {
+    fprintf(stdout,
+            "[DEBUG] Using experimental gene tree SPR move with simulation\n");
+  }
 
   for (i = 0; i < opt_locus_count; ++i)
   {

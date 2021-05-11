@@ -55,6 +55,11 @@ __THREAD gnode_t * dbg_msci_a = NULL;
 __THREAD gnode_t * dbg_msci_s = NULL;
 __THREAD gnode_t * dbg_msci_t = NULL;
 
+static long propose_spr_sim(locus_t * locus,
+                            gtree_t * gtree,
+                            stree_t * stree,
+                            int msa_index,
+                            long thread_index);
 #if 0
 
 /* 
@@ -4991,7 +4996,10 @@ double gtree_propose_spr_serial(locus_t ** locus,
     #ifdef DEBUG_THREADS
     accepted += propose_spr(locus[i],gtree[i],stree,i,indices[i]);
     #else
-    accepted += propose_spr(locus[i],gtree[i],stree,i,0);
+    if (!opt_exp_sim)
+      accepted += propose_spr(locus[i],gtree[i],stree,i,0);
+    else
+      accepted += propose_spr_sim(locus[i],gtree[i],stree,i,0);
     #endif
   }
 
@@ -5025,7 +5033,10 @@ void gtree_propose_spr_parallel(locus_t ** locus,
   {
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->edge_count;
-    accepted += propose_spr(locus[i],gtree[i],stree,i,thread_index);
+    if (!opt_exp_sim)
+      accepted += propose_spr(locus[i],gtree[i],stree,i,thread_index);
+    else
+      accepted += propose_spr_sim(locus[i],gtree[i],stree,i,thread_index);
   }
 
   *p_proposal_count = proposal_count;
@@ -5344,5 +5355,496 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
     divisor += opt_locus_count;
 
   return (accepted / divisor);
+}
+
+/* NEW simulation spr */
+static int cb_cmp_double(const void * a, const void * b)
+{
+  double * x = (double *)a;
+  double * y = (double *)b;
+
+  if (*x > *y) return 1;
+  if (*x < *y) return -1;
+
+  return 0;
+}
+
+static long target_branches(stree_t * stree,
+                            gtree_t * gtree,
+                            snode_t * snode,
+                            gnode_t * curnode,
+                            double t,
+                            gnode_t ** outbuf)
+{
+  long i;
+  long count = 0;
+
+  assert(!opt_msci);
+
+  for (i = 0; i < gtree->tip_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (!stree->pptable[gnode->pop->node_index][snode->node_index]) continue;
+
+    while (!gnode->mark && gnode->parent && gnode->parent->time < t)
+    {
+      gnode->mark = 1;
+      gnode = gnode->parent;
+    }
+    if (gnode->mark) continue;
+
+    if (gnode != curnode)
+      outbuf[count++] = gnode;
+  }
+
+  /* clean marks */
+  for (i = 0; i < gtree->tip_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    while (gnode && gnode->mark)
+    {
+      gnode->mark = 0;
+      gnode = gnode->parent;
+    }
+  }
+
+  return count;
+}
+
+static double simulate_coalescent(gtree_t * gtree,
+                                  gnode_t * gnode,
+                                  long msa_index,
+                                  long thread_index)
+{
+  long i,k;
+  long lineages;
+  double rate;
+  double t;
+  double tnew;
+  double * wtimes;
+  gnode_t * coal;
+  dlist_item_t * dlitem;
+  snode_t * snode = gnode->pop;
+  snode_t * sibling = NULL;
+
+  wtimes = (double *)xmalloc((size_t)(gtree->inner_count+1) * sizeof(double));
+
+  t = gnode->time;
+
+  /* start with the lineages entering the current population */
+  lineages = snode->seqin_count[msa_index];
+
+  /* make a list of waiting times older than t and at the same time reduces
+     number of lineages by the amount of coalescent events younger than t
+     (including t) */
+  k = 0;
+  for (dlitem = snode->event[msa_index]->head; dlitem; dlitem = dlitem->next)
+  {
+    coal = (gnode_t *)(dlitem->data);
+    if (coal->time > t)
+      wtimes[k++] = coal->time;
+    else
+      --lineages;
+  }
+  /* subtract the pruned lineage (branch) */
+  --lineages;
+
+  /* determine time to coalesce */
+  while (1)
+  {
+
+    if (lineages)
+    {
+      /* if not root population add tau and sort waiting times */
+      if (snode->parent)
+        wtimes[k++] = snode->parent->tau;
+      qsort(wtimes,k, sizeof(double), cb_cmp_double);
+      /* simulate until all waiting times are exhausted */
+      for (i = 0; i < k; ++i)
+      {
+        /* generate time */
+        rate = 2*lineages / snode->theta;
+        tnew = legacy_rndexp(thread_index, 1/rate);
+
+        if (t+tnew <= wtimes[i])
+        {
+          t += tnew;
+          break;
+        }
+
+        t = wtimes[i];
+
+        --lineages;
+      }
+
+      /* stop if coalescence happened */
+      if (i != k)
+        break;
+
+      /* also stop if we were in the root population */
+      if (!snode->parent)
+      {
+        assert(lineages == 1);
+
+        /* generate time */
+        rate = 2 / snode->theta;
+        t += legacy_rndexp(thread_index, 1/rate);
+        break;
+      }
+      else
+        ++lineages;
+    }
+    else
+    {
+      assert(!k);
+      assert(snode->parent);
+      t = snode->parent->tau;
+    }
+
+    /* get the lineages from the sibling population going into the parent */
+    sibling = (snode->parent->left == snode) ?
+                snode->parent->right : snode->parent->left;
+
+    lineages += sibling->seqin_count[msa_index] - sibling->event_count[msa_index];
+
+
+    snode = snode->parent;
+    /* make a list of waiting times older than t and at the same time reduces
+       number of lineages by the amount of coalescent events younger than t
+       (including t) */
+    k = 0;
+    for (dlitem = snode->event[msa_index]->head; dlitem; dlitem = dlitem->next)
+    {
+      coal = (gnode_t *)(dlitem->data);
+      if (coal->time > t)
+        wtimes[k++] = coal->time;
+    }
+  }
+
+  free(wtimes);
+
+  return t;
+}
+
+static void subtree_prune(gtree_t * gtree, gnode_t * curnode, long msa_index)
+{
+  gnode_t * father;
+  gnode_t * sibling;  
+  gnode_t * tmp;
+  snode_t * pop;
+                      
+  father  = curnode->parent;
+  sibling = (father->left == curnode) ? father->right : father->left;
+
+  /* remove father from coalescent events of its population */
+  unlink_event(father,msa_index);
+  father->pop->event_count[msa_index]--;
+  if (!opt_est_theta)
+    father->pop->event_count_sum--;
+
+  /* decrease the number of incoming lineages to all populations in the path from
+  curnode population (excluding) to the father population (including) */
+  for (pop = curnode->pop->parent; pop != father->pop->parent; pop = pop->parent)
+    pop->seqin_count[msa_index]--;
+
+  assert(curnode->parent);
+
+  if (!father->parent)
+  {
+    SWAP(gtree->root->pmatrix_index, sibling->pmatrix_index);
+    gtree->root = sibling;
+    sibling->parent = NULL;
+  }
+  else
+  {
+    if (father->parent->left == father)
+      father->parent->left = sibling;
+    else
+      father->parent->right = sibling;
+
+    sibling->parent = father->parent;
+
+    /* update number of leaves all nodes from father's parent and up */
+    for (tmp = father->parent; tmp; tmp = tmp->parent)
+      tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+  }
+
+  curnode->parent = NULL;
+  father->left = father->right = NULL;
+  father->parent = NULL;
+}
+
+static void subtree_regraft(gtree_t * gtree,
+                            gnode_t * curnode,
+                            gnode_t * father,
+                            gnode_t * target,
+                            snode_t * newpop,
+                            double tnew,
+                            long msa_index)
+{
+  gnode_t * tmp;
+  snode_t * pop;
+
+  father->parent = target->parent;
+  target->parent = father;
+  if (father->parent)
+  {
+    if (father->parent->left == target)
+      father->parent->left = father;
+    else
+      father->parent->right = father;
+  }
+
+  father->left = target;
+  father->right = curnode;
+
+  father->leaves = father->left->leaves + father->right->leaves;
+  curnode->parent = father;
+  if (target == gtree->root)
+  {
+    /* father becomes new root */
+    SWAP(gtree->root->pmatrix_index, father->pmatrix_index);
+    gtree->root = father;
+  }
+  else
+  {
+    for (tmp = father->parent; tmp; tmp = tmp->parent)
+      tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+  }
+
+  /* change the population for the current gene tree node */
+  father->pop = newpop;
+  father->time = tnew;
+
+  /* now add the coalescent event to the new population, at the end */
+  dlist_item_append(father->pop->event[msa_index],father->event);
+
+  father->pop->event_count[msa_index]++;
+  if (!opt_est_theta)
+    father->pop->event_count_sum++;
+
+  /* increase number of incoming lineages to all populations in the path from
+   * curnode population (excluding) to the father population (including) */
+  for (pop = curnode->pop->parent; pop != father->pop->parent; pop = pop->parent)
+    pop->seqin_count[msa_index]++;
+}
+
+static long propose_spr_sim(locus_t * locus,
+                            gtree_t * gtree,
+                            stree_t * stree,
+                            int msa_index,
+                            long thread_index)
+{
+  long i,j,k;
+  long accepted = 0;
+  double tnew,told;
+  double lnacceptance = 0;
+  double logpr;
+  double logl;
+
+  gnode_t * curnode;
+  gnode_t * father;
+  gnode_t * sibling;
+  gnode_t * target;
+  gnode_t * tmp;
+
+  snode_t * newpop;
+  snode_t * oldpop;
+  snode_t * pop;
+  snode_t * start;
+  snode_t * end;
+
+  gnode_t ** travbuffer = gtree->travbuffer;
+
+  /*          
+
+                                 *
+                                / \
+                       father  *   \
+                              / \
+                    curnode  /   \
+                            *     *  sibling
+                           / \   / \
+                          /   \
+
+
+
+  */
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+
+    curnode = gtree->nodes[i];
+    if (curnode == gtree->root) continue;
+
+    assert(curnode->parent);
+    sibling = (curnode->parent->left == curnode) ? 
+                curnode->parent->right : curnode->parent->left;
+    father  = curnode->parent;
+
+    oldpop = father->pop;
+    told = father->time;
+
+    /* prune */
+    subtree_prune(gtree,curnode,msa_index);
+
+    /* simulate coalescent from curnode, and return age of coalescence */
+    tnew = simulate_coalescent(gtree,curnode,msa_index,thread_index);
+
+    /* find ancestral population at time tnew */
+    for (newpop = curnode->pop;
+         newpop->parent && newpop->parent->tau < tnew;
+         newpop = newpop->parent);
+
+    /* get lineages entering that population */
+    long lineages = target_branches(stree,gtree,newpop,curnode,tnew,travbuffer);
+
+    /* randomly pick one lineage */
+    j = (long)(lineages*legacy_rndu(thread_index));
+    assert(j < lineages);
+    target = travbuffer[j];
+
+    /* regraft */
+    subtree_regraft(gtree,curnode,father,target,newpop,tnew,msa_index);
+
+    /* update necessary p-matrices */
+    k = 0;
+    travbuffer[k++] = father->left;
+    travbuffer[k++] = father->right;
+    if (father->parent)
+      travbuffer[k++] = father;
+    if (target != sibling && sibling->parent)
+      travbuffer[k++] = sibling;
+    for (j = 0; j < k; ++j)
+      SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
+    locus_update_matrices(locus,gtree,travbuffer,stree,msa_index,k);
+
+    /* find CLVs that must be updated */
+    k = 0;
+    if (target == sibling || !sibling->parent)
+    {
+      /* no spr (within tree move) or father was root => only one root-path  */
+      for (tmp = father; tmp; tmp = tmp->parent)
+      {
+        travbuffer[k++] = tmp;
+
+        tmp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->clv_index);
+        if (opt_scaling)
+          tmp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,tmp->scaler_index);
+      }
+    }
+    else
+    {
+      /* spr (cross tree move), we have two root-paths; one starting from
+         sibling's parent and one from father */
+      for (tmp = father; tmp; tmp = tmp->parent)
+        tmp->mark = 1;
+
+      /* root-path starting from sibling's parent, stop at LCA with curnode */
+      for (tmp = sibling->parent; !(tmp->mark); tmp = tmp->parent)
+      {
+        travbuffer[k++] = tmp;
+
+        tmp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->clv_index);
+        if (opt_scaling)
+          tmp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,tmp->scaler_index);
+      }
+
+      /* remaining root-path starting from father, and reset marks */
+      for (tmp = father; tmp; tmp = tmp->parent)
+      {
+        tmp->mark = 0;
+        travbuffer[k++] = tmp;
+
+        tmp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->clv_index);
+        if (opt_scaling)
+          tmp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,tmp->scaler_index);
+      }
+    }
+
+    /* update partials */
+    locus_update_partials(locus,travbuffer,k);
+
+    /* compute log-l and log-pr */
+    logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
+
+    /* update logpr */
+    logpr = (opt_est_theta) ? gtree->logpr : stree->notheta_logpr;
+
+    start = (tnew > told) ? oldpop : father->pop;
+    end   = (tnew > told) ? father->pop->parent : oldpop->parent;
+
+    for (pop = start; pop != end; pop = pop->parent)
+    {
+      if (opt_est_theta)
+        logpr -= pop->logpr_contrib[msa_index];
+      else
+        logpr -= pop->notheta_logpr_contrib;
+
+      logpr += gtree_update_logprob_contrib(pop,
+                                            locus->heredity[0],
+                                            msa_index,
+                                            thread_index);
+    }
+
+    lnacceptance = logl - gtree->logl;
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted++;
+
+      if (opt_est_theta)
+        gtree->logpr = logpr;
+      else
+        stree->notheta_logpr = logpr;
+
+      gtree->logl = logl;
+    }
+    else
+    {
+      /* rejected */
+
+      /* reset CLV indices */
+      for (j = 0; j < k; ++j)
+      {
+        tmp = travbuffer[j];
+        tmp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->clv_index);
+        if (opt_scaling)
+          tmp->scaler_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->scaler_index);
+      }
+
+      /* now reset branch lengths and pmatrices */
+      k = 0;
+      travbuffer[k++] = father->left;
+      travbuffer[k++] = father->right;
+      if (father->parent)
+        travbuffer[k++] = father;
+      if (target != sibling && sibling->parent)
+        travbuffer[k++] = sibling;
+      for (j = 0; j < k; ++j)
+        SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
+      
+      /* prune */
+      subtree_prune(gtree,curnode,msa_index);
+
+      /* regraft */
+      subtree_regraft(gtree,curnode,father,sibling,oldpop,told,msa_index);
+
+      /* restore logpr */
+      start = (tnew > told) ? oldpop : newpop;
+      end   = (tnew > told) ? newpop->parent : oldpop->parent;
+
+      for (pop = start; pop != end; pop = pop->parent)
+      {
+        if (opt_est_theta)
+          pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+        else
+          logprob_revert_notheta(pop,msa_index);
+      }
+    }
+  }
+  return accepted;
 }
 

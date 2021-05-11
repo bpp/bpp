@@ -83,6 +83,7 @@ long opt_est_stree;
 long opt_est_theta;
 long opt_exp_randomize;
 long opt_exp_theta;
+long opt_exp_sim;
 long opt_finetune_reset;
 long opt_help;
 long opt_locusrate_prior;
@@ -244,6 +245,7 @@ static struct option long_options[] =
   {"debug_abort",  required_argument, 0, 0 },  /* 32 */
   {"exp_theta",    no_argument,       0, 0 },  /* 33 */
   {"debug_bruce",  no_argument,       0, 0 },  /* 34 */
+  {"exp_sim",      no_argument,       0, 0 },  /* 35 */
   { 0, 0, 0, 0 }
 };
 
@@ -405,6 +407,7 @@ void args_init(int argc, char ** argv)
   opt_est_theta = 1;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
+  opt_exp_sim = 0;
 #if(0)
   opt_revolutionary_spr_method = 1;
   opt_revolutionary_spr_debug = 2;
@@ -683,6 +686,10 @@ void args_init(int argc, char ** argv)
 
       case 34:
         opt_debug_bruce = 1;
+        break;
+
+      case 35:
+        opt_exp_sim = 1;
         break;
 
       default:
