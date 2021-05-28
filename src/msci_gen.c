@@ -1093,7 +1093,7 @@ static snode_t * edge_basenode(stree_t * stree,
   assert(!p->hybrid || !node_is_mirror(p));
   
   /* check that the specified edge is not horizontal (introgression) */
-  if (c->hybrid && !c->htau)
+  if (c->hybrid && !c->htau && !node_is_bidirection(c))
   {
     fatal("Cannot insert hybridization on a horizontal introgression edge "
           "defined by %s and %s (line %ld)",
