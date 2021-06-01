@@ -6580,7 +6580,14 @@ long stree_propose_stree_snl(stree_t ** streeptr,
   /* calculate the weight of each branch as the reciprocal of the square root
    * of its length */
   /* TODO: 31.7.2020 At the moment, no consraints */
-  assert(!opt_constraint_count);
+  if (opt_constraint_count)
+    fatal("\nERROR: Constraints are not yet implemented for the SNL move.\n"
+          "Please edit the control file and replace the following line:\n\n"
+          "  speciestree = 1\n\n"
+          "to:\n\n"
+          "  speciestree = 1 0\n\n"
+          "to disable the SNL move and use constraints.");
+
   init_weights(stree, NULL);
 
   lnacceptance = 0;
