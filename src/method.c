@@ -1768,6 +1768,12 @@ static FILE * init(stree_t ** ptr_stree,
   stree_t * sclone = NULL;
   gtree_t ** gclones = NULL;
 
+  if (!(fp_out = fopen(opt_outfile, "w")))
+    fatal("Cannot open file %s for writing...");
+  *ptr_fp_out = fp_out;
+  init_outfile(fp_out);
+
+
   /* load species tree */
   stree = load_tree_or_network();
   printf(" Done\n");
@@ -1869,6 +1875,25 @@ static FILE * init(stree_t ** ptr_stree,
     }
   }
 
+  /* remove missing sequences */
+  for (i = 0; i < msa_count; ++i)
+  {
+    int deleted = msa_remove_missing_sequences(msa_list[i]);
+    if (deleted == -1)
+      fatal("[ERROR]: Locus %ld contains missing sequences only.\n"
+            "Please remove the locus and restart the analysis.\n");
+
+    if (deleted)
+    {
+      fprintf(stdout,
+              "[WARNING]: Removing %d missing sequences from locus %ld\n",
+              deleted, i);
+      fprintf(fp_out,
+              "[WARNING]: Removing %d missing sequences from locus %ld\n",
+              deleted, i);
+    }
+  }
+
   /* remove ambiguous sites */
   if (opt_cleandata)
   {
@@ -1930,11 +1955,6 @@ static FILE * init(stree_t ** ptr_stree,
     /* compute base frequencies */
     compute_base_freqs(msa_list[i], weights[i], pll_map);
   }
-
-  if (!(fp_out = fopen(opt_outfile, "w")))
-    fatal("Cannot open file %s for writing...");
-  *ptr_fp_out = fp_out;
-  init_outfile(fp_out);
 
   if (opt_diploid)
   {

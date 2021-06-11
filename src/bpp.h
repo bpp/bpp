@@ -994,6 +994,8 @@ extern const unsigned int pll_map_fasta[256];
 extern const unsigned int pll_map_amb[256];
 extern const unsigned int pll_map_validjc69[16];
 extern const unsigned int bpp_tolower_table[256];
+extern const unsigned int pll_map_nt_missing[256];
+extern const unsigned int pll_map_aa_missing[256];
 
 extern const double pll_aa_rates_dayhoff[190];
 extern const double pll_aa_rates_lg[190];
@@ -1233,6 +1235,8 @@ int msa_remove_ambiguous(msa_t * msa);
 void msa_summary(FILE * fp, msa_t ** msa_list, int msa_count);
 
 void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map);
+
+int msa_remove_missing_sequences(msa_t * msa);
 
 /* functions in mapping.c */
 

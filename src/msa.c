@@ -241,6 +241,70 @@ int msa_remove_ambiguous(msa_t * msa)
   return rc;
 }
 
+int msa_remove_missing_sequences(msa_t * msa)
+{
+  long i,j,k;
+  long deleted = 0;
+  const unsigned int * map;
+  char ** seq;
+  char ** label;
+
+  map = (msa->dtype == BPP_DATA_DNA) ? pll_map_nt_missing : pll_map_aa_missing;
+
+  /* go over the sequences and delete those that comprise of missing data */
+  for (i = 0; i < msa->count; ++i)
+  {
+    for (j = 0; j < msa->length; ++j)
+      if (!map[(int)(msa->sequence[i][j])])
+        break;
+    
+    if (j == msa->length)
+    {
+      ++deleted;
+      free(msa->sequence[i]);
+      free(msa->label[i]);
+
+      msa->sequence[i] = NULL;
+      msa->label[i] = NULL;
+    }
+  }
+  assert(deleted <= msa->count);
+
+  if (msa->count == deleted)
+    return -1;
+
+  /* now remove those empty records in the msa structure */
+  if (deleted)
+  {
+    seq   = (char **)xmalloc((size_t)(msa->count - deleted) * sizeof(char *));
+    label = (char **)xmalloc((size_t)(msa->count - deleted) * sizeof(char *));
+
+    /* populate new arrays */
+    for (i = 0, k = 0; i < msa->count; ++i)
+    {
+      assert((msa->sequence[i] && msa->label[i]) ||
+             (!msa->sequence[i] && !msa->label[i]));
+
+      if (msa->sequence[i])
+      {
+        seq[k]   = msa->sequence[i];
+        label[k] = msa->label[i];
+
+        ++k;
+      }
+    }
+
+    /* replace */
+    free(msa->sequence);
+    free(msa->label);
+    msa->sequence = seq;
+    msa->label = label;
+
+    msa->count -= deleted;
+  }
+  return deleted;
+}
+
 void msa_destroy(msa_t * msa)
 {
   int i;
