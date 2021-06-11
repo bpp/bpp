@@ -2270,7 +2270,7 @@ double QuantileChi2(double prob, double v);
 
 /* functions in threads.c */
 
-void threads_init(locus_t ** locus);
+void threads_init(locus_t ** locus, FILE * fp_out);
 void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit(void);
 void threads_pin_master(void);
