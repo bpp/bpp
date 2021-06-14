@@ -21,25 +21,30 @@
 
 #include "bpp.h"
 
-typedef struct thread_info_s
+typedef struct qsort_wrapper_s
 {
-  pthread_t thread;
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
-  
-  /* type of work (0 no work) */
-  volatile int work;
+  long index;
+  long comp;
+} qsort_wrapper_t;
 
-  /* thread parameters */
-  long locus_first;
-  long locus_count;
-
-  thread_data_t td;
-
-} thread_info_t;
-
-static thread_info_t * ti;
+static thread_info_t * ti = NULL;
 static pthread_attr_t attr;
+
+static int cb_asc_comp(const void * x, const void * y)
+{
+  const qsort_wrapper_t * a = *(const qsort_wrapper_t **)x;
+  const qsort_wrapper_t * b = *(const qsort_wrapper_t **)y;
+
+  return b->comp - a->comp;
+}
+
+static int cb_desc_comp(const void * x, const void * y)
+{
+  const qsort_wrapper_t * a = *(const qsort_wrapper_t **)x;
+  const qsort_wrapper_t * b = *(const qsort_wrapper_t **)y;
+
+  return a->comp - b->comp;
+}
 
 #if (defined(__linux__) && !defined(DISABLE_COREPIN))
 static void pin_to_core(long t)
@@ -190,11 +195,157 @@ void threads_pin_master()
   #endif
 }
 
+thread_info_t * threads_ti()
+{
+  return ti;
+}
+
+/* this is only used when resuming from a checkpoint */
+void threads_set_ti(thread_info_t * tip)
+{
+  ti = tip;
+}
+
+static void load_balance_none(msa_t ** msa_list)
+{
+  long t;
+  long loci_per_thread = opt_locus_count / opt_threads;
+  long loci_remaining = opt_locus_count % opt_threads;
+  long loci_start = 0;
+
+  /* static load allocation */
+  /* TODO: We discussed with Ziheng better ways to allocate loci on threads. One
+     idea was to use some weights on the site count of each locus, i.e.
+     sites^{2/3} as we need to account for the MSC density computation time and
+     not only on the phylogenetic likelihood.
+
+     For now we only distrubute an equal number of loci to each thread and
+     cyclically distribute the overflow */
+
+  for (t = 0; t < opt_threads; ++t)
+  {
+    thread_info_t * tip = ti + t;
+    tip->work = 0;
+
+    /* allocate loci for thread t */
+    tip->locus_first = loci_start;
+    tip->locus_count = loci_per_thread + (loci_remaining > 0 ? 1 : 0);
+
+    if (loci_remaining)
+      --loci_remaining;
+    loci_start += tip->locus_count;
+  }
+}
+
+static long * load_balance_zigzag(msa_t ** msa_list)
+{
+  long i,t;
+  long core, increment;
+  long * assign;
+  long * shuffle_indices;
+  qsort_wrapper_t ** loadi;
+  msa_t ** reorder_msa;
+
+  loadi = (qsort_wrapper_t **)xmalloc((size_t)opt_locus_count *
+                                      sizeof(qsort_wrapper_t *));
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    loadi[i] = (qsort_wrapper_t *)xmalloc(sizeof(qsort_wrapper_t));
+    loadi[i]->index = i;
+    loadi[i]->comp  = msa_list[i]->count * msa_list[i]->length;  /* load */
+  }
+  qsort(loadi,opt_locus_count,sizeof(loadi),cb_asc_comp);
+
+  /* zig-zag distribution */
+  core = 0;
+  increment = 1;
+  assign = (long *)xmalloc((size_t)opt_locus_count * sizeof(long));
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    assign[i] = core;
+    core += increment;
+
+    if (core == opt_threads)
+    {
+      increment = -1;
+      core = opt_threads - 1;
+    }
+    else if (core == -1)
+    {
+      increment = 1;
+      core = 0;
+    }
+  }
+
+  /* sort loci by assigned thread index */
+  for (i = 0; i < opt_locus_count; ++i)
+    loadi[i]->comp = assign[i];
+  qsort(loadi,opt_locus_count,sizeof(loadi),cb_desc_comp);
+
+  /* reorder loci and gene tree arrays according to thread assignments */
+  reorder_msa = (msa_t **)xmalloc((size_t)opt_locus_count * sizeof(msa_t *));
+  for (i = 0; i < opt_locus_count; ++i)
+    reorder_msa[i] = msa_list[loadi[i]->index];
+
+  shuffle_indices = (long *)xmalloc((size_t)opt_locus_count * sizeof(long));
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    /* keep the shuffling order for other arrays that need to be reordered */
+    shuffle_indices[i] = loadi[i]->index;
+
+    /* reoder msa_list */
+    msa_list[i] = reorder_msa[i];
+  }
+
+  free(reorder_msa);
+  for (i = 0; i < opt_locus_count; ++i)
+    free(loadi[i]);
+  free(loadi);
+
+  /* get number of loci assigned to each thread */
+  long * lc_thread = (long *)xcalloc((size_t)opt_threads, sizeof(long));
+  for (i = 0; i < opt_locus_count; ++i)
+    lc_thread[assign[i]]++;
+  free(assign);
+
+  long loci_start = 0;
+
+  /* init and create worker threads */
+  for (t = 0; t < opt_threads; ++t)
+  {
+    thread_info_t * tip = ti + t;
+    tip->work = 0;
+
+    /* allocate loci for thread t */
+    tip->locus_first = loci_start;
+    tip->locus_count = lc_thread[t];
+
+    loci_start += tip->locus_count;
+  }
+  free(lc_thread);
+  return shuffle_indices;
+}
+
+long * threads_load_balance(msa_t ** msa_list)
+{
+  long * shuffle_indices = NULL;
+
+  /* allocate memory for thread info */
+  ti = (thread_info_t *)xmalloc((size_t)opt_threads * sizeof(thread_info_t));
+
+  if (opt_load_balance == BPP_LB_ZIGZAG)
+    shuffle_indices = load_balance_zigzag(msa_list);
+  else
+    load_balance_none(msa_list);
+
+  return shuffle_indices;
+}
+
 void threads_init(locus_t ** locus, FILE * fp_out)
 {
-  long i;
-  long t;
-  long patterns;
+  long i,t;
+  long lindex, patterns, seqs, load;
 
   if (opt_threads > opt_locus_count)
     fatal("The number of threads cannot be greater than the number of loci");
@@ -207,22 +358,8 @@ void threads_init(locus_t ** locus, FILE * fp_out)
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-  /* allocate memory for thread info */
-  ti = (thread_info_t *)xmalloc((size_t)opt_threads * sizeof(thread_info_t));
-
-  /* static load allocation */
-  /* TODO: We discussed with Ziheng better ways to allocate loci on threads. One
-     idea was to use some weights on the site count of each locus, i.e.
-     sites^{2/3} as we need to account for the MSC density computation time and
-     not only on the phylogenetic likelihood.
-
-     For now we only distrubute an equal number of loci to each thread and
-     cyclically distribute the overflow */
-
-  long loci_per_thread = opt_locus_count / opt_threads;
-  long loci_remaining = opt_locus_count % opt_threads;
-  long loci_start = 0;
-
+  if (!ti)
+    fatal("Internal error - call load balance routine");
 
   /* init and create worker threads */
   fprintf(stdout, "\nDistributing workload to threads:\n");
@@ -235,24 +372,26 @@ void threads_init(locus_t ** locus, FILE * fp_out)
     tip->td.gtree = NULL;
     tip->td.stree = NULL;
 
-    /* allocate loci for thread t */
-    tip->locus_first = loci_start;
-    tip->locus_count = loci_per_thread + (loci_remaining > 0 ? 1 : 0);
-
-    if (loci_remaining)
-      --loci_remaining;
-    loci_start += tip->locus_count;
-
-    /* calculate number of site patterns send to current thread */
-    patterns = 0;
+    /* calculate and print thread load */
+    patterns = seqs = load = 0;
     for (i = 0; i < tip->locus_count; ++i)
-      patterns += locus[tip->locus_first+i]->sites;
+    {
+      lindex    = tip->locus_first+i;
+      patterns += locus[lindex]->sites;
+      seqs     += locus[lindex]->tips;
+      load     += locus[lindex]->sites * locus[lindex]->tips;
+    }
       
-    fprintf(stdout, " Thread %ld : loci [%ld-%ld), %ld patterns\n",
-            t, tip->locus_first, tip->locus_first+tip->locus_count, patterns);
-    fprintf(fp_out, " Thread %ld : loci [%ld-%ld), %ld patterns\n",
-            t, tip->locus_first, tip->locus_first+tip->locus_count, patterns);
+    fprintf(stdout,
+            " Thread %ld : loci [%ld-%ld), Patterns/Sites/Load : %ld / %ld / %ld\n",
+            t, tip->locus_first, tip->locus_first+tip->locus_count,
+            patterns, seqs, load);
+    fprintf(fp_out,
+            " Thread %ld : loci [%ld-%ld), Patterns/Sites/Load : %ld / %ld / %ld\n",
+            t, tip->locus_first, tip->locus_first+tip->locus_count,
+            patterns, seqs, load);
     
+
     pthread_mutex_init(&tip->mutex, NULL);
     pthread_cond_init(&tip->cond, NULL);
     if (pthread_create(&tip->thread, &attr, threads_worker, (void *)(long)t))

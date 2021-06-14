@@ -52,7 +52,7 @@ static int enabled_mui   = 0;
 static int enabled_mubar = 0;
 static int enabled_nubar = 0;
 
-static const char * template_ratesfile = "locus.%ld.sample.txt";
+static const char * template_ratesfile = "locus.%d.sample.txt";
 
 static int prec_logl =  8;
 static int prec_logpr = 8;
@@ -971,8 +971,8 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
     if (opt_est_heredity && opt_print_hscalars)
     {
       fprintf(fp_locus[i],
-              "%sheredity_L%ld",
-              tab_required ? "\t" : "", i+1);
+              "%sheredity_L%d",
+              tab_required ? "\t" : "", locus[i]->original_index+1);
       tab_required = 1;
     }
 
@@ -980,16 +980,16 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
     if (opt_est_locusrate == MUTRATE_ESTIMATE && opt_print_locusrate)
     {
       fprintf(fp_locus[i],
-              "%smu_%ld",
-              tab_required ? "\t" : "", i+1);
+              "%smu_%d",
+              tab_required ? "\t" : "", locus[i]->original_index+1);
       tab_required = 1;
     }
     /* print nu_i header */
     if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
     {
       fprintf(fp_locus[i],
-              "%snu_%ld",
-              tab_required ? "\t" : "", i+1);
+              "%snu_%d",
+              tab_required ? "\t" : "", locus[i]->original_index+1);
       tab_required = 1;
     }
     /* print species tree branch rates header */
@@ -1569,7 +1569,7 @@ static FILE * resume(stree_t ** ptr_stree,
     for (i = 0; i < opt_locus_count; ++i)
     {
       char * s = NULL;
-      xasprintf(&s, "%s.gtree.L%ld", opt_outfile, i+1);
+      xasprintf(&s, "%s.gtree.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
       gtree_files[i] = s;
       checkpoint_truncate(s,gtree_offset[i]);
     }
@@ -1584,7 +1584,7 @@ static FILE * resume(stree_t ** ptr_stree,
     for (i = 0; i < opt_locus_count; ++i)
     {
       char * s = NULL;
-      xasprintf(&s,template_ratesfile,i+1);
+      xasprintf(&s,template_ratesfile,(*ptr_gtree)[i]->original_index+1);
       checkpoint_truncate(s,rates_offset[i]);
       free(s);
     }
@@ -1664,7 +1664,7 @@ static FILE * resume(stree_t ** ptr_stree,
     for (i = 0; i < opt_locus_count; ++i)
     {
       char * s = NULL;
-      xasprintf(&s, template_ratesfile, i+1);
+      xasprintf(&s, template_ratesfile, gtree[i]->original_index+1);
       if (!(fp_locus[i] = fopen(s, "a")))
         fatal("Cannot open file %s for appending...", s);
       free(s);
@@ -1892,6 +1892,7 @@ static FILE * init(stree_t ** ptr_stree,
               "[WARNING]: Removing %d missing sequences from locus %ld\n",
               deleted, i);
     }
+    msa_list[i]->original_index = i;
   }
 
   /* remove ambiguous sites */
@@ -1989,41 +1990,6 @@ static FILE * init(stree_t ** ptr_stree,
   /* print the alignments */
   msa_print_phylip(fp_out,msa_list,msa_count, weights);
 
-  *ptr_fp_gtree = NULL;
-
-  /* if print gtree */
-  if (opt_print_genetrees)
-  {
-    fp_gtree = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
-    for (i = 0; i < opt_locus_count; ++i)
-    {
-      char * s = NULL;
-      xasprintf(&s, "%s.gtree.L%ld", opt_outfile, i+1);
-      fp_gtree[i] = xopen(s,"w");
-      free(s);
-    }
-  }
-  else
-    fp_gtree = NULL;
-
-  *ptr_fp_gtree = fp_gtree;
-
-  /* if print rates */
-  *ptr_fp_locus = NULL;
-  if (opt_print_locusfile)
-  {
-    fp_locus = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
-    for (i = 0; i < opt_locus_count; ++i)
-    {
-      char * s = NULL;
-      xasprintf(&s, template_ratesfile, i+1);
-      if (!(fp_locus[i] = fopen(s, "w")))
-        fatal("Cannot open file %s for appending...", s);
-      free(s);
-    }
-    *ptr_fp_locus = fp_locus;
-  }
-
   /* TODO: PLACE DIPLOID CODE HERE */
   /* mapping from A2 -> A3 if diploid sequences used */
   unsigned long ** mapping = NULL;
@@ -2107,7 +2073,103 @@ static FILE * init(stree_t ** ptr_stree,
   /* Pin master thread for NUMA first policy touch
      TODO: Perhaps move this to an earlier point */
   if (opt_threads > 1)
+  {
+    long * indices = threads_load_balance(msa_list);
+    if (indices)
+    {
+      printf("Shuffled loci:\n");
+      for (i = 0; i < opt_locus_count; ++i)
+        printf("  %ld -> %ld\n", i, indices[i]);
+      assert(msa_count == opt_locus_count);
+
+      unsigned long ** tmp_mapping = NULL;
+      unsigned long ** tmp_rescount = NULL;
+      unsigned int ** tmp_weights = NULL;
+      int * tmp_unphased_length = NULL;
+
+      /* allocate temporary arrays */
+      if (opt_diploid)
+      {
+        tmp_mapping = (unsigned long **)xmalloc((size_t)msa_count *
+                                                sizeof(unsigned int long *));
+        tmp_rescount = (unsigned long **)xmalloc((size_t)msa_count *
+                                                 sizeof(unsigned int long *));
+        tmp_unphased_length = (int *)xmalloc((size_t)msa_count * sizeof(int));
+      }
+      tmp_weights = (unsigned int **)xmalloc((size_t)msa_count *
+                                             sizeof(unsigned int *));
+
+      /* reorder other arrays to the new positions of msa_list */
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        if (opt_diploid)
+        {
+          tmp_mapping[i]         = mapping[indices[i]];
+          tmp_rescount[i]        = resolution_count[indices[i]];
+          tmp_unphased_length[i] = unphased_length[indices[i]];
+        }
+        tmp_weights[i]         = weights[indices[i]];
+      }
+
+      if (opt_diploid)
+      {
+        memmove(mapping,tmp_mapping,opt_locus_count * sizeof(unsigned long *));
+        memmove(resolution_count,tmp_rescount,opt_locus_count * sizeof(unsigned long *));
+        memmove(unphased_length,tmp_unphased_length,opt_locus_count*sizeof(int));
+      }
+      memmove(weights,tmp_weights,opt_locus_count*sizeof(unsigned int *));
+
+      if (opt_diploid)
+      {
+        free(tmp_mapping);
+        free(tmp_rescount);
+        free(tmp_unphased_length);
+      }
+      free(tmp_weights);
+
+      for (i = 0; i < opt_locus_count; ++i)
+        msa_list[i]->original_index = indices[i];
+      free(indices);
+    }
     threads_pin_master();
+  }
+
+  /* gene tree and locus output files */
+  *ptr_fp_gtree = NULL;
+
+  /* if print gtree */
+  if (opt_print_genetrees)
+  {
+    fp_gtree = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, "%s.gtree.L%d", opt_outfile, msa_list[i]->original_index+1);
+      fp_gtree[i] = xopen(s,"w");
+      free(s);
+    }
+  }
+  else
+    fp_gtree = NULL;
+
+  *ptr_fp_gtree = fp_gtree;
+
+  /* if print rates */
+  *ptr_fp_locus = NULL;
+  if (opt_print_locusfile)
+  {
+    fp_locus = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, template_ratesfile, msa_list[i]->original_index+1);
+      if (!(fp_locus[i] = fopen(s, "w")))
+        fatal("Cannot open file %s for appending...", s);
+      free(s);
+    }
+    *ptr_fp_locus = fp_locus;
+  }
+
 
 
   /* allocate TLS mark variables on stree as they are used in delimitations_init
@@ -2253,6 +2315,8 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   gtree = gtree_init(stree,msa_list,map_list,msa_count);
+  for (i = 0; i < opt_locus_count; ++i)
+    gtree[i]->original_index = msa_list[i]->original_index;
 
   /* the below two lines are specific to method 01 and they generate
      space for cloning the species and gene trees */
@@ -2364,6 +2428,7 @@ static FILE * init(stree_t ** ptr_stree,
                             scale_buffers,              /* # scale buffers */
                             (unsigned int)opt_arch);    /* attributes */
 
+    locus[i]->original_index = msa_list[i]->original_index;
     /* set frequencies and substitution rates */
     /* TODO: For GTR perhaps set to empirical frequencies */
     locus_set_frequencies_and_rates(locus[i]);

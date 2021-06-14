@@ -1227,6 +1227,38 @@ l_unwind:
   return ret;
 }
 
+static long parse_loadbalance(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  char * lb = NULL;
+
+  long count;
+
+  count = get_delstring(p," \t\r\n*#",&lb);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!is_emptyline(p)) goto l_unwind;
+
+  ret = 1;
+  if (!strcasecmp(lb, "zigzag"))
+    opt_load_balance = BPP_LB_ZIGZAG;
+  else if (!strcasecmp(lb, "none"))
+    opt_load_balance = BPP_LB_NONE;
+  else
+    ret = 0;
+
+l_unwind:
+  free(s);
+  if (lb)
+    free(lb);
+  return ret;
+}
+
 static long parse_alphaprior(const char * line)
 {
   long ret = 0;
@@ -2614,6 +2646,12 @@ void load_cfile()
         if (!parse_speciestree(value))
           fatal("Erroneous format of options speciestree (line %ld)",
                 line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"loadbalance",11))
+      {
+        if (!parse_loadbalance(value))
+          fatal("Invalid load balance option (line %ld)", line_count);
         valid = 1;
       }
     }

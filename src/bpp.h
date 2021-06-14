@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 3
-#define VERSION_PATCH 8
+#define VERSION_PATCH 9
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -241,6 +241,9 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_GAMMA           2
 #define BPP_THETA_PRIOR_BETA            3
 #define BPP_THETA_PRIOR_MAX             3
+
+#define BPP_LB_NONE                     0
+#define BPP_LB_ZIGZAG                   1
 
 #define BPP_PI  3.1415926535897932384626433832795
 
@@ -509,6 +512,8 @@ typedef struct gtree_s
   unsigned int inner_count;
   unsigned int edge_count;
 
+  int original_index;
+
   gnode_t ** nodes;
   gnode_t * root;
 
@@ -572,6 +577,7 @@ typedef struct msa_s
 
   int dtype;
   int model;
+  int original_index;
 
 } msa_t;
 
@@ -637,6 +643,8 @@ typedef struct locus_s
   unsigned long * diploid_resolution_count;
   double * likelihood_vector;
   int unphased_length;
+
+  int original_index;
 
 } locus_t;
 
@@ -774,6 +782,23 @@ typedef struct thread_data_s
 
 } thread_data_t;
 
+typedef struct thread_info_s
+{
+  pthread_t thread;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  
+  /* type of work (0 no work) */
+  volatile int work;
+
+  /* thread parameters */
+  long locus_first;
+  long locus_count;
+
+  thread_data_t td;
+
+} thread_info_t;
+
 
 /* macros */
 
@@ -871,6 +896,7 @@ extern long opt_exp_theta;
 extern long opt_exp_sim;
 extern long opt_finetune_reset;
 extern long opt_help;
+extern long opt_load_balance;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
 extern long opt_locus_simlen;
@@ -2270,10 +2296,13 @@ double QuantileChi2(double prob, double v);
 
 /* functions in threads.c */
 
+long * threads_load_balance(msa_t ** msa_list);
 void threads_init(locus_t ** locus, FILE * fp_out);
 void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit(void);
 void threads_pin_master(void);
+thread_info_t * threads_ti(void);
+void threads_set_ti(thread_info_t * tip);
 
 /* functions in treeparse.c */
 

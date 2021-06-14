@@ -421,6 +421,19 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&prec_logpg,1,fp);
   DUMP(&prec_logl,1,fp);
+
+  DUMP(&opt_load_balance,1,fp);
+
+  if (opt_threads)
+  {
+    thread_info_t * ti = threads_ti();
+    for (i = 0; i < opt_threads; ++i)
+    {
+      thread_info_t * tip = ti+i;
+      DUMP(&(tip->locus_first),1,fp);
+      DUMP(&(tip->locus_count),1,fp);
+    }
+  }
 }
 
 
@@ -631,6 +644,8 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count
     DUMP(&(gtree->rate_nui),1,fp);
     DUMP(&(gtree->lnprior_rates),1,fp);
   }
+
+  DUMP(&(gtree->original_index),1,fp);
 }
 
 static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
@@ -729,6 +744,8 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
     
     DUMP(locus->clv[clv_index],span,fp);
   }
+
+  DUMP(&(locus->original_index),1,fp);
 }
 
 static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, stree_t * stree, long msa_count)

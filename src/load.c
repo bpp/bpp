@@ -739,6 +739,24 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(prec_logl,1,fp))
     fatal("Cannot read logL digits precision");
 
+  if (!LOAD(&opt_load_balance,1,fp))
+    fatal("Cannot read load balance scheme");
+
+  if (opt_threads)
+  {
+    thread_info_t * ti = (thread_info_t *)xmalloc((size_t)opt_threads *
+                                                  sizeof(thread_info_t));
+    for (i = 0; i < opt_threads; ++i)
+    {
+      thread_info_t * tip = ti+i;
+      if (!LOAD(&(tip->locus_first),1,fp))
+        fatal("Cannot load thread_info");
+      if (!LOAD(&(tip->locus_count),1,fp))
+        fatal("Cannot load thread_info");
+    }
+    threads_set_ti(ti);
+  }
+
   #if 0
   fprintf(stdout, " Burnin: %ld\n", opt_burnin);
   fprintf(stdout, " Sampfreq: %ld\n", opt_samplefreq);
@@ -1312,6 +1330,9 @@ static void load_gene_tree(FILE * fp, long index)
     if (!LOAD(&(gt->lnprior_rates),1,fp))
       fatal("Cannot read gene tree %ld rate prior", index);
   }
+
+  if (!LOAD(&(gt->original_index),1,fp))
+    fatal("Cannot read gene tree original index");
 }
 
 static void load_chk_section_3(FILE * fp, long msa_count)
@@ -1498,6 +1519,9 @@ static void load_locus(FILE * fp, long index)
     if (!LOAD(locus[index]->clv[clv_index],span,fp))
       fatal("Cannot read gene tree %ld tip CLV", index);
   }
+
+  if (!LOAD(&(locus[index]->original_index),1,fp))
+    fatal("Cannot read locus original index");
 }
 
 void load_chk_section_4(FILE * fp)
