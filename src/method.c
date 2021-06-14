@@ -2077,9 +2077,6 @@ static FILE * init(stree_t ** ptr_stree,
     long * indices = threads_load_balance(msa_list);
     if (indices)
     {
-      printf("Shuffled loci:\n");
-      for (i = 0; i < opt_locus_count; ++i)
-        printf("  %ld -> %ld\n", i, indices[i]);
       assert(msa_count == opt_locus_count);
 
       unsigned long ** tmp_mapping = NULL;
