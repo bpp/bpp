@@ -373,12 +373,12 @@ void threads_lb_stats(locus_t ** locus, FILE * fp_out)
     }
 
     /* locus start max digits */
-    n = (int)(floor(log10(tip->locus_first)+1));
+    n = (int)(floor(log10(tip->locus_first+1)+1));
     if (n > ls_digits)
       ls_digits = n;
 
     /* locus end max digits */
-    n = (int)(floor(log10(tip->locus_first+tip->locus_count)+1));
+    n = (int)(floor(log10(tip->locus_first+1+tip->locus_count)+1));
     if (n > le_digits)
       le_digits = n;
 
@@ -407,16 +407,16 @@ void threads_lb_stats(locus_t ** locus, FILE * fp_out)
     fprintf(stdout,
             " Thread %*ld : loci [%*ld - %*ld), Patterns/Seqs/Load : %*ld / %*ld / %*ld\n",
             t_digits, t,
-            ls_digits, tip->locus_first,
-            le_digits, tip->locus_first+tip->locus_count,
+            ls_digits, tip->locus_first+1,
+            le_digits, tip->locus_first+1+tip->locus_count,
             p_digits, patterns[t],
             s_digits, seqs[t],
             l_digits, load[t]);
     fprintf(fp_out,
             " Thread %*ld : loci [%*ld - %*ld), Patterns/Seqs/Load : %*ld / %*ld / %*ld\n",
             t_digits, t,
-            ls_digits, tip->locus_first,
-            le_digits, tip->locus_first+tip->locus_count,
+            ls_digits, tip->locus_first+1,
+            le_digits, tip->locus_first+1+tip->locus_count,
             p_digits, patterns[t],
             s_digits, seqs[t],
             l_digits, load[t]);
