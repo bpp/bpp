@@ -1324,9 +1324,14 @@ static void validate_stree(stree_t * stree)
         (!stree->nodes[i]->left && stree->nodes[i]->right)))
     {
       /* if it's parent is also unary then we have two unary nodes in a row */
+
+      /* NOTE: Consecutive unary nodes are still possible, see issue #146 on
+         GitHub. I disabled this check for now */
+      #if 0
       if ((stree->nodes[i]->parent->left && !stree->nodes[i]->parent->right) ||
           (!stree->nodes[i]->parent->left && stree->nodes[i]->parent->right))
         fatal("Tree contains consecutive unary nodes");
+      #endif
     }
 
     if (!stree->nodes[i]->label) continue;

@@ -888,10 +888,6 @@ static void network_init_tau_iterative(stree_t * stree,
 
           assert(node_is_bidirection(x));
 
-          assert(x->htau &&
-                 (x->parent->prop_tau || 
-                  (x->parent->hybrid && node_is_bidirection(x->parent))));
-
           /* TODO: Account for parallel bidirectional introgressions among two
              lineages with no speciations in between. */
 
