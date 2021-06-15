@@ -2297,7 +2297,8 @@ double QuantileChi2(double prob, double v);
 /* functions in threads.c */
 
 long * threads_load_balance(msa_t ** msa_list);
-void threads_init(locus_t ** locus, FILE * fp_out);
+void threads_lb_stats(locus_t ** locus, FILE * fp_out);
+void threads_init(void);
 void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit(void);
 void threads_pin_master(void);

@@ -342,10 +342,94 @@ long * threads_load_balance(msa_t ** msa_list)
   return shuffle_indices;
 }
 
-void threads_init(locus_t ** locus, FILE * fp_out)
+void threads_lb_stats(locus_t ** locus, FILE * fp_out)
 {
-  long i,t;
-  long lindex, patterns, seqs, load;
+  int ls_digits = 0;
+  int le_digits = 0;
+  int p_digits  = 0;
+  int s_digits  = 0;
+  int l_digits  = 0;
+  int t_digits  = 0;
+  long i,t,n;
+  long lindex;
+
+  long * patterns = (long *)xcalloc((size_t)opt_threads, sizeof(long));
+  long * seqs = (long *)xcalloc((size_t)opt_threads, sizeof(long));
+  long * load = (long *)xcalloc((size_t)opt_threads, sizeof(long));
+
+  /* max number of digits for threads */
+  t_digits = (int)(floor(log10(opt_threads)+1));
+
+  for (t = 0; t < opt_threads; ++t)
+  {
+    thread_info_t * tip = ti + t;
+
+    for (i = 0; i < tip->locus_count; ++i)
+    {
+      lindex    = tip->locus_first+i;
+      patterns[t] += locus[lindex]->sites;
+      seqs[t]     += locus[lindex]->tips;
+      load[t]     += locus[lindex]->sites * locus[lindex]->tips;
+    }
+
+    /* locus start max digits */
+    n = (int)(floor(log10(tip->locus_first)+1));
+    if (n > ls_digits)
+      ls_digits = n;
+
+    /* locus end max digits */
+    n = (int)(floor(log10(tip->locus_first+tip->locus_count)+1));
+    if (n > le_digits)
+      le_digits = n;
+
+    /* patterns max digits */
+    n = (int)(floor(log10(patterns[t])+1));
+    if (n > p_digits)
+      p_digits = n;
+
+    /* sequences max digits */
+    n = (int)(floor(log10(seqs[t])+1));
+    if (n > s_digits)
+      s_digits = n;
+
+    /* load max digits */
+    n = (int)(floor(log10(seqs[t])+1));
+    if (n > l_digits)
+      l_digits = n;
+  }
+
+  fprintf(stdout, "\nDistributing workload to threads:\n");
+  fprintf(fp_out, "\nDistributing workload to threads:\n");
+  for (t = 0; t < opt_threads; ++t)
+  {
+    thread_info_t * tip = ti + t;
+
+    fprintf(stdout,
+            " Thread %*ld : loci [%*ld - %*ld), Patterns/Seqs/Load : %*ld / %*ld / %*ld\n",
+            t_digits, t,
+            ls_digits, tip->locus_first,
+            le_digits, tip->locus_first+tip->locus_count,
+            p_digits, patterns[t],
+            s_digits, seqs[t],
+            l_digits, load[t]);
+    fprintf(fp_out,
+            " Thread %*ld : loci [%*ld - %*ld), Patterns/Seqs/Load : %*ld / %*ld / %*ld\n",
+            t_digits, t,
+            ls_digits, tip->locus_first,
+            le_digits, tip->locus_first+tip->locus_count,
+            p_digits, patterns[t],
+            s_digits, seqs[t],
+            l_digits, load[t]);
+  }
+
+  free(patterns);
+  free(seqs);
+  free(load);
+}
+
+void threads_init()
+{
+  long t;
 
   if (opt_threads > opt_locus_count)
     fatal("The number of threads cannot be greater than the number of loci");
@@ -362,8 +446,6 @@ void threads_init(locus_t ** locus, FILE * fp_out)
     fatal("Internal error - call load balance routine");
 
   /* init and create worker threads */
-  fprintf(stdout, "\nDistributing workload to threads:\n");
-  fprintf(fp_out, "\nDistributing workload to threads:\n");
   for (t = 0; t < opt_threads; ++t)
   {
     thread_info_t * tip = ti + t;
@@ -371,26 +453,6 @@ void threads_init(locus_t ** locus, FILE * fp_out)
     tip->td.locus = NULL;
     tip->td.gtree = NULL;
     tip->td.stree = NULL;
-
-    /* calculate and print thread load */
-    patterns = seqs = load = 0;
-    for (i = 0; i < tip->locus_count; ++i)
-    {
-      lindex    = tip->locus_first+i;
-      patterns += locus[lindex]->sites;
-      seqs     += locus[lindex]->tips;
-      load     += locus[lindex]->sites * locus[lindex]->tips;
-    }
-      
-    fprintf(stdout,
-            " Thread %ld : loci [%ld-%ld), Patterns/Sites/Load : %ld / %ld / %ld\n",
-            t, tip->locus_first, tip->locus_first+tip->locus_count,
-            patterns, seqs, load);
-    fprintf(fp_out,
-            " Thread %ld : loci [%ld-%ld), Patterns/Sites/Load : %ld / %ld / %ld\n",
-            t, tip->locus_first, tip->locus_first+tip->locus_count,
-            patterns, seqs, load);
-    
 
     pthread_mutex_init(&tip->mutex, NULL);
     pthread_cond_init(&tip->cond, NULL);

@@ -3009,7 +3009,8 @@ void cmd_run()
 
   if (opt_threads > 1)
   {
-    threads_init(locus, fp_out);
+    threads_lb_stats(locus, fp_out);
+    threads_init();
     memset(&td,0,sizeof(td));
   }
 
