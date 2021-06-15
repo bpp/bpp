@@ -2686,18 +2686,23 @@ static void increase_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
   }
 }
 
-static snode_t * network_mrca_population(stree_t * stree, gnode_t * left, gnode_t * right)
+static snode_t * network_mrca_desc_population(stree_t * stree,
+                                              snode_t * anc,
+                                              gnode_t * left,
+                                              gnode_t * right)
 {
   long i;
   snode_t * mrca = stree->root;
 
-  /* use pop-pop table to find mrca of the two child populations */
+  /* use pop-pop table to find mrca of the two child populations that is also
+     a descendant of anc */
 
   if (left->pop == right->pop) return left->pop;
 
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
-    if (stree->pptable[left->pop->node_index][i] && 
+    if (stree->pptable[i][anc->node_index] &&
+        stree->pptable[left->pop->node_index][i] && 
         stree->pptable[right->pop->node_index][i] &&
         stree->nodes[i]->tau < mrca->tau)
     {
@@ -2779,7 +2784,10 @@ static long propose_ages(locus_t * locus,
     {
       /* if the children are in different populations then further constraint
          minage by the tau of their most recent common ancestor population */
-      snode_t * mrca = network_mrca_population(stree, node->left, node->right);
+      snode_t * mrca = network_mrca_desc_population(stree,
+                                                    node->pop,
+                                                    node->left,
+                                                    node->right);
 
       minage = MAX(minage,mrca->tau);
     }
