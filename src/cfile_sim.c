@@ -1122,9 +1122,9 @@ static void check_validity()
   if (opt_est_locusrate)
   {
     if (opt_locusrate_mubar <= 0)
-      fatal("Argument 'mu_bar' in option 'clock' must be greater than zero");
+      fatal("Argument 'mu_bar' in option 'locusrate' must be greater than zero");
     if (opt_mui_alpha <= 0)
-      fatal("Argument 'mu_bar' in option 'clock' must be greater than zero");
+      fatal("Argument 'mu_bar' in option 'locusrate' must be greater than zero");
   }
 
   if (!opt_siterate_fixed)
