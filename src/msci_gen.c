@@ -1247,6 +1247,23 @@ static void process_hybrid(stree_t * stree, mscidefs_t * def)
 
   destroy_pptable(stree);
 
+
+  /* **IMPORTANT**
+
+     When defining a hybridization, the internal syntax (as processed by the program) is the following:
+
+     target edge, source edge, target (hybridization) node label, source node label
+
+     From a user perspective, the syntax is:
+
+     source edge, target edge, source node label, target (hybridization) node label
+
+
+     We therefore need to swap the two pairs. All swappings below are indicate with 'Note' 
+
+
+  */
+
   opt_msci = 1;
 
   a = edge_basenode(stree, def->node1_1, def->node1_2, def->lineno);
@@ -1261,6 +1278,25 @@ static void process_hybrid(stree_t * stree, mscidefs_t * def)
   #endif
   if (!b)
     parallel = 1;
+
+  if (a && b)
+  {
+    /* Note: we decided to swap the source and target, i.e. first branch (a)
+       will be source, and second (b) target */
+
+    assert(def->label1 && def->label2);
+    SWAP(a,b);
+    SWAP(def->label1,def->label2);
+    SWAP(def->has_tau1,def->has_tau2);
+  }
+
+  /* From here on
+     
+     a: target
+     b: source
+     
+     label1 is hybrid /target node
+     label2 is source node */
 
   pa = a->parent;
   if (!parallel)
@@ -1377,8 +1413,10 @@ static void process_hybrid(stree_t * stree, mscidefs_t * def)
   /* set phi */
   if (def->phi1 != -1)
   {
-    hl->hphi = def->phi1;
-    hr->hphi = 1 - def->phi1;
+    /* Note: We have changed the syntax such that phi always refers to the newly
+       inserted edge (introgression), therefore we set it to hr */
+    hr->hphi = def->phi1;
+    hl->hphi = 1 - def->phi1;
   }
   else
   {
