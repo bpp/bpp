@@ -1467,7 +1467,8 @@ static void process_hybrid(stree_t * stree, mscidefs_t * def)
 ***/
 extern long opt_msci_faketree_binarize;
 
-static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serialize)(const snode_t*))
+static char* msci_export_newick_recursive(const snode_t* root,
+                                          char* (*cb_serialize)(const snode_t*))
 {
   char* newick;
   int size_alloced;
@@ -1483,7 +1484,10 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
       if (cb_serialize)
       {
         if (opt_msci_faketree_binarize)
-          size_alloced = xasprintf(&newick, "%s :%f", root->label, root->parent->tau);
+          size_alloced = xasprintf(&newick,
+                                   "%s :%f",
+                                   root->label,
+                                   root->parent->tau);
         else
         {
           newick = cb_serialize(root);
@@ -1496,17 +1500,31 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
         {
           /* hybridization event */
           if (root->hphi >= 0)
-            size_alloced = xasprintf(&newick, "%s[&phi=%f,tau-parent=%s]", root->label, root->hphi, root->htau ? "yes" : "no");
+            size_alloced = xasprintf(&newick,
+                                     "%s[&phi=%f,tau-parent=%s]",
+                                     root->label,
+                                     root->hphi,
+                                     root->htau ? "yes" : "no");
           else
-            size_alloced = xasprintf(&newick, "%s[tau-parent=%s]", root->label, root->htau ? "yes" : "no");
+            size_alloced = xasprintf(&newick,
+                                     "%s[tau-parent=%s]",
+                                     root->label,
+                                     root->htau ? "yes" : "no");
         }
         else
         {
           /* bidirectional introgression */
+
+          size_alloced = xasprintf(&newick,"%s[&phi=%f]",root->label,root->hphi);
           if (root->hphi >= 0)
-            size_alloced = xasprintf(&newick, "%s[&phi=%f]", root->label, root->hphi);
+            size_alloced = xasprintf(&newick,
+                                     "%s[&phi=%f]",
+                                     root->label,
+                                     root->hphi);
           else
-            size_alloced = xasprintf(&newick, "%s", root->label);
+            size_alloced = xasprintf(&newick,
+                                     "%s",
+                                     root->label);
         }
       }
     }
@@ -1521,9 +1539,14 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
       else
       {
         if (show_branches)
-          size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+          size_alloced = xasprintf(&newick,
+                                   "%s:%f",
+                                   root->label,
+                                   root->length);
         else
-          size_alloced = xasprintf(&newick, "%s", root->label);
+          size_alloced = xasprintf(&newick,
+                                   "%s",
+                                   root->label);
       }
     }
   }
@@ -1547,17 +1570,34 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
         {
           char* temp = cb_serialize(root);
           if (!opt_msci_faketree_binarize)
-            size_alloced = xasprintf(&newick, "(%s)%s", subtree, temp);
+            size_alloced = xasprintf(&newick,
+                                     "(%s)%s",
+                                     subtree,
+                                     temp);
           else
-            size_alloced = xasprintf(&newick, "(%s, ghost_%s :%f)%s", subtree, root->label, root->tau, temp);
+            size_alloced = xasprintf(&newick,
+                                     "(%s, ghost_%s :%f)%s",
+                                     subtree,
+                                     root->label,
+                                     root->tau,
+                                     temp);
           free(temp);
         }
         else
         {
           if (root->hphi >= 0)
-            size_alloced = xasprintf(&newick, "(%s)%s[&phi=%f,tau-parent=%s]", subtree, root->label ? root->label : "", root->hphi, root->htau ? "yes" : "no");
+            size_alloced = xasprintf(&newick,
+                                     "(%s)%s[&phi=%f,tau-parent=%s]",
+                                     subtree,
+                                     root->label ? root->label : "",
+                                     root->hphi,
+                                     root->htau ? "yes" : "no");
           else
-            size_alloced = xasprintf(&newick, "(%s)%s[tau-parent=%s]", subtree, root->label ? root->label : "", root->htau ? "yes" : "no");
+            size_alloced = xasprintf(&newick,
+                                     "(%s)%s[tau-parent=%s]",
+                                     subtree,
+                                     root->label ? root->label : "",
+                                     root->htau ? "yes" : "no");
         }
       }
       else
@@ -1574,26 +1614,64 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
           /* assert(0); */
           char* temp = cb_serialize(root);
           if (!opt_msci_faketree_binarize)
-            size_alloced = xasprintf(&newick, "(%s, %s)%s", subtree, root->right->label, temp);
+            size_alloced = xasprintf(&newick,
+                                     "(%s, %s)%s",
+                                     subtree,
+                                     root->right->label,
+                                     temp);
           else
-            size_alloced = xasprintf(&newick, "(%s, %s_ghost : %f)%s", subtree, root->label, root->tau, temp);
+            size_alloced = xasprintf(&newick,
+                                     "(%s, %s_ghost : %f)%s",
+                                     subtree,
+                                     root->label,
+                                     root->tau,
+                                     temp);
           free(temp);
         }
         else
         {
+          /* Note: We decided not to print phis for the "main" (non-mirror)
+             nodes as they represent the genetic contributions from the parental
+             (vertical) branches. Instead, we print the phis from the horizontal
+             branches which are located in the mirror nodes */
+
+          assert(root->hphi >= 0);
+          assert(root->right && root->right->hybrid);
+          assert(root->right->hybrid->hphi >= 0);
+
           if (root->hphi >= 0)
           {
             if (show_branches)
-              size_alloced = xasprintf(&newick, "(%s,%s)%s[&phi=%f]:%f", subtree, root->right->label, root->label, root->hphi, root->length);
+              size_alloced = xasprintf(&newick,
+                                       "(%s,%s[&phi=%f])%s:%f",
+                                       subtree,
+                                       root->right->label,
+                                       1-root->right->hybrid->hphi,
+                                       root->label,
+                                       root->length);
             else
-              size_alloced = xasprintf(&newick, "(%s,%s)%s[&phi=%f]", subtree, root->right->label, root->label, root->hphi);
+              size_alloced = xasprintf(&newick,
+                                       "(%s,%s[&phi=%f])%s",
+                                       subtree,
+                                       root->right->label,
+                                       1-root->right->hybrid->hphi,
+                                       root->label);
           }
           else
           {
             if (show_branches)
-              size_alloced = xasprintf(&newick, "(%s,%s)%s:%f", subtree, root->right->label, root->label, root->length);
+              size_alloced = xasprintf(&newick,
+                                       "(%s,%s)%s:%f",
+                                       subtree,
+                                       root->right->label,
+                                       root->label,
+                                       root->length);
             else
-              size_alloced = xasprintf(&newick, "(%s,%s)%s", subtree, root->right->label, root->label);
+              size_alloced = xasprintf(&newick,
+                                       "(%s,%s)%s",
+                                       subtree,
+                                       root->right->label,
+                                       root->label);
           }
         }
       }
@@ -1620,9 +1698,18 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
       else
       {
         if (show_branches)
-          size_alloced = xasprintf(&newick, "(%s,%s)%s:%f", subtree1, subtree2, root->label ? root->label : "", root->length);
+          size_alloced = xasprintf(&newick,
+                                   "(%s,%s)%s:%f",
+                                   subtree1,
+                                   subtree2,
+                                   root->label ? root->label : "",
+                                   root->length);
         else
-          size_alloced = xasprintf(&newick, "(%s,%s)%s", subtree1, subtree2, root->label ? root->label : "");
+          size_alloced = xasprintf(&newick,
+                                   "(%s,%s)%s",
+                                   subtree1,
+                                   subtree2,
+                                   root->label ? root->label : "");
       }
       free(subtree1);
       free(subtree2);
@@ -1635,7 +1722,8 @@ static char* msci_export_newick_recursive(const snode_t* root, char* (*cb_serial
 
 
 
-char * msci_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *))
+char * msci_export_newick(const snode_t * root,
+                          char * (*cb_serialize)(const snode_t *))
 {
   char * newick;
   int size_alloced;
@@ -1651,9 +1739,14 @@ char * msci_export_newick(const snode_t * root, char * (*cb_serialize)(const sno
     else
     {
       if (show_branches)
-        size_alloced = xasprintf(&newick, "%s:%f", root->label ? root->label : "", root->length);
+        size_alloced = xasprintf(&newick,
+                                 "%s:%f",
+                                 root->label ? root->label : "",
+                                 root->length);
       else
-        size_alloced = xasprintf(&newick, "%s", root->label ? root->label : "");
+        size_alloced = xasprintf(&newick,
+                                 "%s",
+                                 root->label ? root->label : "");
     }
   }
   else
@@ -1669,15 +1762,24 @@ char * msci_export_newick(const snode_t * root, char * (*cb_serialize)(const sno
     if (cb_serialize)
     {
       char * temp = cb_serialize(root);
-      size_alloced = xasprintf(&newick, "(%s, %s)%s;", subtree1, subtree2, temp);
+      size_alloced = xasprintf(&newick,"(%s, %s)%s;", subtree1, subtree2, temp);
       free(temp);
     }
     else
     {
       if (show_branches)
-        size_alloced = xasprintf(&newick, "(%s, %s)%s:%f;", subtree1, subtree2,  root->label ? root->label : "", root->length);
+        size_alloced = xasprintf(&newick,
+                                 "(%s, %s)%s:%f;",
+                                 subtree1,
+                                 subtree2,
+                                 root->label ? root->label : "",
+                                 root->length);
       else
-        size_alloced = xasprintf(&newick, "(%s, %s)%s;", subtree1, subtree2, root->label ? root->label : "");
+        size_alloced = xasprintf(&newick,
+                                 "(%s, %s)%s;",
+                                 subtree1,
+                                 subtree2,
+                                 root->label ? root->label : "");
     }
     free(subtree1);
     free(subtree2);
