@@ -244,6 +244,7 @@ static void load_chk_section_1(FILE * fp,
                                double ** mean_theta,
                                long * mean_tau_count,
                                long * mean_theta_count,
+                               double * mean_phi,
                                int * prec_logpg,
                                int * prec_logl)
 {
@@ -733,6 +734,9 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read mean theta values"); 
   }
 
+  if (!LOAD(mean_phi,1,fp))
+    fatal("Cannot load mean phi value");
+
   if (!LOAD(prec_logpg,1,fp))
     fatal("Cannot read logPG digits precision");
 
@@ -742,7 +746,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_load_balance,1,fp))
     fatal("Cannot read load balance scheme");
 
-  if (opt_threads)
+  if (opt_threads > 1)
   {
     thread_info_t * ti = (thread_info_t *)xmalloc((size_t)opt_threads *
                                                   sizeof(thread_info_t));
@@ -1559,6 +1563,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** mean_theta,
                     long * mean_tau_count,
                     long * mean_theta_count,
+                    double * mean_phi,
                     int * prec_logpg,
                     int * prec_logl)
 {
@@ -1606,6 +1611,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_theta,
                      mean_tau_count,
                      mean_theta_count,
+                     mean_phi,
                      prec_logpg,
                      prec_logl);
 

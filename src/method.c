@@ -252,6 +252,12 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
       fprintf(fp," mtau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
   }
   if (opt_msci)
+    fprintf(fp,
+            "  mphi: mean of phi_%s : %s -> %s\n",
+            stree->nodes[stree->tip_count+stree->inner_count]->label,
+            stree->nodes[stree->tip_count+stree->inner_count]->parent->label,
+            stree->nodes[stree->tip_count+stree->inner_count]->label);
+  if (opt_msci)
     fprintf(fp, "log-PG: log-probability of gene trees (MSCi)\n");
   else
     fprintf(fp, "log-PG: log-probability of gene trees (MSC)\n");
@@ -927,7 +933,16 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->hybrid->label);
+    {
+      if (node_is_bidirection(stree->nodes[offset+i]))
+        fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->label);
+      else
+        fprintf(fp,
+                "\tphi_%s<-%s",
+                stree->nodes[offset+i]->label,
+                stree->nodes[offset+i]->parent->label);
+
+    }
   }
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -1305,7 +1320,7 @@ static void mcmc_logsample(FILE * fp,
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "\t%.6f", stree->nodes[offset+i]->hybrid->hphi);
+      fprintf(fp, "\t%.6f", stree->nodes[offset+i]->hphi);
   }
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -1507,6 +1522,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      double ** ptr_mean_theta,
                      long * ptr_mean_tau_count,
                      long * ptr_mean_theta_count,
+                     double * ptr_mean_phi,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
@@ -1551,6 +1567,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mean_theta,
                   ptr_mean_tau_count,
                   ptr_mean_theta_count,
+                  ptr_mean_phi,
                   &prec_logpr,
                   &prec_logl);
 
@@ -1786,7 +1803,8 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_clock == BPP_CLOCK_CORR)
       fatal("MSCi model with auto-correlated relaxed clock is not currently implemented.");
 
-    print_network_table(stree);
+    print_network_table(stree,fp_out);
+    print_network_table(stree,stdout);
   }
 
   /* parse the phylip file */
@@ -2902,6 +2920,7 @@ void cmd_run()
                      &mean_theta,
                      &mean_tau_count,
                      &mean_theta_count,
+                     &mean_phi,
                      &sclone, 
                      &gclones,
                      &fp_gtree,
@@ -3545,7 +3564,7 @@ void cmd_run()
       }
       mean_tau_count = k;
       if (opt_msci)
-        mean_phi = (mean_phi*(ft_round-1) + stree->nodes[stree->tip_count+stree->inner_count]->hybrid->hphi)/ft_round;
+        mean_phi = (mean_phi*(ft_round-1) + stree->nodes[stree->tip_count+stree->inner_count]->hphi)/ft_round;
 
       #ifdef DEBUG_GTR
       if (fabs(locus[0]->frequencies[0][0] + locus[0]->frequencies[0][1] + locus[0]->frequencies[0][2] + locus[0]->frequencies[0][3]-1) >= 1e-10)
@@ -3759,6 +3778,7 @@ void cmd_run()
                         mean_theta,
                         mean_tau_count,
                         mean_theta_count,
+                        mean_phi,
                         prec_logpr,
                         prec_logl);
       }

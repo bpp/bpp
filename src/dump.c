@@ -189,6 +189,7 @@ static void dump_chk_section_1(FILE * fp,
                                double * mean_theta,
                                long mean_tau_count,
                                long mean_theta_count,
+                               double mean_phi,
                                int prec_logpg,
                                int prec_logl)
 {
@@ -418,13 +419,14 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(mean_tau,mean_tau_count,fp);
   if (opt_est_theta)
     DUMP(mean_theta,mean_theta_count,fp);
+  DUMP(&mean_phi,1,fp);
 
   DUMP(&prec_logpg,1,fp);
   DUMP(&prec_logl,1,fp);
 
   DUMP(&opt_load_balance,1,fp);
 
-  if (opt_threads)
+  if (opt_threads > 1)
   {
     thread_info_t * ti = threads_ti();
     for (i = 0; i < opt_threads; ++i)
@@ -798,6 +800,7 @@ int checkpoint_dump(stree_t * stree,
                     double * mean_theta,
                     long mean_tau_count,
                     long mean_theta_count,
+                    double mean_phi,
                     int prec_logpg,
                     int prec_logl)
 {
@@ -846,6 +849,7 @@ int checkpoint_dump(stree_t * stree,
                      mean_theta,
                      mean_tau_count,
                      mean_theta_count,
+                     mean_phi,
                      prec_logpg,
                      prec_logl);
 

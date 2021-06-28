@@ -99,7 +99,7 @@ static void print_settings(stree_t * stree)
   if (opt_msci)
   {
     printf("  NETWORK\n");
-    print_network_table(stree);
+    print_network_table(stree,stdout);
   }
   else
   {

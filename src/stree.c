@@ -113,13 +113,13 @@ static int longint_len(long x)
   return x ? (int)floor(log10(abs(x))) + 1 : 1;
 }
 
-void print_network_table(stree_t * stree)
+void print_network_table(stree_t * stree, FILE * fp)
 {
   long i;
   long hybrid_count = 0;
   long bidir_count = 0;
 
-  printf("Species tree contains hybridization/introgression events.\n\n");
+  fprintf(fp, "Species tree contains hybridization/introgression events.\n\n");
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->hybrid)
     {
@@ -137,10 +137,10 @@ void print_network_table(stree_t * stree)
         fatal("Internal error when counting hybridization events");
       }
     }
-  printf("Hybridization events: %ld\n", hybrid_count);
-  printf("Bidirectional introgressions: %ld\n", bidir_count);
+  fprintf(fp, "Hybridization events: %ld\n", hybrid_count);
+  fprintf(fp, "Bidirectional introgressions: %ld\n", bidir_count);
     
-  printf("Label        Node-index  Child1-index  Child2-index  Parent-index\n");
+  fprintf(fp, "Label        Node-index  Child1-index  Child2-index  Parent-index\n");
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
   {
     char * label;
@@ -155,43 +155,79 @@ void print_network_table(stree_t * stree)
       label[9] = '.'; label[10] = '.'; label[11] = '.'; label[12] = 0;
     }
 
-    printf("%-12s", label);
+    fprintf(fp, "%-12s", label);
     free(label);
-    printf("  %9d", stree->nodes[i]->node_index);
+    fprintf(fp, "  %9d", stree->nodes[i]->node_index);
 
     if (stree->nodes[i]->left)
-      printf("  %12d", stree->nodes[i]->left->node_index);
+      fprintf(fp, "  %12d", stree->nodes[i]->left->node_index);
     else
-      printf("  %12s", "N/A");
+      fprintf(fp, "  %12s", "N/A");
 
     if (stree->nodes[i]->right)
-      printf("  %12d", stree->nodes[i]->right->node_index);
+      fprintf(fp, "  %12d", stree->nodes[i]->right->node_index);
     else
-      printf("  %12s", "N/A");
+      fprintf(fp, "  %12s", "N/A");
 
 
     if (stree->nodes[i]->parent)
-      printf("  %12d", stree->nodes[i]->parent->node_index);
+      fprintf(fp, "  %12d", stree->nodes[i]->parent->node_index);
     else
-      printf("  %12s", "N/A");
+      fprintf(fp, "  %12s", "N/A");
 
     if (i >= stree->tip_count + stree->inner_count)
     {
-      printf("   Mirrored hybridization node");
+      if (node_is_bidirection(stree->nodes[i]))
+        fprintf(fp, "   Mirrored bidirection node");
+      else
+        fprintf(fp, "   Mirrored hybridization node");
       assert(stree->nodes[i]->hybrid);
       if (stree->nodes[i]->hybrid->label)
-        printf(" [Hybrid = %s (%d)]", stree->nodes[i]->hybrid->label, stree->nodes[i]->hybrid->node_index);
+        fprintf(fp,
+                " [Hybrid = %s (%d)]",
+                stree->nodes[i]->hybrid->label,
+                stree->nodes[i]->hybrid->node_index);
     }
 
     if (stree->nodes[i]->hybrid)
     {
-      printf("   [tau = %ld, phi = %f, prop_tau = %d]", stree->nodes[i]->htau, stree->nodes[i]->hphi, stree->nodes[i]->prop_tau);
-      if (i < stree->tip_count+stree->inner_count)
-        printf("  phi_%s : %s -> %s", stree->nodes[i]->label, stree->nodes[i]->parent->label, stree->nodes[i]->label);
+      fprintf(fp,
+              "   [tau = %ld, phi = %f, prop_tau = %d]",
+              stree->nodes[i]->htau,
+              stree->nodes[i]->hphi,
+              stree->nodes[i]->prop_tau);
+
+      /* for bidirections print the mirror node phi, for hybridizations print
+         both node phi. */
+      if (i >= stree->tip_count+stree->inner_count)
+      {
+        if (node_is_bidirection(stree->nodes[i]))
+          fprintf(fp,
+                  "  phi_%s : %s -> %s",
+                  stree->nodes[i]->label,
+                  stree->nodes[i]->parent->label,
+                  stree->nodes[i]->label);
+        else
+          fprintf(fp,
+                  "  phi_%s : %s -> %s",
+                  stree->nodes[i]->label,
+                  stree->nodes[i]->parent->label,
+                  stree->nodes[i]->label);
+
+      }
+      else
+      {
+        if (!node_is_bidirection(stree->nodes[i]))
+          fprintf(fp,
+                  " 1-phi_%s : %s -> %s",
+                  stree->nodes[i]->label,
+                  stree->nodes[i]->parent->label,
+                  stree->nodes[i]->label);
+      }
     }
-    printf("\n");
+    fprintf(fp, "\n");
   }
-  printf("\n");
+  fprintf(fp, "\n");
 }
 
 void debug_print_network_node_attribs(stree_t * stree)

@@ -1213,7 +1213,7 @@ int node_is_bidirection(const snode_t * node);
 int node_is_mirror(const snode_t * node);
 int node_is_hybridization(const snode_t * node);
 
-void print_network_table(stree_t * stree);
+void print_network_table(stree_t * stree, FILE * fp);
 void debug_print_network_node_attribs(stree_t * stree);
 
 void propose_tau_update_gtrees(locus_t ** loci,
@@ -1668,6 +1668,7 @@ int checkpoint_dump(stree_t * stree,
                     double * mean_theta,
                     long mean_tau_count,
                     long mean_theta_count,
+                    double mean_phi,
                     int prec_logpg,
                     int prec_logl);
 
@@ -1698,6 +1699,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** mean_theta,
                     long * mean_tau_count,
                     long * mean_theta_count,
+                    double * mean_phi,
                     int * prec_logpg,
                     int * prec_logl);
 
