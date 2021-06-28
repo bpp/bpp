@@ -4155,7 +4155,7 @@ long stree_propose_spr(stree_t ** streeptr,
         if (opt_clock != BPP_CLOCK_GLOBAL)
         {
           /* flag diamond node branches to be updated */
-          if (!(node->mark & FLAG_BRANCH_UPDATE))
+          if (!(node->mark & FLAG_BRANCH_UPDATE) && node->parent)
           {
             bl_list[branch_update_count++] = node;
             node->mark |= FLAG_BRANCH_UPDATE;
@@ -4203,7 +4203,7 @@ long stree_propose_spr(stree_t ** streeptr,
         if (opt_clock != BPP_CLOCK_GLOBAL)
         {
           /* flag diamond node branches to be updated */
-          if (!(node->mark & FLAG_BRANCH_UPDATE) && 
+          if (!(node->mark & FLAG_BRANCH_UPDATE) && node->parent &&
               ((node->parent->time >= c->parent->tau) || (node->parent->time >= y->parent->tau)))
           {
             bl_list[branch_update_count++] = node;
