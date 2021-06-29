@@ -208,21 +208,52 @@ void print_network_table(stree_t * stree, FILE * fp)
                   stree->nodes[i]->parent->label,
                   stree->nodes[i]->label);
         else
-          fprintf(fp,
-                  "  phi_%s : %s -> %s",
-                  stree->nodes[i]->label,
-                  stree->nodes[i]->parent->label,
-                  stree->nodes[i]->label);
+        {
+          /* hybridization node */
 
+          /* if main node htau==0 and mirror node htau==1 then that is the only
+             case we use the phi from the main node */
+          snode_t * tmpnode = stree->nodes[i];
+          if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+          {
+            fprintf(fp,
+                    "  1-phi_%s : %s -> %s",
+                    stree->nodes[i]->label,
+                    stree->nodes[i]->parent->label,
+                    stree->nodes[i]->label);
+          }
+          else
+          {
+            fprintf(fp,
+                    "  phi_%s : %s -> %s",
+                    stree->nodes[i]->label,
+                    stree->nodes[i]->parent->label,
+                    stree->nodes[i]->label);
+          }
+        }
       }
       else
       {
         if (!node_is_bidirection(stree->nodes[i]))
-          fprintf(fp,
-                  " 1-phi_%s : %s -> %s",
-                  stree->nodes[i]->label,
-                  stree->nodes[i]->parent->label,
-                  stree->nodes[i]->label);
+        {
+          snode_t * tmpnode = stree->nodes[i];
+          if (tmpnode->htau == 0 && tmpnode->hybrid->htau == 1)
+          {
+            fprintf(fp,
+                    " phi_%s : %s -> %s",
+                    stree->nodes[i]->label,
+                    stree->nodes[i]->parent->label,
+                    stree->nodes[i]->label);
+          }
+          else
+          {
+            fprintf(fp,
+                    " 1-phi_%s : %s -> %s",
+                    stree->nodes[i]->label,
+                    stree->nodes[i]->parent->label,
+                    stree->nodes[i]->label);
+          }
+        }
       }
     }
     fprintf(fp, "\n");

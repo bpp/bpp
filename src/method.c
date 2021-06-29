@@ -252,11 +252,25 @@ static void print_mcmc_headerline(FILE * fp, stree_t * stree, gtree_t ** gtree)
       fprintf(fp," mtau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
   }
   if (opt_msci)
+  {
+    snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
+
+    if (!node_is_bidirection(tmpnode))
+    {
+      /* hybridization node */
+
+      /* if main node htau==0 and mirror node htau==1 then that is the only case
+         we use the phi from the main node */
+      if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+        tmpnode = tmpnode->hybrid;
+    }
+
     fprintf(fp,
             "  mphi: mean of phi_%s : %s -> %s\n",
-            stree->nodes[stree->tip_count+stree->inner_count]->label,
-            stree->nodes[stree->tip_count+stree->inner_count]->parent->label,
-            stree->nodes[stree->tip_count+stree->inner_count]->label);
+            tmpnode->label,
+            tmpnode->parent->label,
+            tmpnode->label);
+  }
   if (opt_msci)
     fprintf(fp, "log-PG: log-probability of gene trees (MSCi)\n");
   else
@@ -937,10 +951,20 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       if (node_is_bidirection(stree->nodes[offset+i]))
         fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->label);
       else
+      {
+        /* hybridization node */
+
+        /* if main node htau==0 and mirror node htau==1 then that is the only
+           case we use the phi from the main node */
+        snode_t * tmpnode = stree->nodes[offset+i];
+        if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+          tmpnode = tmpnode->hybrid;
+
         fprintf(fp,
                 "\tphi_%s<-%s",
-                stree->nodes[offset+i]->label,
-                stree->nodes[offset+i]->parent->label);
+                tmpnode->label,
+                tmpnode->parent->label);
+      }
 
     }
   }
@@ -1319,8 +1343,22 @@ static void mcmc_logsample(FILE * fp,
   if (opt_msci)
   {
     unsigned int offset=stree->tip_count+stree->inner_count;
+
     for (i = 0; i < stree->hybrid_count; ++i)
-      fprintf(fp, "\t%.6f", stree->nodes[offset+i]->hphi);
+    {
+      snode_t * tmpnode = stree->nodes[offset+i];
+      if (!node_is_bidirection(tmpnode))
+      {
+        /* hybridization node */
+
+        /* if main node htau==0 and mirror node htau==1 then that is the only
+           case we use the phi from the main node */
+        if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+          tmpnode = tmpnode->hybrid;
+      }
+
+      fprintf(fp, "\t%.6f", tmpnode->hphi);
+    }
   }
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -3564,7 +3602,19 @@ void cmd_run()
       }
       mean_tau_count = k;
       if (opt_msci)
-        mean_phi = (mean_phi*(ft_round-1) + stree->nodes[stree->tip_count+stree->inner_count]->hphi)/ft_round;
+      {
+        snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
+        if (!node_is_bidirection(tmpnode))
+        {
+          /* hybridization node */
+
+          /* if main node htau==0 and mirror node htau==1 then that is the only
+             case we use the phi from the main node */
+          if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+            tmpnode = tmpnode->hybrid;
+        }
+        mean_phi = (mean_phi*(ft_round-1) + tmpnode->hphi)/ft_round;
+      }
 
       #ifdef DEBUG_GTR
       if (fabs(locus[0]->frequencies[0][0] + locus[0]->frequencies[0][1] + locus[0]->frequencies[0][2] + locus[0]->frequencies[0][3]-1) >= 1e-10)
