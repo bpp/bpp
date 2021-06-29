@@ -29,9 +29,6 @@
       finetune =  1: 3 0.003 0.002 0.00002 0.005 0.9 0.001 0.001 # finetune for GBtj, GBspr, theta, tau, mix
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
-        burnin = 16000
+        burnin = 32000
       sampfreq = 2
        nsample = 500000
-        burnin = 1600
-      sampfreq = 1
-       nsample = 5000

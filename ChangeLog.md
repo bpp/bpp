@@ -2,6 +2,42 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.4.0] - 2021-06-29
+### Changed
+ - Phi parameters (MSCi model) for non-BDI events always correspond to
+   horizontal edges. If both parental edges of a hybridization node are
+   horizontal or both are non-horizontal, then the phi parameter always
+   corresponds to the mirror node.
+ - Phi parameters (MSci model) for BDI events always correspond to the
+   horizontal branches
+ - MSci generator syntax accepts source branch first, then target branch
+ - MSci generator prints phis on horizontal branches for BDI events
+ - Numbering of loci in load balancing stats output starts from 1 instead of 0
+ - Removed checks for consecutive unary nodes which fixes the rejection of some
+   correctly constructed MSCi newick formats
+### Fixed
+ - Failing assertion caused by trying to update a non-existent root branch
+   length for circle/triangle/square nodes in species tree spr with relaxed
+   clock
+ - Error message in simulation for locusrate syntax
+ - MRCA function (for MSCi) in gene tree age proposal to find the MRCA
+   population of two daughter nodes (a and b), such that the MRCA is also a
+   descendant of the population of the parent of a and b. This fixes a failing
+   assertion
+ - Rule in MSCi creator that prevented from having multiple bidirections on
+   sister species
+ - Header of modelparafile when using relaxed clock models (printing of species
+   tree branch rate labels)
+ - Removed SNL branch rate swap strategies when species tree root changes
+ - Removed branch rates swapping from sSPR and SNL when move is NNI
+
+### Added
+ - Zig-zag load balancing scheme
+ - Removal of sequences that contain only missing data
+ - Gene tree topology change move using simulation (option --exp_sim)
+ - Gamma prior for tau
+ - Gamma and Beta for theta
+
 ## [4.3.8] - 2020-12-02
 ### Changed
  - Initialization of phi values
