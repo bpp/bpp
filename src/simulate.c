@@ -1970,6 +1970,16 @@ void cmd_simulate()
   process_diploid(stree->tip_count);
 
   simulate(stree);
+  if (opt_migration)
+  {
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      free(opt_migration_labels[i]);
+    free(opt_migration_labels);
+
+    free(opt_migration_matrix);
+    free(opt_migration_events);
+  }
+
 
   stree_destroy(stree,free);
 

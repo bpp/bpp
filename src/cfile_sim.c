@@ -633,6 +633,7 @@ static char ** split_strings(const char * x, long * token_count)
     /* skip whitespace */
     while (*p && (*p == ' ' || *p == '\t')) p++;
   }
+  free(data);
 
   return token;
 }
@@ -674,9 +675,14 @@ static void parse_migration_matrix(FILE * fp, long line_count)
             "%ld (line %ld)", i+1, i+1, line_count+2+i);
 
     for (j = 0; j < matrix_dim; ++j)
+    {
       if (!get_double(data[j+1], opt_migration_matrix+i*matrix_dim+j))
         fatal("Migration matrix cell (%ld,%ld) is not a number (line %ld)",
               i+1, j+1, line_count+2+i);
+      free(data[j+1]);
+    }
+    free(data[0]);
+    free(data);
 
   }
 }
