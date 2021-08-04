@@ -2054,7 +2054,7 @@ double gtree_update_logprob_contrib(snode_t* snode,
   if (opt_est_theta)
   {
     if (snode->event_count[msa_index])
-      logpr += snode->event_count[msa_index] * log(2.0 / snode->theta);
+      logpr += snode->event_count[msa_index] * log(2.0 / (heredity*snode->theta));
 
     if (T2h)
       logpr -= T2h / snode->theta;
@@ -5293,17 +5293,8 @@ static long prop_heredity(gtree_t ** gtree,
     if (!opt_est_theta)
     {
       hfactor = 0;
-      double y = 1;
       for (j = 0; j < opt_locus_count; ++j)
-      {
-        y *= locus[j]->heredity[0];
-        if ((j+1) % 100 == 0)
-        {
-          hfactor -= log(y);
-          y = 1;
-        }
-      }
-      hfactor -= log(y);
+        hfactor -= (gtree[j]->tip_count-1)*log(locus[j]->heredity[0]);
       logpr += hfactor - stree->notheta_hfactor;
     }
 
@@ -5354,12 +5345,12 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
   if (opt_est_locusrate == MUTRATE_ESTIMATE)
     accepted = prop_locusrate(gtree,stree,locus,thread_index);
 
-  if (opt_est_heredity)
+  if (opt_est_heredity == HEREDITY_ESTIMATE)
     accepted += prop_heredity(gtree,stree,locus,thread_index);
 
   if (opt_est_locusrate == MUTRATE_ESTIMATE)
     divisor = opt_locus_count-1;
-  if (opt_est_heredity)
+  if (opt_est_heredity == HEREDITY_ESTIMATE)
     divisor += opt_locus_count;
 
   return (accepted / divisor);

@@ -154,7 +154,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(double);                     /* opt_heredity_alpha */
   size_section += sizeof(double);                     /* opt_heredity_beta */
   size_section += 4*sizeof(long);                     /* opt_print_* */
-  if (opt_est_locusrate || opt_est_heredity)
+  if (opt_est_locusrate || opt_est_heredity == HEREDITY_ESTIMATE)
     size_section += sizeof(double);                   /* locusrate finetune */
 
   /* TODO: Check which parameters are written for notheta option */

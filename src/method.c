@@ -480,7 +480,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
   fp[0] = stdout; fp[1] = fp_out;
   
   /* TODO: Adjust such that each move has a different pjump and steplength */
-  extra = (opt_est_heredity ||
+  extra = (opt_est_heredity == HEREDITY_ESTIMATE ||
            (opt_est_locusrate == MUTRATE_ESTIMATE &&
             opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
 
@@ -841,7 +841,7 @@ static void status_print_pjump(FILE * fp,
                                double mean_pjump_rj)
 {
   long j;
-  int extra = (opt_est_heredity ||
+  int extra = (opt_est_heredity == HEREDITY_ESTIMATE ||
                (opt_est_locusrate == MUTRATE_ESTIMATE &&
                 opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
 
@@ -1007,7 +1007,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
   {
     tab_required = 0;
     /* print heredity scalars header */
-    if (opt_est_heredity && opt_print_hscalars)
+    if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
       fprintf(fp_locus[i],
               "%sheredity_L%d",
@@ -1138,7 +1138,7 @@ static void print_rates(FILE ** fp_locus,
   {
     tab_required = 0;
     /* print heredity scalars */
-    if (opt_est_heredity && opt_print_hscalars)
+    if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
       fprintf(fp_locus[i],
               "%s%.6f",
@@ -2266,29 +2266,11 @@ static FILE * init(stree_t ** ptr_stree,
       heredity[i] = opt_heredity_alpha /
                     opt_heredity_beta*(0.8 + 0.4*legacy_rndu(0));
 
-    /* TODO: Perhaps we can avoid the check every 100-th term by using the log
-       of heredity scaler from the beginning. E.g. if this loop is replaced by
-       
-       for (j = 0; j < opt_locus_count; ++j)
-         logpr -= log(locus[j]->heredity[0]);
-
-       then we only need to add and subtract the two corresponding heredity
-       multipliers (the old and new)
-    */
     if (!opt_est_theta)
     {
       double hfactor = 0;
-      double y = 1;
       for (i = 0; i < opt_locus_count; ++i)
-      {
-        y *= heredity[i];
-        if ((i+1) % 100 == 0)
-        {
-          hfactor -= log(y);
-          y = 1;
-        }
-      }
-      hfactor -= log(y);
+        hfactor -= (msa_list[i]->count-1)*log(heredity[i]);
       stree->notheta_hfactor = hfactor;
     }
   }
@@ -2310,7 +2292,13 @@ static FILE * init(stree_t ** ptr_stree,
             opt_heredity_filename, errcontext);
 
     /* disable estimation of heredity scalars */
-    opt_est_heredity = 0;
+    if (!opt_est_theta)
+    {
+      double hfactor = 0;
+      for (i = 0; i < opt_locus_count; ++i)
+        hfactor -= (msa_list[i]->count-1)*log(heredity[i]);
+      stree->notheta_hfactor = hfactor;
+    }
   }
 
   /* initialize locus mutation rates if estimation was selected */
@@ -2395,7 +2383,6 @@ static FILE * init(stree_t ** ptr_stree,
   /* ensure that heredity is now set to either 0 or 1, and locusrate is not set
      to MUTATE_FROMFILE */
   assert(opt_est_locusrate >= MUTRATE_CONSTANT && opt_est_locusrate != MUTRATE_FROMFILE);
-  assert(opt_est_heredity  >= 0 && opt_est_heredity  <= 1);
 
   gtree_update_branch_lengths(gtree, msa_count);
 
@@ -3034,11 +3021,11 @@ void cmd_run()
   }
 
   /* enable/disable variables for mcmc headerline */
-  if (opt_est_heredity &&
+  if (opt_est_heredity == HEREDITY_ESTIMATE &&
       (opt_est_locusrate == MUTRATE_ESTIMATE &&
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR))
     enabled_lrht = 1;
-  else if (opt_est_heredity)
+  else if (opt_est_heredity == HEREDITY_ESTIMATE)
     enabled_hrdt = 1;
   else if (opt_est_locusrate == MUTRATE_ESTIMATE &&
            opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR)
@@ -3363,7 +3350,8 @@ void cmd_run()
       #endif
 
     if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
-         opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR) || opt_est_heredity)
+         opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR) ||
+         opt_est_heredity == HEREDITY_ESTIMATE)
     {
       ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
       pjump[BPP_MOVE_LRHT_INDEX] = (pjump[BPP_MOVE_LRHT_INDEX]*(ft_round-1)+ratio) /
