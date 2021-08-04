@@ -803,7 +803,7 @@ static void replace_hybrid(stree_t * stree,
   *count = *count + 1;
 }
 
-static void replace(pop_t * pop, int count, snode_t * epoch)
+static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
 {
   int i,j;
 
@@ -835,10 +835,14 @@ static void replace(pop_t * pop, int count, snode_t * epoch)
     SWAP(i,j);
 
   /* allocate indices and nodes arrays for the new population */
-  int * indices = (int *)xmalloc((pop[i].seq_count+pop[j].seq_count) *
-                                 sizeof(int));
-  gnode_t ** nodes = (gnode_t **)xmalloc((pop[i].seq_count+pop[j].seq_count) *
-                                         sizeof(gnode_t *));
+  size_t alloc_size;
+  if (opt_migration)
+    alloc_size = msa->count;
+  else
+    alloc_size = pop[i].seq_count + pop[j].seq_count;
+
+  int * indices = (int *)xmalloc(alloc_size * sizeof(int));
+  gnode_t ** nodes = (gnode_t **)xmalloc(alloc_size * sizeof(gnode_t *));
 
   /* fill indices and nodes by merging the information from its two children
      populations */
@@ -1561,7 +1565,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     if (opt_msci && epoch[e]->hybrid)
       replace_hybrid(stree,pop,&pop_count,epoch[e],thread_index);
     else
-      replace(pop,pop_count,epoch[e]);
+      replace(pop,pop_count,epoch[e],msa);
     
     if (e != epoch_count-1)
     {
