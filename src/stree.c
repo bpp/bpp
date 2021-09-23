@@ -140,7 +140,7 @@ void print_network_table(stree_t * stree, FILE * fp)
   fprintf(fp, "Hybridization events: %ld\n", hybrid_count);
   fprintf(fp, "Bidirectional introgressions: %ld\n", bidir_count);
     
-  fprintf(fp, "Label        Node-index  Child1-index  Child2-index  Parent-index\n");
+  fprintf(fp, "Label        Node  Child1  Child2  Parent\n");
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
   {
     char * label;
@@ -157,23 +157,23 @@ void print_network_table(stree_t * stree, FILE * fp)
 
     fprintf(fp, "%-12s", label);
     free(label);
-    fprintf(fp, "  %9d", stree->nodes[i]->node_index);
+    fprintf(fp, "  %3d", stree->nodes[i]->node_index);
 
     if (stree->nodes[i]->left)
-      fprintf(fp, "  %12d", stree->nodes[i]->left->node_index);
+      fprintf(fp, "  %6d", stree->nodes[i]->left->node_index);
     else
-      fprintf(fp, "  %12s", "N/A");
+      fprintf(fp, "  %6s", "N/A");
 
     if (stree->nodes[i]->right)
-      fprintf(fp, "  %12d", stree->nodes[i]->right->node_index);
+      fprintf(fp, "  %6d", stree->nodes[i]->right->node_index);
     else
-      fprintf(fp, "  %12s", "N/A");
+      fprintf(fp, "  %6s", "N/A");
 
 
     if (stree->nodes[i]->parent)
-      fprintf(fp, "  %12d", stree->nodes[i]->parent->node_index);
+      fprintf(fp, "  %6d", stree->nodes[i]->parent->node_index);
     else
-      fprintf(fp, "  %12s", "N/A");
+      fprintf(fp, "  %6s", "N/A");
 
     if (i >= stree->tip_count + stree->inner_count)
     {
