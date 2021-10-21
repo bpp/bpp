@@ -356,6 +356,11 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&opt_max_species_count,1,fp);
 
+  DUMP(&opt_prob_snl,1,fp);
+  DUMP(&opt_prob_snl_shrink,1,fp);
+  DUMP(&opt_snl_lambda_expand,1,fp);
+  DUMP(&opt_snl_lambda_shrink,1,fp);
+
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
   DUMP(&(stree->nui_sum),1,fp);
@@ -368,6 +373,7 @@ static void dump_chk_section_1(FILE * fp,
     for (i = 0; i < stree->tip_count; ++i)
       DUMP(dummy,sizeof(long),fp);         /* typecast */
   }
+  DUMP(&opt_diploid_size,1,fp);
 
   /* write mcmc run info */
   DUMP(&opt_burnin,1,fp);

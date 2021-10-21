@@ -69,7 +69,7 @@ static const char * rate_prior_option[] =
  };
 static const char * rate_prior_name[] =
  {
-   "Camma-Dirichlet", "Conditional iid"
+   "Gamma-Dirichlet", "Conditional iid"
  };
 
 static void reallocline(size_t newmaxsize)

@@ -574,6 +574,16 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_max_species_count,1,fp))
     fatal("Cannot read max number of species");
 
+  if (!LOAD(&opt_prob_snl,1,fp))
+    fatal("Cannot read frequency for SNL");
+  if (!LOAD(&opt_prob_snl_shrink,1,fp))
+    fatal("Cannot read frequency for SNL shrink");
+  if (!LOAD(&opt_snl_lambda_expand,1,fp))
+    fatal("Cannot read lambda for SNL expand");
+  if (!LOAD(&opt_snl_lambda_shrink,1,fp))
+    fatal("Cannot read lambda for SNL shrink");
+
+
   #if 0
   printf(" Current finetune: %ld: %f %f %f %f %f",
          opt_finetune_reset, opt_finetune_gtage, opt_finetune_gtspr,
@@ -620,6 +630,8 @@ static void load_chk_section_1(FILE * fp,
     printf("\n");
   }
   #endif
+  if (!LOAD(&opt_diploid_size,1,fp))
+    fatal("Cannot load diploid size variable");
 
   /* read MCMC run info  */
   if (!LOAD(&opt_burnin,1,fp))
@@ -1633,11 +1645,7 @@ int checkpoint_load(gtree_t *** gtreep,
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree_reset_leaves(gtree[i]->root);
-    locus_update_matrices(locus[i],
-                          gtree[i],
-                          gtree[i]->nodes,
-                          stree,i,
-                          gtree[i]->edge_count);
+    locus_update_all_matrices(locus[i],gtree[i],stree,i);
     locus_update_all_partials(locus[i],gtree[i]);
 
     gtree[i]->logl = locus_root_loglikelihood(locus[i],
