@@ -530,9 +530,16 @@ static void write_figtree(FILE * fp_out,
   /* copy phi for msci model */
   for (i = 0; i < stree->hybrid_count; i++)
   {
-    snode_t *mnode = stree->nodes[stree->tip_count + stree->inner_count + i];
-    mnode->hphi = 1 - mean[theta_count + tau_count + i];
-    mnode->hybrid->hphi = mean[theta_count + tau_count + i];
+    snode_t * mnode = stree->nodes[stree->tip_count + stree->inner_count + i];
+    
+    if (!node_is_bidirection(mnode))
+    {
+      if (mnode->hybrid->htau == 0 && mnode->htau == 1)
+        mnode = mnode->hybrid;
+    }
+
+    mnode->hphi = mean[theta_count + tau_count + i];
+    mnode->hybrid->hphi = 1 - mnode->hphi;
   }
 
   /*** Ziheng 2020-10-2 ***/
