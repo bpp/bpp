@@ -170,12 +170,24 @@ multiple-hit correction, and the use of GTR is unnecessary.
 </td></tr> </table>
 
 
-**Note:** At the end of the MCMC run under the MSci model, BPP creates a file named
-`FakeTree.tre`. This is a binary tree with "hybrid mirror nodes" converted into
+
+### Drawing the species tree with introgressions using FigTree
+
+At the end of the MCMC run under the MSci model, BPP creates a file named
+`FakeTree.tre`, which has branch lengths given by the posterior means of node ages (&tau) and the 95% HPD CI 
+as the node bars.  It also includes the estimated population size parameters (&theta) as branch/node labels. 
+This tree is binary with "hybrid mirror nodes" converted into
 ghost tips, so the tree can be read into [FigTree](http://tree.bio.ed.ac.uk/software/figtree/).
-It will use the estimated node ages to draw branches and the 95% HPD CI for
-node ages as node bars. You can then save the tree into a vector graphics file,
-and import it into a graphics program for editing. Below is an example of the generated `FakeTree.tre`.
+You can  save the tree into a vector graphics file (not a pictcure file), and import it into a graphics program for editing. 
+On Windows .wmf and emf formats seem to work well, so the procedure will be as follows.
+First, open FakeTree.tre in FigTree.  Choose node bars, node labels, change curvature etc. as you like.  
+Save the file as a graphics file (File - Export Graphics or Ctrl-Alt-E, choose file type .emf).
+Second start MS Powerpoint, Insert-Picture from file, Ungroup (Ctrl-Shift-G), twice.  Texts and lines will be editable.
+
+On a MAC, you can try to save the graphics into a sgv file.
+
+
+Below is an example of the generated `FakeTree.tre`.
 
 ![anopheles species network](https://raw.githubusercontent.com/xflouris/assets/master/bpp/anopheles/anopheles-faketree.png)
 
