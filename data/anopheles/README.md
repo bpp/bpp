@@ -1,5 +1,5 @@
 This dataset represents the third block of 100 loci for the non-coding 2L1
-region as used in (Flouri et al. 2019).
+region as used in Flouri et al. (2020).
 
 Below is the species tree (network) for the anopheles dataset with annotated introgressions 
 
