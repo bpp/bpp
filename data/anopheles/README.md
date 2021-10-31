@@ -174,14 +174,16 @@ multiple-hit correction, and the use of GTR is unnecessary.
 ### Drawing the species tree with introgressions using FigTree
 
 At the end of the MCMC run under the MSci model, BPP creates a file named
-`FakeTree.tre`, which has branch lengths given by the posterior means of node ages (&tau) and the 95% HPD CI 
-as the node bars.  It also includes the estimated population size parameters (&theta) as branch/node labels. 
-This tree is binary with "hybrid mirror nodes" converted into
-ghost tips, so the tree can be read into [FigTree](http://tree.bio.ed.ac.uk/software/figtree/).
-You can  save the tree into a vector graphics file (not a pictcure file), and import it into a graphics program for editing. 
-On Windows .wmf and emf formats seem to work well, so the procedure will be as follows.
+`FakeTree.tre`, which has branch lengths given by the posterior means of node ages (&tau;) and the 95% HPD CI 
+as node bars.  It also includes the estimated population size parameters (&theta;) as branch/node labels. 
+
+This tree is binary with "hybrid mirror nodes" converted into ghost tips, so the tree can be read into [FigTree](http://tree.bio.ed.ac.uk/software/figtree/).
+You can  save the tree into a vector graphics file (instead of a pictcure file), and import it into a graphics program for editing. 
+On Windows .wmf (Windows Metafile) and .emf (Enhanced Windows Metafile) formats seem to work well, so the procedure will be as follows.
+
 First, open FakeTree.tre in FigTree.  Choose node bars, node labels, change curvature etc. as you like.  
 Save the file as a graphics file (File - Export Graphics or Ctrl-Alt-E, choose file type .emf).
+
 Second start MS Powerpoint, Insert-Picture from file, Ungroup (Ctrl-Shift-G), twice.  Texts and lines will be editable.
 
 On a MAC, you can try to save the graphics into a sgv file.
