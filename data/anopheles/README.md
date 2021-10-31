@@ -191,8 +191,6 @@ On a MAC, you can try to save the graphics into a sgv file.
 
 Below is an example of the generated `FakeTree.tre`.
 
-![anopheles species network](https://raw.githubusercontent.com/xflouris/assets/master/bpp/anopheles/anopheles-faketree.png)
-
 Example `FakeTree.tre` file:
 
 ```
@@ -204,6 +202,9 @@ BEGIN TREES;
 END;
 
 ```
+
+![anopheles species network](https://raw.githubusercontent.com/xflouris/assets/master/bpp/anopheles/anopheles-faketree.png)
+
 
 ## References
 
