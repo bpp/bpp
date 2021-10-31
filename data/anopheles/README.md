@@ -189,9 +189,7 @@ Second start MS Powerpoint, Insert-Picture from file, Ungroup (Ctrl-Shift-G), tw
 On a MAC, you can try to save the graphics into a sgv file.
 
 
-Below is an example of the generated `FakeTree.tre`.
-
-Example `FakeTree.tre` file:
+Below is an example of the generated `FakeTree.tre` file:
 
 ```
 
