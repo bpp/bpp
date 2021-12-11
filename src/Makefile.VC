@@ -60,7 +60,9 @@ OBJ_BPP = \
 	parsemap.obj \
 	msci_gen.obj \
 	constraint.obj \
-	debug.obj
+	debug.obj \
+	lswitch.obj \
+	ming2.obj
 
 all: $(PROG)
 
