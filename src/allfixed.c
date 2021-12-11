@@ -735,8 +735,25 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (bad_count)
     fprintf(stderr, "Skipped a total of %ld erroneous records...\n", bad_count);
 
+  /* BDI label-switching routine to resolve unidentifiability issues */
+  if (opt_msci)
+  {
+    long bidir_count = 0;
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      if (stree->nodes[i]->hybrid &&
+          node_is_bidirection(stree->nodes[i]) &&
+          stree->nodes[i]->prop_tau)
+      {
+        bidir_count++;
+      }
+
+    if (bidir_count)
+      lswitch(stree, header, matrix, col_count);
+  }
+
   fprintf(stdout, "          %s\n", header+4);
   fprintf(fp_out, "          %s\n", header+4);
+
   free(header);
 
   /* compute means */

@@ -2358,3 +2358,11 @@ void debug_bruce(stree_t * stree,
                  const char * move,
                  long iter,
                  FILE * fp_out);
+
+/* functions in lswitch.c */
+void lswitch(stree_t * stree, const char * header, double ** matrix, long col_count);
+
+/* functions in ming2.c */
+int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
+          int(*dfun)(double x[], double *f, double dx[], int n),
+          double x[], double xb[][2], double space[], double e, int n);
