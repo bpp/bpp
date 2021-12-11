@@ -384,6 +384,9 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
           stree->nodes[i]->prop_tau))
       continue;
 
+    printf("Resolving potential unidentifiability for BDI %s <-> %s\n",
+           stree->nodes[i]->label, stree->nodes[i]->hybrid->parent->label);
+
     /* phi1 and phi2 indices */
     pindex[0] = theta_count + tau_count +
                 stree->nodes[i]->hybrid->node_index -

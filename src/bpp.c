@@ -247,6 +247,7 @@ static struct option long_options[] =
   {"exp_theta",    no_argument,       0, 0 },  /* 33 */
   {"debug_bruce",  no_argument,       0, 0 },  /* 34 */
   {"exp_sim",      no_argument,       0, 0 },  /* 35 */
+  {"summary",      required_argument, 0, 0 },  /* 36 */
   { 0, 0, 0, 0 }
 };
 
@@ -692,6 +693,11 @@ void args_init(int argc, char ** argv)
 
       case 35:
         opt_exp_sim = 1;
+        break;
+
+      case 36:
+        opt_cfile = xstrdup(optarg);
+        opt_onlysummary = 1;
         break;
 
       default:

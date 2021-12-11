@@ -3129,7 +3129,8 @@ void cmd_run()
     delim_digit_count = dels ? (int)floor(log10(abs(dels)))+1 : 1;
   }
 
-  print_mcmc_headerline(stdout,stree,gtree);
+  if (!opt_onlysummary)
+    print_mcmc_headerline(stdout,stree,gtree);
   if (!opt_resume)
   {
     print_mcmc_headerline(fp_out,stree,gtree);
@@ -3824,7 +3825,8 @@ void cmd_run()
     if (opt_debug_abort == opt_debug_counter)
       fatal("[DBG] Aborting debugging (reached step %ld)", opt_debug_abort);
   }
-  timer_print("\n", " spent in MCMC\n\n", fp_out);
+  if (!opt_onlysummary)
+    timer_print("\n", " spent in MCMC\n\n", fp_out);
 
   #if 0
   progress_done();
