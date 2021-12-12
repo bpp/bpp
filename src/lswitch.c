@@ -24,11 +24,6 @@
 /* number of parameters (phi_X,phi_Y,theta_X,theta_Y) in a single BDI */
 #define TPARAMS         4
 
-#define IDX_PHI1        0
-#define IDX_PHI2        1
-#define IDX_THETA1      2
-#define IDX_THETA2      3
-
 #define ALG_COG0        0
 #define ALG_COGN        1
 #define ALG_BG          2
@@ -38,7 +33,7 @@ static long algorithm;
 
 static double mean[TPARAMS];
 static double var[TPARAMS];
-static double hyper[2*TPARAMS];
+static double hyperp[2*TPARAMS];
 static double sum_lnphi[2], sum_ln1mphi[2];
 static double sum_theta[2], sum_lntheta[2];
 static long hparams;
@@ -228,12 +223,12 @@ static long compare_towers(long * tower, double ** matrix, long * pindex)
     else
     {
       assert(algorithm == ALG_BG);
-      score_diff  =  ln_beta_ratio(pnew[0], p[0], hyper[0], hyper[1]);    /* phi_x   */
-      score_diff +=  ln_beta_ratio(pnew[1], p[1], hyper[2], hyper[3]);    /* phi_y   */
+      score_diff  =  ln_beta_ratio(pnew[0], p[0], hyperp[0], hyperp[1]);    /* phi_x   */
+      score_diff +=  ln_beta_ratio(pnew[1], p[1], hyperp[2], hyperp[3]);    /* phi_y   */
       if (opt_est_theta)
       {
-        score_diff += ln_gamma_ratio(pnew[2], p[2], hyper[4], hyper[5]);    /* theta_x */
-        score_diff += ln_gamma_ratio(pnew[3], p[3], hyper[6], hyper[7]);    /* theta_y */
+        score_diff += ln_gamma_ratio(pnew[2], p[2], hyperp[4], hyperp[5]);    /* theta_x */
+        score_diff += ln_gamma_ratio(pnew[3], p[3], hyperp[6], hyperp[7]);    /* theta_y */
       }
     }
 
@@ -265,16 +260,16 @@ static void init_tower(const char * phi1_label,
   }
 
   update_summary(matrix, pindex, tower);
-  memset(hyper,0,hparams*sizeof(double));
+  memset(hyperp,0,hparams*sizeof(double));
 
   if (algorithm == ALG_BG)
   {
-    fit_beta_moments(hyper+0, mean[0], var[0]);         /* p q for phi_x   */
-    fit_beta_moments(hyper+2, mean[1], var[1]);         /* p q for phi_y   */
+    fit_beta_moments(hyperp+0, mean[0], var[0]);         /* p q for phi_x   */
+    fit_beta_moments(hyperp+2, mean[1], var[1]);         /* p q for phi_y   */
     if (opt_est_theta)
     {
-      fit_gamma_moments(hyper+4, mean[2], var[2]);         /* a b for theta_x */
-      fit_gamma_moments(hyper+6, mean[3], var[3]);         /* a b for theta_y */
+      fit_gamma_moments(hyperp+4, mean[2], var[2]);         /* a b for theta_x */
+      fit_gamma_moments(hyperp+6, mean[3], var[3]);         /* a b for theta_y */
     }
   }
 }
@@ -447,7 +442,7 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
     #endif
     if (algorithm == ALG_BG)
     {
-      lnL = lnlike_msci(hyper,hparams);
+      lnL = lnlike_msci(hyperp,hparams);
       printf("lnL0: %f\n", lnL);
     }
 
@@ -457,15 +452,15 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
       mpoint_count = compare_towers(tower, matrix, pindex);
       printf("Round %2ld, %2ld points moved...\n", j, mpoint_count);
       update_summary(matrix, pindex, tower);
-      if (algorithm == ALG_BG) { double lnL = lnlike_msci(hyper, hparams); printf("  lnL = %f\n", lnL); }
+      if (algorithm == ALG_BG) { double lnL = lnlike_msci(hyperp, hparams); printf("  lnL = %f\n", lnL); }
       if (!mpoint_count) break;
 
       if (algorithm == ALG_BG)
       {
 
-        int k = ming2(NULL, &lnL, lnlike_msci, NULL, hyper, bounds, space, e, hparams);
+        int k = ming2(NULL, &lnL, lnlike_msci, NULL, hyperp, bounds, space, e, hparams);
         for (k = 0; k < 8; ++k)
-          printf("  %f", hyper[k]);
+          printf("  %f", hyperp[k]);
         printf("\n");
       }
     }
