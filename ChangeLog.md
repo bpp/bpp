@@ -2,6 +2,18 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.4.1] - 2021-12-13
+### Changed
+ - Shortened MSci model information table
+### Fixed
+ - Crash when resuming from a checkpoint with SNL enabled
+ - Assignment of mean phi values for model B on summarized species tree/network
+ - Position of theta and tau in the header of the last output table
+### Added
+ - Option --summary for only summarizing the MCMC file
+ - Algorithms CoG0,CoGN,BetaGamma for resolving identifiability issues
+   associated with BDI events
+
 ## [4.4.0] - 2021-06-29
 ### Changed
  - Phi parameters (MSCi model) for non-BDI events always correspond to

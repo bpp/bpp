@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
-[![Version](https://img.shields.io/badge/version-4.4.0-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.4.0)
+[![Version](https://img.shields.io/badge/version-4.4.1-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.4.1)
 
 ## Introduction
 
@@ -70,26 +70,26 @@ Download the appropriate executable for your system using the following
 commands if you are using a Linux x86_64 system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.4.0/bpp-4.4.0-linux-x86_64.tar.gz
-tar zxvf bpp-4.4.0-linux-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.4.1/bpp-4.4.1-linux-x86_64.tar.gz
+tar zxvf bpp-4.4.1-linux-x86_64.tar.gz
 ```
 
 Or these commands if you using a Mac:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.4.0/bpp-4.4.0-macos-x86_64.tar.gz
-tar zxvf bpp-4.4.0-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.4.1/bpp-4.4.1-macos-x86_64.tar.gz
+tar zxvf bpp-4.4.1-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
 
 ```
-https://github.com/bpp/bpp/releases/download/v4.4.0/bpp-4.4.0-win-x86_64.zip
+https://github.com/bpp/bpp/releases/download/v4.4.1/bpp-4.4.1-win-x86_64.zip
 ```
 
-Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.4.0-linux-x86_64` or `bpp-4.4.0-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.4.1-linux-x86_64` or `bpp-4.4.1-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
-Windows: You will now have the binary distribution in a folder called `bpp-4.4.0-win-x86_64`. The bpp executable is called `bpp.exe`.
+Windows: You will now have the binary distribution in a folder called `bpp-4.4.1-win-x86_64`. The bpp executable is called `bpp.exe`.
 
 
 **Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository*.
@@ -97,9 +97,9 @@ Windows: You will now have the binary distribution in a folder called `bpp-4.4.0
 **Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
 ```
-wget https://github.com/bpp/bpp/archive/v4.4.0.tar.gz
-tar zxvf v4.4.0.tar.gz
-cd bpp-4.4.0/src
+wget https://github.com/bpp/bpp/archive/v4.4.1.tar.gz
+tar zxvf v4.4.1.tar.gz
+cd bpp-4.4.1/src
 make
 ```
 
@@ -171,15 +171,22 @@ If you would like to run the MSci network generator, please run:
 
 ```bash
 bpp --msci-create [DEFS-FILE]
+
 ```
 
-For an example of a DEFS-FILE see the botton of [Issue 114](https://github.com/bpp/bpp/issues/114)
+If you would like to only summarize the results of an analysis, please run:
+```bash
+bpp --summary [CONTROL-FILE]
+```
+
+
+For an example of a DEFS-FILE see the [MSci generator notes](https://github.com/bpp/bpp/releases/download/v4.4.0/msci-create.pdf)
 
 More documentation regarding control files, will be available soon on the [wiki](https://github.com/bpp/bpp/wiki).
 
 ## Documentation
 
-The most up-to-date documentation of BPP is [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.4.0/bppDOC.pdf) distribution together with BPP.
+The most up-to-date documentation of BPP is [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.4.1/bppDOC.pdf) distribution together with BPP.
 
 A tutorial on BPP was recently published as a book chapter:
 [A Tutorial on the Use of BPP for Species Tree Estimation and Species Delimitation](https://hal.inria.fr/PGE/hal-02536475)
@@ -209,6 +216,12 @@ doi:[10.1093/molbev/msz296](https://doi.org/10.1093/molbev/msz296)
 
 The code is currently licensed under the [GNU Affero General Public License version 3](http://www.gnu.org/licenses/agpl-3.0.en.html).
 
+## The team
+
+* Tom&aacute;&scaron; Flouri
+* Bruce Rannala
+* Ziheng Yang
+
 ## Code
 
 | File                       | Description                                                                       |
@@ -216,9 +229,11 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **arch.c**                 | Architecture specific code (Linux/Mac/Windows)                                    |
 | **allfixed.c**             | Summary statistics for method A00 (fixed species tree)                            |
 | **bpp.c**                  | Main file handling command-line parameters and executing selected methods         |
+| **bpp.h**                  | BPP header file including function prototypes and data structures                 |
 | **cfile.c**                | Functions for parsing the control file                                            |
-| **cfile_sim.c**            | Functions for parsing the control file (simulation mode)
+| **cfile_sim.c**            | Functions for parsing the control file (simulation mode)                          |
 | **compress.c**             | Functions for compressing multiple sequence alignments into site patterns         |
+| **constraint.c**           | Functions for placing topological constraints on species tree                     |
 | **core_likelihood.c**      | Core functions for evaluating the likelihood of a tree (non-vectorized)           |
 | **core_likelihood_avx.c**  | Core functions for evaluating the likelihood of a tree (AVX version)              |
 | **core_likelihood_avx2.c** | Core functions for evaluating the likelihood of a tree (AVX-2 version)            |
@@ -228,6 +243,7 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **core_partials_avx2.c**   | Core functions for computing partial likelihoods (AVX-2 version)                  |
 | **core_partials_sse.c**    | Core functions for computing partial likelihoods (SSE-3 version)                  |
 | **core_pmatrix.c**         | Core functions for constructing the transition probability matrix                 |
+| **debug.c**                | Functions for debugging purposes                                                  |
 | **delimit.c**              | Species delimitation auxiliary functions and summary statistics                   |
 | **diploid.c**              | Functions for resolving/phasing diploid sequences                                 |
 | **dlist.c**                | Functions for handling doubly linked-lists                                        |
@@ -239,11 +255,13 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **list.c**                 | Linked list implementation and related functions                                  |
 | **load.c**                 | Functions for loading a checkpoint file                                           |
 | **locus.c**                | Locus specific functions                                                          |
+| **lswitch.c**              | Algorithms for resolving identifiability issues associated with BDI events        |
 | **Makefile**               | Makefile                                                                          |
 | **mapping.c**              | Functions for handling map files                                                  |
 | **maps.c**                 | Character mapping arrays for converting sequences to the internal representation  |
 | **method.c**               | Function containing the MCMC loop and calls to proposals                          |
 | **msa.c**                  | Code for processing multiple sequence alignments                                  |
+| **msci_gen.c**             | Functions for the MSci generator                                                  |
 | **output.c**               | Auxiliary functions for printing pmatrices (to-be-renamed)                        |
 | **parsemap.c**             | Functions for parsing map files                                                   |
 | **phylip.c**               | Functions for parsing phylip files                                                |
@@ -256,13 +274,21 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **simulate.c**             | Functions for the simulation program (MCcoal)                                     |
 | **stree.c**                | Functions for setting and processing the species tree                             |
 | **summary.c**              | Species tree inference summary related functions                                  | 
+| **summary11.c**            | Functions for summarizing joint species tree inference and delimitation           |
 | **threads.c**              | Functions for parallelizing computation using POSIX threads                       |
 | **treeparse.c**            | Functions for parsing trees                                                       |
 | **util.c**                 | Various common utility functions                                                  |
 
 # Acknowledgements
 
-Special thanks to Yuttapong Thawornwattana, [Mario dos Reis Barros](http://www.sbcs.qmul.ac.uk/staff/mariodosreisbarros.html) and Paul M. Hime for testing and bug reports.
+Special thanks to:
+ * Paul M. Hime
+ * Jiayi Ji
+ * Paschalia Kapli
+ * Mario dos Reis Barros
+ * Yuttapong Thawornwattana,
+
+for testing and bug reports.
 
 # References
 
