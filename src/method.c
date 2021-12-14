@@ -3980,6 +3980,7 @@ void cmd_run()
       free(species_names[i]);
     free(species_names);
 
+    #if 0
     if (opt_prob_snl && !opt_onlysummary)
     {
       long opt_debug_sum = opt_debug_expand_count +
@@ -3990,6 +3991,7 @@ void cmd_run()
              opt_debug_expand_count, (opt_debug_expand_count / (double)opt_debug_sum)*100,
              opt_debug_expshr_count, (opt_debug_expshr_count / (double)opt_debug_sum)*100);
     }
+    #endif
   }
 
   if (opt_est_theta)
