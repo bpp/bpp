@@ -134,6 +134,7 @@ double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
+double opt_finetune_migrates;
 double opt_finetune_mix;
 double opt_finetune_mubar;
 double opt_finetune_mui;
@@ -146,6 +147,8 @@ double opt_finetune_theta;
 double opt_heredity_alpha;
 double opt_heredity_beta;
 double opt_locusrate_mubar;
+double opt_mig_alpha;
+double opt_mig_beta;
 double opt_mubar_alpha;
 double opt_mubar_beta;
 double opt_mui_alpha;
@@ -153,6 +156,8 @@ double opt_prob_snl;
 double opt_prob_snl_shrink;
 double opt_phi_alpha;
 double opt_phi_beta;
+double opt_pseudo_alpha;
+double opt_pseudo_beta;
 double opt_rjmcmc_alpha;
 double opt_rjmcmc_epsilon;
 double opt_rjmcmc_mean;
@@ -191,10 +196,13 @@ char * opt_simulate;
 char * opt_streenewick;
 char * opt_treefile;
 double * opt_basefreqs_params;
-double * opt_migration_events;
-double * opt_migration_matrix;
 double * opt_qrates_params;
 char ** opt_migration_labels;
+char ** opt_mig_source;
+char ** opt_mig_target;
+long ** opt_mig_bitmatrix;
+double ** opt_migration_events;
+double ** opt_migration_matrix;
 partition_t ** opt_partition_list;
 
 long mmx_present;
@@ -424,6 +432,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_gtspr = 0.001;
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
+  opt_finetune_migrates = 0.1;
   opt_finetune_mui = 0.1;
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
@@ -451,6 +460,11 @@ void args_init(int argc, char ** argv)
   opt_migration_events = NULL;
   opt_migration_labels = NULL;
   opt_migration_matrix = NULL;
+  opt_mig_bitmatrix = NULL;
+  opt_mig_alpha = 0;
+  opt_mig_beta = 0;
+  opt_mig_source = NULL;
+  opt_mig_target = NULL;
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_msafile = NULL;
@@ -472,6 +486,8 @@ void args_init(int argc, char ** argv)
   opt_print_samples = 1;
   opt_prob_snl = 0.2;
   opt_prob_snl_shrink = 0.333;
+  opt_pseudo_alpha = 0;
+  opt_pseudo_beta = 0;
   opt_qrates_fixed = -1;
   opt_qrates_params = NULL;
   opt_quiet = 0;
@@ -693,11 +709,6 @@ void args_init(int argc, char ** argv)
 
       case 35:
         opt_exp_sim = 1;
-        break;
-
-      case 36:
-        opt_cfile = xstrdup(optarg);
-        opt_onlysummary = 1;
         break;
 
       default:

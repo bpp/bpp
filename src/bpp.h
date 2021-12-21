@@ -93,8 +93,8 @@
 
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 4
-#define VERSION_PATCH 1
+#define VERSION_MINOR 5
+#define VERSION_PATCH 0
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -250,11 +250,12 @@ extern const char * global_freqs_strings[28];
 #define THREAD_WORK_GTAGE               1
 #define THREAD_WORK_GTSPR               2
 #define THREAD_WORK_TAU                 3
-#define THREAD_WORK_MIXING              4
-#define THREAD_WORK_ALPHA               5
-#define THREAD_WORK_RATES               6
-#define THREAD_WORK_FREQS               7
-#define THREAD_WORK_BRATE               8
+#define THREAD_WORK_TAU_MIG             4
+#define THREAD_WORK_MIXING              5
+#define THREAD_WORK_ALPHA               6
+#define THREAD_WORK_RATES               7
+#define THREAD_WORK_FREQS               8
+#define THREAD_WORK_BRATE               9
 
 #define BPP_MOVE_INDEX_MIN              0
 #define BPP_MOVE_GTAGE_INDEX            0
@@ -272,7 +273,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_MUI_INDEX              12
 #define BPP_MOVE_NUI_INDEX              13
 #define BPP_MOVE_BRANCHRATE_INDEX       14
-#define BPP_MOVE_INDEX_MAX              14
+#define BPP_MOVE_MRATE_INDEX            15
+#define BPP_MOVE_INDEX_MAX              15
 
 #define BPP_MSCIDEFS_TREE               1
 #define BPP_MSCIDEFS_DEFINE             2
@@ -287,6 +289,13 @@ extern const char * global_freqs_strings[28];
 #define BPP_OUTGROUP_NONE               0
 #define BPP_OUTGROUP_FULL               1
 #define BPP_OUTGROUP_PARTIAL            2
+
+/* migbuffer events due to migration */
+#define EVENT_COAL        0
+#define EVENT_MIG_SOURCE  1
+#define EVENT_MIG_TARGET  2
+#define EVENT_TAU         3
+
 
 /* libpll related definitions */
 
@@ -362,6 +371,14 @@ typedef struct dlist_s
   dlist_item_t * tail;
 } dlist_t;
 
+typedef struct migbuffer_s
+{
+  double time;
+  long type;
+  double mrsum;
+} migbuffer_t;
+
+
 typedef struct snode_s
 {
   char * label;
@@ -436,7 +453,24 @@ typedef struct snode_s
   long htau;                        /* tau parameter (1: yes, 0: no) */
   struct snode_s * hybrid;          /* linked hybridization node */
   long * hx;                        /* sum of events count and seqin_count (per msa) */
+
+  /* migration events associated with population across loci */
+  long * migevent_count;
+  migbuffer_t * migbuffer;
+  long mb_count;
 } snode_t;
+
+typedef struct miginfo_s
+{
+  long alloc_size;
+
+  long count;
+  double * time;
+  double * old_time;
+  snode_t ** source;
+  snode_t ** target;
+} miginfo_t;
+
 
 typedef struct stree_s
 {
@@ -466,6 +500,9 @@ typedef struct stree_s
   double locusrate_mubar;
   double locusrate_nubar;
   double nui_sum;
+
+  /* migration related elements */
+  miginfo_t ** mi_tbuffer;
 } stree_t;
 
 typedef struct gnode_s
@@ -504,6 +541,9 @@ typedef struct gnode_s
      possible values are BPP_HPATH_NONE, BPP_HPATH_LEFT, BPP_HPATH_RIGHT */
   int * hpath;
 
+  /* migration related structures */
+  miginfo_t * mi;
+
 } gnode_t;
 
 typedef struct gtree_s
@@ -530,6 +570,12 @@ typedef struct gtree_s
   double rate_nui;
   double lnprior_rates;
   double old_lnprior_rates;
+
+  /* migration counts between populations */
+  long ** migcount;
+
+  /* buffer to store feasible populations where migrants come from during simulation */
+  snode_t ** migpops;
 
 } gtree_t;
 
@@ -780,6 +826,9 @@ typedef struct thread_data_s
   /* return values for mixing proposal */
   double lnacceptance;
 
+  /* rejection for tau rubberband with migration */
+  long mig_reject;
+
 } thread_data_t;
 
 typedef struct thread_info_s
@@ -944,6 +993,7 @@ extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
+extern double opt_finetune_migrates;
 extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
@@ -957,6 +1007,8 @@ extern double opt_heredity_beta;
 extern double opt_snl_lambda_expand;
 extern double opt_snl_lambda_shrink;
 extern double opt_locusrate_mubar;      /* used only in simulation */
+extern double opt_mig_alpha;
+extern double opt_mig_beta;
 extern double opt_mubar_alpha;
 extern double opt_mubar_beta;
 extern double opt_mui_alpha;
@@ -964,6 +1016,8 @@ extern double opt_phi_alpha;
 extern double opt_phi_beta;
 extern double opt_prob_snl;            /* probability for SNL move, with 1 - opt_prob_snl for SPR */
 extern double opt_prob_snl_shrink;
+extern double opt_pseudo_alpha;
+extern double opt_pseudo_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
@@ -1002,10 +1056,13 @@ extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
-extern double * opt_migration_matrix;
-extern double * opt_migration_events;
 extern double * opt_qrates_params;
 extern char ** opt_migration_labels;
+extern char ** opt_mig_source;
+extern char ** opt_mig_target;
+extern long ** opt_mig_bitmatrix;
+extern double ** opt_migration_events;
+extern double ** opt_migration_matrix;
 extern partition_t ** opt_partition_list;
 
 /* common data */
@@ -1161,6 +1218,11 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+double stree_propose_tau_mig(stree_t ** streeptr,
+                             gtree_t *** gtreeptr,
+                             stree_t ** scloneptr,
+                             gtree_t *** gcloneptr,
+                             locus_t ** loci);
 
 double stree_propose_phi(stree_t * stree, gtree_t ** gtree);
 
@@ -1234,10 +1296,35 @@ void propose_tau_update_gtrees(locus_t ** loci,
                                double * ret_logl_diff,
                                double * ret_logpr_diff,
                                long thread_index);
+void propose_tau_update_gtrees_mig(locus_t ** loci,
+                                   gtree_t ** gtree,
+                                   stree_t * stree,
+                                   snode_t * snode,
+                                   double oldage,
+                                   double minage,
+                                   double maxage,
+                                   double minfactor,
+                                   double maxfactor,
+                                   long locus_start,
+                                   long locus_count,
+                                   snode_t ** affected,
+                                   unsigned int paffected_count,
+                                   long * ret_mig_reject,
+                                   unsigned int * ret_count_above,
+                                   unsigned int * ret_count_below,
+                                   double * ret_logl_diff,
+                                   double * ret_logpr_diff,
+                                   long thread_index);
 
 double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
+
+long prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+
+void stree_update_mig_subpops(stree_t * stree, long msa_index);
+
+long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
 
 /* functions in arch.c */
 
@@ -1349,7 +1436,9 @@ int pll_compute_gamma_cats(double alpha,
 
 /* functions in gtree.c */
 
-void gtree_alloc_internals(gtree_t ** gtree, long msa_count);
+void gtree_alloc_internals(gtree_t ** gtree,
+                           long msa_count,
+                           unsigned int stree_inner_count);
 
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
@@ -1397,12 +1486,23 @@ void gtree_reset_leaves(gnode_t * node);
 
 void gtree_fini(int msa_count);
 
+double gtree_logprob_mig(stree_t * stree,
+                         gtree_t * gtree,
+                         double heredity,
+                         long msa_index,
+                         long thread_index);
 double gtree_logprob(stree_t * stree,
                      double heredity,
                      long msa_index,
                      long thread_index);
 
 //double gtree_logprob_notheta(stree_t * stree);
+double gtree_update_logprob_contrib_mig(snode_t * snode,
+                                        stree_t * stree,
+                                        gtree_t * gtree,
+                                        double heredity,
+                                        long msa_index,
+                                        long thread_index);
 double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index,
@@ -1450,6 +1550,9 @@ double prop_locusrate_mui(gtree_t ** gtree,
                           stree_t * stree,
                           locus_t ** locus,
                           long thread_index);
+double gtree_propose_migevent_ages_serial(locus_t ** locus,
+                                          gtree_t ** gtree,
+                                          stree_t * stree);
 
 /* functions in prop_mixing.c */
 
@@ -1664,8 +1767,13 @@ int checkpoint_dump(stree_t * stree,
                     long pjump_spr,
                     long pjump_snl,
                     double mean_logl,
+                    long * mean_mrate_row,
+                    long * mean_mrate_col,
+                    long * mean_mrate_round,
+                    double * mean_mrate,
                     double * mean_tau,
                     double * mean_theta,
+                    long mean_mrate_count,
                     long mean_tau_count,
                     long mean_theta_count,
                     double mean_phi,
@@ -1695,8 +1803,13 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * pjump_spr,
                     long * pjump_snl,
                     double * mean_logl,
+                    long ** mean_mrate_row,
+                    long ** mean_mrate_col,
+                    long ** mean_mrate_round,
+                    double ** mean_mrate,
                     double ** mean_tau,
                     double ** mean_theta,
+                    long * mean_mrate_count,
                     long * mean_tau_count,
                     long * mean_theta_count,
                     double * mean_phi,
@@ -2358,6 +2471,17 @@ void debug_bruce(stree_t * stree,
                  const char * move,
                  long iter,
                  FILE * fp_out);
+void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index);
+void debug_consistency(stree_t * stree, gtree_t ** gtree_list);
+
+/* functions in miginfo.c */
+miginfo_t * miginfo_create(size_t alloc_size);
+miginfo_t * miginfo_create_default();
+void miginfo_destroy(miginfo_t * mi);
+miginfo_t * miginfo_realloc(miginfo_t * mi);
+void miginfo_append(miginfo_t ** miptr, snode_t * s, snode_t * t, double time);
+void miginfo_clean(miginfo_t * mi);
+void miginfo_clone(miginfo_t * mi, miginfo_t ** clonebuf);
 
 /* functions in lswitch.c */
 void lswitch(stree_t * stree, const char * header, double ** matrix, long col_count);

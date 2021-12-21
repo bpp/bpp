@@ -643,6 +643,14 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     if (stree->nodes[stree->tip_count+i]->tau)
       col_count++;
 
+  if (opt_migration)
+  {
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+        if (opt_mig_bitmatrix[i][j])
+          col_count++;
+  }
+
   /* compute number of phi parameters */
   if (opt_msci)
     col_count += stree->hybrid_count;

@@ -642,11 +642,13 @@ static void parse_migration_matrix(FILE * fp, long line_count)
 {
   long i,j;
 
-  size_t matrix_size = opt_migration * opt_migration;
-
-
-  opt_migration_matrix = (double *)xmalloc(matrix_size*sizeof(double));
-  opt_migration_events = (double *)xcalloc(matrix_size,sizeof(double));
+  opt_migration_matrix = (double **)xmalloc(opt_migration*sizeof(double *));
+  opt_migration_events = (double **)xmalloc(opt_migration*sizeof(double *));
+  for (i = 0; i < opt_migration; ++i)
+  {
+    opt_migration_matrix[i] = (double *)xmalloc(opt_migration*sizeof(double));
+    opt_migration_events[i] = (double *)xcalloc(opt_migration,sizeof(double));
+  }
 
   if (!getnextline(fp))
     fatal("Incomplete 'migration' record (line %ld)", line_count+1);
@@ -654,7 +656,8 @@ static void parse_migration_matrix(FILE * fp, long line_count)
   long matrix_dim = 0;
   opt_migration_labels = split_strings(line,&matrix_dim);
   if (!opt_migration_labels || matrix_dim == 0)
-    fatal("Option 'migration' must be followed by the population labels (line %ld)", line_count+1);
+    fatal("Option 'migration' must be followed by the population labels "
+          "(line %ld)", line_count+1);
 
   /* read matrix */
   for (i = 0; i < matrix_dim; ++i)
@@ -675,15 +678,13 @@ static void parse_migration_matrix(FILE * fp, long line_count)
             "%ld (line %ld)", i+1, i+1, line_count+2+i);
 
     for (j = 0; j < matrix_dim; ++j)
-    {
-      if (!get_double(data[j+1], opt_migration_matrix+i*matrix_dim+j))
+      if (!get_double(data[j+1], opt_migration_matrix[i]+j))
         fatal("Migration matrix cell (%ld,%ld) is not a number (line %ld)",
               i+1, j+1, line_count+2+i);
-      free(data[j+1]);
-    }
-    free(data[0]);
-    free(data);
 
+    for (j = 0; j < dim; ++j)
+      free(data[j]);
+    free(data);
   }
 }
 

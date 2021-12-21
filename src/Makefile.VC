@@ -62,6 +62,7 @@ OBJ_BPP = \
 	constraint.obj \
 	debug.obj \
 	lswitch.obj \
+	miginfo.obj \
 	ming2.obj
 
 all: $(PROG)
