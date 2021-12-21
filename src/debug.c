@@ -26,9 +26,9 @@
 
 void debug_print_gtree(gtree_t * gtree)
 {
-  long i;
+  long i,j;
 
-  printf("Label        Node-index  Child1-index  Child2-index  Parent-index  "
+  printf("Label        Node-index  Child1-index  Child2-index  Parent-index    Mi  "
          "Pmat-index    Pop     time\n");
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
   {
@@ -64,11 +64,62 @@ void debug_print_gtree(gtree_t * gtree)
     else
       printf("  %12s", "N/A");
 
+    if (gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)
+      printf("  %4ld", gtree->nodes[i]->mi->count);
+    else
+      printf("  %4s", "-");
+
     printf("  %10d", gtree->nodes[i]->pmatrix_index);
 
     printf(" %5s", gtree->nodes[i]->pop->label);
     printf(" %.12f", gtree->nodes[i]->time);
     printf("\n");
+  }
+  if (opt_migration)
+  {
+    long migfound = 0;
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    {
+      if (!(gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)) continue;
+      migfound++;
+    }
+
+    if (migfound)
+    {
+      printf("\nMigration events:\n");
+      printf("Label  Node  #Migs  Migrations (backwards in time)\n");
+    }
+
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    {
+      if (!(gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)) continue;
+
+      gnode_t * x = gtree->nodes[i];
+
+      char * label;
+      if (x->label)
+        label = xstrdup(x->label);
+      else
+        label = xstrdup("N/A");
+
+      /* shorten label if over 12 characters */
+      if (strlen(label) > 6)
+      {
+        label[4] = '.'; label[5] = '.'; label[6] = 0;
+      }
+
+      printf("%-6s", label);
+      free(label);
+      printf(" %4d", gtree->nodes[i]->node_index);
+      printf("  %5ld", x->mi->count);
+
+      printf("  %s -> %s   %f\n", x->mi->source[0]->label, x->mi->target[0]->label, x->mi->time[0]);
+      for (j = 1; j < x->mi->count; ++j)
+        printf("                    %s -> %s   %f\n", x->mi->source[j]->label, x->mi->target[j]->label, x->mi->time[j]);
+
+
+
+    }
   }
 }
 
@@ -135,10 +186,30 @@ void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index)
     long rout = snode->right->seqin_count[msa_index] -
                 snode->right->event_count[msa_index];
 
+    if (opt_migration)
+    {
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      {
+        lout += gtree->migcount[snode->left->node_index][j];
+        rout += gtree->migcount[snode->right->node_index][j];
+
+        lout -= gtree->migcount[j][snode->left->node_index];
+        rout -= gtree->migcount[j][snode->right->node_index];
+      }
+    }
+
     assert(snode->seqin_count[msa_index] == lout+rout);
   }
   snode_t * sroot = stree->root;
   assert(sroot->seqin_count[msa_index] - sroot->event_count[msa_index] == 1);
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode_t * x = stree->nodes[i];
+
+    for (j = 1; j < x->mb_count; ++j)
+      assert(x->migbuffer[j].time != x->migbuffer[j-1].time);
+  }
 
   /* check ages */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
@@ -198,6 +269,43 @@ void debug_check_leaves(gtree_t ** gtree)
         assert(node->leaves == 1);
       }
     }
+  }
+}
+static void debug_validate_logpg_theta(stree_t * stree,
+                                       gtree_t ** gtree,
+                                       locus_t ** locus,
+                                       const char * move)
+{
+  long i,j;
+  double logpr, old_logpr;
+  const long thread_index = 0;
+
+  logpr = 0;
+
+  assert(!opt_msci);
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    old_logpr = gtree[i]->logpr;
+    if (opt_migration)
+      logpr = gtree_logprob_mig(stree,gtree[i],locus[i]->heredity[0],i,thread_index);
+    else
+      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+
+      if (fabs(x->logpr_contrib[i] - x->old_logpr_contrib[i]) > 1e-9)
+        fatal("[FATAL-%ld] move: %s locus: %ld snode: %d "
+              "logpr_contrib: %f old_contrib: %f\n",
+              opt_debug_counter, move, i, j,
+              x->logpr_contrib[i], x->old_logpr_contrib[i]);
+    }
+
+    if (fabs(logpr - old_logpr) > 1e-9)
+      fatal("FATAL-%ld] move: %s locus %ld logpr: %f old_logpr: %f\n",
+            opt_debug_counter, move, i, logpr, old_logpr);
   }
 }
 
@@ -398,7 +506,7 @@ void debug_validate_logpg(stree_t * stree,
   if (!opt_est_theta)
     debug_validate_logpg_notheta(stree,gtree,locus,move);
   else
-    fatal("Testing of logPG with theta not implemented...");
+    debug_validate_logpg_theta(stree,gtree,locus,move);
 }
 
 void debug_snl_stage1(stree_t * stree,
@@ -671,3 +779,180 @@ void debug_bruce(stree_t * stree,
     free(newick);
   }
 }
+
+void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
+{
+  long i,j;
+
+  long * migevent_count;
+  int * seqin_count;
+  long ** migcount;
+  snode_t * curpop;
+  snode_t * pop;
+
+  /* return; */
+
+  if (!opt_migration) return;
+
+  assert(!gtree->root->parent);
+
+  long total_nodes = stree->tip_count+stree->inner_count;
+
+  migevent_count = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+  seqin_count = (int *)xcalloc((size_t)total_nodes, sizeof(int));
+
+  
+  migcount = (long **)xcalloc((size_t)total_nodes, sizeof(long *));
+  for (i = 0; i < total_nodes; ++i)
+    migcount[i] = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+
+
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    if (i < gtree->tip_count)
+      seqin_count[x->pop->node_index]++;
+
+    curpop = x->pop;
+    if (x->mi)
+    {
+      for (j = 0; j < x->mi->count; ++j)
+      {
+        long s = x->mi->source[j]->node_index;
+        long t = x->mi->target[j]->node_index;
+
+        assert(x->mi->target[j]->parent);
+        assert(x->mi->target[j]->tau < x->mi->time[j]);
+        assert(x->mi->target[j]->parent->tau > x->mi->time[j]);
+
+        migevent_count[s]++;
+        migevent_count[t]++;
+        migcount[t][s]++;
+
+        if (curpop != x->mi->source[j])
+        {
+          for (pop = curpop->parent; pop != x->mi->source[j]->parent; pop = pop->parent)
+            seqin_count[pop->node_index]++;
+        }
+        curpop = x->mi->target[j];
+      }
+    }
+    snode_t * end = x->parent ? x->parent->pop->parent : NULL;
+    for (pop = curpop->parent; pop != end; pop = pop->parent)
+      seqin_count[pop->node_index]++;
+  }
+
+  /* check */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+    unsigned int node_index = snode->node_index;
+
+   
+    if (snode->seqin_count[msa_index] != seqin_count[node_index])
+    {
+      printf("\n");
+      printf("[DEBUG]: Locus %ld snode %s\n", msa_index, snode->label);
+      printf("seqin_count: %d    wrong: %d\n", seqin_count[node_index], snode->seqin_count[msa_index]);
+      debug_print_gtree(gtree);
+      fatal("Exiting");
+    }
+    //assert(snode->seqin_count[msa_index] == seqin_count[node_index]);
+    if (snode->migevent_count[msa_index] != migevent_count[node_index])
+    {
+      printf("\n");
+      printf("[DEBUG]: Locus %ld snode %s\n", msa_index, snode->label);
+      printf("migevent_count: %ld    wrong: %ld\n", migevent_count[node_index], snode->migevent_count[msa_index]);
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+        printf("  node %ld migevent_count %ld  wrong %ld  \n", j, migevent_count[j], stree->nodes[j]->migevent_count[msa_index]);
+      debug_print_gtree(gtree);
+      fatal("Exiting");
+    }
+    //assert(snode->migevent_count[msa_index] == migevent_count[node_index]);
+  }
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      assert(gtree->migcount[i][j] == migcount[i][j]);
+
+  /* deallocate */
+  free(seqin_count);
+  free(migevent_count);
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    free(migcount[i]);
+  free(migcount);
+}
+
+void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
+{
+  long i,j;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree_t * gtree = gtree_list[i];
+  
+    for (j = 0; j < gtree->tip_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+      if (x->left || x->right)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld should be tip but has children",
+              i, gtree->tip_count, x->node_index);
+    }
+    for (j = gtree->tip_count; j < gtree->tip_count + gtree->inner_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+
+      if (x->time <= x->pop->tau)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its population (%s) starts at %f",
+              i, gtree->tip_count, x->node_index, x->time, x->pop->label, x->pop->tau);
+
+      if (x->pop->parent && x->pop->parent->tau <= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld [%s] has age %f but its population's parent (%s) starts at %f",
+              i, gtree->tip_count, x->node_index, x->pop->label, x->time, x->pop->parent->label, x->pop->parent->tau);
+      
+      if (x->parent && x->parent->time <= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its parent has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->parent->time);
+
+      if (x->left->time >= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its left daughter has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->left->time);
+      if (x->right->time >= x->time)
+        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its right daughter has older age %f",
+              i, gtree->tip_count, x->node_index, x->time, x->right->time);
+    }
+
+    /* chekc if each node is in the correct population */
+    for (j = 0; j < gtree->tip_count+gtree->inner_count; ++j)
+    {
+      gnode_t * x = gtree->nodes[j];
+      snode_t * pop = gtree->nodes[j]->pop;
+
+      if (x->time < pop->tau)
+      {
+        printf("node_index: %d time: %f pop: %s pop->tau: %f\n", x->node_index, x->time, x->pop->label, x->pop->tau);
+        debug_print_gtree(gtree);
+      }
+      assert(x->time >= pop->tau);
+      if (pop->parent && pop->parent->tau)
+        assert(x->time < pop->parent->tau);
+    }
+    unsigned int event_count = 0;
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      event_count += stree->nodes[j]->event_count[i];
+      dlist_item_t * item = stree->nodes[j]->event[i]->head;
+      int pop_event_count = 0;
+      while (item)
+      {
+        gnode_t * x = (gnode_t *)(item->data);
+        assert(x->pop == stree->nodes[j]);
+        ++pop_event_count;
+
+        item = item->next;
+      }
+      assert(pop_event_count == stree->nodes[j]->event_count[i]);
+    }
+    assert(event_count == gtree->inner_count);
+  }
+}
+

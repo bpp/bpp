@@ -240,8 +240,13 @@ static void load_chk_section_1(FILE * fp,
                                long * pjump_spr,
                                long * pjump_snl,
                                double * mean_logl,
+                               long ** mean_mrate_row,
+                               long ** mean_mrate_col,
+                               long ** mean_mrate_round,
+                               double ** mean_mrate,
                                double ** mean_tau,
                                double ** mean_theta,
+                               long * mean_mrate_count,
                                long * mean_tau_count,
                                long * mean_theta_count,
                                double * mean_phi,
@@ -315,6 +320,9 @@ static void load_chk_section_1(FILE * fp,
   /* read network info */
   if (!LOAD(&opt_msci,1,fp))
     fatal("Cannot read species network flag");
+
+  if (!LOAD(&opt_migration,1,fp))
+    fatal("Cannot read migration flag");
 
   /* read method info */
   if (!LOAD(&opt_method,1,fp))
@@ -488,6 +496,12 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_phi_beta,1,fp))
     fatal("Cannot read beta of 'phiprior' tag"); 
 
+  /* laod migration rates prior */
+  if (!LOAD(&opt_mig_alpha,1,fp))
+    fatal("Cannot read alpha of 'migprior' tag"); 
+  if (!LOAD(&opt_mig_beta,1,fp))
+    fatal("Cannot read beta of 'migprior' tag"); 
+
   if (!LOAD(&opt_model,1,fp))
     fatal("Cannot read substitution model information");
 
@@ -540,6 +554,8 @@ static void load_chk_section_1(FILE * fp,
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
+  if (!LOAD(&opt_finetune_migrates,1,fp))
+    fatal("Cannot read migration rates finetune parameter");
   if (!LOAD(&opt_finetune_phi,1,fp))
     fatal("Cannot read gene tree phi finetune parameter");
   if (!LOAD(&opt_finetune_gtage,1,fp))
@@ -647,7 +663,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ndspecies,1,fp))
     fatal("Cannot read number of delimited species");
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))
@@ -721,6 +737,34 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(mean_logl,1,fp))
     fatal("Cannot read mean logl"); 
 
+  *mean_mrate = NULL;
+  *mean_mrate_row = NULL;
+  *mean_mrate_col = NULL;
+  *mean_mrate_round = NULL;
+  *mean_mrate_count = 0;
+  if (opt_migration)
+  {
+    if (!LOAD(mean_mrate_count,1,fp))
+      fatal("Cannot read number of mean migration rates");
+
+    *mean_mrate = (double *)xmalloc((size_t)(*mean_mrate_count)*sizeof(double));
+    *mean_mrate_row = (long *)xmalloc((size_t)(*mean_mrate_count)*sizeof(long));
+    *mean_mrate_col = (long *)xmalloc((size_t)(*mean_mrate_count)*sizeof(long));
+    *mean_mrate_round = (long *)xmalloc((size_t)(*mean_mrate_count)*sizeof(long));
+
+    if (!LOAD(*mean_mrate, *mean_mrate_count, fp))
+      fatal("Cannot read mean migration rate values");
+
+    if (!LOAD(*mean_mrate_row, *mean_mrate_count, fp))
+      fatal("Cannot read mean migration rate row values");
+
+    if (!LOAD(*mean_mrate_col, *mean_mrate_count, fp))
+      fatal("Cannot read mean migration rate col values");
+
+    if (!LOAD(*mean_mrate_round, *mean_mrate_count, fp))
+      fatal("Cannot read mean migration rate round values");
+
+  }
   if (!LOAD(mean_tau_count,1,fp))
     fatal("Cannot read number of mean taus"); 
 
@@ -771,6 +815,30 @@ static void load_chk_section_1(FILE * fp,
         fatal("Cannot load thread_info");
     }
     threads_set_ti(ti);
+  }
+
+  if (opt_migration)
+  {
+    assert(stree_hybrid_count == 0);
+    unsigned int total_nodes = stree_tip_count+stree_inner_count;
+
+    opt_migration_matrix = (double **)xmalloc((size_t)total_nodes *
+                                              sizeof(double *));
+    for (i = 0; i < total_nodes; ++i)
+    {
+     opt_migration_matrix[i] = (double *)xmalloc((size_t)total_nodes *
+                                                 sizeof(double));
+     if (!LOAD(opt_migration_matrix[i],total_nodes,fp))
+       fatal("Cannot load migration matrix");
+    }
+
+    opt_mig_bitmatrix = (long **)xmalloc((size_t)total_nodes * sizeof(long *));
+    for (i = 0; i < total_nodes; ++i)
+    {
+      opt_mig_bitmatrix[i] = (long *)xmalloc((size_t)total_nodes*sizeof(long));
+      if (!LOAD(opt_mig_bitmatrix[i],total_nodes,fp))
+        fatal("Cannot load migration bitmatrix");
+    }
   }
 
   #if 0
@@ -1190,13 +1258,39 @@ void load_chk_section_2(FILE * fp)
       }
     }
   }
-
   free(buffer);
+
+  if (opt_migration)
+  {
+    for (i = 0; i < total_nodes; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+      x->migevent_count = (long *)xcalloc((size_t)opt_locus_count,sizeof(long));
+      
+      if (!LOAD(x->migevent_count,opt_locus_count,fp))
+        fatal("Cannot read migevent_count");
+
+    }
+    for (i = 0; i < total_nodes; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+      x->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
+                                            sizeof(migbuffer_t));
+      if (!LOAD(&(x->mb_count), 1, fp))
+        fatal("Cannot read migbuffer count");
+
+      if (!LOAD(x->migbuffer, x->mb_count, fp))
+        fatal("Cannot load node migbuffers");
+    }
+
+    stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
+                                              sizeof(miginfo_t *));
+  }
 }
 
 static void load_gene_tree(FILE * fp, long index)
 {
-  long i;
+  long i,j;
   unsigned int gtree_tip_count = 0;
 
   gtree_t * gt = gtree[index];
@@ -1349,6 +1443,66 @@ static void load_gene_tree(FILE * fp, long index)
 
   if (!LOAD(&(gt->original_index),1,fp))
     fatal("Cannot read gene tree original index");
+
+  if (opt_migration)
+  {
+    /* mi structure */
+    for (i = 0; i < gt->tip_count+gt->inner_count; ++i)
+    {
+      gnode_t * x = gt->nodes[i];
+      long mi_count = 0;
+      double mi_time = 0;
+      unsigned int src_node_index;
+      unsigned int tgt_node_index;
+      
+
+      x->mi = NULL;
+
+      if (!LOAD(&mi_count,1,fp))
+        fatal("Cannot load number of migration events on branch");
+
+      if (!mi_count) continue;
+
+      for (j = 0; j < mi_count; ++j)
+      {
+        if (!LOAD(&mi_time,1,fp))
+          fatal("Cannot load migration event time");
+
+        if (!LOAD(&src_node_index,1,fp))
+          fatal("Cannot load migration event source index");
+
+        if (!LOAD(&tgt_node_index,1,fp))
+          fatal("Cannot load migration event source index");
+
+        miginfo_append(&(x->mi),
+                       stree->nodes[src_node_index],
+                       stree->nodes[tgt_node_index],
+                       mi_time);
+      }
+      assert(x->mi->count == mi_count);
+    }
+
+    /*  migcount */
+    long total_snodes = stree->tip_count+stree->inner_count;
+
+    void * mem = xmalloc((size_t)(total_snodes*total_snodes)*sizeof(long) +
+                         (size_t)total_snodes * sizeof(long *));
+    gt->migcount = (long **)mem;
+    gt->migcount[0] = (long *)(gt->migcount+total_snodes);
+    memset(gt->migcount[0],0,total_snodes*sizeof(long));
+    for (i = 1; i < total_snodes; ++i)
+    {
+      gt->migcount[i] = (long *)(gt->migcount[i-1] + total_snodes);
+      memset(gt->migcount[i],0,total_snodes*sizeof(long));
+    }
+    for (i = 0; i < total_snodes; ++i)
+    {
+      if (!LOAD(gt->migcount[i],total_snodes,fp))
+        fatal("Cannot load migcounts");
+    }
+
+    gt->migpops = (snode_t **)xcalloc((size_t)total_snodes, sizeof(snode_t *));
+  }
 }
 
 static void load_chk_section_3(FILE * fp, long msa_count)
@@ -1571,8 +1725,13 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * pjump_spr,
                     long * pjump_snl,
                     double * mean_logl,
+                    long ** mean_mrate_row,
+                    long ** mean_mrate_col,
+                    long ** mean_mrate_round,
+                    double ** mean_mrate,
                     double ** mean_tau,
                     double ** mean_theta,
+                    long * mean_mrate_count,
                     long * mean_tau_count,
                     long * mean_theta_count,
                     double * mean_phi,
@@ -1619,8 +1778,13 @@ int checkpoint_load(gtree_t *** gtreep,
                      pjump_spr,
                      pjump_snl,
                      mean_logl,
+                     mean_mrate_row,
+                     mean_mrate_col,
+                     mean_mrate_round,
+                     mean_mrate,
                      mean_tau,
                      mean_theta,
+                     mean_mrate_count,
                      mean_tau_count,
                      mean_theta_count,
                      mean_phi,

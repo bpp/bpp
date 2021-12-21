@@ -1129,22 +1129,21 @@ static void set_migration_rates(stree_t * stree)
 
       if (x == y)
       {
-        if (opt_migration_matrix[i*nodes_count + j] > 0) reset_count++;
-        opt_migration_matrix[i*nodes_count+j] = 0;
+        if (opt_migration_matrix[i][j] > 0) reset_count++;
+        opt_migration_matrix[i][j] = 0;
       }
       else if (stree->pptable[x->node_index][y->node_index] ||
                stree->pptable[y->node_index][x->node_index] ||
                x->tau > y->parent->tau ||
                y->tau > x->parent->tau)
       {
-        if (opt_migration_matrix[i*nodes_count + j] > 0) reset_count++;
-        if (opt_migration_matrix[j*nodes_count + i] > 0) reset_count++;
-        if (opt_migration_matrix[i*nodes_count + j] > 0 ||
-            opt_migration_matrix[j*nodes_count+i] > 0)
+        if (opt_migration_matrix[i][j] > 0) reset_count++;
+        if (opt_migration_matrix[j][i] > 0) reset_count++;
+        if (opt_migration_matrix[i][j] > 0 || opt_migration_matrix[j][i] > 0)
           fprintf(stderr,
                   "\nMigration between %s and %s is impossible...\n",
                   x->label, y->label);
-        opt_migration_matrix[i*nodes_count+j] = opt_migration_matrix[j*nodes_count+i] = -1;
+        opt_migration_matrix[i][j] = opt_migration_matrix[j][i] = -1;
       }
     }
   }
@@ -1155,24 +1154,24 @@ static void set_migration_rates(stree_t * stree)
 
   /* print migration matrix on screen */
   fprintf(stdout, "\nMigration matrix:\n");
-  for (i = 0; i < nodes_count*nodes_count; ++i)
+  for (i = 0; i < nodes_count; ++i)
   {
-    printf(" %f", opt_migration_matrix[i]);
-    if (i && ((i+1) % nodes_count) == 0)
-      printf("\n");
+    for (j = 0; j < nodes_count; ++j)
+      printf(" %f", opt_migration_matrix[i][j]);
+    printf("\n");
   }
 
   for (i = 0; i < nodes_count; ++i)
     for (j = 0; j < nodes_count; ++j)
-      if (opt_migration_matrix[i*nodes_count+j] < 0)
-        opt_migration_matrix[i*nodes_count+j] = 0;
+      if (opt_migration_matrix[i][j] < 0)
+        opt_migration_matrix[i][j] = 0;
 
   long needtheta;
   long die = 0;
   for (i = 0; i < stree->tip_count; ++i)
   {
     for (j = 0, needtheta=0; j < nodes_count; ++j)
-      if (opt_migration_matrix[j*nodes_count+i]) needtheta = 1;
+      if (opt_migration_matrix[j][i]) needtheta = 1;
     if (needtheta && stree->nodes[i]->theta <= 0)
     {
       fprintf(stderr, " [Error]: theta for %s should be > 0\n", stree->nodes[i]->label);
@@ -1644,19 +1643,18 @@ static void simulate(stree_t * stree)
 
   if (opt_migration)
   {
-    long matrix_size = opt_migration * opt_migration;
-
-    for (i = 0; i < matrix_size; ++i)
-      opt_migration_events[i] /= opt_locus_count;
+    for (i = 0; i < opt_migration; ++i)
+      for (j = 0; j < opt_migration; ++j)
+        opt_migration_events[i][j] /= opt_locus_count;
 
     printf("\nCounts of migration events averaged over replicates: %8.4f\n",
            tmrca / opt_locus_count);
     /* print migration matrix on screen */
-    for (i = 0; i < matrix_size; ++i)
+    for (i = 0; i < opt_migration; ++i)
     {
-      printf(" %f", opt_migration_events[i]);
-      if (i && ((i+1) % opt_migration) == 0)
-        printf("\n");
+      for (j = 0; j < opt_migration; ++j)
+        printf(" %f", opt_migration_events[i][j]);
+      printf("\n");
     }
   }
 
@@ -1917,6 +1915,11 @@ void cmd_simulate()
 
   for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
     stree->nodes[i]->tau = stree->nodes[i]->length;
+  
+  if (opt_migration)
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      stree->nodes[i]->migevent_count = (long *)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(long));
 
   /* allocate and set pptable */
   stree_init_pptable(stree);
@@ -1970,19 +1973,21 @@ void cmd_simulate()
   process_diploid(stree->tip_count);
 
   simulate(stree);
-  if (opt_migration)
-  {
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      free(opt_migration_labels[i]);
-    free(opt_migration_labels);
-
-    free(opt_migration_matrix);
-    free(opt_migration_events);
-  }
-
 
   stree_destroy(stree,free);
 
   if (opt_diploid)
     free(opt_diploid);
+  if (opt_migration)
+  {
+    for (i = 0; i < opt_migration; ++i)
+    {
+      free(opt_migration_matrix[i]);
+      free(opt_migration_events[i]);
+      free(opt_migration_labels[i]);
+    }
+    free(opt_migration_matrix);
+    free(opt_migration_events);
+    free(opt_migration_labels);
+  }
 }

@@ -1560,6 +1560,50 @@ l_unwind:
   return ret;
 }
 
+static long parse_migprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_double(p, &opt_mig_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_mig_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
+  count = get_double(p, &opt_pseudo_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read second token */
+  count = get_double(p, &opt_pseudo_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p)) ret = 1;
+
+  
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_heredity(const char * line)
 {
   long ret = 0;
@@ -1837,6 +1881,18 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
+  /* 16. migration rate finetune */
+  count = get_doubleordash(p, &opt_finetune_migrates);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+  {
+    ret = 1;
+    goto l_unwind;
+  }
+
   if (is_emptyline(p)) ret = 1;
 
 l_unwind:
@@ -2006,6 +2062,55 @@ static long parse_speciesandtree(const char * line, long * spcount)
   free(seqnames);
   if (!seq_count) ret = 1;
 
+l_unwind:
+  free(s);
+  return ret;
+}
+
+static long parse_migration(FILE * fp, const char * firstline, long line_count)
+{
+  long i;
+  long ret = 1;
+  long count;
+  char * s = xstrdup(firstline);
+  char * p = s;
+
+  count = get_long(p, &opt_migration);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!opt_migration && is_emptyline(p)) goto l_unwind;
+
+  ret = 0;
+
+  if (!is_emptyline(p)) goto l_unwind;
+
+  opt_mig_source = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
+  opt_mig_target = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
+
+  /* start reading potential migration between populations */
+  for (i = 0; i < opt_migration; ++i)
+  {
+    if (!getnextline(fp))
+      fatal("Incomplete 'migration' record (line %ld)", line_count+1);
+
+    char * ss = xstrdup(line);
+    p = ss;
+
+    count = get_delstring(p, " \t\r\n*#,-", opt_mig_source+i);
+    if (!count) goto l_unwind;
+    p += count;
+
+    count = get_delstring(p, " \t\r\n*#,-", opt_mig_target+i);
+    if (!count) goto l_unwind;
+    p += count;
+    
+    free(ss);
+  }
+  ret = 1;
+
+  
 l_unwind:
   free(s);
   return ret;
@@ -2592,6 +2697,12 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"migprior",8))
+      {
+        if (!parse_migprior(value))
+          fatal("Option 'migprior' expects two doubles (line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 9)
     {
@@ -2607,6 +2718,12 @@ void load_cfile()
       {
         if (!parse_locusrate(value))
           fatal("Erroneous format of 'locusrate' (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"migration",9))
+      {
+        if (!parse_migration(fp,value,line_count))
+          fatal("Erroneous format of 'migration' (line %ld)", line_count);
         valid = 1;
       }
     }

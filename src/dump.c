@@ -136,7 +136,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
      size_section += opt_locus_count*sizeof(long);
     
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -185,8 +185,13 @@ static void dump_chk_section_1(FILE * fp,
                                long pjump_spr,
                                long pjump_snl,
                                double mean_logl,
+                               long * mean_mrate_row,
+                               long * mean_mrate_col,
+                               long * mean_mrate_round,
+                               double * mean_mrate,
                                double * mean_tau,
                                double * mean_theta,
+                               long mean_mrate_count,
                                long mean_tau_count,
                                long mean_theta_count,
                                double mean_phi,
@@ -195,6 +200,7 @@ static void dump_chk_section_1(FILE * fp,
 {
   size_t i;
   unsigned int hoffset = stree->tip_count+stree->inner_count;
+  unsigned int total_nodes = hoffset+stree->hybrid_count;
 
   /* write seed */
   DUMP(&opt_seed,1,fp);
@@ -232,6 +238,9 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write network info */
   DUMP(&opt_msci,1,fp);
+
+  /* write migration info */
+  DUMP(&opt_migration,1,fp);
 
   /* write method info */
   DUMP(&opt_method,1,fp);
@@ -305,6 +314,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_phi_alpha,1,fp);
   DUMP(&opt_phi_beta,1,fp);
 
+  DUMP(&opt_mig_alpha,1,fp);
+  DUMP(&opt_mig_beta,1,fp);
+
   /* write substitution model information */
   DUMP(&opt_model,1,fp);
 
@@ -338,6 +350,7 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
+  DUMP(&opt_finetune_migrates,1,fp);
   DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
@@ -383,7 +396,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 
@@ -419,6 +432,14 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&pjump_spr, 1, fp);
   DUMP(&pjump_snl,1,fp);
   DUMP(&mean_logl,1,fp);
+  if (opt_migration)
+  {
+    DUMP(&mean_mrate_count,1,fp);
+    DUMP(mean_mrate,mean_mrate_count,fp);
+    DUMP(mean_mrate_row, mean_mrate_count, fp);
+    DUMP(mean_mrate_col, mean_mrate_count, fp);
+    DUMP(mean_mrate_round, mean_mrate_count, fp);
+  }
   DUMP(&mean_tau_count,1,fp);
   if (opt_est_theta)
     DUMP(&mean_theta_count,1,fp);
@@ -435,12 +456,22 @@ static void dump_chk_section_1(FILE * fp,
   if (opt_threads > 1)
   {
     thread_info_t * ti = threads_ti();
-    for (i = 0; i < opt_threads; ++i)
+    for (i = 0; i < (size_t)opt_threads; ++i)
     {
       thread_info_t * tip = ti+i;
       DUMP(&(tip->locus_first),1,fp);
       DUMP(&(tip->locus_count),1,fp);
     }
+  }
+
+  if (opt_migration)
+  {
+    assert(stree->hybrid_count == 0);
+    for (i = 0; i < total_nodes; ++i)
+      DUMP(opt_migration_matrix[i],total_nodes,fp);
+
+    for (i = 0; i < total_nodes; ++i)
+      DUMP(opt_mig_bitmatrix[i],total_nodes,fp);
   }
 }
 
@@ -594,13 +625,27 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
         di = di->next;
       }
     }
+  }
 
+  /* write migevent_count */
+  if (opt_migration)
+  {
+    for (i = 0; i < total_nodes; ++i)
+      DUMP(stree->nodes[i]->migevent_count,opt_locus_count,fp);
+
+    for (i = 0; i < total_nodes; ++i)
+    {
+      DUMP(&(stree->nodes[i]->mb_count),1,fp);
+      DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
+    }
   }
 }
 
-static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count)
+static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
 {
-  long i;
+  long i,j;
+
+  unsigned int hybrid_count = stree->hybrid_count;
 
   /* write gene tree tip labels */
   for (i = 0; i < gtree->tip_count; ++i)
@@ -654,6 +699,36 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, unsigned int hybrid_count
   }
 
   DUMP(&(gtree->original_index),1,fp);
+
+  if (opt_migration)
+  {
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    {
+      miginfo_t * mi = gtree->nodes[i]->mi;
+
+      if (!mi || mi->count == 0)
+      {
+        long mi_count = 0;
+        DUMP(&mi_count,1,fp);
+        continue;
+      }
+
+      DUMP(&(mi->count),1,fp);
+      for (j = 0; j < mi->count; ++j)
+      {
+        DUMP(&(mi->time[j]),1,fp);
+        DUMP(&(mi->source[j]->node_index),1,fp);
+        DUMP(&(mi->target[j]->node_index),1,fp);
+      }
+
+    }
+
+    /* migcount */
+    long total_snodes = stree->tip_count+stree->inner_count;
+    for (i = 0; i < total_snodes; ++i)
+      DUMP(gtree->migcount[i],total_snodes,fp);
+  }
+  
 }
 
 static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
@@ -762,7 +837,7 @@ static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, stree_t * stree
 
   for (i = 0; i < msa_count; ++i)
   {
-    dump_gene_tree(fp,gtree_list[i],stree->hybrid_count);
+    dump_gene_tree(fp,gtree_list[i],stree);
   }
 }
 
@@ -802,8 +877,13 @@ int checkpoint_dump(stree_t * stree,
                     long pjump_spr,
                     long pjump_snl,
                     double mean_logl,
+                    long * mean_mrate_row,
+                    long * mean_mrate_col,
+                    long * mean_mrate_round,
+                    double * mean_mrate,
                     double * mean_tau,
                     double * mean_theta,
+                    long mean_mrate_count,
                     long mean_tau_count,
                     long mean_theta_count,
                     double mean_phi,
@@ -851,8 +931,13 @@ int checkpoint_dump(stree_t * stree,
                      pjump_spr,
                      pjump_snl,
                      mean_logl,
+                     mean_mrate_row,
+                     mean_mrate_col,
+                     mean_mrate_round,
+                     mean_mrate,
                      mean_tau,
                      mean_theta,
+                     mean_mrate_count,
                      mean_tau_count,
                      mean_theta_count,
                      mean_phi,
