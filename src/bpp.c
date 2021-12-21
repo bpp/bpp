@@ -711,11 +711,6 @@ void args_init(int argc, char ** argv)
         opt_exp_sim = 1;
         break;
 
-      case 36:
-        opt_cfile = xstrdup(optarg);
-        opt_onlysummary = 1;
-        break;
-
       default:
         fatal("Internal error in option parsing");
     }
