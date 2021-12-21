@@ -21,8 +21,12 @@
 
 #include "bpp.h"
 
-#define mBactrian  0.95
+#define mBactrian  0.90
 #define sBactrian  sqrt(1-mBactrian*mBactrian)
+#define aBox 0.5
+#define bBox (sqrt(12 - 3*aBox*aBox) - aBox) / 2
+#define aAirplane 1.0
+#define aStrawhat 1.0
 
 /* legacy random number generators */
 static unsigned int * z_rndu = NULL;
@@ -122,12 +126,76 @@ static double rndTriangle(long index)
 	return z;
 }
 
+static double getRoot(double(*f)(double), double(*df)(double), double initVal)
+{
+   double x, newx = initVal;
+   int nIter = 0;
+   do {
+      x = newx;
+      newx = x - (*f)(x) / (*df)(x);
+      nIter++;
+   } while ((fabs(x - newx) > 1e-10) && nIter < 100);
+
+   if (fabs(x - newx) > 1e-10) {
+      fatal("root finder didn't converge");
+   }
+   return(newx);
+}
+
+static double BStrawhat(double b) {
+   return 5 * b*b*b - 15 * b + 10 * aStrawhat - 2 * aStrawhat*aStrawhat*aStrawhat;
+}
+
+static double dBStrawhat(double b) {
+   return 15 * b*b - 15;
+}
+
+static double rndStrawhat(long index)
+{
+   static int firsttime = 1;
+   static double bStrawhat;
+   double z;
+
+   if (firsttime) {
+      bStrawhat = getRoot(&BStrawhat, &dBStrawhat, 2.0);
+      firsttime = 0;
+   }
+   if (legacy_rndu(index) < aStrawhat / ((3 * bStrawhat - 2 * aStrawhat))) {
+      /* sample from Strawhat part */
+      z = aStrawhat * pow(legacy_rndu(index), 1.0 / 3.0);
+   }
+   else {
+      /* sample from the box part */
+      z = legacy_rndu(index) * (bStrawhat - aStrawhat) + aStrawhat;
+   }
+   return (legacy_rndu(index) < 0.5 ? -z : z);
+}
+
 static double rndBactrianTriangle(long index)
 {
 /* This returns a variate from the 1:1 mixture of two Triangle Tri(-m, 1-m^2) and Tri(m, 1-m^2),
    which has mean 0 and variance 1. 
 */
    double z = mBactrian + rndTriangle(index)*sBactrian;
+   if (legacy_rndu(index) < 0.5) z = -z;
+   return (z);
+}
+
+static double rndLaplace(long index)
+{
+   /* Standard Laplace variate, generated using inverse CDF  */
+   double u, r;
+   u = legacy_rndu(index) - 0.5;
+   r = log(1 - 2 * fabs(u)) * 0.70710678118654752440;
+   return (u >= 0 ? -r : r);
+}
+
+static double rndBactrianLaplace(long index)
+{
+   /* This returns a variate from the 1:1 mixture of two Laplace Lap(-m, 1-m^2) and Lap(m, 1-m^2),
+      which has mean 0 and variance 1.
+   */
+   double z = mBactrian + rndLaplace(index)*sBactrian;
    if (legacy_rndu(index) < 0.5) z = -z;
    return (z);
 }
@@ -154,7 +222,12 @@ double rndNormal(long index)
 
 double legacy_rnd_symmetrical(long index)
 {
+  #if 0
   return rndBactrianTriangle(index);
+  #else
+  return rndBactrianLaplace(index);
+  /* return rndStrawhat(index); */
+  #endif
 }
 
 double legacy_rndgamma (long index, double a)
