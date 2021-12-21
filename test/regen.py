@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 # Copyright (C) 2016-2019 Tomas Flouri, Bruce Rannala and Ziheng Yang
 #
@@ -29,7 +29,7 @@ import urllib
 
 #define hash for stable bpp version
 
-opt_stable_hash = "9cccf07fa1f07ca2d790c67e9498561cca0a6985"
+opt_stable_hash = "c6aadc38edf1a8bc740d38e975bd9e994846ea64"
 
 #define path to BPP binary
 opt_bpp_bin = ""
