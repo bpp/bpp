@@ -347,6 +347,12 @@ void stree_destroy(stree_t * tree,
     if (node->mark)
       free(node->mark);
 
+    if (opt_migration && node->migevent_count)
+      free(node->migevent_count);
+
+    if (opt_migration && node->migbuffer)
+      free(node->migbuffer);
+
     free(node);
   }
 
@@ -359,6 +365,13 @@ void stree_destroy(stree_t * tree,
       if (tree->pptable[i])
         free(tree->pptable[i]);
     free(tree->pptable);
+  }
+
+  if (tree->mi_tbuffer)
+  {
+    for (i = 0; i < opt_threads; ++i)
+      miginfo_destroy(tree->mi_tbuffer[i]);
+    free(tree->mi_tbuffer);
   }
 
   /* deallocate tree structure */

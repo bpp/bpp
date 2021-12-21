@@ -123,6 +123,27 @@ static void * threads_worker(void * vp)
                                     &tip->td.logpr_diff,
                                     t);
           break;
+        case THREAD_WORK_TAU_MIG:
+          propose_tau_update_gtrees_mig(tip->td.locus,
+                                        tip->td.gtree,
+                                        tip->td.stree,
+                                        tip->td.snode,
+                                        tip->td.oldage,
+                                        tip->td.minage,
+                                        tip->td.maxage,
+                                        tip->td.minfactor,
+                                        tip->td.maxfactor,
+                                        tip->locus_first,
+                                        tip->locus_count,
+                                        tip->td.affected,
+                                        tip->td.paffected_count,
+                                        &tip->td.mig_reject,
+                                        &tip->td.count_above,
+                                        &tip->td.count_below,
+                                        &tip->td.logl_diff,
+                                        &tip->td.logpr_diff,
+                                        t);
+          break;
         case THREAD_WORK_MIXING:
           prop_mixing_update_gtrees(tip->td.locus,
                                     tip->td.gtree,
@@ -524,6 +545,29 @@ void threads_wakeup(int work_type, thread_data_t * data)
     for (t = 0; t < opt_threads; ++t)
     {
       thread_info_t * tip = ti+t;
+
+      data->count_above += tip->td.count_above;
+      data->count_below += tip->td.count_below;
+      data->logl_diff   += tip->td.logl_diff;
+      data->logpr_diff  += tip->td.logpr_diff;
+    }
+  }
+  else if (work_type == THREAD_WORK_TAU_MIG)
+  {
+    data->count_above = 0;
+    data->count_below = 0;
+    data->logl_diff = 0;
+    data->logpr_diff = 0;
+    data->mig_reject = 0;
+    for (t = 0; t < opt_threads; ++t)
+    {
+      thread_info_t * tip = ti+t;
+
+      if (tip->td.mig_reject)
+      {
+        data->mig_reject = 1;
+        break;
+      }
 
       data->count_above += tip->td.count_above;
       data->count_below += tip->td.count_below;

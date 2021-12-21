@@ -76,6 +76,22 @@ void prop_mixing_update_gtrees(locus_t ** locus,
       gt->nodes[j]->time *= c;
     }
 
+    /* migration */
+    if (opt_migration)
+    {
+      for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
+      {
+        if (!gt->nodes[j]->mi || !gt->nodes[j]->mi->count) continue;
+        miginfo_t * mi = gt->nodes[j]->mi;
+
+        for (k = 0; k < mi->count; ++k)
+        {
+          mi->old_time[k] = mi->time[k];
+          mi->time[k] *= c;
+        }
+      }
+    }
+
     /* update branch lengths */
     for (j = 0; j < gt->tip_count+gt->inner_count; ++j)
     {
@@ -113,9 +129,23 @@ void prop_mixing_update_gtrees(locus_t ** locus,
 
 
     if (opt_est_theta)
-      logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+    {
+      if (opt_migration)
+      {
+        logpr = gtree_logprob_mig(stree,
+                                  gtree[i],
+                                  locus[i]->heredity[0],
+                                  i,
+                                  thread_index);
+      }
+      else
+        logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+    }
     else
     {
+      if (opt_migration)
+        fatal("Integrating out thetas for IM model not implemented yet");
+
       for (j = 0; j < nodes_count; ++j)
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
@@ -220,6 +250,16 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     k += gtree[i]->inner_count; 
 
   lnacceptance = (theta_count + tau_count + k)*lnc;
+
+  /* account for migration events */
+  if (opt_migration)
+  {
+    for (i=0,k=0; i < stree->locus_count; ++i)
+      for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+        if (gtree[i]->nodes[j]->mi)
+          k += gtree[i]->nodes[j]->mi->count;
+    lnacceptance += k*lnc;
+  }
 
   /* TODO: skip this for integrated-out theta */
   /* TODO: This loop separation is for having the same traversal as old bpp */
@@ -334,6 +374,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   
   if (!opt_est_theta)
     logpr = stree->notheta_logpr;
+
+  if (opt_migration)
+    stree_update_mig_subpops(stree, thread_index);
 
   /* update gene trees with either parallel or serial code */
   if (opt_threads > 1)
@@ -485,6 +528,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
                                                 gnodeptr[j]->scaler_index);
         gnodeptr[j]->time = gnodeptr[j]->old_time;
       }
+      if (opt_migration)
+      {
+        for (j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+        {
+          if (!gtree[i]->nodes[j]->mi || !gtree[i]->nodes[j]->mi->count)
+            continue;
+
+          miginfo_t * mi = gtree[i]->nodes[j]->mi;
+          for (k = 0; k < mi->count; ++k)
+            mi->time[k] = mi->old_time[k];
+        }
+      }
 
       /* revert trans prob matrices */
       for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
@@ -495,6 +550,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
         gtree[i]->lnprior_rates = gtree[i]->old_lnprior_rates;
     }
+    if (opt_migration)
+      stree_update_mig_subpops(stree, thread_index);
   }
   free(snodes);
 
