@@ -247,15 +247,18 @@ static void init_tower(const char * phi1_label,
                        long * pindex,
                        long * tower)
 {
-  long i;
+  long i, j;
+  double epsilon = 1e-9;
 
   for (i = 0; i < opt_samples; ++i)
   {
-    if (matrix[pindex[0]][i] <= 0 || matrix[pindex[0]][i] >= 1)
-      fatal("phi_%s out of range", phi1_label);
-    if (matrix[pindex[1]][i] <= 0 || matrix[pindex[1]][i] >= 1)
-      fatal("phi_%s out of range", phi2_label);
-
+    for (j = 0; j < 2; ++j) 
+    {
+      if (matrix[pindex[j]][i] < 0 || matrix[pindex[0]][i] > 1)
+        fatal("phi_%s = %.6g, out of range", phi1_label, matrix[pindex[0]][i]);
+      matrix[pindex[j]][i] = MAX(matrix[pindex[j]][i], epsilon);
+      matrix[pindex[j]][i] = MIN(matrix[pindex[j]][i], 1 - epsilon);
+    }
     tower[i] = (matrix[pindex[0]][i] < .5 || matrix[pindex[1]][i] < .5) ? 0 : 1;
   }
 
