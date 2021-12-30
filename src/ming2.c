@@ -35,20 +35,23 @@ static double Small_Diff = 1e-6;  /* reasonable values 1e-5, 1e-7 */
 
 static int zero(double x[], int n)
 {
-   for (int i = 0; i < n; i++) x[i] = 0; 
+   int i;
+   for (i = 0; i < n; i++) x[i] = 0; 
    return (0);
 }
 
 static int xtoy(double x[], double y[], int n)
 {
-   for (int i = 0; i < n; i++) y[i] = x[i];
+   int i;
+   for (i = 0; i < n; i++) y[i] = x[i];
    return(0);
 }
 
 static int identity(double x[], int n)
 {
-   for (int i = 0; i < n; i++) { 
-     for (int j = 0; j < n; j++)
+   int i, j;
+   for (i = 0; i < n; i++) {
+     for (j = 0; j < n; j++)
        x[i * n + j] = 0;
      x[i * n + i] = 1;
    }  
@@ -57,19 +60,26 @@ static int identity(double x[], int n)
 
 static double distance(double x[], double y[], int n)
 {
+   int i;
    double t = 0;
-   for (int i = 0; i < n; i++) t += square(x[i] - y[i]);
+   for (i = 0; i < n; i++) t += square(x[i] - y[i]);
    return(sqrt(t));
 }
 
 static double innerp(double x[], double y[], int n)
 {
-   double t = 0;  for (int i = 0; i < n; i++)  t += x[i] * y[i];  return(t);
+   int i;
+   double t = 0;  
+   for (i = 0; i < n; i++)  t += x[i] * y[i];
+   return(t);
 }
 
 static double norm(double x[], int n)
 {
-   double t = 0;  for (int i = 0; i < n; i++)  t += x[i] * x[i];  return sqrt(t);
+   int i;
+   double t = 0;  
+   for (i = 0; i < n; i++)  t += x[i] * x[i];  
+   return sqrt(t);
 }
 
 static int H_end(double x0[], double x1[], double f0, double f1, double e1, double e2, int n)
