@@ -1059,7 +1059,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         if (opt_mig_bitmatrix[i][j])
           fprintf(fp,
-                  "\tm_%s->%s",
+                  "\tM_%s->%s",
                   stree->nodes[i]->label,
                   stree->nodes[j]->label);
   }
