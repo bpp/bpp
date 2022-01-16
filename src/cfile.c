@@ -1468,7 +1468,7 @@ static long parse_tauprior(const char * line)
 
   /* peak at the first argument. If not a double then read distribution type
      otherwise read the arguments of invgamma (default) */
-  count = get_double(p, &opt_theta_alpha);
+  count = get_double(p, &opt_tau_alpha);
   if (!count)
   {
     count = get_delstring(p, " \t\r\n*#,", &dist);
