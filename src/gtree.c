@@ -3894,6 +3894,8 @@ static long propose_migevent_ages(locus_t * locus,
       tnew = mi->time[j] + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);
       tnew = reflect(tnew, minage, maxage, thread_index);
 
+      mi->time[j] = tnew;
+
       if (opt_est_theta)
         logpr = gtree->logpr;
       else
@@ -3943,6 +3945,8 @@ static long propose_migevent_ages(locus_t * locus,
       else
       {
         /* rejected */
+        mi->time[j] = mi->old_time[j];
+
         if (opt_est_theta)
         {
           mi->source[j]->logpr_contrib[msa_index] = mi->source[j]->old_logpr_contrib[msa_index];
