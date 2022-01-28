@@ -601,6 +601,14 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->locusrate_mubar = stree->locusrate_mubar;
   clone->locusrate_nubar = stree->locusrate_nubar;
   clone->nui_sum = stree->nui_sum;
+  
+  if (opt_migration)
+  {
+    for (i = 0; i < nodes_count; ++i)
+      memcpy(clone->migcount_sum[i],
+             stree->migcount_sum[i],
+             nodes_count*sizeof(long));
+  }
 }
 
 stree_t * stree_clone_init(stree_t * stree)
@@ -608,6 +616,7 @@ stree_t * stree_clone_init(stree_t * stree)
   unsigned int i;
   unsigned nodes_count = stree->tip_count + stree->inner_count;
   stree_t * clone;
+  long ** migcount_sum = NULL;
 
   clone = (stree_t *)xcalloc(1, sizeof(stree_t));
   memcpy(clone, stree, sizeof(stree_t));
@@ -638,8 +647,21 @@ stree_t * stree_clone_init(stree_t * stree)
   clone->root = clone->nodes[stree->root->node_index];
 
   clone->mi_tbuffer = NULL;
+  clone->migcount_sum = NULL;
   if (opt_migration)
   {
+    void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
+                         (size_t)nodes_count*sizeof(long *));
+    migcount_sum = (long **)mem;
+    migcount_sum[0] = (long *)(migcount_sum+nodes_count);
+    memcpy(migcount_sum[0],stree->migcount_sum[0],nodes_count*sizeof(long));
+    for (i = 1; i < nodes_count; ++i)
+    {
+      migcount_sum[i] = (long *)(migcount_sum[i-1] + nodes_count);
+      memcpy(migcount_sum[i],stree->migcount_sum[i],nodes_count*sizeof(long));
+    }
+    clone->migcount_sum = migcount_sum;
+
     clone->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
   }
@@ -2150,6 +2172,7 @@ void stree_init(stree_t * stree,
                 FILE * fp_out)
 {
   unsigned int i, j;
+  long ** migcount_sum = NULL;
 
   long thread_index = 0;
 
@@ -2187,6 +2210,7 @@ void stree_init(stree_t * stree,
     stree_init_phi(stree);
 
   stree->mi_tbuffer = NULL;
+  stree->migcount_sum = NULL;
   if (opt_migration)
   {
     /* reset the number of migration events associated with each population */
@@ -2198,6 +2222,20 @@ void stree_init(stree_t * stree,
                                                           sizeof(migbuffer_t));
     stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
+
+    unsigned int nodes_count = stree->tip_count+stree->inner_count;
+    void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
+                         (size_t)nodes_count*sizeof(long *));
+    migcount_sum = (long **)mem;
+    migcount_sum[0] = (long *)(migcount_sum+nodes_count);
+    memset(migcount_sum[0],0,nodes_count*sizeof(long));
+    for (i = 1; i < nodes_count; ++i)
+    {
+      migcount_sum[i] = (long *)(migcount_sum[i-1] + nodes_count);
+      memset(migcount_sum[i],0,nodes_count*sizeof(long));
+    }
+
+    stree->migcount_sum = migcount_sum;
   }
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
@@ -3888,6 +3926,7 @@ static double logPDFGamma(double x, double a, double b)
       fatal("large alpha in PDFGamma()");
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
+
 static long propose_tau_mig(locus_t ** loci,
                             snode_t * snode,
                             gtree_t ** gtree,

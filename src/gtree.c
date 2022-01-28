@@ -1308,6 +1308,7 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
       long s = gtree->root->mi->target[i]->node_index;
       long t = gtree->root->mi->source[i]->node_index;
       gtree->migcount[s][t]++;
+      stree->migcount_sum[s][t]++;
 
       if (gtree->root->mi->source[i] != pop)
       {
@@ -1428,6 +1429,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       migcount[i] = (long *)(migcount[i-1] + total_nodes);
       memset(migcount[i],0,total_nodes*sizeof(long));
     }
+    assert(stree->migcount_sum);
   }
 
   /* create one hash table of species and one for sequence->species mappings */
@@ -1723,6 +1725,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
         /* increase # of migrations from pop k to j (forward in time) */
         migcount[pop[k].snode->node_index][pop[j].snode->node_index]++;
+        stree->migcount_sum[pop[k].snode->node_index][pop[j].snode->node_index]++;
         if (i != --pop[j].seq_count)
         {
           pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
@@ -6429,7 +6432,10 @@ static double simulate_coalescent_mig(stree_t * stree,
   return t;
 }
 
-static void subtree_prune(gtree_t * gtree, gnode_t * curnode, long msa_index)
+static void subtree_prune(stree_t * stree,
+                          gtree_t * gtree,
+                          gnode_t * curnode,
+                          long msa_index)
 {
   long i;
 
@@ -6469,6 +6475,7 @@ static void subtree_prune(gtree_t * gtree, gnode_t * curnode, long msa_index)
       long s = curnode->mi->target[i]->node_index;
       long t = curnode->mi->source[i]->node_index;
       gtree->migcount[s][t]--;
+      stree->migcount_sum[s][t]--;
 
       if (curnode->mi->source[i] != curpop)
       {
@@ -6521,7 +6528,8 @@ static void subtree_prune(gtree_t * gtree, gnode_t * curnode, long msa_index)
   }
 }
 
-static void subtree_regraft(gtree_t * gtree,
+static void subtree_regraft(stree_t * stree,
+                            gtree_t * gtree,
                             gnode_t * curnode,
                             gnode_t * father,
                             gnode_t * target,
@@ -6604,6 +6612,7 @@ static void subtree_regraft(gtree_t * gtree,
       long s = curnode->mi->target[i]->node_index;
       long t = curnode->mi->source[i]->node_index;
       gtree->migcount[s][t]++;
+      stree->migcount_sum[s][t]++;
 
       if (curnode->mi->source[i] != curpop)
       {
@@ -6676,7 +6685,7 @@ static long propose_spr_sim(locus_t * locus,
     old_mi_count = (opt_migration && curnode->mi) ? curnode->mi->count : 0;
 
     /* prune, move migrations from father to sibling and save curnode migs */
-    subtree_prune(gtree,curnode,msa_index);
+    subtree_prune(stree,gtree,curnode,msa_index);
 
     /* store old array of migration events for restoring in case of rejection */
     if (opt_migration)
@@ -6710,7 +6719,7 @@ static long propose_spr_sim(locus_t * locus,
     target = travbuffer[j];
 
     /* regraft */
-    subtree_regraft(gtree,curnode,father,target,newpop,tnew,msa_index);
+    subtree_regraft(stree,gtree,curnode,father,target,newpop,tnew,msa_index);
 
     /* update necessary p-matrices */
     k = 0;
@@ -6856,14 +6865,14 @@ static long propose_spr_sim(locus_t * locus,
         SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
       /* prune */
-      subtree_prune(gtree,curnode,msa_index);
+      subtree_prune(stree,gtree,curnode,msa_index);
 
       /* restore original array of migration events on pruned edge */
       if (opt_migration)
         SWAP(stree->mi_tbuffer[thread_index], curnode->mi);
 
       /* regraft */
-      subtree_regraft(gtree,curnode,father,sibling,oldpop,told,msa_index);
+      subtree_regraft(stree,gtree,curnode,father,sibling,oldpop,told,msa_index);
 
       /* restore logpr */
       if (opt_migration)
