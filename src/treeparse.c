@@ -373,6 +373,8 @@ void stree_destroy(stree_t * tree,
       miginfo_destroy(tree->mi_tbuffer[i]);
     free(tree->mi_tbuffer);
   }
+  if (tree->migcount_sum)
+    free(tree->migcount_sum);
 
   /* deallocate tree structure */
   free(tree->nodes);
