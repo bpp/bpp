@@ -503,6 +503,7 @@ typedef struct stree_s
 
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
+  long ** migcount_sum;      /* migrations across loci */
 } stree_t;
 
 typedef struct gnode_s
