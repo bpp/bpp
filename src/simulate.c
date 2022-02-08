@@ -1096,27 +1096,52 @@ static void set_migration_rates(stree_t * stree)
 {
   long i,j;
 
-  assert(opt_migration_labels);
-
   assert(!opt_msci);
-
-  assert(opt_migration == stree->tip_count + stree->inner_count);
 
   long nodes_count = stree->tip_count + stree->inner_count;
 
-  /* check that the order of migration matrix labels corresponds to the order
-     of labels in tree->nodes */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (strcmp(stree->nodes[i]->label,opt_migration_labels[i]))
-      break;
-
-  if (i != stree->tip_count+stree->inner_count)
+  /* allocate migration matrix */
+  opt_migration_matrix = (double **)xmalloc(nodes_count*sizeof(double *));
+  opt_migration_events = (double **)xmalloc(nodes_count*sizeof(double *));
+  for (i = 0; i < nodes_count; ++i)
   {
-    fprintf(stderr, "Please use the following order for migration matrix cells:\n");
-    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      fprintf(stderr, "  %s\n", stree->nodes[i]->label);
-    fatal("Order of migration matrix entries mismatch.");
+    opt_migration_matrix[i] = (double *)xcalloc(nodes_count,sizeof(double));
+    opt_migration_events[i] = (double *)xcalloc(nodes_count,sizeof(double));
   }
+
+
+  for (i = 0; i < opt_migration; ++i)
+  {
+    long s,t;
+
+    for (j = 0; j < nodes_count; ++j)
+      if (!strcmp(opt_mig_source[i], stree->nodes[j]->label))
+        break;
+
+    if (j == nodes_count)
+      fatal("Invalid population name %s specified as source in 'migration' tag",
+            opt_mig_source[i]);
+    s = j;
+
+    for (j = 0; j < nodes_count; ++j)
+      if (!strcmp(opt_mig_target[i], stree->nodes[j]->label))
+        break;
+
+    if (j == nodes_count)
+      fatal("Invalid population name %s specified as target in 'migration' tag",
+            opt_mig_target[i]);
+    t = j;
+    
+    opt_migration_matrix[s][t] = opt_mig_simrate[i];
+  }
+  for (i = 0; i < opt_migration; ++i)
+  {
+    free(opt_mig_source[i]);
+    free(opt_mig_target[i]);
+  }
+  free(opt_mig_source);
+  free(opt_mig_target);
+  free(opt_mig_simrate);
 
   /* reset invalid entries in the migration matrix */
   long reset_count = 0;
@@ -1181,7 +1206,6 @@ static void set_migration_rates(stree_t * stree)
   if (die)
     fatal("Please fix the migration matrix in the control file");
 }
-
 
 static void simulate(stree_t * stree)
 {
@@ -1643,16 +1667,16 @@ static void simulate(stree_t * stree)
 
   if (opt_migration)
   {
-    for (i = 0; i < opt_migration; ++i)
-      for (j = 0; j < opt_migration; ++j)
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         opt_migration_events[i][j] /= opt_locus_count;
 
     printf("\nCounts of migration events averaged over replicates: %8.4f\n",
            tmrca / opt_locus_count);
     /* print migration matrix on screen */
-    for (i = 0; i < opt_migration; ++i)
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
-      for (j = 0; j < opt_migration; ++j)
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         printf(" %f", opt_migration_events[i][j]);
       printf("\n");
     }
@@ -1991,20 +2015,19 @@ void cmd_simulate()
 
   simulate(stree);
 
+  if (opt_migration)
+  {
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    {
+      free(opt_migration_matrix[i]);
+      free(opt_migration_events[i]);
+    }
+    free(opt_migration_matrix);
+    free(opt_migration_events);
+  }
+
   stree_destroy(stree,free);
 
   if (opt_diploid)
     free(opt_diploid);
-  if (opt_migration)
-  {
-    for (i = 0; i < opt_migration; ++i)
-    {
-      free(opt_migration_matrix[i]);
-      free(opt_migration_events[i]);
-      free(opt_migration_labels[i]);
-    }
-    free(opt_migration_matrix);
-    free(opt_migration_events);
-    free(opt_migration_labels);
-  }
 }

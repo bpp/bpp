@@ -1074,7 +1074,7 @@ extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
 extern double * opt_qrates_params;
-extern char ** opt_migration_labels;
+extern double * opt_mig_simrate;
 extern char ** opt_mig_source;
 extern char ** opt_mig_target;
 extern long ** opt_mig_bitmatrix;
