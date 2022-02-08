@@ -104,6 +104,7 @@ static long is_emptyline(const char * line)
   return 0;
 }
 
+#if 0
 static long starts_with_opar(const char * line)
 {
   size_t ws;
@@ -128,6 +129,7 @@ static long starts_with_opar(const char * line)
 
   return 1;
 }
+#endif
 
 static long get_tree_string_with_thetas(const char * line, char ** value)
 {
@@ -561,6 +563,7 @@ l_unwind:
   return ret;
 }
 
+#if 0
 static char ** split_strings(const char * x, long * token_count)
 {
   long i;
@@ -637,60 +640,98 @@ static char ** split_strings(const char * x, long * token_count)
 
   return token;
 }
+#endif
 
-static void parse_migration_matrix(FILE * fp, long line_count)
+/* get string from current position pointed by line until a delimiter. Create
+   new string with result, store it in value, and return number of characters
+   read */
+static long get_delstring(const char * line, const char * del, char ** value)
 {
-  long i,j;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
 
-  opt_migration_matrix = (double **)xmalloc(opt_migration*sizeof(double *));
-  opt_migration_events = (double **)xmalloc(opt_migration*sizeof(double *));
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters until a delimiter is found */
+  char * end = start + strcspn(start, del);
+
+  *end = 0;
+
+  if (start==end)
+  {
+    free(s);
+    return 0;
+  }
+
+  *value = xstrdup(start);
+
+  free(s);
+  return ws + end - start;
+}
+
+static long parse_migration(FILE * fp, const char * firstline, long line_count)
+{
+  long i;
+  long ret = 1;
+  long count;
+  char * s = xstrdup(firstline);
+  char * p = s;
+
+  count = get_long(p, &opt_migration);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!opt_migration && is_emptyline(p)) goto l_unwind;
+
+  ret = 0;
+
+  if (!is_emptyline(p)) goto l_unwind;
+  
+  opt_mig_source  = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
+  opt_mig_target  = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
+  opt_mig_simrate = (double *)xcalloc((size_t)opt_migration, sizeof(double));
+
+  /* start reading potential migration between populations */
   for (i = 0; i < opt_migration; ++i)
   {
-    opt_migration_matrix[i] = (double *)xmalloc(opt_migration*sizeof(double));
-    opt_migration_events[i] = (double *)xcalloc(opt_migration,sizeof(double));
-  }
-
-  if (!getnextline(fp))
-    fatal("Incomplete 'migration' record (line %ld)", line_count+1);
-
-  long matrix_dim = 0;
-  opt_migration_labels = split_strings(line,&matrix_dim);
-  if (!opt_migration_labels || matrix_dim == 0)
-    fatal("Option 'migration' must be followed by the population labels "
-          "(line %ld)", line_count+1);
-
-  /* read matrix */
-  for (i = 0; i < matrix_dim; ++i)
-  {
-    long dim;
-
     if (!getnextline(fp))
-      fatal("Incomplete 'migration' record (line %ld)", line_count+2+i);
+      fatal("Incomplete 'migration' record (line %ld)", line_count+1);
 
-    char ** data = split_strings(line,&dim);
+    char * ss = xstrdup(line);
+    p = ss;
 
-    if (dim != matrix_dim+1)
-      fatal("Wrong number of parameters in migration matrix row (line %ld)"
-            " Expected %ld found %ld", line_count+2+i, matrix_dim+1, dim);
+    count = get_delstring(p, " \t\r\n*#,-", opt_mig_source+i);
+    if (!count) goto l_unwind;
+    p += count;
+
+    count = get_delstring(p, " \t\r\n*#,-", opt_mig_target+i);
+    if (!count) goto l_unwind;
+    p += count;
+
+    count = get_double(p, opt_mig_simrate+i);
+    if (!count) goto l_unwind;
+    p += count;
     
-    if (strcmp(data[0],opt_migration_labels[i]))
-      fatal("Migration matrix label of row %ld does not match label of column "
-            "%ld (line %ld)", i+1, i+1, line_count+2+i);
-
-    //printf("label: %s\n", data[0]);
-    //printf("matrix_dim: %ld\n", matrix_dim);
-    for (j = 0; j < matrix_dim; ++j)
-    {
-      //printf("data: %s\n", data[j+1]);
-      if (!get_double(data[j+1], opt_migration_matrix[i]+j))
-        fatal("Migration matrix cell (%ld,%ld) is not a number (line %ld)",
-              i+1, j+1, line_count+2+i);
-    }
-
-    for (j = 0; j < dim; ++j)
-      free(data[j]);
-    free(data);
+    free(ss);
   }
+  ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
 }
 
 static long get_token(char * line, char ** token, char ** value)
@@ -1157,12 +1198,6 @@ static void check_validity()
               opt_siterate_alpha);
 
   }
-
-  if (opt_migration)
-  {
-    if (opt_migration != species_count*2-1)
-      fatal("Option 'migration' must be equal number of nodes in species tree");
-  }
 }
 
 void load_cfile_sim()
@@ -1311,7 +1346,7 @@ void load_cfile_sim()
         if (!get_long(value,&opt_migration))
           fatal("Option 'migration' expects one integer (line %ld)", line_count);
         
-        parse_migration_matrix(fp, line_count);
+        parse_migration(fp, value, line_count);
         valid = 1;
       }
     }
