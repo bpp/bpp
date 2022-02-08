@@ -266,7 +266,7 @@ void gtree_destroy(gtree_t * tree,
     if (node->hpath)
       free(node->hpath);
     if (node->mi)
-      miginfo_destroy(node->mi);
+      miginfo_destroy(node->mi, tree->msa_index, MI_DLI_FREE);
 
     free(node);
   }
@@ -1283,7 +1283,7 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
       }
 
       assert(migsource[j] != snode);
-      miginfo_append(&(gtree->root->mi), snode, migsource[j], t);
+      miginfo_append(&(gtree->root->mi), snode, migsource[j], t, msa_index);
 
       snode = migsource[j];
     }
@@ -1301,23 +1301,23 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
   {
     for (i = 0; i < gtree->root->mi->count; ++i)
     {
-      gtree->root->mi->source[i]->migevent_count[msa_index]++;
-      gtree->root->mi->target[i]->migevent_count[msa_index]++;
+      gtree->root->mi->me[i].source->migevent_count[msa_index]++;
+      gtree->root->mi->me[i].target->migevent_count[msa_index]++;
 
       /* increase # of migration from s to t (forward in time) */
-      long s = gtree->root->mi->target[i]->node_index;
-      long t = gtree->root->mi->source[i]->node_index;
+      long s = gtree->root->mi->me[i].target->node_index;
+      long t = gtree->root->mi->me[i].source->node_index;
       gtree->migcount[s][t]++;
       stree->migcount_sum[s][t]++;
 
-      if (gtree->root->mi->source[i] != pop)
+      if (gtree->root->mi->me[i].source != pop)
       {
         for (pop = pop->parent;
-             pop != gtree->root->mi->source[i]->parent;
+             pop != gtree->root->mi->me[i].source->parent;
              pop = pop->parent)
           pop->seqin_count[msa_index]++;
       }
-      pop = gtree->root->mi->target[i];
+      pop = gtree->root->mi->me[i].target;
     }
   }
   for (pop = pop->parent; pop; pop = pop->parent)
@@ -1718,7 +1718,12 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
         pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
         /* add migration info backwards in time (from j to k) */
-        miginfo_append(&(pop[j].nodes[i]->mi), pop[j].snode, pop[k].snode, t);
+        if (!opt_simulate)
+          miginfo_append(&(pop[j].nodes[i]->mi),
+                         pop[j].snode,
+                         pop[k].snode,
+                         t,
+                         msa_index);
 
         stree->nodes[pop[j].snode->node_index]->migevent_count[msa_index]++;
         stree->nodes[pop[k].snode->node_index]->migevent_count[msa_index]++;
@@ -2253,6 +2258,7 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   /* add migration events in sortbuffer */
   /* TODO: Create population indexing structure instead of going through all
      gene tree edges */
+  #if 0
   for (k = 0; k < gtree->tip_count+gtree->inner_count; ++k)
   {
     miginfo_t * mi = gtree->nodes[k]->mi;
@@ -2260,18 +2266,33 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
 
     for (n = 0; n < mi->count; ++n)
     {
-      if (mi->source[n] == snode)
+      if (mi->me[n].source == snode)
       {
-        migbuffer[j].time   = mi->time[n];
+        migbuffer[j].time   = mi->me[n].time;
         migbuffer[j++].type = EVENT_MIG_SOURCE;
       }
-      else if (mi->target[n] == snode)
+      else if (mi->me[n].target == snode)
       {
-        migbuffer[j].time   = mi->time[n];
+        migbuffer[j].time   = mi->me[n].time;
         migbuffer[j++].type = EVENT_MIG_TARGET;
       }
     }
   }
+  #else
+  dlist_item_t * li;
+  for (li = snode->mig_source[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_SOURCE;
+  }
+  for (li = snode->mig_target[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_TARGET;
+  }
+  #endif
 
   /* add splitting of populations */
   for (k = 0; k < snode->mb_count; ++k)
@@ -3157,10 +3178,10 @@ static long propose_ages(locus_t * locus,
     if (opt_migration && (node->left->mi || node->right->mi))
     {
       if (node->left->mi && node->left->mi->count)
-        ltime = node->left->mi->time[node->left->mi->count-1];
+        ltime = node->left->mi->me[node->left->mi->count-1].time;
 
       if (node->right->mi && node->right->mi->count)
-        rtime = node->right->mi->time[node->right->mi->count-1];
+        rtime = node->right->mi->me[node->right->mi->count-1].time;
     }
     minage = MAX(ltime,rtime);
 
@@ -3187,10 +3208,10 @@ static long propose_ages(locus_t * locus,
            migration event as time is measured backwards */
 
         if (node->left->mi && node->left->mi->count)
-          lpop_start = node->left->mi->target[node->left->mi->count-1];
+          lpop_start = node->left->mi->me[node->left->mi->count-1].target;
 
         if (node->right->mi && node->right->mi->count)
-          rpop_start = node->right->mi->target[node->right->mi->count-1];
+          rpop_start = node->right->mi->me[node->right->mi->count-1].target;
 
       }
 
@@ -3216,7 +3237,7 @@ static long propose_ages(locus_t * locus,
 
     /* compute max age. TODO: 999 is placed for compatibility with old bpp */
     if (opt_migration && node->mi && node->mi->count)
-      maxage = node->mi->time[0];
+      maxage = node->mi->me[0].time;
     else
       maxage = node->parent ? node->parent->time : 999;
 
@@ -3292,7 +3313,7 @@ static long propose_ages(locus_t * locus,
     {   /* not a network */
       pop = node->left->pop;
       if (opt_migration && node->left->mi && node->left->mi->count)
-        pop = node->left->mi->target[node->left->mi->count-1];
+        pop = node->left->mi->me[node->left->mi->count-1].target;
         
       for (; pop->parent; pop = pop->parent)
         if (pop->parent->tau > tnew)
@@ -3886,18 +3907,18 @@ static long propose_migevent_ages(locus_t * locus,
     minage = node->time;
     for (mi = node->mi, j = 0; j < mi->count; ++j)
     {
-      minage = MAX(minage,MAX(mi->source[j]->tau, mi->target[j]->tau));
-      maxage = MIN(mi->source[j]->parent->tau,mi->target[j]->parent->tau);
+      minage = MAX(minage,MAX(mi->me[j].source->tau, mi->me[j].target->tau));
+      maxage = MIN(mi->me[j].source->parent->tau,mi->me[j].target->parent->tau);
       if (j == mi->count-1 && node->parent)
         maxage = MIN(maxage,node->parent->time);
       else if (j != mi->count-1)
-        maxage = MIN(maxage,mi->time[j+1]);
+        maxage = MIN(maxage,mi->me[j+1].time);
 
-      mi->old_time[j] = mi->time[j];
-      tnew = mi->time[j] + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);
+      mi->me[j].old_time = mi->me[j].time;
+      tnew = mi->me[j].time + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);
       tnew = reflect(tnew, minage, maxage, thread_index);
 
-      mi->time[j] = tnew;
+      mi->me[j].time = tnew;
 
       if (opt_est_theta)
         logpr = gtree->logpr;
@@ -3906,22 +3927,22 @@ static long propose_migevent_ages(locus_t * locus,
 
       if (opt_est_theta)
       {
-        logpr -= mi->source[j]->logpr_contrib[msa_index];
-        logpr -= mi->target[j]->logpr_contrib[msa_index];
+        logpr -= mi->me[j].source->logpr_contrib[msa_index];
+        logpr -= mi->me[j].target->logpr_contrib[msa_index];
       }
       else
       {
-        logpr -= mi->source[j]->notheta_logpr_contrib;
-        logpr -= mi->target[j]->notheta_logpr_contrib;
+        logpr -= mi->me[j].source->notheta_logpr_contrib;
+        logpr -= mi->me[j].target->notheta_logpr_contrib;
       }
 
-      logpr += gtree_update_logprob_contrib_mig(mi->source[j],
+      logpr += gtree_update_logprob_contrib_mig(mi->me[j].source,
                                                 stree,
                                                 gtree,
                                                 locus->heredity[0],
                                                 msa_index,
                                                 thread_index);
-      logpr += gtree_update_logprob_contrib_mig(mi->target[j],
+      logpr += gtree_update_logprob_contrib_mig(mi->me[j].target,
                                                 stree,
                                                 gtree,
                                                 locus->heredity[0],
@@ -3948,21 +3969,21 @@ static long propose_migevent_ages(locus_t * locus,
       else
       {
         /* rejected */
-        mi->time[j] = mi->old_time[j];
+        mi->me[j].time = mi->me[j].old_time;
 
         if (opt_est_theta)
         {
-          mi->source[j]->logpr_contrib[msa_index] = mi->source[j]->old_logpr_contrib[msa_index];
-          mi->target[j]->logpr_contrib[msa_index] = mi->target[j]->old_logpr_contrib[msa_index];
+          mi->me[j].source->logpr_contrib[msa_index] = mi->me[j].source->old_logpr_contrib[msa_index];
+          mi->me[j].target->logpr_contrib[msa_index] = mi->me[j].target->old_logpr_contrib[msa_index];
         }
         else
         {
-          logprob_revert_notheta(mi->source[j],msa_index);
-          logprob_revert_notheta(mi->target[j],msa_index);
+          logprob_revert_notheta(mi->me[j].source,msa_index);
+          logprob_revert_notheta(mi->me[j].target,msa_index);
         }
       }
       
-      minage = mi->time[j];
+      minage = mi->me[j].time;
     }
   }
   return accepted;
@@ -4091,7 +4112,6 @@ void gtree_propose_ages_parallel(locus_t ** locus,
   unsigned int i;
   long proposal_count = 0;
   long accepted = 0;
-
   assert(locus_start >= 0);
   assert(locus_count > 0);
 
@@ -6049,8 +6069,8 @@ static long target_branches(stree_t * stree,
       /* check if part of the lineage passes through snode at time t */
       for (j = 0; j < gnode->mi->count; ++j)
       {
-        if (t < gnode->mi->time[j]) break;
-        curpop = gnode->mi->target[j];
+        if (t < gnode->mi->me[j].time) break;
+        curpop = gnode->mi->me[j].target;
       }
     }
     if (!stree->pptable[curpop->node_index][snode->node_index])
@@ -6258,18 +6278,18 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
 
     for (j = 0; j < mi->count; ++j)
     {
-      if (mi->source[j] != snode && mi->target[j] != snode) continue;
+      if (mi->me[j].source != snode && mi->me[j].target != snode) continue;
       
-      if (mi->time[j] > t)
+      if (mi->me[j].time > t)
       {
-        wtimes[k].time   = mi->time[j];
+        wtimes[k].time   = mi->me[j].time;
         wtimes[k].mrsum  = 0;
-        wtimes[k++].type = (mi->source[j] == snode) ?
+        wtimes[k++].type = (mi->me[j].source == snode) ?
                              EVENT_MIG_SOURCE : EVENT_MIG_TARGET;
       }
       else
       {
-        if (mi->source[j] == snode)
+        if (mi->me[j].source == snode)
           --lineages;
         else
           ++lineages;
@@ -6407,7 +6427,7 @@ static double simulate_coalescent_mig(stree_t * stree,
 
       /* store miginfo in current branch: snode is source in backward time */
       assert(migsource[j] != snode);
-      miginfo_append(&(gnode->mi), snode, migsource[j], t);
+      miginfo_append(&(gnode->mi), snode, migsource[j], t, msa_index);
 
       snode = migsource[j];
 
@@ -6434,10 +6454,10 @@ static double simulate_coalescent_mig(stree_t * stree,
 
 static void subtree_prune(stree_t * stree,
                           gtree_t * gtree,
-                          gnode_t * curnode,
-                          long msa_index)
+                          gnode_t * curnode)
 {
   long i;
+  long msa_index = gtree->msa_index;
 
   gnode_t * father;
   gnode_t * sibling;  
@@ -6468,21 +6488,22 @@ static void subtree_prune(stree_t * stree,
   {
     for (i = 0; i < curnode->mi->count; ++i)
     {
-      curnode->mi->source[i]->migevent_count[msa_index]--;
-      curnode->mi->target[i]->migevent_count[msa_index]--;
+      curnode->mi->me[i].source->migevent_count[msa_index]--;
+      curnode->mi->me[i].target->migevent_count[msa_index]--;
 
       /* decrease # of migration from s to t (forward in time) */
-      long s = curnode->mi->target[i]->node_index;
-      long t = curnode->mi->source[i]->node_index;
+      long s = curnode->mi->me[i].target->node_index;
+      long t = curnode->mi->me[i].source->node_index;
       gtree->migcount[s][t]--;
       stree->migcount_sum[s][t]--;
 
-      if (curnode->mi->source[i] != curpop)
+      if (curnode->mi->me[i].source != curpop)
       {
-        for (pop = curpop->parent; pop != curnode->mi->source[i]->parent; pop = pop->parent)
+        for (pop = curpop->parent; pop != curnode->mi->me[i].source->parent; pop = pop->parent)
           pop->seqin_count[msa_index]--;
       }
-      curpop = curnode->mi->target[i];
+      curpop = curnode->mi->me[i].target;
+      migevent_unlink(curnode->mi->me+i,msa_index);
     }
     curnode->mi->count = 0;
   }
@@ -6515,14 +6536,14 @@ static void subtree_prune(stree_t * stree,
   father->parent = NULL;
 
   /* move migration events from father to sibling */
-  if (opt_migration && father->mi)
+  if (opt_migration && father->mi && father->mi->count)
   {
+    miginfo_check_and_extend(&(sibling->mi), father->mi->count);
     for (i = 0; i < father->mi->count; ++i)
     {
-      miginfo_append(&(sibling->mi),
-                     father->mi->source[i],
-                     father->mi->target[i],
-                     father->mi->time[i]);
+      /* TODO: miginfo_move is dangerous (see notes in function), and assumes
+         caller maintains count */
+      miginfo_move(father->mi->me+i,&(sibling->mi));
     }
     father->mi->count = 0;
   }
@@ -6534,10 +6555,10 @@ static void subtree_regraft(stree_t * stree,
                             gnode_t * father,
                             gnode_t * target,
                             snode_t * newpop,
-                            double tnew,
-                            long msa_index)
+                            double tnew)
 {
   long i,k;
+  long msa_index = gtree->msa_index;
   gnode_t * tmp;
   snode_t * pop;
   snode_t * curpop;
@@ -6574,17 +6595,18 @@ static void subtree_regraft(stree_t * stree,
   father->time = tnew;
 
   /* move target migration events older than tnew onto the father branch */
+  /* Assumes migration are sorted from younger one (which is the case)
+     otherwise miginfo_move will have trouble  */
   if (opt_migration && target->mi && target->mi->count)
   {
     k = 0;
     for (i = 0; i < target->mi->count; ++i)
     {
-      if (target->mi->time[i] > tnew)
+      if (target->mi->me[i].time > tnew)
       {
-        miginfo_append(&(father->mi),
-                       target->mi->source[i],
-                       target->mi->target[i],
-                       target->mi->time[i]);
+        miginfo_move(target->mi->me+i, &(father->mi));
+
+        /* keep track of how many migrations we copied */
         ++k;
       }
     }
@@ -6605,21 +6627,21 @@ static void subtree_regraft(stree_t * stree,
   {
     for (i = 0; i < curnode->mi->count; ++i)
     {
-      curnode->mi->source[i]->migevent_count[msa_index]++;
-      curnode->mi->target[i]->migevent_count[msa_index]++;
+      curnode->mi->me[i].source->migevent_count[msa_index]++;
+      curnode->mi->me[i].target->migevent_count[msa_index]++;
 
       /* increase # of migration from s to t (forward in time) */
-      long s = curnode->mi->target[i]->node_index;
-      long t = curnode->mi->source[i]->node_index;
+      long s = curnode->mi->me[i].target->node_index;
+      long t = curnode->mi->me[i].source->node_index;
       gtree->migcount[s][t]++;
       stree->migcount_sum[s][t]++;
 
-      if (curnode->mi->source[i] != curpop)
+      if (curnode->mi->me[i].source != curpop)
       {
-        for (pop = curpop->parent; pop != curnode->mi->source[i]->parent; pop = pop->parent)
+        for (pop = curpop->parent; pop != curnode->mi->me[i].source->parent; pop = pop->parent)
           pop->seqin_count[msa_index]++;
       }
-      curpop = curnode->mi->target[i];
+      curpop = curnode->mi->me[i].target;
     }
   }
   for (pop = curpop->parent; pop != father->pop->parent; pop = pop->parent)
@@ -6685,15 +6707,23 @@ static long propose_spr_sim(locus_t * locus,
     old_mi_count = (opt_migration && curnode->mi) ? curnode->mi->count : 0;
 
     /* prune, move migrations from father to sibling and save curnode migs */
-    subtree_prune(stree,gtree,curnode,msa_index);
+    subtree_prune(stree,gtree,curnode);
 
     /* store old array of migration events for restoring in case of rejection */
     if (opt_migration)
     {
+      #if 0
+      /* IMPORTANT: We assume the following two conditions hold. I disabled the
+         checks as I tested them sufficiently */
+
+      if (curnode->mi)
+        assert(curnode->mi->count == 0);
+
+      if (stree->mi_tbuffer[thread_index])
+        assert(stree->mi_tbuffer[thread_index]->count == 0);
+      #endif
+
       SWAP(stree->mi_tbuffer[thread_index], curnode->mi);
-      if (old_mi_count)
-        stree->mi_tbuffer[thread_index]->count = old_mi_count;
-      miginfo_clean(curnode->mi);
     }
 
     /* simulate coalescent from curnode, and return age of coalescence */
@@ -6704,7 +6734,7 @@ static long propose_spr_sim(locus_t * locus,
 
     newpop = curnode->pop;
     if (opt_migration && curnode->mi && curnode->mi->count)
-      newpop = curnode->mi->target[curnode->mi->count-1];
+      newpop = curnode->mi->me[curnode->mi->count-1].target;
 
     /* find ancestral population at time tnew */
     while (newpop->parent && newpop->parent->tau < tnew)
@@ -6719,7 +6749,7 @@ static long propose_spr_sim(locus_t * locus,
     target = travbuffer[j];
 
     /* regraft */
-    subtree_regraft(stree,gtree,curnode,father,target,newpop,tnew,msa_index);
+    subtree_regraft(stree,gtree,curnode,father,target,newpop,tnew);
 
     /* update necessary p-matrices */
     k = 0;
@@ -6865,14 +6895,25 @@ static long propose_spr_sim(locus_t * locus,
         SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
       /* prune */
-      subtree_prune(stree,gtree,curnode,msa_index);
+      subtree_prune(stree,gtree,curnode);
 
       /* restore original array of migration events on pruned edge */
       if (opt_migration)
+      {
         SWAP(stree->mi_tbuffer[thread_index], curnode->mi);
 
+        /* link old migration events with populations */
+        if (old_mi_count)
+        {
+          assert(curnode->mi);
+          curnode->mi->count = old_mi_count;
+          for (j = 0; j < curnode->mi->count; ++j)
+            migevent_link(curnode->mi->me+j, msa_index);
+        }
+      }
+
       /* regraft */
-      subtree_regraft(stree,gtree,curnode,father,sibling,oldpop,told,msa_index);
+      subtree_regraft(stree,gtree,curnode,father,sibling,oldpop,told);
 
       /* restore logpr */
       if (opt_migration)

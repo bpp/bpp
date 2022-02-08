@@ -677,10 +677,15 @@ static void parse_migration_matrix(FILE * fp, long line_count)
       fatal("Migration matrix label of row %ld does not match label of column "
             "%ld (line %ld)", i+1, i+1, line_count+2+i);
 
+    //printf("label: %s\n", data[0]);
+    //printf("matrix_dim: %ld\n", matrix_dim);
     for (j = 0; j < matrix_dim; ++j)
+    {
+      //printf("data: %s\n", data[j+1]);
       if (!get_double(data[j+1], opt_migration_matrix[i]+j))
         fatal("Migration matrix cell (%ld,%ld) is not a number (line %ld)",
               i+1, j+1, line_count+2+i);
+    }
 
     for (j = 0; j < dim; ++j)
       free(data[j]);

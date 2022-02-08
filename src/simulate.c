@@ -1935,6 +1935,23 @@ void cmd_simulate()
     validate_and_set_taus(stree);
   }
 
+  if (opt_migration)
+  {
+    unsigned int nodes_count = stree->tip_count+stree->inner_count;
+    void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
+                         (size_t)nodes_count*sizeof(long *));
+    long ** migcount_sum = (long **)mem;
+    migcount_sum[0] = (long *)(migcount_sum+nodes_count);
+    memset(migcount_sum[0],0,nodes_count*sizeof(long));
+    for (i = 1; i < nodes_count; ++i)
+    {
+      migcount_sum[i] = (long *)(migcount_sum[i-1] + nodes_count);
+      memset(migcount_sum[i],0,nodes_count*sizeof(long));
+    }
+
+    stree->migcount_sum = migcount_sum;
+  }
+
 
   /* allocate space for keeping track of coalescent events at each species tree
      node for each locus */

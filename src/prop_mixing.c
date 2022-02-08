@@ -86,8 +86,8 @@ void prop_mixing_update_gtrees(locus_t ** locus,
 
         for (k = 0; k < mi->count; ++k)
         {
-          mi->old_time[k] = mi->time[k];
-          mi->time[k] *= c;
+          mi->me[k].old_time = mi->me[k].time;
+          mi->me[k].time *= c;
         }
       }
     }
@@ -537,7 +537,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
           miginfo_t * mi = gtree[i]->nodes[j]->mi;
           for (k = 0; k < mi->count; ++k)
-            mi->time[k] = mi->old_time[k];
+            mi->me[k].time = mi->me[k].old_time;
         }
       }
 

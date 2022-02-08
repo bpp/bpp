@@ -352,6 +352,12 @@ extern const char * global_freqs_strings[28];
 #define HEREDITY_ESTIMATE               1
 #define HEREDITY_FROMFILE               2
 
+/* Handle memory (de)allocation of dlist_item_t within the miginfo_t structure.
+   NOOP (no operation, do not allocate), ALLOC (allocate) FREE (deallocate) */
+#define MI_DLI_NOOP                  0
+#define MI_DLI_ALLOC                 1
+#define MI_DLI_FREE                  2
+
 /* structures and data types */
 
 typedef unsigned int UINT32;
@@ -458,19 +464,28 @@ typedef struct snode_s
   long * migevent_count;
   migbuffer_t * migbuffer;
   long mb_count;
+  dlist_t ** mig_source;
+  dlist_t ** mig_target;
 } snode_t;
+
+typedef struct migevent_s
+{
+  double time;
+  double old_time;
+  snode_t * source;
+  snode_t * target;
+
+  dlist_item_t * di_src;
+  dlist_item_t * di_tgt;
+} migevent_t;
 
 typedef struct miginfo_s
 {
   long alloc_size;
-
   long count;
-  double * time;
-  double * old_time;
-  snode_t ** source;
-  snode_t ** target;
-} miginfo_t;
 
+  migevent_t * me;
+} miginfo_t;
 
 typedef struct stree_s
 {
@@ -554,6 +569,7 @@ typedef struct gtree_s
   unsigned int edge_count;
 
   int original_index;
+  long msa_index;
 
   gnode_t ** nodes;
   gnode_t * root;
@@ -2476,13 +2492,20 @@ void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
 void debug_consistency(stree_t * stree, gtree_t ** gtree_list);
 
 /* functions in miginfo.c */
-miginfo_t * miginfo_create(size_t alloc_size);
+miginfo_t * miginfo_create(size_t alloc_size, int alloc_dlist);
 miginfo_t * miginfo_create_default();
-void miginfo_destroy(miginfo_t * mi);
-miginfo_t * miginfo_realloc(miginfo_t * mi);
-void miginfo_append(miginfo_t ** miptr, snode_t * s, snode_t * t, double time);
-void miginfo_clean(miginfo_t * mi);
-void miginfo_clone(miginfo_t * mi, miginfo_t ** clonebuf);
+void miginfo_destroy(miginfo_t * mi, long msa_index, int dealloc_dlist);
+miginfo_t * miginfo_extend(miginfo_t * mi, size_t units);
+void miginfo_append(miginfo_t ** miptr, snode_t * s, snode_t * t, double time, long msa_index);
+void miginfo_clean(miginfo_t * mi, long msa_index);
+void miginfo_clone(miginfo_t * mi,
+                   miginfo_t ** clonebuf,
+                   stree_t * clone_stree,
+                   long msa_index);
+void miginfo_move(migevent_t * me, miginfo_t ** miptr);
+void migevent_link(migevent_t * me, long msa_index);
+void migevent_unlink(migevent_t * me, long msa_index);
+void miginfo_check_and_extend(miginfo_t ** miptr, size_t extra);
 
 /* functions in lswitch.c */
 void lswitch(stree_t * stree, const char * header, double ** matrix, long col_count);
