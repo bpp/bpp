@@ -506,8 +506,6 @@ static void gnode_clone(gnode_t * gnode,
                         gtree_t * clone_gtree,
                         stree_t * clone_stree)
 {
-  long i;
-
   if (clone->label)
     free(clone->label);
 
@@ -559,18 +557,9 @@ static void gnode_clone(gnode_t * gnode,
   else
     clone->old_pop = NULL;
 
-  miginfo_clean(clone->mi);
+  miginfo_clean(clone->mi,clone_gtree->msa_index); 
   if (gnode->mi)
-  {
-    miginfo_clone(gnode->mi, &(clone->mi));
-    /* replace pointers to populations from old stree with populations in
-       cloned stree */
-    for (i = 0; i < gnode->mi->count; ++i)
-    {
-      clone->mi->source[i] = clone_stree->nodes[clone->mi->source[i]->node_index];
-      clone->mi->target[i] = clone_stree->nodes[clone->mi->target[i]->node_index];
-    }
-  }
+    miginfo_clone(gnode->mi, &(clone->mi), clone_stree, clone_gtree->msa_index);
 }
 
 static void stree_clone(stree_t * stree, stree_t * clone)
@@ -614,7 +603,8 @@ static void stree_clone(stree_t * stree, stree_t * clone)
 stree_t * stree_clone_init(stree_t * stree)
 {
   unsigned int i;
-  unsigned nodes_count = stree->tip_count + stree->inner_count;
+  unsigned int nodes_count = stree->tip_count + stree->inner_count;
+  long j;
   stree_t * clone;
   long ** migcount_sum = NULL;
 
@@ -626,13 +616,24 @@ stree_t * stree_clone_init(stree_t * stree)
   for (i = 0; i < nodes_count; ++i)
   {
     clone->nodes[i] = (snode_t *)xcalloc(1, sizeof(snode_t));
+    snode_t * x = clone->nodes[i];
+
     if (opt_migration)
     {
-      clone->nodes[i]->migevent_count = (long *)xcalloc((size_t)opt_locus_count,
-                                                        sizeof(long));
-      clone->nodes[i]->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
-                                                          sizeof(migbuffer_t));
-      clone->nodes[i]->mb_count = 0;
+      x->migevent_count = (long *)xcalloc((size_t)opt_locus_count,sizeof(long));
+      x->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
+                                            sizeof(migbuffer_t));
+      x->mb_count = 0;
+
+      x->mig_source = (dlist_t **)xcalloc((size_t)opt_locus_count,
+                                          sizeof(dlist_t *));
+      x->mig_target = (dlist_t **)xcalloc((size_t)opt_locus_count,
+                                          sizeof(dlist_t *));
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        x->mig_source[j] = dlist_create();
+        x->mig_target[j] = dlist_create();
+      }
     }
   }
   for (i = 0; i < nodes_count; ++i)
@@ -754,6 +755,7 @@ static void events_clone(stree_t * stree,
   unsigned int msa_count = clone_stree->locus_count;
   unsigned stree_nodes_count = stree->tip_count + stree->inner_count;
   dlist_item_t * item;
+  dlist_item_t * cloned;
 
   for (i = 0; i < stree_nodes_count; ++i)
   {
@@ -767,8 +769,7 @@ static void events_clone(stree_t * stree,
         unsigned int node_index = original_node->node_index;
         gnode_t * cloned_node = (gnode_t *)(clone_gtree->nodes[node_index]);
 
-        dlist_item_t * cloned = dlist_append(clone_stree->nodes[i]->event[j],
-          cloned_node);
+        cloned = dlist_append(clone_stree->nodes[i]->event[j], cloned_node);
 
         cloned_node->event = cloned;
       }
@@ -2218,10 +2219,24 @@ void stree_init(stree_t * stree,
       stree->nodes[i]->migevent_count = (long *)xcalloc((size_t)opt_locus_count,
                                                         sizeof(long));
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      stree->nodes[i]->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
-                                                          sizeof(migbuffer_t));
+    {
+      snode_t * x = stree->nodes[i];
+
+      x->migbuffer  = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
+                                             sizeof(migbuffer_t));
+      x->mig_source = (dlist_t **)xmalloc((size_t)opt_locus_count *
+                                          sizeof(dlist_t *));
+      x->mig_target = (dlist_t **)xmalloc((size_t)opt_locus_count *
+                                          sizeof(dlist_t *));
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        x->mig_source[j] = dlist_create();
+        x->mig_target[j] = dlist_create();
+      }
+    }
     stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
+
 
     unsigned int nodes_count = stree->tip_count+stree->inner_count;
     void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
@@ -3009,27 +3024,27 @@ static long update_migs(locus_t * locus,
     /* go through migration events */
     for (j = 0; j < x->mi->count; ++j)
     {
-      if (x->mi->time[j] < minage || x->mi->time[j] > maxage) continue;
+      if (x->mi->me[j].time < minage || x->mi->me[j].time > maxage) continue;
 
       for (k = 0; k < paffected_count; ++k)
-        if (x->mi->source[j] == affected[k] || x->mi->target[j] == affected[k])
+        if (x->mi->me[j].source == affected[k] || x->mi->me[j].target == affected[k])
           break;
 
       if (k == paffected_count) continue;
 
-      x->mi->old_time[j] = x->mi->time[j];
+      x->mi->me[j].old_time = x->mi->me[j].time;
 
       /* mark populations to update logpr */
-      assert(x->mi->source[j]->mark[thread_index]);
+      assert(x->mi->me[j].source->mark[thread_index]);
 
-      if (x->mi->time[j] >= oldage && snode != stree->root)
+      if (x->mi->me[j].time >= oldage && snode != stree->root)
       {
-        x->mi->time[j] = maxage + maxfactor*(x->mi->time[j] - maxage);
+        x->mi->me[j].time = maxage + maxfactor*(x->mi->me[j].time - maxage);
         locus_count_above++;
       }
       else
       {
-        x->mi->time[j] = minage + minfactor*(x->mi->time[j] - minage);
+        x->mi->me[j].time = minage + minfactor*(x->mi->me[j].time - minage);
         locus_count_below++;
       }
     }
@@ -3046,17 +3061,17 @@ static long update_migs(locus_t * locus,
     for (j = 0; j < x->mi->count; ++j)
     {
       /* determine lower bound for migration event */
-      minb = MAX(x->mi->source[j]->tau, x->mi->target[j]->tau);
-      minb = MAX(minb, j ? x->mi->time[j-1] : x->time);
+      minb = MAX(x->mi->me[j].source->tau, x->mi->me[j].target->tau);
+      minb = MAX(minb, j ? x->mi->me[j-1].time : x->time);
 
       /* determine upper bound for migration event */
-      maxb = MIN(x->mi->source[j]->parent->tau, x->mi->target[j]->parent->tau);
+      maxb = MIN(x->mi->me[j].source->parent->tau, x->mi->me[j].target->parent->tau);
       if (j < x->mi->count-1)
-        maxb = MIN(x->mi->time[j+1],maxb);
+        maxb = MIN(x->mi->me[j+1].time,maxb);
       else if (x->parent)
         maxb = MIN(x->parent->time,maxb);
 
-      if (x->mi->time[j] <= minb || x->mi->time[j] >= maxb)
+      if (x->mi->me[j].time <= minb || x->mi->me[j].time >= maxb)
         return 0;
     }
   }
@@ -3093,7 +3108,6 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   double logl_diff = 0;
   double logpr_diff = 0;
   double logpr = 0;
-
   assert(opt_migration);
   assert(opt_clock == BPP_CLOCK_GLOBAL);
   if (!opt_est_theta)
@@ -3950,7 +3964,6 @@ static long propose_tau_mig(locus_t ** loci,
 
   unsigned int count_above = 0;
   unsigned int count_below = 0;
-
   unsigned int paffected_count;        /* number of affected populations */
 
   oldage = snode->tau;
@@ -4194,7 +4207,6 @@ double stree_propose_tau_mig(stree_t ** streeptr,
 
   for (i = 0; i < total_nodes; ++i)
   {
-    long debug_flag = 0;
     if (candidate[i])
     {
       /* clone species tree and gene trees */

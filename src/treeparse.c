@@ -316,6 +316,43 @@ void stree_destroy(stree_t * tree,
         }
       free(node->event);
     }
+
+    if (opt_migration)
+    {
+      if (node->mig_target)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+        {
+          /* 
+            IMPORTANT: Do not delete the dlist_item_t's with the below call:
+
+            dlist_clear(tree->nodes[i]->mig_target[j],NULL); 
+
+            as these elements are deleted in
+            
+              gtree_destroy(..)  -> miginfo_destroy(..)
+          */
+
+          dlist_destroy(tree->nodes[i]->mig_target[j]);
+        }
+        free(node->mig_target);
+      }
+
+      if (node->mig_source)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+        {
+          /*  IMPORTANT: Same applies here, see above
+
+          dlist_clear(tree->nodes[i]->mig_source[j],NULL);
+
+          */
+
+          dlist_destroy(tree->nodes[i]->mig_source[j]);
+        }
+        free(node->mig_source);
+      }
+    }
     
     if (node->event_count)
       free(node->event_count);
@@ -370,7 +407,17 @@ void stree_destroy(stree_t * tree,
   if (tree->mi_tbuffer)
   {
     for (i = 0; i < opt_threads; ++i)
-      miginfo_destroy(tree->mi_tbuffer[i]);
+    {
+      /* all dlist_items should be unlinked */
+      if (tree->mi_tbuffer[i]) // && tree->mi_tbuffer[i]->me)
+      {
+        /* dlist_item_ts must already be unlinked, so we set count to 0 to avoid
+           unlinking them again in miginfo_destroy. Locus number is set to -1 as
+           it's irrelevant, the function will not enter the locus loop */
+        tree->mi_tbuffer[i]->count = 0;
+        miginfo_destroy(tree->mi_tbuffer[i], -1, MI_DLI_FREE);
+      }
+    }
     free(tree->mi_tbuffer);
   }
   if (tree->migcount_sum)

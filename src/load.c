@@ -1276,6 +1276,15 @@ void load_chk_section_2(FILE * fp)
       snode_t * x = stree->nodes[i];
       x->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
                                             sizeof(migbuffer_t));
+      x->mig_source = (dlist_t **)xcalloc((size_t)opt_locus_count,
+                                          sizeof(dlist_t *));
+      x->mig_target = (dlist_t **)xcalloc((size_t)opt_locus_count,
+                                          sizeof(dlist_t *));
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        x->mig_source[j] = dlist_create();
+        x->mig_target[j] = dlist_create();
+      }
       if (!LOAD(&(x->mb_count), 1, fp))
         fatal("Cannot read migbuffer count");
 
@@ -1444,6 +1453,9 @@ static void load_gene_tree(FILE * fp, long index)
   if (!LOAD(&(gt->original_index),1,fp))
     fatal("Cannot read gene tree original index");
 
+  if (!LOAD(&(gt->msa_index),1,fp))
+    fatal("Cannot read gene tree msa index");
+
   if (opt_migration)
   {
     /* mi structure */
@@ -1463,6 +1475,8 @@ static void load_gene_tree(FILE * fp, long index)
 
       if (!mi_count) continue;
 
+      miginfo_check_and_extend(&(x->mi), mi_count);
+
       for (j = 0; j < mi_count; ++j)
       {
         if (!LOAD(&mi_time,1,fp))
@@ -1472,12 +1486,13 @@ static void load_gene_tree(FILE * fp, long index)
           fatal("Cannot load migration event source index");
 
         if (!LOAD(&tgt_node_index,1,fp))
-          fatal("Cannot load migration event source index");
+          fatal("Cannot load migration event target index");
 
         miginfo_append(&(x->mi),
                        stree->nodes[src_node_index],
                        stree->nodes[tgt_node_index],
-                       mi_time);
+                       mi_time,
+                       gt->msa_index);
       }
       assert(x->mi->count == mi_count);
     }
@@ -1738,7 +1753,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     int * prec_logpg,
                     int * prec_logl)
 {
-  long i;
+  long i,j,k;
   FILE * fp;
 
   assert(opt_resume);
@@ -1804,6 +1819,30 @@ int checkpoint_load(gtree_t *** gtreep,
   load_chk_section_4(fp);
 
   /* TODO: set tip sequences, charmap etc when using tipchars */
+
+  /* if migration then population migcount_sum */
+  if (opt_migration)
+  {
+    unsigned int nodes_count = stree->tip_count + stree->inner_count;
+
+    void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
+                         (size_t)nodes_count*sizeof(long *));
+    stree->migcount_sum = (long **)mem;
+    stree->migcount_sum[0] = (long *)(stree->migcount_sum+nodes_count);
+    for (i = 1; i < nodes_count; ++i)
+    {
+      stree->migcount_sum[i] = (long *)(stree->migcount_sum[i-1] + nodes_count);
+    }
+    for (i = 0; i < nodes_count; ++i)
+    {
+      for (j = 0; j < nodes_count; ++j)
+      {
+        stree->migcount_sum[i][j] = 0;
+        for (k = 0; k < opt_locus_count; ++k)
+          stree->migcount_sum[i][j] = gtree[k]->migcount[i][j];
+      }
+    }
+  }
 
   /* update pmatrices and CLVs */
   for (i = 0; i < opt_locus_count; ++i)

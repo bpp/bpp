@@ -24,6 +24,31 @@
 #define SHRINK 1
 #define EXPAND 2
 
+void debug_im_check_sum(stree_t * stree, gtree_t ** gtree, const char * desc)
+{
+  long i,j,k;
+  long migsum;
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      if (opt_mig_bitmatrix[i][j])
+      {
+        migsum = 0;
+        for (k = 0; k < opt_locus_count; ++k)
+          migsum += gtree[k]->migcount[i][j];
+
+        if (migsum != stree->migcount_sum[i][j])
+        {
+          fprintf(stderr, "[DEBUG] Error in function %s\n", __FUNCTION__);
+          fatal("migsum_count[%ld][%ld]: %ld   correct: %ld   locus: %ld\n",
+                stree->migcount_sum[i][j], migsum, k);
+          for (k = 0; k < opt_locus_count; ++k)
+            debug_print_gtree(gtree[k]);
+        }
+        assert(migsum == stree->migcount_sum[i][j]);
+      }
+}
+
 void debug_print_gtree(gtree_t * gtree)
 {
   long i,j;
@@ -113,9 +138,9 @@ void debug_print_gtree(gtree_t * gtree)
       printf(" %4d", gtree->nodes[i]->node_index);
       printf("  %5ld", x->mi->count);
 
-      printf("  %s -> %s   %f\n", x->mi->source[0]->label, x->mi->target[0]->label, x->mi->time[0]);
+      printf("  %s -> %s   %f\n", x->mi->me[0].source->label, x->mi->me[0].target->label, x->mi->me[0].time);
       for (j = 1; j < x->mi->count; ++j)
-        printf("                    %s -> %s   %f\n", x->mi->source[j]->label, x->mi->target[j]->label, x->mi->time[j]);
+        printf("                    %s -> %s   %f\n", x->mi->me[j].source->label, x->mi->me[j].target->label, x->mi->me[j].time);
 
 
 
@@ -819,23 +844,23 @@ void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
     {
       for (j = 0; j < x->mi->count; ++j)
       {
-        long s = x->mi->source[j]->node_index;
-        long t = x->mi->target[j]->node_index;
+        long s = x->mi->me[j].source->node_index;
+        long t = x->mi->me[j].target->node_index;
 
-        assert(x->mi->target[j]->parent);
-        assert(x->mi->target[j]->tau < x->mi->time[j]);
-        assert(x->mi->target[j]->parent->tau > x->mi->time[j]);
+        assert(x->mi->me[j].target->parent);
+        assert(x->mi->me[j].target->tau < x->mi->me[j].time);
+        assert(x->mi->me[j].target->parent->tau > x->mi->me[j].time);
 
         migevent_count[s]++;
         migevent_count[t]++;
         migcount[t][s]++;
 
-        if (curpop != x->mi->source[j])
+        if (curpop != x->mi->me[j].source)
         {
-          for (pop = curpop->parent; pop != x->mi->source[j]->parent; pop = pop->parent)
+          for (pop = curpop->parent; pop != x->mi->me[j].source->parent; pop = pop->parent)
             seqin_count[pop->node_index]++;
         }
-        curpop = x->mi->target[j];
+        curpop = x->mi->me[j].target;
       }
     }
     snode_t * end = x->parent ? x->parent->pop->parent : NULL;
@@ -854,7 +879,8 @@ void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
     {
       printf("\n");
       printf("[DEBUG]: Locus %ld snode %s\n", msa_index, snode->label);
-      printf("seqin_count: %d    wrong: %d\n", seqin_count[node_index], snode->seqin_count[msa_index]);
+      printf("seqin_count: %d    wrong: %d\n",
+             seqin_count[node_index], snode->seqin_count[msa_index]);
       debug_print_gtree(gtree);
       fatal("Exiting");
     }
@@ -863,9 +889,11 @@ void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
     {
       printf("\n");
       printf("[DEBUG]: Locus %ld snode %s\n", msa_index, snode->label);
-      printf("migevent_count: %ld    wrong: %ld\n", migevent_count[node_index], snode->migevent_count[msa_index]);
+      printf("migevent_count: %ld    wrong: %ld\n",
+             migevent_count[node_index], snode->migevent_count[msa_index]);
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
-        printf("  node %ld migevent_count %ld  wrong %ld  \n", j, migevent_count[j], stree->nodes[j]->migevent_count[msa_index]);
+        printf("  node %ld migevent_count %ld  wrong %ld  \n",
+               j,migevent_count[j],stree->nodes[j]->migevent_count[msa_index]);
       debug_print_gtree(gtree);
       fatal("Exiting");
     }

@@ -700,6 +700,8 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
 
   DUMP(&(gtree->original_index),1,fp);
 
+  DUMP(&(gtree->msa_index),1,fp);
+
   if (opt_migration)
   {
     for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
@@ -716,11 +718,10 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
       DUMP(&(mi->count),1,fp);
       for (j = 0; j < mi->count; ++j)
       {
-        DUMP(&(mi->time[j]),1,fp);
-        DUMP(&(mi->source[j]->node_index),1,fp);
-        DUMP(&(mi->target[j]->node_index),1,fp);
+        DUMP(&(mi->me[j].time),1,fp);
+        DUMP(&(mi->me[j].source->node_index),1,fp);
+        DUMP(&(mi->me[j].target->node_index),1,fp);
       }
-
     }
 
     /* migcount */

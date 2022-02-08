@@ -2534,7 +2534,10 @@ static FILE * init(stree_t ** ptr_stree,
 
   gtree = gtree_init(stree,msa_list,map_list,msa_count);
   for (i = 0; i < opt_locus_count; ++i)
+  {
     gtree[i]->original_index = msa_list[i]->original_index;
+    gtree[i]->msa_index = i;
+  }
 
 
 
