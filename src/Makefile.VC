@@ -1,3 +1,5 @@
+CFLAGS = /W2 /DHAVE_SSE3 /DHAVE_AVX /DHAVE_AVX2 /Ox /Ot
+
 OBJ_AVX=core_likelihood_avx.obj core_partials_avx.obj
 SRC_AVX=core_likelihood_avx.c core_partials_avx.c
 
@@ -71,13 +73,16 @@ $(PROG): $(OBJ_AVX2) $(OBJ_AVX) $(OBJ_SSE) $(OBJ_LIBPLL) $(OBJ_BPP)
 	link /out:$@ $** libpthreadvc3.lib
 
 $(OBJ_AVX2): $(SRC_AVX2)
-	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:AVX2 $**
+	cl -c $(CFLAGS) /arch:AVX2 $**
 
 $(OBJ_AVX): $(SRC_AVX)
-	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:AVX $**
+	cl -c $(CFLAGS) /arch:AVX $**
 
 $(OBJ_SSE): $(SRC_SSE)
-	cl -c -DHAVE_SSE3 -DHAVE_AVX -DHAVE_AVX2 -DHAVE_SSE3 -Ox /arch:SSE2 $**
+	cl -c $(CFLAGS) /arch:AVX $**
+
+$(OBJ_LIBPLL): $(SRC_LIBPLL)
+	cl -c $(CFLAGS) $**
 
 clean:
 	del *.obj $(PROG)
