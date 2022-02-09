@@ -1107,8 +1107,6 @@ static void process_bidir(stree_t * stree, mscidefs_t * def)
 {
   long i;
 
-  destroy_pptable(stree);
-
   opt_msci = 1;
 
   snode_t * a = edge_basenode(stree, def->node1_1, def->node1_2, def->lineno);
@@ -1117,12 +1115,18 @@ static void process_bidir(stree_t * stree, mscidefs_t * def)
   if (a == b)
     fatal("Cannot create bidirection on a single edge %s - %s (line %ld)",
           def->node1_1, def->node1_2, def->lineno);
+  
+  if (stree->pptable[b->node_index][a->node_index])
+    fatal("Node %s cannot be ancestral to node %s in bidirections",
+          a->label, b->label);
 
   snode_t * pa = a->parent;
   snode_t * pb = b->parent;
 
   assert(pa && pb);
-  
+
+  destroy_pptable(stree);
+
   /* create four new hybridization nodes (2 inner and 2 mirror) */
   snode_t * sh = (snode_t *)xcalloc(1,sizeof(snode_t));
   snode_t * sm = (snode_t *)xcalloc(1,sizeof(snode_t));
@@ -1864,6 +1868,9 @@ void cmd_msci_create()
       /* create marks */
       for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
         stree->nodes[i]->mark = (int *)xcalloc(1,sizeof(int));
+      
+      /* create pptable */
+      stree_init_pptable(stree);
     }
     li = li->next;
   }
