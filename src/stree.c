@@ -3113,7 +3113,10 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   if (!opt_est_theta)
     fatal("Integrating out thetas not yet implemented for IM model");
 
-  assert(paffected_count == 3);
+  if (opt_exp_imrb)
+    assert(paffected_count >= 3);
+  else
+    assert(paffected_count == 3);
 
   *ret_mig_reject = 0;
   for (i = locus_start; i < locus_start+locus_count; ++i)
@@ -3189,6 +3192,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
                      thread_index))
     {
       /* conflict was caused; reject! */
+      assert(!opt_exp_imrb);
       *ret_mig_reject = 1;
       return;
     }
@@ -3941,6 +3945,168 @@ static double logPDFGamma(double x, double a, double b)
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
 
+static long getlinkedpops(stree_t * stree,
+                          snode_t * x,
+                          double * bounds,
+                          snode_t ** linked)
+{
+  long i,j,k,m;
+  long lcount = 0;
+  long mfound;
+  double tl = bounds[0];
+  double tu = bounds[1];
+  migevent_t * me;
+  dlist_item_t * dli;
+  const static long thread_index_zero = 0;
+
+  /* find both directly and indirectly linked populations to x */
+  k = 0;
+  while (x)
+  {
+    /* get index of population for which we are looking for its linked pops */
+    j = x->node_index;
+
+    /* look for linked pops */
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    {
+      /* skip populations already identified as linked */
+      if (stree->nodes[i]->mark[thread_index_zero]) continue;
+
+      if (!(stree->migcount_sum[i][j] || stree->migcount_sum[j][i])) continue;
+
+      /* TODO: To remove the below loops over all loci we could store the
+         oldest and youngest migration times between any two populations.
+         Is it sufficient??  */
+
+      /* check whether there exists at least one migration between pops i and j
+         that falls within the bounds */
+      for (mfound = 0, m = 0; m < opt_locus_count && !mfound; ++m)
+      {
+        for (dli = x->mig_source[m]->head; dli; dli = dli->next)
+        {
+          me = (migevent_t *)(dli->data);
+          if (me->target == stree->nodes[i] && me->time > tl && me->time < tu)
+          {
+            mfound = 1;
+            break;
+          }
+        }
+       
+        if (mfound) break;
+
+        for (dli = x->mig_target[m]->head; dli; dli = dli->next)
+        {
+          me = (migevent_t *)(dli->data);
+          if (me->source == stree->nodes[i] && me->time > tl && me->time < tu)
+          {
+            mfound = 1;
+            break;
+          }
+        }
+      }
+
+      if (!mfound) continue;
+
+      linked[lcount++] = stree->nodes[i];
+      stree->nodes[i]->mark[thread_index_zero] = 1;
+    }
+
+    /* move to the next population in the list of linked pops and repeat */
+    x = linked[k++];
+  }
+  return lcount;
+}
+
+static long rb_bounds(stree_t * stree,
+                      snode_t * x,
+                      snode_t ** linked,
+                      double * bounds)
+{
+  long i,j;
+  long lcount = 0;
+  double tl, tu;
+
+  const static long thread_index_zero = 0;
+
+  unsigned int total_nodes = stree->tip_count+stree->inner_count;
+
+  /* sanity check -- remove */
+  for (i = 0; i < total_nodes; ++i)
+    assert(stree->nodes[i]->mark[thread_index_zero] == 0);
+
+  for (i = 0; i < total_nodes+1; ++i)
+    linked[i] = NULL;
+
+  /* 1. Set initial bounds */
+  tu = (x->parent) ? x->parent->tau : 999;
+  tl = MAX(x->left->tau, x->right->tau);
+  
+  bounds[0] = tl; bounds[1] = tu;
+
+  /* 2. Find populations linked to X,V,W - both directly and indirectly linked */
+  x->mark[thread_index_zero] = 1;
+  x->left->mark[thread_index_zero] = 1;
+  x->right->mark[thread_index_zero] = 1;
+  linked[0] = x; linked[1] = x->left; linked[2] = x->right;
+  lcount = 3;
+
+  lcount += getlinkedpops(stree,x,       bounds,linked+lcount);
+  lcount += getlinkedpops(stree,x->left, bounds,linked+lcount);
+  lcount += getlinkedpops(stree,x->right,bounds,linked+lcount);
+
+  /* cleans marks also on x, x->left and x->right */
+  for (i = 0; i < lcount; ++i)
+    linked[i]->mark[thread_index_zero] = 0;
+
+  /* 3. and 4. merged -- get final upper and lower bounds. Skip first 3 nodes */
+  for (i = 3; i < lcount; ++i)
+  {
+    if (linked[i]->tau < x->tau && linked[i]->parent->tau > x->tau)
+    {
+      if (linked[i]->parent->tau < tu)
+        tu = linked[i]->parent->tau;
+      if (linked[i]->tau > tl)
+        tl = linked[i]->tau;
+    }
+    else if (linked[i]->parent->tau < x->tau)
+    {
+      /* t_a < t_X */
+      if (linked[i]->parent->tau > tl)
+        tl = linked[i]->parent->tau;
+    }
+    else
+    {
+      /* t_b > t_X */
+      assert(linked[i]->tau > x->tau);
+      if (linked[i]->tau < tu)
+        tu = linked[i]->tau;
+    }
+  }
+  bounds[0] = tl; bounds[1] = tu;
+
+  /* 5. Delete unaffected linked populations. Skip first three nodes
+        NOTE: j holds the last empty position */
+  for (j=3, i=3; i < lcount; ++i)
+  {
+    if (linked[i]->tau > tu || linked[i]->parent->tau < tl)
+    {
+      linked[i] = NULL;
+    }
+    else
+    {
+      if (i != j)
+      {
+        linked[j] = linked[i];
+        linked[i] = NULL;
+      }
+      ++j;
+    }
+  }
+  lcount = j;
+
+  return lcount;
+}
+
 static long propose_tau_mig(locus_t ** loci,
                             snode_t * snode,
                             gtree_t ** gtree,
@@ -3961,6 +4127,8 @@ static long propose_tau_mig(locus_t ** loci,
   double logpr = 0;
   double logpr_diff = 0;
   double logl_diff = 0;
+  snode_t ** affected;
+  snode_t * affected3[3];
 
   unsigned int count_above = 0;
   unsigned int count_below = 0;
@@ -3974,6 +4142,25 @@ static long propose_tau_mig(locus_t ** loci,
 
   if (snode->parent)
     maxage = snode->parent->tau;
+
+  if (opt_exp_imrb)
+  {
+    double bounds[2];
+    affected = (snode_t **)xcalloc((size_t)stree->tip_count+stree->inner_count+1, sizeof(snode_t *));
+
+    paffected_count = rb_bounds(stree,snode,affected,bounds);
+
+    minage = bounds[0];
+    maxage = bounds[1];
+  }
+  else
+  {
+    affected = affected3;
+    paffected_count = 3;
+    affected[0] = snode;
+    affected[1] = snode->left;
+    affected[2] = snode->right;
+  }
 
   /* propose new tau */
   newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
@@ -4036,13 +4223,6 @@ static long propose_tau_mig(locus_t ** loci,
       }
     }
   }
-
-  snode_t * affected[3];
-
-  paffected_count = 3;
-  affected[0] = snode;
-  affected[1] = snode->left;
-  affected[2] = snode->right;
 
   if (!opt_est_theta)
   {
@@ -4116,6 +4296,9 @@ static long propose_tau_mig(locus_t ** loci,
     stree->notheta_old_logpr = stree->notheta_logpr;
     stree->notheta_logpr = logpr;
   }
+
+  if (opt_exp_imrb)
+    free(affected);
 
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);

@@ -957,6 +957,7 @@ extern long opt_est_locusrate;
 extern long opt_est_mubar;
 extern long opt_est_stree;
 extern long opt_est_theta;
+extern long opt_exp_imrb;
 extern long opt_exp_randomize;
 extern long opt_exp_theta;
 extern long opt_exp_sim;
