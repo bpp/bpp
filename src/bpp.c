@@ -81,6 +81,7 @@ long opt_est_locusrate;
 long opt_est_mubar;
 long opt_est_stree;
 long opt_est_theta;
+long opt_exp_imrb;
 long opt_exp_randomize;
 long opt_exp_theta;
 long opt_exp_sim;
@@ -256,6 +257,7 @@ static struct option long_options[] =
   {"debug_bruce",  no_argument,       0, 0 },  /* 34 */
   {"exp_sim",      no_argument,       0, 0 },  /* 35 */
   {"summary",      required_argument, 0, 0 },  /* 36 */
+  {"exp_imrb",     no_argument,       0, 0 },  /* 37 */
   { 0, 0, 0, 0 }
 };
 
@@ -415,6 +417,7 @@ void args_init(int argc, char ** argv)
   opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
+  opt_exp_imrb = 0;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
   opt_exp_sim = 0;
@@ -714,6 +717,10 @@ void args_init(int argc, char ** argv)
       case 36:
         opt_cfile = xstrdup(optarg);
         opt_onlysummary = 1;
+        break;
+
+      case 37:
+        opt_exp_imrb = 1;
         break;
 
       default:
