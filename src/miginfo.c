@@ -101,9 +101,9 @@ miginfo_t * miginfo_extend(miginfo_t * mi, size_t units)
   extmi->alloc_size = mi->alloc_size+units*alloc_extend;
   extmi->count = mi->count;
 
-  memcpy(extmi->me, mi->me, mi->count*sizeof(migevent_t));
+  memcpy(extmi->me, mi->me, mi->alloc_size*sizeof(migevent_t));
 
-  for (i = mi->count; i < mi->alloc_size+units*alloc_extend; ++i)
+  for (i = mi->alloc_size; i < mi->alloc_size+units*alloc_extend; ++i)
   {
     extmi->me[i].di_src = (dlist_item_t *)xcalloc(1,sizeof(dlist_item_t));
     extmi->me[i].di_tgt = (dlist_item_t *)xcalloc(1,sizeof(dlist_item_t));

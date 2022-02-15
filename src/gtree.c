@@ -2066,7 +2066,20 @@ static void migbuffer_realloc(long thread_index, size_t newsize)
   migbuffer_r[thread_index] = (migbuffer_t *)xmalloc((size_t)newsize *
                                                      sizeof(migbuffer_t));
   migbuffer_size[thread_index] = newsize;
+}
 
+static void migbuffer_check_and_realloc(long thread_index,
+                                        size_t alloc_required)
+{
+  if (migbuffer_size[thread_index] >= alloc_required) return;
+
+  /* calculate the minimum size >= alloc_required that is a multiple of
+     migbuffer_increment */
+  size_t newsize = alloc_required / migbuffer_increment +
+                   !!(alloc_required % migbuffer_increment);
+  newsize *= migbuffer_increment;
+
+  migbuffer_realloc(thread_index, newsize);
 }
 
 void gtree_simulate_init(stree_t * stree, list_t * maplist)
@@ -2237,11 +2250,11 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   dlist_item_t* event;
   migbuffer_t * migbuffer;
 
+  /* make sure migbuffer is large enough */
   size_t alloc_required = snode->migevent_count[msa_index] +
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
-  while (migbuffer_size[thread_index] < alloc_required)
-    migbuffer_realloc(thread_index, migbuffer_size[thread_index]+migbuffer_increment);
+  migbuffer_check_and_realloc(thread_index,alloc_required);
   migbuffer = migbuffer_r[thread_index];
 
   /* add taus and coalescence times in sortbuffer */
@@ -6223,11 +6236,11 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
   long lineages;
   migbuffer_t * wtimes;
 
+  /* make sure migbuffer is large enough */
   size_t alloc_required = snode->migevent_count[msa_index] +
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
-  while (migbuffer_size[thread_index] < alloc_required)
-    migbuffer_realloc(thread_index, migbuffer_size[thread_index]+migbuffer_increment);
+  migbuffer_check_and_realloc(thread_index,alloc_required);
   wtimes = migbuffer_r[thread_index];
 
   /* start with the lineages entering the current population */
