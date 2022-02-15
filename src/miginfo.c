@@ -103,7 +103,7 @@ miginfo_t * miginfo_extend(miginfo_t * mi, size_t units)
 
   memcpy(extmi->me, mi->me, mi->count*sizeof(migevent_t));
 
-  for (i = mi->count; i < mi->count+units*alloc_extend; ++i)
+  for (i = mi->count; i < mi->alloc_size+units*alloc_extend; ++i)
   {
     extmi->me[i].di_src = (dlist_item_t *)xcalloc(1,sizeof(dlist_item_t));
     extmi->me[i].di_tgt = (dlist_item_t *)xcalloc(1,sizeof(dlist_item_t));
@@ -113,7 +113,7 @@ miginfo_t * miginfo_extend(miginfo_t * mi, size_t units)
      Note: the below loop will also update the contents of the first mi->count 
      dlist_item_t entries which are already linked with populations, thus no
      need for linking/unlinking */
-  for (i = 0; i < mi->count+units*alloc_extend; ++i)
+  for (i = 0; i < mi->alloc_size+units*alloc_extend; ++i)
   {
     extmi->me[i].di_src->data = (void *)(extmi->me+i);
     extmi->me[i].di_tgt->data = (void *)(extmi->me+i);
