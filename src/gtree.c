@@ -1308,7 +1308,6 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
       long s = gtree->root->mi->me[i].target->node_index;
       long t = gtree->root->mi->me[i].source->node_index;
       gtree->migcount[s][t]++;
-      stree->migcount_sum[s][t]++;
 
       if (gtree->root->mi->me[i].source != pop)
       {
@@ -1730,7 +1729,6 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
         /* increase # of migrations from pop k to j (forward in time) */
         migcount[pop[k].snode->node_index][pop[j].snode->node_index]++;
-        stree->migcount_sum[pop[k].snode->node_index][pop[j].snode->node_index]++;
         if (i != --pop[j].seq_count)
         {
           pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
@@ -6508,7 +6506,6 @@ static void subtree_prune(stree_t * stree,
       long s = curnode->mi->me[i].target->node_index;
       long t = curnode->mi->me[i].source->node_index;
       gtree->migcount[s][t]--;
-      stree->migcount_sum[s][t]--;
 
       if (curnode->mi->me[i].source != curpop)
       {
@@ -6647,7 +6644,6 @@ static void subtree_regraft(stree_t * stree,
       long s = curnode->mi->me[i].target->node_index;
       long t = curnode->mi->me[i].source->node_index;
       gtree->migcount[s][t]++;
-      stree->migcount_sum[s][t]++;
 
       if (curnode->mi->me[i].source != curpop)
       {
