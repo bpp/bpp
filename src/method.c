@@ -3239,6 +3239,8 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Revolutionary species tree SPR algorithm\n");
   if (opt_exp_theta)
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
+  if (opt_exp_imrb)
+    fprintf(stdout, "[EXPERIMENTAL] - New IM rubberband algorithm\n");
 
   /* enable proposals */
   if (opt_model != BPP_DNA_MODEL_JC69)

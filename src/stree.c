@@ -3972,7 +3972,15 @@ static long getlinkedpops(stree_t * stree,
       /* skip populations already identified as linked */
       if (stree->nodes[i]->mark[thread_index_zero]) continue;
 
+#if 0
+      /* TODO: Quickly check whether there is any migration event between the
+         two populations. Unfortunately, the below code is not working because
+         of the way we try to construct the matrix which leads to a race
+         condition */
       if (!(stree->migcount_sum[i][j] || stree->migcount_sum[j][i])) continue;
+#else
+      if (!(opt_mig_bitmatrix[i][j] || opt_mig_bitmatrix[j][i])) continue;
+#endif
 
       /* TODO: To remove the below loops over all loci we could store the
          oldest and youngest migration times between any two populations.
