@@ -37,6 +37,7 @@ __THREAD char bpp_errmsg[200] = {0};
 long opt_alpha_cats;
 long opt_arch;
 long opt_basefreqs_fixed;
+long opt_bfd_points;
 long opt_burnin;
 long opt_checkpoint;
 long opt_checkpoint_current;
@@ -179,6 +180,7 @@ double opt_vbar_beta;
 double opt_vi_alpha;
 long * opt_diploid;
 long * opt_sp_seqcount;
+char * opt_bfdriver;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constraintfile;
@@ -258,6 +260,8 @@ static struct option long_options[] =
   {"exp_sim",      no_argument,       0, 0 },  /* 35 */
   {"summary",      required_argument, 0, 0 },  /* 36 */
   {"exp_imrb",     no_argument,       0, 0 },  /* 37 */
+  {"bfdriver",     required_argument, 0, 0 },  /* 38 */
+  {"points",       required_argument, 0, 0 },  /* 39 */
   { 0, 0, 0, 0 }
 };
 
@@ -364,6 +368,8 @@ void args_init(int argc, char ** argv)
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
   opt_bfbeta = 1;
+  opt_bfdriver = NULL;
+  opt_bfd_points = 0;
   opt_mubar_alpha = -1;
   opt_mubar_beta = -1;
   opt_mui_alpha = -1;
@@ -723,6 +729,14 @@ void args_init(int argc, char ** argv)
         opt_exp_imrb = 1;
         break;
 
+      case 38:
+        opt_bfdriver = xstrdup(optarg);
+        break;
+
+      case 39:
+        opt_bfd_points = atol(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -756,6 +770,8 @@ void args_init(int argc, char ** argv)
     commands++;
   if (opt_comply)
     commands++;
+  if (opt_bfdriver)
+    commands++;
 
   /* if more than one independent command, fail */
   if (commands > 1)
@@ -784,6 +800,7 @@ static void dealloc_switches()
   if (opt_reorder) free(opt_reorder);
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
+  if (opt_bfdriver) free(opt_bfdriver);
 
   /* mccoal switches */
   if (opt_basefreqs_params) free(opt_basefreqs_params);
@@ -803,12 +820,16 @@ void cmd_help()
   fprintf(stderr,
           "\n"
           "General options:\n"
-          "  --help             display help information\n"
-          "  --version          display version information\n"
-          "  --quiet            only output warnings and fatal errors to stderr\n"
-          "  --cfile FILENAME   run analysis for the specified control file\n"
-          "  --resume FILENAME  resume analysis from a specified checkpoint file\n"
-          "  --arch SIMD        force specific vector instruction set (default: auto)\n"
+          "  --help                  display help information\n"
+          "  --version               display version information\n"
+          "  --quiet                 only output warnings and fatal errors to stderr\n"
+          "  --cfile FILENAME        run analysis for the specified control file\n"
+          "  --resume FILENAME       resume analysis from a specified checkpoint file\n"
+          "  --arch SIMD             force specific vector instruction set (default: auto)\n"
+          "  --msci-create FILENAME  construct an MSci graph using a definitions file\n"
+          "  --bfdriver FILENAME     create control files to calculate marginal likelihood\n"
+          "  --points INTEGER        number of G-L quadrature points (used with --bfdriver)\n"
+          "  --summary FILENAME      summarize results using specified control file\n"
           "\n"
          );
 
@@ -904,6 +925,10 @@ int main (int argc, char * argv[])
   else if (opt_comply)
   {
     cmd_comply();
+  }
+  else if (opt_bfdriver)
+  {
+    cmd_bfdriver();
   }
 
   legacy_fini();

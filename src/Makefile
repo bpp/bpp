@@ -18,8 +18,8 @@
 # University College London, Gower Street, London WC1E 6BT, England
 
 # Profiling
-#PROFILING=-g -pg
-PROFILING=-g
+#PROFILING=-g -pg -no-pie
+#PROFILING=-g
 
 # Compiler warnings
 WARN=-Wall -Wsign-compare
@@ -43,7 +43,7 @@ endif
 ifndef CC
 CC = gcc-7
 endif
-CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
 LIBS=-lm -lpthread
 
@@ -60,7 +60,7 @@ OBJS=bpp.o rtree.o util.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
      gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o \
-     constraint.o debug.o lswitch.o miginfo.o ming2.o $(AVXOBJ) $(AVX2OBJ)
+     constraint.o debug.o lswitch.o miginfo.o ming2.o bfdriver.o $(AVXOBJ) $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

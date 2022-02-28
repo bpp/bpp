@@ -916,6 +916,7 @@ typedef struct thread_info_s
 extern long opt_alpha_cats;
 extern long opt_arch;
 extern long opt_basefreqs_fixed;
+extern long opt_bfd_points;
 extern long opt_burnin;
 extern long opt_checkpoint;
 extern long opt_checkpoint_current;
@@ -1055,6 +1056,7 @@ extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
+extern char * opt_bfdriver;
 extern char * cmdline;
 extern char * opt_cfile;
 extern char * opt_concatfile;
@@ -2515,3 +2517,6 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
 int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
           int(*dfun)(double x[], double *f, double dx[], int n),
           double x[], double xb[][2], double space[], double e, int n);
+
+/* functions in bfdriver.c */
+void cmd_bfdriver();
