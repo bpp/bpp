@@ -105,6 +105,13 @@ static void init_outfile(FILE * fp)
           VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
   fprintf(fp, "Command: %s\n\n", cmdline);
 
+  if (opt_seed > 0)
+    fprintf(fp, "Seed: %ld (fixed by user)\n", opt_seed);
+  else
+  {
+    unsigned int rseed = get_legacy_rndu_status(0);
+    fprintf(fp, "Seed: %d (randomly generated)\n", rseed);
+  }
 }
 
 static void print_mcmc_headerline(FILE * fp,
@@ -482,7 +489,14 @@ static stree_t * load_tree_or_network(void)
 {
   stree_t * stree;
 
-  printf("Using seed: %ld\n", opt_seed);
+  if (opt_seed > 0)
+    printf("Seed: %ld (fixed by user)\n", opt_seed);
+  else
+  {
+    unsigned int rseed = get_legacy_rndu_status(0);
+    printf("Seed: %d (randomly generated)\n", rseed);
+  }
+
   /* parse tree */
   if (!opt_quiet)
     fprintf(stdout, "Parsing species tree...");
