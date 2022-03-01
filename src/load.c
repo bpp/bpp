@@ -1517,6 +1517,9 @@ static void load_gene_tree(FILE * fp, long index)
     }
 
     gt->migpops = (snode_t **)xcalloc((size_t)total_snodes, sizeof(snode_t *));
+    gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
+                                        sizeof(snode_t *));
+    gt->rb_lcount = 0;
   }
 }
 
