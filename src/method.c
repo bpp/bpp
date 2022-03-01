@@ -3254,7 +3254,7 @@ void cmd_run()
   if (opt_exp_theta)
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
   if (opt_exp_imrb)
-    fprintf(stdout, "[EXPERIMENTAL] - New IM rubberband algorithm\n");
+    fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
 
   /* enable proposals */
   if (opt_model != BPP_DNA_MODEL_JC69)

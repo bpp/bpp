@@ -593,6 +593,8 @@ typedef struct gtree_s
 
   /* buffer to store feasible populations where migrants come from during simulation */
   snode_t ** migpops;
+  snode_t ** rb_linked;  /* per-locus affected snodes in new rubberband */
+  long rb_lcount;
 
 } gtree_t;
 
