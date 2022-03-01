@@ -438,6 +438,8 @@ static gtree_t * gtree_wraptree(gnode_t * root,
   gtree_t * tree = (gtree_t *)xmalloc(sizeof(gtree_t));
   tree->migpops  = NULL;
   tree->migcount = NULL;
+  tree->rb_linked = NULL;
+  tree->rb_lcount = 0;
 
   if (tip_count < 2 && tip_count != 0)
     fatal("Invalid number of tips in input tree (%u).", tip_count);
