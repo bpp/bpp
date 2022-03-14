@@ -404,6 +404,9 @@ void stree_destroy(stree_t * tree,
     free(tree->pptable);
   }
 
+  if (tree->td)
+    free(tree->td);
+
   if (tree->mi_tbuffer)
   {
     for (i = 0; i < opt_threads; ++i)

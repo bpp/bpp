@@ -242,6 +242,12 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_BETA            3
 #define BPP_THETA_PRIOR_MAX             3
 
+#define BPP_LINKEDTHETA_NONE            0
+#define BPP_LINKEDTHETA_ALL             1       /* model M0 */
+#define BPP_LINKEDTHETA_INNER           2       /* model M1 */
+#define BPP_LINKEDTHETA_MSCI            3       /* model M2 */
+
+
 #define BPP_LB_NONE                     0
 #define BPP_LB_ZIGZAG                   1
 
@@ -466,6 +472,9 @@ typedef struct snode_s
   long mb_count;
   dlist_t ** mig_source;
   dlist_t ** mig_target;
+
+  /* linked theta model */
+  struct snode_s * linked_theta;
 } snode_t;
 
 typedef struct migevent_s
@@ -497,6 +506,7 @@ typedef struct stree_s
   unsigned int locus_count;
 
   snode_t ** nodes;
+  snode_t ** td;
 
   int ** pptable;
 
@@ -966,6 +976,7 @@ extern long opt_exp_theta;
 extern long opt_exp_sim;
 extern long opt_finetune_reset;
 extern long opt_help;
+extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
@@ -2468,6 +2479,7 @@ void cmd_comply();
 
 /* functions in debug.c */
 void debug_print_gtree(gtree_t * gtree);
+void debug_print_stree(stree_t * stree);
 void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index);
 void debug_check_leaves(gtree_t ** gtree);
 void debug_validate_logpg(stree_t * stree,

@@ -88,6 +88,7 @@ long opt_exp_theta;
 long opt_exp_sim;
 long opt_finetune_reset;
 long opt_help;
+long opt_linkedtheta;
 long opt_load_balance;
 long opt_locusrate_prior;
 long opt_locus_count;
@@ -455,6 +456,7 @@ void args_init(int argc, char ** argv)
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
   opt_heredity_filename = NULL;
+  opt_linkedtheta = BPP_LINKEDTHETA_NONE;
   opt_load_balance = BPP_LB_ZIGZAG;
   opt_locusrate_filename = NULL;
   opt_locusrate_prior = -1;

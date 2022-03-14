@@ -607,12 +607,14 @@ stree_t * stree_clone_init(stree_t * stree)
   long j;
   stree_t * clone;
   long ** migcount_sum = NULL;
-
+  
+  assert(!opt_msci);
   clone = (stree_t *)xcalloc(1, sizeof(stree_t));
   memcpy(clone, stree, sizeof(stree_t));
 
   /* create cloned species tree nodes */
   clone->nodes = (snode_t **)xmalloc(nodes_count * sizeof(snode_t *));
+  clone->td = (snode_t **)xmalloc(nodes_count * sizeof(snode_t *));
   for (i = 0; i < nodes_count; ++i)
   {
     clone->nodes[i] = (snode_t *)xcalloc(1, sizeof(snode_t));
@@ -1458,6 +1460,135 @@ static void stree_init_phi(stree_t * stree)
   }
 }
 
+static void msci_link_thetas_bfs(stree_t * stree)
+{
+  long i,j = 0;
+  long head,tail;
+  long total_nodes;
+  snode_t * sibling;
+  snode_t ** queue;
+  snode_t ** hybrid;
+
+  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+  queue = (snode_t **)xcalloc((size_t)(total_nodes+1),sizeof(snode_t *));
+  hybrid = (snode_t **)xcalloc((size_t)(stree->hybrid_count),sizeof(snode_t *));
+  
+  /* order nodes using BFS */  
+  head = tail = 0;
+  queue[tail++] = stree->root;
+  while (queue[head])
+  {
+    snode_t * x = queue[head++];
+
+    if (x->left)
+      queue[tail++] = x->left;
+
+    if (x->right)
+      queue[tail++] = x->right;
+
+    if (x->hybrid && x->node_index < stree->tip_count+stree->inner_count)
+      hybrid[j++] = x;
+
+    printf(" %s", x->label);
+  }
+  printf("\n");
+  free(queue);
+
+  printf("Hybrid nodes: %ld\n", j);
+  assert(j == stree->hybrid_count);
+
+  /* now get list of hybrid nodes in bfs order */
+  for (i = 0; i < j; ++i)
+    printf(" %s", hybrid[i]->label);
+  printf("\n");
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
+    snode_t * mnode = snode->hybrid;
+
+    if (!node_is_bidirection(snode))
+    {
+      /* hybridization */
+
+      /* model A */
+      if (snode->htau && mnode->htau) continue;
+
+      /* model C */
+      if (!snode->htau) 
+      {
+        /* sibling is linked to parent */
+        sibling = (snode->parent->left == snode) ?
+                    snode->parent->right : snode->parent->left;
+        sibling->linked_theta = snode->parent->linked_theta ?
+                                  snode->parent->linked_theta : snode->parent;
+      }
+      else
+      {
+        /* child is linked to hybrid */
+        assert(snode->left && !snode->right);
+
+        snode_t * child = snode->left;
+        child->linked_theta = snode->linked_theta ? snode->linked_theta : snode;
+      }
+
+      if (!mnode->htau)
+      {
+        sibling = (mnode->parent->left == mnode) ?
+                    mnode->parent->right : mnode->parent->left;
+        sibling->linked_theta = mnode->parent->linked_theta ?
+                            mnode->parent->linked_theta : mnode->parent;
+      }
+      else
+      {
+        assert(!mnode->left && !mnode->right && snode->left && !snode->right);
+        snode_t * child = snode->left;
+        child->linked_theta = mnode->linked_theta ? mnode->linked_theta : mnode;
+      }
+    }
+    else
+    {
+      /* bidirection */
+      snode->left->linked_theta = snode->linked_theta ?
+                                    snode->linked_theta : snode;
+    }
+  }
+}
+
+static void init_theta_linkage(stree_t * stree)
+{
+  long i;
+  unsigned int total_nodes;
+
+  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  for (i = 0; i < total_nodes; ++i)
+    stree->nodes[i]->linked_theta = NULL;
+
+  if (opt_linkedtheta == BPP_LINKEDTHETA_NONE) return;
+
+  if (opt_linkedtheta == BPP_LINKEDTHETA_ALL)
+  {
+    for (i = 0; i < total_nodes; ++i)
+    {
+      if (stree->nodes[i] != stree->root)
+        stree->nodes[i]->linked_theta = stree->root;
+    }
+  }
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_INNER)
+  {
+    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+    {
+      if (stree->nodes[i] != stree->root)
+        stree->nodes[i]->linked_theta = stree->root;
+    }
+  }
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_MSCI)
+  {
+    msci_link_thetas_bfs(stree);
+  }
+}
+
 static void stree_init_theta(stree_t * stree,
                              msa_t ** msalist,
                              list_t * maplist,
@@ -1617,6 +1748,7 @@ static void stree_init_theta(stree_t * stree,
    /* From Ziheng's email from 3.3.2018 (see also issue #62) this is changed
       to set estimation of thetas according to the 'species&tree' tag in the
       control file. */
+   init_theta_linkage(stree);
    for (i = 0; i < stree->tip_count; ++i)
    {
      snode_t * node = stree->nodes[i];
@@ -1768,6 +1900,12 @@ static void stree_init_theta(stree_t * stree,
         node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
       }
     }
+  }
+
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+  {
+    if (stree->nodes[i]->linked_theta && stree->nodes[i]->has_theta)
+      stree->nodes[i]->theta = stree->nodes[i]->linked_theta->theta;
   }
 
   /* deallocate seqcount */
@@ -2176,6 +2314,7 @@ void stree_init(stree_t * stree,
                 FILE * fp_out)
 {
   unsigned int i, j;
+  unsigned int nodes_count;
   long ** migcount_sum = NULL;
 
   long thread_index = 0;
@@ -2209,6 +2348,9 @@ void stree_init(stree_t * stree,
   {
     stree->nodes[0]->tau = 0;
   }
+  nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  stree->td = (snode_t **)xmalloc((size_t)nodes_count * sizeof(snode_t *));
 
   if (opt_msci)
     stree_init_phi(stree);
@@ -2241,7 +2383,6 @@ void stree_init(stree_t * stree,
                                               sizeof(miginfo_t *));
 
 
-    unsigned int nodes_count = stree->tip_count+stree->inner_count;
     void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
                          (size_t)nodes_count*sizeof(long *));
     migcount_sum = (long **)mem;
@@ -2372,12 +2513,15 @@ static int propose_theta(stree_t * stree,
                          snode_t * snode,
                          long thread_index)
 {
-  long i;
+  long i,j;
+  long lcount = 0;
   double thetaold, logthetaold;
   double thetanew, logthetanew;
   double lnacceptance = 0;
   double minv = -99;
   double maxv =  99;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   thetaold = snode->theta;
 
@@ -2428,22 +2572,44 @@ static int propose_theta(stree_t * stree,
                     log((opt_theta_max-thetanew) / (opt_theta_max-thetaold));
   }
 
+  lcount = 1;
+  stree->td[0] = snode;
+
+  if (opt_linkedtheta)
+  {
+    for (i=0; i < total_nodes; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+
+      if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
+      {
+        x->theta = thetanew;
+        stree->td[lcount++] = x;
+      }
+    }
+  }
+
   for (i = 0; i < opt_locus_count; ++i)
   {
     /* save a copy of old logpr */
     gtree[i]->old_logpr = gtree[i]->logpr;
 
-    gtree[i]->logpr -= snode->logpr_contrib[i];
-    if (opt_migration)
-      gtree_update_logprob_contrib_mig(snode,
-                                       stree,
-                                       gtree[i],
-                                       locus[i]->heredity[0],
-                                       i,
-                                       thread_index);
-    else
-      gtree_update_logprob_contrib(snode, locus[i]->heredity[0],i,thread_index);
-    gtree[i]->logpr += snode->logpr_contrib[i];
+    for (j = 0; j < lcount; ++j)
+    {
+      snode_t * x = stree->td[j];
+
+      gtree[i]->logpr -= x->logpr_contrib[i];
+      if (opt_migration)
+        gtree_update_logprob_contrib_mig(x,
+                                         stree,
+                                         gtree[i],
+                                         locus[i]->heredity[0],
+                                         i,
+                                         thread_index);
+      else
+        gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
+      gtree[i]->logpr += x->logpr_contrib[i];
+    }
 
     lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
   }
@@ -2464,9 +2630,16 @@ static int propose_theta(stree_t * stree,
   for (i = 0; i < opt_locus_count; ++i)
     gtree[i]->logpr = gtree[i]->old_logpr;
 
-  snode->theta = thetaold;
-  for (i = 0; i < opt_locus_count; ++i)
-    snode->logpr_contrib[i] = snode->old_logpr_contrib[i];
+  for (i = 0; i < lcount; ++i)
+    stree->td[i]->theta = thetaold;
+
+  for (j = 0; j < lcount; ++j)
+  {
+    snode_t * x = stree->td[j];
+
+    for (i = 0; i < opt_locus_count; ++i)
+      x->logpr_contrib[i] = x->old_logpr_contrib[i];
+  }
 
   return 0;
 }
@@ -2483,7 +2656,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
     snode = stree->nodes[i];
-    if (snode->theta >= 0 && snode->has_theta)
+    if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
       accepted += propose_theta(stree,gtree,locus,stree->nodes[i],thread_index);
       theta_count++;
@@ -3410,6 +3583,10 @@ static long propose_tau(locus_t ** loci,
 
   oldage = snode->tau;
 
+  /* TODO: Implement a generic version */
+  if (opt_linkedtheta)
+    theta_method = 0;
+
   /* compute minage and maxage bounds */
   if (opt_msci && snode->hybrid)
   {
@@ -4224,6 +4401,10 @@ static long propose_tau_mig(locus_t ** loci,
   unsigned int count_above = 0;
   unsigned int count_below = 0;
   unsigned int paffected_count;        /* number of affected populations */
+
+  /* TODO: Implement a generic version */
+  if (opt_linkedtheta)
+    theta_method = 0;
 
   oldage = snode->tau;
 

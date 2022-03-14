@@ -1910,6 +1910,7 @@ static FILE * resume(stree_t ** ptr_stree,
      cloned copy of the species tree and gene trees */
   if (opt_est_stree || opt_migration)
   {
+    assert(opt_msci == 0);
     *ptr_sclone = stree_clone_init(stree);
     *ptr_gclones = (gtree_t **)xmalloc((size_t)opt_locus_count*sizeof(gtree_t *));
     for (i = 0; i < opt_locus_count; ++i)
@@ -2860,6 +2861,10 @@ static FILE * init(stree_t ** ptr_stree,
           "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
           "\n  scaling = 1\n\nto the control file");
 
+  #if 0
+  debug_print_stree(stree);
+  assert(0);
+  #endif
   /* free weights array */
   free(weights);
 
@@ -3255,6 +3260,14 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
+  if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
+    fprintf(stdout, "Linked thetas: none\n");
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_ALL)
+    fprintf(stdout, "Linked thetas: all nodes\n");
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_INNER)
+    fprintf(stdout, "Linked thetas: inner nodes\n");
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_MSCI)
+    fprintf(stdout, "Linked thetas: introgression nodes\n");
 
   /* enable proposals */
   if (opt_model != BPP_DNA_MODEL_JC69)

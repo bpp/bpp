@@ -221,7 +221,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   {
     /* TODO: Precompute how many theta parameters we have for A00 */
     for (i = 0; i < nodes_count; ++i)
-      if (stree->nodes[i]->theta > 0)
+      if (stree->nodes[i]->theta > 0 && !stree->nodes[i]->linked_theta)
         theta_count++;
   }
   else
@@ -279,6 +279,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
       snodes[i]->old_theta = snodes[i]->theta;
       snodes[i]->theta *= c;
+
+      if (snodes[i]->linked_theta) continue;
       
       if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += (-opt_theta_alpha-1)*lnc -
