@@ -1295,6 +1295,41 @@ l_unwind:
   return ret;
 }
 
+static long parse_thetamodel(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  char * model = NULL;
+
+  long count;
+
+  count = get_delstring(p," \t\r\n*#,",&model);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!strcasecmp(model, "linked-none")) 
+    opt_linkedtheta = BPP_LINKEDTHETA_NONE;
+  else if (!strcasecmp(model, "linked-all"))
+    opt_linkedtheta = BPP_LINKEDTHETA_ALL;
+  else if (!strcasecmp(model, "linked-inner"))
+    opt_linkedtheta = BPP_LINKEDTHETA_INNER;
+  else if (!strcasecmp(model, "linked-msci"))
+    opt_linkedtheta = BPP_LINKEDTHETA_MSCI;
+  else
+    goto l_unwind;
+
+  ret = 1;
+
+l_unwind:
+  if (model)
+    free(model);
+  free(s);
+  return ret;
+}
+
+
 static long parse_thetaprior_args(const char * line)
 {
   long ret = 0;
@@ -2752,6 +2787,15 @@ void load_cfile()
       {
         if (!parse_alphaprior(value))
           fatal("Option 'alphaprior' expects two doubles (line %ld)",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"thetamodel",10))
+      {
+        if (!parse_thetamodel(value))
+          fatal("Erroneous format of 'thetamodel' (line %ld)\n"
+                "Possible options:\n"
+                " linked-none\n linked-all\n linked-inner\n linked-msci",
                 line_count);
         valid = 1;
       }

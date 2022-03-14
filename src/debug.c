@@ -49,6 +49,79 @@ void debug_im_check_sum(stree_t * stree, gtree_t ** gtree, const char * desc)
       }
 }
 
+void debug_print_stree(stree_t * stree)
+{
+  long i;
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  printf("Total nodes: %ld\n", total_nodes);
+
+  printf("Label        Node  Child1  Child2  Parent  Linked     Theta       Tau  Leaves  "
+         "prop_tau      hphi  htau\n");
+  for (i = 0; i <total_nodes; ++i)
+  {
+    char * label;
+    if (stree->nodes[i]->label)
+      label = xstrdup(stree->nodes[i]->label);
+    else
+      label = xstrdup("N/A");
+
+    /* shorten label if over 12 characters */
+    if (strlen(label) > 12)
+    {
+      label[9] = '.'; label[10] = '.'; label[11] = '.'; label[12] = 0;
+    }
+
+    printf("%-12s", label);
+    free(label);
+    printf(" %4d", stree->nodes[i]->node_index);
+
+    if (stree->nodes[i]->left)
+      printf("  %6d", stree->nodes[i]->left->node_index);
+    else
+      printf("  %6s", "N/A");
+    if (stree->nodes[i]->right)
+      printf("  %6d", stree->nodes[i]->right->node_index);
+    else
+      printf("  %6s", "N/A");
+    if (stree->nodes[i]->parent)
+      printf("  %6d", stree->nodes[i]->parent->node_index);
+    else
+      printf("  %6s", "N/A");
+
+    if (stree->nodes[i]->linked_theta)
+      printf("  %1s:%2d", "Yes", stree->nodes[i]->linked_theta->node_index);
+    else
+      printf("  %6s", "No");
+
+    double theta = 0;
+    if (stree->nodes[i]->linked_theta)
+      theta = stree->nodes[i]->linked_theta->theta;
+    else
+      theta = stree->nodes[i]->theta;
+
+    if (theta < 0)
+      printf("  %8s", "-");
+    else
+      printf("  %.6f", theta);
+
+    if (stree->nodes[i]->tau)
+      printf("  %.6f", stree->nodes[i]->tau);
+    else
+      printf("  %8s", "-");
+
+    printf("  %6d", stree->nodes[i]->leaves);
+    printf("  %8d", stree->nodes[i]->prop_tau);
+    
+    if (opt_msci && stree->nodes[i]->hybrid)
+      printf("  %.6f", stree->nodes[i]->hphi);
+    else
+      printf("  %8s", "-");
+
+    printf("  %4ld\n", stree->nodes[i]->htau);
+  }
+}
+
 void debug_print_gtree(gtree_t * gtree)
 {
   long i,j;
@@ -984,3 +1057,73 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
   }
 }
 
+void debug_write_migs_header(FILE * fp_debug, stree_t * stree, gtree_t ** gtree)
+{
+  long j,k;
+
+  fprintf(fp_debug, "Order:");
+  for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    for (k = 0; k < stree->tip_count+stree->inner_count; ++k)
+      if (opt_mig_bitmatrix[j][k])
+        fprintf(fp_debug, " MC_%s->%s", stree->nodes[j]->label, stree->nodes[k]->label);
+  fprintf(fp_debug,"\n");
+}
+void debug_write_migs(FILE * fp_debug, stree_t * stree, gtree_t ** gtree, long sample)
+{
+  int print_perlocus = 0;
+  int print_sample_number = 0;
+  long i,j,k;
+  
+  long * perlocus  = (long *)xcalloc((size_t)opt_locus_count, sizeof(long));
+  long * perthread = (long *)xcalloc((size_t)opt_locus_count, sizeof(long));
+
+  if (print_sample_number)
+    fprintf(fp_debug, "%ld\n", sample);
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      for (k = 0; k < stree->tip_count+stree->inner_count; ++k)
+        if (opt_mig_bitmatrix[j][k])
+        {
+          if (print_perlocus)
+            fprintf(fp_debug," %5ld", gtree[i]->migcount[j][k]);
+          perlocus[i] += gtree[i]->migcount[j][k];
+        }
+    if (print_perlocus)
+      fprintf(fp_debug, "  |  %ld\n", perlocus[i]);
+  }
+
+  #if 0
+  fprintf(fp_debug, "Per-thread migrations:\n");
+  #endif
+  thread_info_t * ti = threads_ti();
+  double mean = 0;
+  double stdev = 0;
+  for (i = 0; i < opt_threads; ++i)
+  {
+    thread_info_t * tip = ti+i;
+    for (j = tip->locus_first; j < tip->locus_first+tip->locus_count; ++j)
+      perthread[i] += perlocus[j];
+    if (!i)
+      fprintf(fp_debug, "%5ld", perthread[i]);
+    else
+      fprintf(fp_debug, " %5ld", perthread[i]);
+    mean += perthread[i];
+  }
+  mean /= opt_threads;
+  for (i = 0; i < opt_threads; ++i)
+    stdev += (perthread[i] - mean)*(perthread[i] - mean);
+  stdev = sqrt(stdev / opt_threads);
+  
+  #if 0
+  fprintf(fp_debug, "  | %.2f %.2f\n", mean, stdev);
+  #endif
+
+  free(perlocus);
+  free(perthread);
+  #if 0
+  fprintf(fp_debug,"\n\n");
+  #else
+  fprintf(fp_debug,"\n");
+  #endif
+}
