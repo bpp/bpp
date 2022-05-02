@@ -1,3 +1,0 @@
-option('have_sse3', type: 'boolean', value: true, description: 'Compile with sse3')
-option('have_avx', type: 'boolean', value: true, description: 'Compile with avx')
-option('have_avx2', type: 'boolean', value: true, description: 'Compile with avx2')
