@@ -1,4 +1,4 @@
-project('bpp', ['cpp','c'],
+project('bpp', 'c',
         version: '4.4.1',
         default_options : [
           'optimization=3',     # -O3
