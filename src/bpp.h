@@ -1528,6 +1528,7 @@ double gtree_logprob(stree_t * stree,
                      double heredity,
                      long msa_index,
                      long thread_index);
+void gtree_update_branchlengths(stree_t * stree, gtree_t * gtree);
 
 //double gtree_logprob_notheta(stree_t * stree);
 double gtree_update_logprob_contrib_mig(snode_t * snode,

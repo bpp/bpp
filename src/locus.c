@@ -1140,6 +1140,21 @@ static double update_branchlength_relaxed_clock(stree_t * stree,
   return length;
 }
 
+void gtree_update_branchlengths(stree_t * stree, gtree_t * gtree)
+{
+  long j;
+
+  for (j = 0; j < gtree->tip_count+gtree->inner_count; ++j)
+  {
+    gnode_t * x = gtree->nodes[j];
+    if (!x->parent) continue;
+
+    x->length = (opt_clock == BPP_CLOCK_GLOBAL) ?
+                  (x->parent->time - x->time) * gtree->rate_mui :
+                  update_branchlength_relaxed_clock(stree,x,gtree->msa_index);
+  }
+}
+
 static void locus_update_all_matrices_generic_recursive(locus_t * locus,
                                                         gtree_t * gtree,
                                                         gnode_t * node,
