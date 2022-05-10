@@ -1491,14 +1491,26 @@ static void mcmc_logsample(FILE * fp,
     fprintf(fp, "\n");
 }
 
-static void print_gtree(FILE ** fp, gtree_t ** gtree)
+static void print_gtree(FILE ** fp, stree_t * stree, gtree_t ** gtree)
 {
-  long i;
+  long i,j;
+  double tl;
+
+  /* TODO: For IM, branch lengths are incorrect */
+  assert(!opt_migration);
 
   for (i = 0; i < opt_locus_count; ++i)
   {
+    gtree_update_branchlengths(stree,gtree[i]);
+    for (tl = 0, j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+    {
+      if (!gtree[i]->nodes[j]->parent) continue;
+
+      tl += gtree[i]->nodes[j]->length;
+    }
+
     char * newick = gtree_export_newick(gtree[i]->root,NULL);
-    fprintf(fp[i], "%s\n", newick);
+    fprintf(fp[i], "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
     free(newick);
   }
 }
@@ -3810,7 +3822,7 @@ void cmd_run()
 
       /* log gene trees */
       if (opt_print_genetrees)
-        print_gtree(fp_gtree,gtree);
+        print_gtree(fp_gtree,stree,gtree);
 
       /* log rates */
       if (opt_print_locusfile)

@@ -1558,8 +1558,15 @@ static void simulate(stree_t * stree)
 
     if (opt_treefile)
     {
+      double tl;
+      for (tl = 0, j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
+      {
+        if (!gtree[i]->nodes[j]->parent) continue;
+
+        tl += gtree[i]->nodes[j]->length;
+      }
       char * newick = gtree_export_newick(gtree[i]->root, NULL);
-      fprintf(fp_tree, "%s [TH=%.6f]\n", newick, gtree[i]->root->time);
+      fprintf(fp_tree, "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
       free(newick);
     }
 
