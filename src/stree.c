@@ -2506,6 +2506,108 @@ static void gtree_all_partials(gnode_t * root,
   all_partials_recursive(root, trav_size, travbuffer);
 }
 
+static int cb_cmp_double_asc(const void * a, const void * b)
+{
+  const double * x = a;
+  const double * y = b;
+
+  if (*x > *y) return 1;
+
+  return -1;
+}
+
+static int propose_theta_gibbs(stree_t * stree,
+                               gtree_t ** gtree,
+                               locus_t ** locus,
+                               snode_t * snode,
+                               long thread_index)
+{
+  unsigned int j, k, n;
+  long i;
+  long lcount = 0;
+  long msa_index;
+  long coal_sum = 0;
+  double T2h_sum = 0;
+  double a1;
+  double b1 = opt_theta_beta;;
+  double heredity;
+  double * sortbuffer = global_sortbuffer_r[thread_index];
+  dlist_item_t * event;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  /* TODO: For migration we'll need to account for incoming/outgoing lineages
+     as in the gene tree density function */
+  assert(!opt_migration);
+
+  /* TODO: Speed this up by using coal_event_sum variable as in NoTheta */
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    heredity = locus[msa_index]->heredity[0];
+
+    coal_sum += snode->event_count[msa_index];
+
+    sortbuffer[0] = snode->tau;
+    j = 1;
+    for (event = snode->event[msa_index]->head; event; event = event->next)
+    {
+      gnode_t* gnode = (gnode_t*)(event->data);
+      sortbuffer[j++] = gnode->time;
+    }
+    if (snode->parent)
+      sortbuffer[j++] = snode->parent->tau;
+
+    /* if there was at least one coalescent event, sort */
+    if (j > 1)
+      qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
+
+    /* skip the last step in case the last value of n was supposed to be 1 */
+    if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
+    for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
+    {
+      T2h_sum += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+    }
+  }
+
+
+  /* MSC(i) model */
+
+  a1 = opt_theta_alpha + coal_sum;
+  b1 = opt_theta_beta  + T2h_sum;
+  
+  snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+
+  lcount = 1;
+  stree->td[0] = snode;
+
+  if (opt_linkedtheta)
+  {
+    for (i=0; i < total_nodes; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+
+      if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
+      {
+        x->theta = snode->theta;
+        stree->td[lcount++] = x;
+      }
+    }
+  }
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    for (j = 0; j < lcount; ++j)
+    {
+      snode_t * x = stree->td[j];
+
+      gtree[i]->logpr -= x->logpr_contrib[i];
+      gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
+      gtree[i]->logpr += x->logpr_contrib[i];
+    }
+  }
+
+  return 1;
+}
 
 static int propose_theta(stree_t * stree,
                          gtree_t ** gtree,
@@ -2658,7 +2760,10 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      accepted += propose_theta(stree,gtree,locus,stree->nodes[i],thread_index);
+      if (opt_exp_gibbs)
+        accepted += propose_theta_gibbs(stree,gtree,locus,stree->nodes[i],thread_index);
+      else
+        accepted += propose_theta(stree,gtree,locus,stree->nodes[i],thread_index);
       theta_count++;
     }
   }

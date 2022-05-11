@@ -82,6 +82,7 @@ long opt_est_locusrate;
 long opt_est_mubar;
 long opt_est_stree;
 long opt_est_theta;
+long opt_exp_gibbs;
 long opt_exp_imrb;
 long opt_exp_randomize;
 long opt_exp_theta;
@@ -263,6 +264,7 @@ static struct option long_options[] =
   {"exp_imrb",     no_argument,       0, 0 },  /* 37 */
   {"bfdriver",     required_argument, 0, 0 },  /* 38 */
   {"points",       required_argument, 0, 0 },  /* 39 */
+  {"exp_gibbs",    no_argument,       0, 0 },  /* 40 */
   { 0, 0, 0, 0 }
 };
 
@@ -424,6 +426,7 @@ void args_init(int argc, char ** argv)
   opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
+  opt_exp_gibbs = 0;
   opt_exp_imrb = 0;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
@@ -739,6 +742,10 @@ void args_init(int argc, char ** argv)
         opt_bfd_points = atol(optarg);
         break;
 
+      case 40:
+        opt_exp_gibbs = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -781,6 +788,9 @@ void args_init(int argc, char ** argv)
 
   if (opt_prob_snl_shrink <= 0 || opt_prob_snl_shrink >= 1)
     fatal("Proportion of SHRINK moves must be between 0 and 1");
+
+  if (opt_exp_gibbs && opt_theta_dist != BPP_THETA_PRIOR_INVGAMMA)
+    fatal("Gibbs sampler for thetas requires an inverse gamma prior");
 
   /* if no command specified, turn on --help */
   if (!commands)
