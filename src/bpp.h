@@ -970,6 +970,7 @@ extern long opt_est_locusrate;
 extern long opt_est_mubar;
 extern long opt_est_stree;
 extern long opt_est_theta;
+extern long opt_exp_gibbs;
 extern long opt_exp_imrb;
 extern long opt_exp_randomize;
 extern long opt_exp_theta;
@@ -1164,6 +1165,8 @@ extern long popcnt_present;
 extern long avx_present;
 extern long avx2_present;
 extern long altivec_present;
+
+extern double ** global_sortbuffer_r;
 
 /* functions in util.c */
 

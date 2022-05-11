@@ -48,7 +48,7 @@ static hashtable_t * mht;
 
 /* one sortbuffer per thread (used as space to sort coalescent times when
    computing MSC density) to avoid reallocation */
-static double ** sortbuffer_r = NULL;
+double ** global_sortbuffer_r = NULL;
 
 static migbuffer_t ** migbuffer_r = NULL;
 static size_t * migbuffer_size = NULL;
@@ -2046,21 +2046,21 @@ void gtree_alloc_internals(gtree_t ** gtree,
     if (opt_threads == 1)
     {
       opt_threads = DEBUG_THREADS_COUNT;
-      sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+      global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
       opt_threads = 1;
     }
     else
     {
-      sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+      global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
     }
     #else
-    sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
+    global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
     for (i = 0; i < opt_threads; ++i)
-      sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+      global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
     #endif
   }
 }
@@ -2395,7 +2395,7 @@ double gtree_update_logprob_contrib(snode_t* snode,
   double T2h = 0;
   dlist_item_t* event;
 
-  double* sortbuffer = sortbuffer_r[thread_index];
+  double* sortbuffer = global_sortbuffer_r[thread_index];
 
   sortbuffer[0] = snode->tau;
   j = 1;
@@ -4307,20 +4307,20 @@ void gtree_fini(int msa_count)
     {
       opt_threads = DEBUG_THREADS_COUNT;
       for (i = 0; i < opt_threads; ++i)
-        free(sortbuffer_r[i]);
-      free(sortbuffer_r);
+        free(global_sortbuffer_r[i]);
+      free(global_sortbuffer_r);
       opt_threads = 1;
     }
     else
     {
       for (i = 0; i < opt_threads; ++i)
-        free(sortbuffer_r[i]);
-      free(sortbuffer_r);
+        free(global_sortbuffer_r[i]);
+      free(global_sortbuffer_r);
     }
     #else
     for (i = 0; i < opt_threads; ++i)
-      free(sortbuffer_r[i]);
-    free(sortbuffer_r);
+      free(global_sortbuffer_r[i]);
+    free(global_sortbuffer_r);
     #endif
   }
     
