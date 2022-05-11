@@ -221,8 +221,24 @@ static void process_subst_model()
     {
       fprintf(stdout, "Substitution model: GTR with fixed rates\n");
       opt_qrates_fixed = 1;
-        for (i = 0; i < 6; ++i)
-          opt_qrates_params[i] /= opt_qrates_params[5];
+      #if 0
+
+      /* last rate=1 */
+
+      for (i = 0; i < 6; ++i)
+        opt_qrates_params[i] /= opt_qrates_params[5];
+
+      #else
+
+      /* rates sum to 1 */
+
+      double qr_sum = 0;
+      for (i = 0; i < 6; ++i)
+        qr_sum += opt_qrates_params[i];
+      for (i = 0; i < 6; ++i)
+        opt_qrates_params[i] /= qr_sum;
+
+      #endif
     }
     else
     {
@@ -1424,8 +1440,20 @@ static void simulate(stree_t * stree)
       if (!opt_qrates_fixed)
       {
         legacy_rnddirichlet(thread_index_zero,qrates,opt_qrates_params,6);
+        #if 0
+
+        /* last rate=1 */
         for (j = 0; j < 6; ++j)
           qrates[j] /= qrates[5];
+        #else
+
+        /* rates sum to 1 */
+        double qr_sum = 0;
+        for (j = 0; j < 6; ++j)
+          qr_sum += qrates[j];
+        for (j = 0; j < 6; ++j)
+          qrates[j] /= qr_sum;
+        #endif
       }
       else
         memcpy(qrates,opt_qrates_params,6*sizeof(double));
