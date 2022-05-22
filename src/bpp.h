@@ -1167,6 +1167,7 @@ extern long avx2_present;
 extern long altivec_present;
 
 extern double ** global_sortbuffer_r;
+extern migbuffer_t ** global_migbuffer_r;
 
 /* functions in util.c */
 
