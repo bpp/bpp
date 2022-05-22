@@ -1287,10 +1287,11 @@ static void simulate(stree_t * stree)
     }
     else if (opt_model == BPP_DNA_MODEL_GTR)
     {
+      fprintf(fp_param,
+              "\ta(TC)\tb(TA)\tc(TG)\td(CA)\te(CG)\tf(AG)"
+              "\tpi_T\tpi_C\tpi_A\tpi_G\talpha");
       if (opt_est_locusrate)
-        fprintf(fp_param, "\tQrates_abcdef\tpi_TACG\talpha\tmu_i");
-      else
-        fprintf(fp_param, "\tQrates_abcdef\tpi_TACG\talpha");
+        fprintf(fp_param, "\tmu_i");
     }
     else
       assert(0);
