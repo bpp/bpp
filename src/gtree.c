@@ -50,7 +50,7 @@ static hashtable_t * mht;
    computing MSC density) to avoid reallocation */
 double ** global_sortbuffer_r = NULL;
 
-static migbuffer_t ** migbuffer_r = NULL;
+migbuffer_t ** global_migbuffer_r = NULL;
 static size_t * migbuffer_size = NULL;
 static size_t migbuffer_increment = 10;
 
@@ -2032,11 +2032,13 @@ void gtree_alloc_internals(gtree_t ** gtree,
      and end of epoch */
   if (opt_migration)
   {
-    migbuffer_r = (migbuffer_t **)xmalloc((size_t)(opt_threads) * sizeof(migbuffer_t *));
+    global_migbuffer_r = (migbuffer_t **)xmalloc((size_t)(opt_threads) *
+                                                 sizeof(migbuffer_t *));
     migbuffer_size = (size_t *)xmalloc((size_t)(opt_threads) * sizeof(size_t));
     for (i = 0; i < opt_threads; ++i)
     {
-      migbuffer_r[i] = (migbuffer_t *)xmalloc((size_t)(max_count+stree_inner_count+2) * sizeof(migbuffer_t));
+      global_migbuffer_r[i] = (migbuffer_t *)xmalloc((size_t)
+                          (max_count+stree_inner_count+2)*sizeof(migbuffer_t));
       migbuffer_size[i] = max_count+stree_inner_count+2;
     }
   }
@@ -2071,9 +2073,9 @@ static void migbuffer_realloc(long thread_index, size_t newsize)
   /* Note: no elements copying is necessary here */
   assert(newsize > migbuffer_size[thread_index]);
 
-  free(migbuffer_r[thread_index]);
-  migbuffer_r[thread_index] = (migbuffer_t *)xmalloc((size_t)newsize *
-                                                     sizeof(migbuffer_t));
+  free(global_migbuffer_r[thread_index]);
+  global_migbuffer_r[thread_index] = (migbuffer_t *)xmalloc((size_t)newsize *
+                                                          sizeof(migbuffer_t));
   migbuffer_size[thread_index] = newsize;
 }
 
@@ -2264,7 +2266,7 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
   migbuffer_check_and_realloc(thread_index,alloc_required);
-  migbuffer = migbuffer_r[thread_index];
+  migbuffer = global_migbuffer_r[thread_index];
 
   /* add taus and coalescence times in sortbuffer */
   migbuffer[0].time = snode->tau;
@@ -4296,8 +4298,8 @@ void gtree_fini(int msa_count)
   if (opt_migration)
   {
     for (i = 0; i < opt_threads; ++i)
-      free(migbuffer_r[i]);
-    free(migbuffer_r);
+      free(global_migbuffer_r[i]);
+    free(global_migbuffer_r);
     free(migbuffer_size);
   }
   else
@@ -6250,7 +6252,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
   migbuffer_check_and_realloc(thread_index,alloc_required);
-  wtimes = migbuffer_r[thread_index];
+  wtimes = global_migbuffer_r[thread_index];
 
   /* start with the lineages entering the current population */
   lineages = snode->seqin_count[msa_index];
