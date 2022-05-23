@@ -2516,6 +2516,144 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
+static int propose_theta_gibbs_im(stree_t * stree,
+                                 gtree_t ** gtree,
+                                 locus_t ** locus,
+                                 snode_t * snode,
+                                 long thread_index)
+{
+  unsigned int i, j, k, n;
+  long lcount = 0;
+  long msa_index;
+  long coal_sum = 0;
+  double heredity;
+  double T2h_sum = 0;
+  double a1, b1;
+  dlist_item_t* event;
+  migbuffer_t * migbuffer;
+  size_t alloc_required;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    /* make sure migbuffer is large enough */
+    alloc_required = snode->migevent_count[msa_index] +
+                     snode->event_count[msa_index] +
+                     stree->inner_count+1;
+    migbuffer_check_and_realloc(thread_index,alloc_required);
+    migbuffer = global_migbuffer_r[thread_index];
+
+    heredity = locus[msa_index]->heredity[0];
+
+    coal_sum += snode->event_count[msa_index];
+
+    /* add taus and coalescence times in sortbuffer */
+    migbuffer[0].time = snode->tau;
+    migbuffer[0].type = EVENT_TAU;
+    j = 1;
+    for (event = snode->event[msa_index]->head; event; event = event->next)
+    {
+      gnode_t* gnode = (gnode_t*)(event->data);
+      migbuffer[j].time   = gnode->time;
+      migbuffer[j++].type = EVENT_COAL;
+    }
+
+    dlist_item_t * li;
+    for (li = snode->mig_source[msa_index]->head; li; li = li->next)
+    {
+      migevent_t * me     = (migevent_t *)(li->data);
+      migbuffer[j].time   = me->time;
+      migbuffer[j++].type = EVENT_MIG_SOURCE;
+    }
+    for (li = snode->mig_target[msa_index]->head; li; li = li->next)
+    {
+      migevent_t * me     = (migevent_t *)(li->data);
+      migbuffer[j].time   = me->time;
+      migbuffer[j++].type = EVENT_MIG_TARGET;
+    }
+
+    /* add splitting of populations */
+    for (k = 0; k < snode->mb_count; ++k)
+    {
+      migbuffer[j++] = snode->migbuffer[k];
+    }
+
+    if (snode->parent && !snode->mb_count)
+    {
+      printf("\nError when processing node %s\n", snode->label);
+    }
+    long epoch = 0;
+    assert(!snode->parent || snode->mb_count);
+    double mrsum = snode->migbuffer[epoch].mrsum;
+
+    /* TODO: Probably split the following qsort case into two:
+       in case snode->parent then sort j-2 elements, otherwise
+       j-1 elements.
+    */
+
+    /* if there was at least one coalescent event, sort */
+    if (j > 1)
+      qsort(migbuffer + 1, j - 1, sizeof(migbuffer_t), cb_migbuf_asctime);
+
+    for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k)
+    {
+      double t = migbuffer[k].time - migbuffer[k - 1].time;
+      T2h_sum += n * (n - 1) * t / heredity;
+      if (n>0 && snode->parent)  /* no need to count migration for stree root. */
+        T2h_sum += 4 * n * mrsum * t / heredity;
+
+      if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
+        --n;
+      else if (migbuffer[k].type == EVENT_MIG_TARGET)
+        ++n;
+      else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
+        mrsum = snode->migbuffer[++epoch].mrsum;
+    }
+  }
+
+  a1 = opt_theta_alpha + coal_sum;
+  b1 = opt_theta_beta  + T2h_sum;
+
+  snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+
+  lcount = 1;
+  stree->td[0] = snode;
+
+  if (opt_linkedtheta)
+  {
+    for (i=0; i < total_nodes; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+
+      if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
+      {
+        x->theta = snode->theta;
+        stree->td[lcount++] = x;
+      }
+    }
+  }
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    for (j = 0; j < lcount; ++j)
+    {
+      snode_t * x = stree->td[j];
+
+      gtree[i]->logpr -= x->logpr_contrib[i];
+      gtree_update_logprob_contrib_mig(x,
+                                       stree,
+                                       gtree[i],
+                                       locus[i]->heredity[0],
+                                       i,
+                                       thread_index);
+      gtree[i]->logpr += x->logpr_contrib[i];
+    }
+  }
+
+  return 1;
+}
+
 static int propose_theta_gibbs(stree_t * stree,
                                gtree_t ** gtree,
                                locus_t ** locus,
@@ -2528,8 +2666,7 @@ static int propose_theta_gibbs(stree_t * stree,
   long msa_index;
   long coal_sum = 0;
   double T2h_sum = 0;
-  double a1;
-  double b1 = opt_theta_beta;;
+  double a1, b1;
   double heredity;
   double * sortbuffer = global_sortbuffer_r[thread_index];
   dlist_item_t * event;
@@ -2761,9 +2898,26 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
       if (opt_exp_gibbs)
-        accepted += propose_theta_gibbs(stree,gtree,locus,stree->nodes[i],thread_index);
+      {
+        if (opt_migration)
+          accepted += propose_theta_gibbs_im(stree,
+                                             gtree,
+                                             locus,
+                                             stree->nodes[i],
+                                             thread_index);
+        else
+          accepted += propose_theta_gibbs(stree,
+                                          gtree,
+                                          locus,
+                                          stree->nodes[i],
+                                          thread_index);
+      }
       else
-        accepted += propose_theta(stree,gtree,locus,stree->nodes[i],thread_index);
+        accepted += propose_theta(stree,
+                                  gtree,
+                                  locus,
+                                  stree->nodes[i],
+                                  thread_index);
       theta_count++;
     }
   }
