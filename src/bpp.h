@@ -1591,6 +1591,8 @@ double prop_locusrate_mui(gtree_t ** gtree,
 double gtree_propose_migevent_ages_serial(locus_t ** locus,
                                           gtree_t ** gtree,
                                           stree_t * stree);
+void migbuffer_check_and_realloc(long thread_index, size_t alloc_required);
+int cb_migbuf_asctime(const void * x, const void * y);
 
 /* functions in prop_mixing.c */
 

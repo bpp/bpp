@@ -2079,8 +2079,7 @@ static void migbuffer_realloc(long thread_index, size_t newsize)
   migbuffer_size[thread_index] = newsize;
 }
 
-static void migbuffer_check_and_realloc(long thread_index,
-                                        size_t alloc_required)
+void migbuffer_check_and_realloc(long thread_index, size_t alloc_required)
 {
   if (migbuffer_size[thread_index] >= alloc_required) return;
 
@@ -2217,7 +2216,7 @@ void logprob_revert_notheta(snode_t* snode, long msa_index)
   }
 }
 
-static int cb_migbuf_asctime(const void * x, const void * y)
+int cb_migbuf_asctime(const void * x, const void * y)
 {
   const migbuffer_t * a = (const migbuffer_t *)x;
   const migbuffer_t * b = (const migbuffer_t *)y;
