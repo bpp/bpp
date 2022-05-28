@@ -2523,15 +2523,19 @@ static int propose_theta_gibbs_im(stree_t * stree,
                                  long thread_index)
 {
   unsigned int i, j, k, n;
+  unsigned int si;
+  unsigned int ti = snode->node_index;
   long lcount = 0;
   long msa_index;
   long coal_sum = 0;
+  long migcount_sum = 0;
   double heredity;
   double T2h_sum = 0;
   double a1, b1;
-  dlist_item_t* event;
-  migbuffer_t * migbuffer;
   size_t alloc_required;
+  dlist_item_t * event;
+  dlist_item_t * li;
+  migbuffer_t * migbuffer;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
@@ -2547,6 +2551,13 @@ static int propose_theta_gibbs_im(stree_t * stree,
     heredity = locus[msa_index]->heredity[0];
 
     coal_sum += snode->event_count[msa_index];
+    for (j = 0; j < total_nodes; ++j)
+    {
+      if (stree->nodes[j] == snode) continue;
+
+      si = stree->nodes[j]->node_index;
+      migcount_sum += gtree[msa_index]->migcount[si][ti];
+    }
 
     /* add taus and coalescence times in sortbuffer */
     migbuffer[0].time = snode->tau;
@@ -2559,7 +2570,6 @@ static int propose_theta_gibbs_im(stree_t * stree,
       migbuffer[j++].type = EVENT_COAL;
     }
 
-    dlist_item_t * li;
     for (li = snode->mig_source[msa_index]->head; li; li = li->next)
     {
       migevent_t * me     = (migevent_t *)(li->data);
@@ -2612,7 +2622,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
     }
   }
 
-  a1 = opt_theta_alpha + coal_sum;
+  a1 = opt_theta_alpha + coal_sum + migcount_sum;
   b1 = opt_theta_beta  + T2h_sum;
 
   snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
