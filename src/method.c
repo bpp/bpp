@@ -3561,7 +3561,8 @@ void cmd_run()
       #endif
 
     /* propose gene tree ages */
-    if (opt_threads == 1)
+    /* Note: call serial version when thetas are integrated out */
+    if (!opt_est_theta || opt_threads == 1)
       ratio = gtree_propose_ages_serial(locus, gtree, stree);
     else
     {
@@ -3590,7 +3591,8 @@ void cmd_run()
     }
 
     /* propose gene tree topologies using SPR */
-    if (opt_threads == 1)
+    /* Note: call serial version when thetas are integrated out */
+    if (!opt_est_theta || opt_threads == 1)
       ratio = gtree_propose_spr_serial(locus,gtree,stree);
     else
     {

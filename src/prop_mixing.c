@@ -380,8 +380,9 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (opt_migration)
     stree_update_mig_subpops(stree, thread_index);
 
-  /* update gene trees with either parallel or serial code */
-  if (opt_threads > 1)
+  /* update gene trees with either parallel or serial code. Note, for thetas
+     integrated out we use the serial version */
+  if (opt_est_theta && opt_threads > 1)
   {
     /* TODO: It seems logpr_change is not used with multiple threads and 
        integrated out thetas. This must be fixed. */
