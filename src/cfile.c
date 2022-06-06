@@ -2371,10 +2371,6 @@ static void check_validity()
       fatal("Invalid 'speciesmodelprior' value");
   }
 
-  if (opt_threads > 1 && !opt_est_theta)
-    fatal("Cannot use multiple threads when *not* estimating theta parameters."
-          " Please either estimate theta or set threads=1");
-  
   if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
     fatal("Internal error: invalid theta prior distribution");
 

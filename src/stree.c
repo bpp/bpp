@@ -4149,7 +4149,8 @@ static long propose_tau(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
       logpr -= affected[j]->notheta_logpr_contrib;
   }
-  if (opt_threads > 1)
+  /* Note: we use the serial version when thetas are integrated out */
+  if (opt_est_theta && opt_threads > 1)
   {
     thread_data_t tp;
     tp.locus = loci; tp.gtree = gtree; tp.stree = stree;
@@ -4772,9 +4773,10 @@ static long propose_tau_mig(locus_t ** loci,
       logpr -= affected[j]->notheta_logpr_contrib;
   }
   #if 1
-  /* change to if 0 to disable gtrees */
+  /* change to if 0 to disable gtrees. Note: we use the serial version when
+     thetas are integrated out */
   mig_reject = 0;
-  if (opt_threads > 1)
+  if (opt_est_theta && opt_threads > 1)
   {
     thread_data_t tp;
     tp.locus = loci; tp.gtree = gtree; tp.stree = stree;
