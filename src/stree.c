@@ -192,10 +192,15 @@ void print_network_table(stree_t * stree, FILE * fp)
     if (stree->nodes[i]->hybrid)
     {
       fprintf(fp,
-              "   [tau = %ld, phi = %f, prop_tau = %d]",
+              "   [tau = %ld, phi = %f, prop_tau = %d, has_phi = %ld]",
               stree->nodes[i]->htau,
               stree->nodes[i]->hphi,
-              stree->nodes[i]->prop_tau);
+              stree->nodes[i]->prop_tau,
+              stree->nodes[i]->has_phi);
+
+      #if 0
+
+      /* old code before the introduction of has_phi */
 
       /* for bidirections print the mirror node phi, for hybridizations print
          both node phi. */
@@ -236,6 +241,7 @@ void print_network_table(stree_t * stree, FILE * fp)
       {
         if (!node_is_bidirection(stree->nodes[i]))
         {
+          /* hybridization - main node */
           snode_t * tmpnode = stree->nodes[i];
           if (tmpnode->htau == 0 && tmpnode->hybrid->htau == 1)
           {
@@ -255,6 +261,16 @@ void print_network_table(stree_t * stree, FILE * fp)
           }
         }
       }
+      #else
+      snode_t * tmpnode = stree->nodes[i];
+      if (tmpnode->has_phi)
+        fprintf(fp,
+                "  phi_%s : %s -> %s",
+                stree->nodes[i]->label,
+                stree->nodes[i]->parent->label,
+                stree->nodes[i]->label);
+
+      #endif
     }
     fprintf(fp, "\n");
   }
@@ -1248,14 +1264,51 @@ static int propose_phi(stree_t * stree,
   double old_logpr;
   double lnacceptance;
   double lnphiratio, lnphiratio1;
+  double aratio, bratio;
 
+  snode_t * pnode;   /* node that has the phi parameter */
+
+  /* Note: snode is the main node */
   assert(!node_is_mirror(snode));
 
+  /* Note: after our email exchange with Adam in June 2022 we introduced a flag
+     (has_phi) on snode indicating the presence of the phi parameter. To
+     minimize the changes to the phi proposal, we still pass the 'main' node to
+     the function, even though it may not have the parameter. We keep all
+     notations intact and we propose/accept/reject the new phi value on the
+     node that has the parameter.
+  */
+
+  #if 0
+
+  /* old code before the introduction of has_phi flag */
   phiold = snode->hphi;
+
+  #else
+
+  /* new correct code */
+  pnode = snode->has_phi ? snode : snode->hybrid;
+  assert(pnode->has_phi);
+  phiold = pnode->hphi;
+
+
+  #endif
+
   phinew = phiold + opt_finetune_phi*legacy_rnd_symmetrical(thread_index);
   phinew = reflect(phinew,0,1,thread_index);
-  lnphiratio = log(phinew / phiold);
-  lnphiratio1 = log((1-phinew) / (1-phiold));
+
+  /* new correct code after the introduciton of has_phi flag
+     determine the right ratios for each node */
+  if (snode == pnode)
+  {
+    aratio = lnphiratio = log(phinew / phiold);
+    bratio = lnphiratio1 = log((1-phinew) / (1-phiold));
+  }
+  else
+  {
+    aratio = lnphiratio1 = log(phinew / phiold);
+    bratio = lnphiratio  = log((1-phinew) / (1-phiold));
+  }
 
   if (opt_est_theta)
   {
@@ -1292,8 +1345,8 @@ static int propose_phi(stree_t * stree,
     }
   }
 
-  lnacceptance = (opt_phi_alpha-1) * lnphiratio +
-                 (opt_phi_beta-1) * lnphiratio1 +
+  lnacceptance = (opt_phi_alpha-1) * aratio +
+                 (opt_phi_beta-1) * bratio +
                  new_logpr - old_logpr;
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
@@ -1301,8 +1354,16 @@ static int propose_phi(stree_t * stree,
     /* accepted */
 
     accepted = 1;
+
+    #if 0
+    /* old code before the introduction of has_phi flag */
     snode->hphi = phinew;
     snode->hybrid->hphi = 1-phinew;
+    #else
+    /* new correct code */
+    pnode->hphi = phinew;
+    pnode->hybrid->hphi = 1-phinew;
+    #endif
 
     /* update logpr */
     if (opt_est_theta)

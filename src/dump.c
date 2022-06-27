@@ -518,6 +518,9 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&(stree->nodes[hoffset+i]->hybrid->hphi),1,fp);
 
   for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->has_phi),1,fp);
+
+  for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->htau),1,fp);
 
   for (i = 0; i < total_nodes; ++i)

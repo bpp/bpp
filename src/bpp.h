@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 5
-#define VERSION_PATCH 1
+#define VERSION_PATCH 2
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -461,6 +461,7 @@ typedef struct snode_s
   long constraint_lineno;
 
   /* introgression */
+  long has_phi;                     /* has the phi parameter (1: yes, 0: no) */
   double hphi;                      /* genetic contribution */
   long htau;                        /* tau parameter (1: yes, 0: no) */
   struct snode_s * hybrid;          /* linked hybridization node */

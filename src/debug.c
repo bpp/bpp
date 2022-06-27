@@ -57,7 +57,7 @@ void debug_print_stree(stree_t * stree)
   printf("Total nodes: %ld\n", total_nodes);
 
   printf("Label        Node  Child1  Child2  Parent  Linked     Theta       Tau  Leaves  "
-         "prop_tau      hphi  htau\n");
+         "prop_tau      hphi  htau  has_phi\n");
   for (i = 0; i <total_nodes; ++i)
   {
     char * label;
@@ -118,7 +118,10 @@ void debug_print_stree(stree_t * stree)
     else
       printf("  %8s", "-");
 
-    printf("  %4ld\n", stree->nodes[i]->htau);
+    printf("  %4ld", stree->nodes[i]->htau);
+
+    if (opt_msci)
+      printf("  %7ld\n", stree->nodes[i]->has_phi);
   }
 }
 
