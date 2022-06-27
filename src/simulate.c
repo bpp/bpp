@@ -1960,6 +1960,25 @@ static void validate_and_set_taus(stree_t * stree)
   }
 }
 
+static void check_taus(stree_t * stree)
+{
+  long i;
+
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    snode_t * x = stree->nodes[i];
+
+    while (x->parent)
+    {
+      if (x->parent->tau <= x->tau)
+        fatal("[ERROR] Parental node %s (tau=%f) is younger than daughter %s"
+              " (tau=%f)\n",
+              x->parent->label, x->parent->tau, x->label, x->tau);
+      x = x->parent;
+    }
+  }
+}
+
 void cmd_simulate()
 {
   long i;
@@ -1984,6 +2003,7 @@ void cmd_simulate()
   /* allocate and set pptable */
   stree_init_pptable(stree);
   stree_label(stree);
+  check_taus(stree);
 
   if (opt_msci)
   {
