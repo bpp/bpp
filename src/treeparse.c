@@ -818,6 +818,15 @@ static void parse_annotation(snode_t * snode, const char * annotation)
       fatal("Erroneous format in annotation (%s) - token (%s) is missing a '=' "
             "sign and a value", annotation, s);
 
+    if (!strcasecmp(s,"defphi") || !strcasecmp(s,"&defphi"))
+    {
+      snode->has_phi = 1;
+      s += tokenlen+comma;
+
+      continue;
+    }
+
+
     if (strlen(s+optlen) == 0)
       fatal("Missing value for option (%s) in annotation (%s)", s, annotation);
 
@@ -2184,6 +2193,35 @@ stree_t * stree_from_ntree(ntree_t * ntree)
   return stree;
 }
 
+static void network_assign_phis(stree_t * stree)
+{
+  long offset,i;
+
+  offset = stree->tip_count+stree->inner_count;
+
+  for (i = 0; i < stree->hybrid_count; ++i)
+  {
+    snode_t * mnode = stree->nodes[offset+i];
+    snode_t * snode = mnode->hybrid;
+
+    /* both edges have a phi */
+    if (mnode->has_phi && snode->has_phi)
+      fatal("[ERROR] Multiple phi definitions (defphi) found on node %s.\n"
+            "[ERROR] Define the phi parameter only on one of the two branches.",
+            snode->label);
+    
+    /* one of the edges has a phi */
+    if (mnode->has_phi || snode->has_phi) continue;
+
+    /* none of the edges has a phi. If just one of the edges is horizontal
+       place phi on it, otherwise place it on the main edge */
+    if (!mnode->htau && snode->htau)
+      mnode->has_phi = 1;
+    else
+      snode->has_phi = 1;
+  }
+}
+
 stree_t * bpp_parse_newick_string(const char * line)
 {
   ntree_t * tree = NULL;
@@ -2205,6 +2243,12 @@ stree_t * bpp_parse_newick_string(const char * line)
   /* TODO: The PPTABLE is not yet allocated and thus MSci doesn't work */
   if (!opt_msci)
     stree_reset_leaves(stree);
+
+  if (opt_msci)
+  {
+    /* postprocess to set phi parameters */
+    network_assign_phis(stree);
+  }
 
   #else
   /* old parser */

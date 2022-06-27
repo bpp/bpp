@@ -289,6 +289,8 @@ static void print_mcmc_headerline(FILE * fp,
   {
     snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
 
+    #if 0
+    /* old code before introduction of has_phi */
     if (!node_is_bidirection(tmpnode))
     {
       /* hybridization node */
@@ -298,6 +300,12 @@ static void print_mcmc_headerline(FILE * fp,
       if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
         tmpnode = tmpnode->hybrid;
     }
+    #else
+    /* new correct code */
+    if (!tmpnode->has_phi)
+      tmpnode = tmpnode->hybrid;
+
+    #endif
 
     fprintf(fp,
             "  mphi: mean of phi_%s : %s -> %s\n",
@@ -1033,6 +1041,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     unsigned int offset=stree->tip_count+stree->inner_count;
     for (i = 0; i < stree->hybrid_count; ++i)
     {
+      #if 0
+      /* old code before the introduction of has_phi */
+
       if (node_is_bidirection(stree->nodes[offset+i]))
         fprintf(fp, "\tphi_%s", stree->nodes[offset+i]->label);
       else
@@ -1050,6 +1061,18 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
                 tmpnode->label,
                 tmpnode->parent->label);
       }
+      #else
+
+      /* new correct code */
+
+      snode_t * tmpnode = stree->nodes[offset+i];
+      if (!tmpnode->has_phi)
+        tmpnode = tmpnode->hybrid;
+      fprintf(fp,
+              "\tphi_%s<-%s",
+              tmpnode->label,
+              tmpnode->parent->label);
+      #endif
 
     }
   }
@@ -1459,6 +1482,10 @@ static void mcmc_logsample(FILE * fp,
 
     for (i = 0; i < stree->hybrid_count; ++i)
     {
+      #if 0
+
+      /* old code prior the introduction of has_phi */
+
       snode_t * tmpnode = stree->nodes[offset+i];
       if (!node_is_bidirection(tmpnode))
       {
@@ -1469,6 +1496,14 @@ static void mcmc_logsample(FILE * fp,
         if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
           tmpnode = tmpnode->hybrid;
       }
+      #else
+
+      /* mew correct code */
+
+      snode_t * tmpnode = stree->nodes[offset+i];
+      if (!tmpnode->has_phi)
+        tmpnode = tmpnode->hybrid;
+      #endif
 
       fprintf(fp, "\t%.6f", tmpnode->hphi);
     }
@@ -3932,6 +3967,8 @@ void cmd_run()
       if (opt_msci)
       {
         snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
+        #if 0
+        /* old code before has_phi */
         if (!node_is_bidirection(tmpnode))
         {
           /* hybridization node */
@@ -3941,6 +3978,11 @@ void cmd_run()
           if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
             tmpnode = tmpnode->hybrid;
         }
+        #else
+        if (!tmpnode->has_phi)
+          tmpnode = tmpnode->hybrid;
+        /* new correct code */
+        #endif
         mean_phi = (mean_phi*(ft_round-1) + tmpnode->hphi)/ft_round;
       }
 

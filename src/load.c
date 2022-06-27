@@ -1077,6 +1077,12 @@ void load_chk_section_2(FILE * fp)
 
   for (i = 0; i < total_nodes; ++i)
   {
+    if (!LOAD(&(stree->nodes[i]->has_phi),1,fp))
+      fatal("Cannot read has_phi for node %ld", i);
+  }
+
+  for (i = 0; i < total_nodes; ++i)
+  {
     if (!LOAD(&(stree->nodes[i]->htau),1,fp))
       fatal("Cannot read parent htau for node %ld", i);
   }

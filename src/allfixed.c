@@ -532,6 +532,8 @@ static void write_figtree(FILE * fp_out,
   {
     snode_t * mnode = stree->nodes[stree->tip_count + stree->inner_count + i];
     
+    #if 0
+    /* old code before the introduction of has_phi */
     if (!node_is_bidirection(mnode))
     {
       if (mnode->hybrid->htau == 0 && mnode->htau == 1)
@@ -540,6 +542,13 @@ static void write_figtree(FILE * fp_out,
 
     mnode->hphi = mean[theta_count + tau_count + i];
     mnode->hybrid->hphi = 1 - mnode->hphi;
+    #else
+
+    /* new correct code */
+    snode_t * pnode = mnode->has_phi ? mnode : mnode->hybrid;
+    pnode->hphi = mean[theta_count + tau_count + i];
+    pnode->hybrid->hphi = 1 - pnode->hphi;
+    #endif
   }
 
   /*** Ziheng 2020-10-2 ***/
