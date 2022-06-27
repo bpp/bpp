@@ -753,7 +753,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     fprintf(stderr, "Skipped a total of %ld erroneous records...\n", bad_count);
 
   /* BDI label-switching routine to resolve unidentifiability issues */
-  if (opt_msci)
+  if (opt_msci && opt_usedata)
   {
     long bidir_count = 0;
     for (i = 0; i < stree->tip_count + stree->inner_count; ++i)

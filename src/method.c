@@ -2079,6 +2079,10 @@ static FILE * init(stree_t ** ptr_stree,
   stree = load_tree_or_network();
   printf(" Done\n");
 
+  if (opt_msci && opt_migration)
+    fatal(BPP_ERROR " Cannot use isolation with migration (IM) and "
+          "introgression (MSci) models together.");
+
   /* Show network */
   if (opt_msci)
   {
