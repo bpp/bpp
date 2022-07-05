@@ -191,10 +191,11 @@ static void dump_chk_section_1(FILE * fp,
                                double * mean_mrate,
                                double * mean_tau,
                                double * mean_theta,
+                               double * mean_phi,
                                long mean_mrate_count,
                                long mean_tau_count,
                                long mean_theta_count,
-                               double mean_phi,
+                               long mean_phi_count,
                                int prec_logpg,
                                int prec_logl)
 {
@@ -443,10 +444,17 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&mean_tau_count,1,fp);
   if (opt_est_theta)
     DUMP(&mean_theta_count,1,fp);
+  DUMP(&mean_phi_count,1,fp);
+
   DUMP(mean_tau,mean_tau_count,fp);
   if (opt_est_theta)
     DUMP(mean_theta,mean_theta_count,fp);
-  DUMP(&mean_phi,1,fp);
+
+  if (mean_phi_count)
+  {
+    assert(opt_msci);
+    DUMP(mean_phi,mean_phi_count,fp);
+  }
 
   DUMP(&prec_logpg,1,fp);
   DUMP(&prec_logl,1,fp);
@@ -887,10 +895,11 @@ int checkpoint_dump(stree_t * stree,
                     double * mean_mrate,
                     double * mean_tau,
                     double * mean_theta,
+                    double * mean_phi,
                     long mean_mrate_count,
                     long mean_tau_count,
                     long mean_theta_count,
-                    double mean_phi,
+                    long mean_phi_count,
                     int prec_logpg,
                     int prec_logl)
 {
@@ -941,10 +950,11 @@ int checkpoint_dump(stree_t * stree,
                      mean_mrate,
                      mean_tau,
                      mean_theta,
+                     mean_phi,
                      mean_mrate_count,
                      mean_tau_count,
                      mean_theta_count,
-                     mean_phi,
+                     mean_phi_count,
                      prec_logpg,
                      prec_logl);
 

@@ -66,12 +66,16 @@ static void alloc_gtree()
     size_t alloc_size = MAX(4,gtree[i]->tip_count + gtree[i]->inner_count);
     /* TODO: Change to xmalloc for the first-touch numa policy */
     gt->travbuffer = (gnode_t **)xcalloc(alloc_size, sizeof(gnode_t *));
+    gt->migcount = NULL;
+    gt->migpops = NULL;
+    gt->rb_linked = NULL;
     
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
     {
       gt->nodes[j] = (gnode_t *)xmalloc(sizeof(gnode_t));
 
       gt->nodes[j]->node_index = j;
+      gt->nodes[j]->mi = NULL;
 
       if (stree->hybrid_count)
         gt->nodes[j]->hpath = (int *)xmalloc((size_t)(stree->hybrid_count) *
@@ -221,6 +225,17 @@ int load_string(FILE * fp, char ** buffer)
   return 1;
 }
 
+static void print_filepaths()
+{
+  fprintf(stdout,
+          "Control file     : %s\n"
+          "Sequence file    : %s\n"
+          "Map file         : %s\n"
+          "MCMC sample file : %s\n"
+          "Output file      : %s\n\n",
+          opt_cfile, opt_msafile, opt_mapfile, opt_mcmcfile, opt_outfile);
+}
+
 static void load_chk_section_1(FILE * fp,
                                double ** pjump,
                                unsigned long * curstep,
@@ -246,10 +261,11 @@ static void load_chk_section_1(FILE * fp,
                                double ** mean_mrate,
                                double ** mean_tau,
                                double ** mean_theta,
+                               double ** mean_phi,
                                long * mean_mrate_count,
                                long * mean_tau_count,
                                long * mean_theta_count,
-                               double * mean_phi,
+                               long * mean_phi_count,
                                int * prec_logpg,
                                int * prec_logl)
 {
@@ -262,17 +278,14 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
-  printf(" Seed: %ld\n", opt_seed);
 
   /* read control file name */
   if (!load_string(fp,&opt_cfile))
     fatal("Cannot read name of control file");
-  printf(" control file: %s\n", opt_cfile);
 
   /* read MSA filename */
   if (!load_string(fp,&opt_msafile))
     fatal("Cannot read name of MSA file");
-  printf(" MSA file: %s\n", opt_msafile);
 
   /* read constraint filename */
   if (!LOAD(&opt_constraint_count,1,fp))
@@ -294,18 +307,17 @@ static void load_chk_section_1(FILE * fp,
     /* read imap filename */
     if (!load_string(fp,&opt_mapfile))
       fatal("Cannot read name of map file");
-    printf(" Map file: %s\n", opt_mapfile);
   }
 
   /* read output filename */
   if (!load_string(fp,&opt_outfile))
     fatal("Cannot read name of output file");
-  printf(" Output file: %s\n", opt_outfile);
 
   /* read output filename */
   if (!load_string(fp,&opt_mcmcfile))
     fatal("Cannot read name of mcmc file");
-  printf(" MCMC file: %s\n", opt_mcmcfile);
+
+  print_filepaths();
 
   /* read checkpoint info */
   if (!LOAD(&opt_checkpoint,1,fp))
@@ -774,6 +786,9 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read number of mean thetas"); 
   }
 
+  if (!LOAD(mean_phi_count,1,fp))
+    fatal("Cannot read number of mean phis");
+
   *mean_tau   = (double *)xmalloc((size_t)(*mean_tau_count)*sizeof(double));
 
   if (opt_est_theta)
@@ -790,8 +805,15 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read mean theta values"); 
   }
 
-  if (!LOAD(mean_phi,1,fp))
-    fatal("Cannot load mean phi value");
+  *mean_phi = NULL;
+  if (mean_phi_count)
+  {
+    *mean_phi = (double *)xmalloc((size_t)(*mean_phi_count)*sizeof(double));
+    
+    if (!LOAD(*mean_phi,*mean_phi_count,fp))
+      fatal("Cannot load mean phi value");
+  }
+
 
   if (!LOAD(prec_logpg,1,fp))
     fatal("Cannot read logPG digits precision");
@@ -849,7 +871,8 @@ static void load_chk_section_1(FILE * fp,
   #endif
 
   /* populate species tree */
-  stree = (stree_t *)xmalloc(sizeof(stree_t));
+  //stree = (stree_t *)xcalloc(1,sizeof(stree_t));
+  stree = (stree_t *)xcalloc(1,sizeof(stree_t));
   
   stree->tip_count = stree_tip_count;
   stree->inner_count = stree_inner_count;
@@ -860,11 +883,17 @@ static void load_chk_section_1(FILE * fp,
   stree->locusrate_nubar = stree_locusrate_nubar;
   stree->nui_sum = stree_nui_sum;
 
+  stree->mi_tbuffer = NULL;
+  if (opt_migration)
+    stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
+                                              sizeof(miginfo_t *));
+
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
   stree->nodes = (snode_t **)xmalloc((size_t)total_nodes*sizeof(snode_t *));
   for (i = 0; i < total_nodes; ++i)
     stree->nodes[i] = (snode_t *)xcalloc(1,sizeof(snode_t));
 
+  stree->td = (snode_t **)xmalloc((size_t)total_nodes * sizeof(snode_t *));
 
   /* set tip labels */
   for (i = 0; i < stree->tip_count; ++i)
@@ -979,11 +1008,6 @@ void load_chk_section_2(FILE * fp)
 
   /* sort hindices in ascending order */
   qsort(hindices,(size_t)stree->hybrid_count,sizeof(unsigned int), cb_ascint);
-
-  for (i = 0; i < stree->hybrid_count; ++i)
-  {
-    printf(" !!! hindices: %d\n", hindices[i]);
-  }
 
   /* set left child for each inner node according to checkpoint data */
   for (i = 0; i < stree->inner_count; ++i)
@@ -1755,10 +1779,11 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** mean_mrate,
                     double ** mean_tau,
                     double ** mean_theta,
+                    double ** mean_phi,
                     long * mean_mrate_count,
                     long * mean_tau_count,
                     long * mean_theta_count,
-                    double * mean_phi,
+                    long * mean_phi_count,
                     int * prec_logpg,
                     int * prec_logl)
 {
@@ -1767,7 +1792,7 @@ int checkpoint_load(gtree_t *** gtreep,
 
   assert(opt_resume);
 
-  fprintf(stdout, "Loading checkpoint file %s\n\n", opt_resume);
+  fprintf(stdout, "\nResuming from checkpoint file %s\n\n", opt_resume);
   fp = fopen(opt_resume,"r");
   if (!fp)
     fatal("Cannot open checkpoint file %s", opt_resume);
@@ -1808,10 +1833,11 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_mrate,
                      mean_tau,
                      mean_theta,
+                     mean_phi,
                      mean_mrate_count,
                      mean_tau_count,
                      mean_theta_count,
-                     mean_phi,
+                     mean_phi_count,
                      prec_logpg,
                      prec_logl);
 
