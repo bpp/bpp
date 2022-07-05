@@ -568,8 +568,8 @@ static void write_figtree(FILE * fp_out,
   else
   {
     opt_msci_faketree_binarize = 0;
-    fprintf(stdout, "\nSpecies tree network :\n");
-    fprintf(fp_out, "\nSpecies tree network :\n");
+    fprintf(stdout, "\nSpecies tree network:\n");
+    fprintf(fp_out, "\nSpecies tree network:\n");
     newick = msci_export_newick(stree->root, NULL);
     fprintf(stdout, "%s\n", newick);
     fprintf(fp_out, "%s\n", newick);

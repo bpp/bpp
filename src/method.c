@@ -35,6 +35,7 @@
 #define MAX_MRATE_OUTPUT        4
 #define MAX_THETA_OUTPUT        3
 #define MAX_TAU_OUTPUT          3
+#define MAX_PHI_OUTPUT          3
 
 const static int rate_matrices = 1;
 const static long thread_index_zero = 0;
@@ -124,6 +125,7 @@ static void print_mcmc_headerline(FILE * fp,
   long i,j,k;
   long mean_theta_count = 0;
   long mean_tau_count = 0;
+  long mean_phi_count = 0;
 
   long linewidth = 0;
   long ap_width = 0;
@@ -161,17 +163,19 @@ static void print_mcmc_headerline(FILE * fp,
     mean_tau_count = 1;
     mean_theta_index = (long *)xcalloc(1,sizeof(long));
     mean_theta_index[0] = stree->root->node_index;
+
+    assert(!opt_msci);
   }
   else
   {
     /* compute mean thetas */
 
-    /* 1. calculate number of thetas to print */
+    /* 1a. calculate number of thetas to print */
     long max_param_count = MIN(stree->tip_count+stree->inner_count,
                                MAX_THETA_OUTPUT);
     mean_theta_index = (long *)xcalloc((size_t)max_param_count,sizeof(long));
 
-    /* 2. calculate number of mean thetas */
+    /* 1b. calculate number of mean thetas */
     k = 0;
     if (opt_est_theta)
     {
@@ -187,11 +191,11 @@ static void print_mcmc_headerline(FILE * fp,
 
     /* compute mean taus */
 
-    /* 1. calculate number of taus to print */
+    /* 2a. calculate number of taus to print */
     max_param_count = MIN(stree->tip_count+stree->inner_count,
                           MAX_TAU_OUTPUT);
 
-    /* 2. calculate means */
+    /* 2b. calculate means */
     k = 0;
     for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
     {
@@ -200,6 +204,9 @@ static void print_mcmc_headerline(FILE * fp,
       if (++k == max_param_count) break;
     }
     mean_tau_count = k;
+
+    /* compute mean phis */
+    mean_phi_count = MIN(stree->hybrid_count, MAX_PHI_OUTPUT);
   }
 
   /* print legend */
@@ -287,31 +294,35 @@ static void print_mcmc_headerline(FILE * fp,
   }
   if (opt_msci)
   {
-    snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
-
-    #if 0
-    /* old code before introduction of has_phi */
-    if (!node_is_bidirection(tmpnode))
+    for (i = 0; i < mean_phi_count; ++i)
     {
-      /* hybridization node */
+      snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count+i];
 
-      /* if main node htau==0 and mirror node htau==1 then that is the only case
-         we use the phi from the main node */
-      if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+      #if 0
+      /* old code before introduction of has_phi */
+      if (!node_is_bidirection(tmpnode))
+      {
+        /* hybridization node */
+
+        /* if main node htau==0 and mirror node htau==1 then that is the only case
+           we use the phi from the main node */
+        if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+          tmpnode = tmpnode->hybrid;
+      }
+      #else
+      /* new correct code */
+      if (!tmpnode->has_phi)
         tmpnode = tmpnode->hybrid;
+
+      #endif
+
+      fprintf(fp,
+              " mphi%ld: mean of phi_%s : %s -> %s\n",
+              i+1,
+              tmpnode->label,
+              tmpnode->parent->label,
+              tmpnode->label);
     }
-    #else
-    /* new correct code */
-    if (!tmpnode->has_phi)
-      tmpnode = tmpnode->hybrid;
-
-    #endif
-
-    fprintf(fp,
-            "  mphi: mean of phi_%s : %s -> %s\n",
-            tmpnode->label,
-            tmpnode->parent->label,
-            tmpnode->label);
   }
   if (opt_msci)
     fprintf(fp, "log-PG: log-probability of gene trees (MSCi)\n");
@@ -476,12 +487,19 @@ static void print_mcmc_headerline(FILE * fp,
 
   if (opt_msci)
   {
-    fprintf(fp,"  mphi ");  linewidth += 7;
+    fprintf(fp, " ");                       linewidth += 1;
+    for (i = 0; i < mean_phi_count; ++i)
+    {
+      fprintf(fp,"  mphi%ld",i+1);          linewidth += 7;
+    }
   }
 
   fprintf(fp," ");          linewidth += 1;
   fprintf(fp," %*s", prec_logpr,"log-PG");  linewidth += prec_logpr+1;
-  fprintf(fp," %*s", prec_logl,"log-L");    linewidth += prec_logl+1;
+  if (opt_usedata)
+  {
+    fprintf(fp," %*s", prec_logl,"log-L");  linewidth += prec_logl+1;
+  }
   fprintf(fp,"\n");
 
   /* TODO */
@@ -764,7 +782,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     if (opt_migration)
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
     else
-      fprintf(fp[j], " %*s", empty, "-");
+      fprintf(fp[j], " %*s", empty, "- ");
 
     fprintf(fp[j], "\n");
   }
@@ -1780,10 +1798,11 @@ static FILE * resume(stree_t ** ptr_stree,
                      double ** ptr_mrate,
                      double ** ptr_mean_tau,
                      double ** ptr_mean_theta,
+                     double ** ptr_mean_phi,
                      long * ptr_mrate_count,
                      long * ptr_mean_tau_count,
                      long * ptr_mean_theta_count,
-                     double * ptr_mean_phi,
+                     long * ptr_mean_phi_count,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
@@ -1830,10 +1849,11 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mrate,
                   ptr_mean_tau,
                   ptr_mean_theta,
+                  ptr_mean_phi,
                   ptr_mrate_count,
                   ptr_mean_tau_count,
                   ptr_mean_theta_count,
-                  ptr_mean_phi,
+                  ptr_mean_phi_count,
                   &prec_logpr,
                   &prec_logl);
 
@@ -3181,7 +3201,6 @@ void cmd_run()
   long pjump_spr, pjump_snl;
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
-  double mean_phi = 0;
   double dbg_mean_rate = 0;
   #ifdef DEBUG_GTR
   double mean_freqa = 0;
@@ -3205,10 +3224,12 @@ void cmd_run()
   double * mean_mrate = NULL;
   double * mean_tau = NULL;
   double * mean_theta = NULL;
+  double * mean_phi = NULL;
 
   long mean_mrate_count = 0;
   long mean_theta_count = 0;
   long mean_tau_count = 0;
+  long mean_phi_count = 0;
 
   stree_t * sclone;
   gtree_t ** gclones;
@@ -3246,10 +3267,11 @@ void cmd_run()
                      &mean_mrate,
                      &mean_tau,
                      &mean_theta,
+                     &mean_phi,
                      &mean_mrate_count,
                      &mean_tau_count,
                      &mean_theta_count,
-                     &mean_phi,
+                     &mean_phi_count,
                      &sclone, 
                      &gclones,
                      &fp_gtree,
@@ -3294,6 +3316,9 @@ void cmd_run()
     if (opt_est_theta)
       mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT,sizeof(double));
     mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT,sizeof(double));
+
+    if (opt_msci)
+      mean_phi = (double *)xcalloc(MAX_PHI_OUTPUT,sizeof(double));
 
     /* count number of delimited species with current species tree */
     ndspecies = 1;
@@ -3970,24 +3995,16 @@ void cmd_run()
       mean_tau_count = k;
       if (opt_msci)
       {
-        snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count];
-        #if 0
-        /* old code before has_phi */
-        if (!node_is_bidirection(tmpnode))
-        {
-          /* hybridization node */
+        mean_phi_count = MIN(stree->hybrid_count, MAX_PHI_OUTPUT);
 
-          /* if main node htau==0 and mirror node htau==1 then that is the only
-             case we use the phi from the main node */
-          if (tmpnode->hybrid->htau == 0 && tmpnode->htau == 1)
+        for (j = 0; j < mean_phi_count; ++j)
+        {
+          snode_t * tmpnode = stree->nodes[stree->tip_count+stree->inner_count+j];
+          if (!tmpnode->has_phi)
             tmpnode = tmpnode->hybrid;
+
+          mean_phi[j] = (mean_phi[j]*(ft_round-1) + tmpnode->hphi)/ft_round;
         }
-        #else
-        if (!tmpnode->has_phi)
-          tmpnode = tmpnode->hybrid;
-        /* new correct code */
-        #endif
-        mean_phi = (mean_phi*(ft_round-1) + tmpnode->hphi)/ft_round;
       }
 
       #ifdef DEBUG_GTR
@@ -4124,9 +4141,15 @@ void cmd_run()
 
       if (opt_msci)
       {
-        printf(" %6.4f ", mean_phi);
+        for (j = 0; j < mean_phi_count; ++j)
+          printf(" %6.4f", mean_phi[j]);
+        printf(" ");
         if (print_newline)
-          fprintf(fp_out, " %6.4f ", mean_phi);
+        {
+          for (j = 0; j < mean_phi_count; ++j)
+            fprintf(fp_out, " %6.4f", mean_phi[j]);
+          fprintf(fp_out, " ");
+        }
       }
 
       #if 0
@@ -4217,10 +4240,11 @@ void cmd_run()
                         mean_mrate,
                         mean_tau,
                         mean_theta,
+                        mean_phi,
                         mean_mrate_count,
                         mean_tau_count,
                         mean_theta_count,
-                        mean_phi,
+                        mean_phi_count,
                         prec_logpr,
                         prec_logl);
       }
@@ -4411,6 +4435,8 @@ void cmd_run()
   if (opt_est_theta)
     free(mean_theta);
   free(mean_tau);
+  if (opt_msci)
+    free(mean_phi);
 
   if (opt_migration)
   {
