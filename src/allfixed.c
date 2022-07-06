@@ -765,7 +765,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       }
 
     if (bidir_count)
-      lswitch(stree, header, matrix, col_count);
+      lswitch(stree, header, matrix, col_count, fp_out);
   }
 
   fprintf(stdout, "          %s\n", header+4);
