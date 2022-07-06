@@ -2547,7 +2547,11 @@ void migevent_unlink(migevent_t * me, long msa_index);
 void miginfo_check_and_extend(miginfo_t ** miptr, size_t extra);
 
 /* functions in lswitch.c */
-void lswitch(stree_t * stree, const char * header, double ** matrix, long col_count);
+void lswitch(stree_t * stree,
+             const char * header,
+             double ** matrix,
+             long col_count,
+             FILE * fp_outfile);
 
 /* functions in ming2.c */
 int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),

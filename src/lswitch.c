@@ -38,6 +38,8 @@ static double sum_lnphi[2], sum_ln1mphi[2];
 static double sum_theta[2], sum_lntheta[2];
 static long hparams;
 
+static FILE * fp_out = NULL;
+
 static double lnlike_msci(double x[], int np)
 {
    /* loglikelihood for fitting beta(p,q) & gamma(a, b) to phi_x, phi_y, theta_x, theta_y, using
@@ -89,7 +91,8 @@ static void fit_beta_moments(double pq[2], double m, double v)
   double z = m*(1-m)/v - 1;
   if (z <= 0)
   {
-    printf("v > m*(1-m) in fit_beta_moments\n");
+    fprintf(stdout, "v > m*(1-m) in fit_beta_moments\n");
+    fprintf(fp_out, "v > m*(1-m) in fit_beta_moments\n");
     z = 0.01;
   }
 
@@ -301,7 +304,7 @@ static void update_matrix(double ** matrix, long * pindex, long * tower)
   }
 }
 
-static void write_output(FILE * fp_out,
+static void write_output(FILE * fp_newmcmc,
                          const char * filename,
                          const char * header,
                          double ** matrix,
@@ -309,27 +312,32 @@ static void write_output(FILE * fp_out,
 {
   long i,j;
 
-  printf("Printing processed sample into %s\n\n", filename);
+  fprintf(stdout, "Printing processed sample into %s\n\n", filename);
+  fprintf(fp_out, "Printing processed sample into %s\n\n", filename);
 
-  fprintf(fp_out, "%s\n", header);
+  fprintf(fp_newmcmc, "%s\n", header);
   for (i = 0; i < opt_samples; ++i)
   {
     /* write sample */
-    fprintf(fp_out, "%ld", (i+1)*opt_samplefreq);
+    fprintf(fp_newmcmc, "%ld", (i+1)*opt_samplefreq);
 
     for (j = 0; j < col_count; ++j)
     {
       if (j == col_count-1 && opt_usedata)
-        fprintf(fp_out, "\t%.3f", matrix[j][i]);
+        fprintf(fp_newmcmc, "\t%.3f", matrix[j][i]);
       else
-        fprintf(fp_out, "\t%.6f", matrix[j][i]);
+        fprintf(fp_newmcmc, "\t%.6f", matrix[j][i]);
 
     }
-    fprintf(fp_out, "\n");
+    fprintf(fp_newmcmc, "\n");
   }
 }
 
-void lswitch(stree_t * stree, const char * header, double ** matrix, long col_count)
+void lswitch(stree_t * stree,
+             const char * header,
+             double ** matrix,
+             long col_count,
+             FILE * fp_outfile)
 {
   long i,j;
   long mpoint_count;
@@ -338,7 +346,7 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
   long * pindex;
   long * tower;
   long rounds = 100;
-  FILE * fp_out;
+  FILE * fp_newmcmc;
 
   double bounds[16][2];
   double e = 1e-7;
@@ -347,10 +355,12 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
 
   char * outfile = NULL;
   xasprintf(&outfile, "%s.processed", opt_mcmcfile);
-  fp_out = xopen(outfile, "w");
+  fp_newmcmc= xopen(outfile, "w");
 
   assert(opt_method == METHOD_00);
   assert(opt_msci);
+
+  fp_out = fp_outfile;
 
   /* set default algorithm */
   algorithm = ALG_DEFAULT;
@@ -382,8 +392,10 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
           stree->nodes[i]->prop_tau))
       continue;
 
-    printf("Resolving potential unidentifiability for BDI %s <-> %s\n",
-           stree->nodes[i]->label, stree->nodes[i]->hybrid->parent->label);
+    fprintf(stdout, "Resolving potential unidentifiability for BDI %s <-> %s\n",
+            stree->nodes[i]->label, stree->nodes[i]->hybrid->parent->label);
+    fprintf(fp_out, "Resolving potential unidentifiability for BDI %s <-> %s\n",
+            stree->nodes[i]->label, stree->nodes[i]->hybrid->parent->label);
 
     /* phi1 and phi2 indices */
     pindex[0] = theta_count + tau_count +
@@ -446,16 +458,23 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
     if (algorithm == ALG_BG)
     {
       lnL = lnlike_msci(hyperp,hparams);
-      printf("lnL0: %f\n", lnL);
+      fprintf(stdout, "lnL0: %f\n", lnL);
+      fprintf(fp_out, "lnL0: %f\n", lnL);
     }
 
     for (j = 0; j < hparams; ++j) { bounds[j][0] = 0.5; bounds[j][1] = 99999; }
     for (j = 0; j < rounds; ++j)
     {
       mpoint_count = compare_towers(tower, matrix, pindex);
-      printf("Round %2ld, %2ld points moved...\n", j, mpoint_count);
+      fprintf(stdout, "Round %2ld, %2ld points moved...\n", j, mpoint_count);
+      fprintf(fp_out, "Round %2ld, %2ld points moved...\n", j, mpoint_count);
       update_summary(matrix, pindex, tower);
-      if (algorithm == ALG_BG) { double lnL = lnlike_msci(hyperp, hparams); printf("  lnL = %f\n", lnL); }
+      if (algorithm == ALG_BG)
+      {
+        double lnL = lnlike_msci(hyperp, hparams);
+        fprintf(stdout, "  lnL = %f\n", lnL);
+        fprintf(fp_out, "  lnL = %f\n", lnL);
+      }
       if (!mpoint_count) break;
 
       if (algorithm == ALG_BG)
@@ -463,24 +482,29 @@ void lswitch(stree_t * stree, const char * header, double ** matrix, long col_co
 
         int k = ming2(NULL, &lnL, lnlike_msci, NULL, hyperp, bounds, space, e, hparams);
         for (k = 0; k < 8; ++k)
-          printf("  %f", hyperp[k]);
-        printf("\n");
+        {
+          fprintf(stdout, "  %f", hyperp[k]);
+          fprintf(fp_out, "  %f", hyperp[k]);
+        }
+        fprintf(stdout, "\n");
+        fprintf(fp_out, "\n");
       }
     }
 
     mpoint_count = 0;
     for (j = 0; j < opt_samples; ++j)
       mpoint_count += (tower[j] > 0);
-    printf("\n%4ld points reflected\n", mpoint_count);
+    fprintf(stdout, "\n%4ld points reflected\n", mpoint_count);
+    fprintf(fp_out, "\n%4ld points reflected\n", mpoint_count);
     
     update_matrix(matrix, pindex, tower);
   }
 
   /* output */
-  write_output(fp_out, outfile, header, matrix, col_count);
+  write_output(fp_newmcmc, outfile, header, matrix, col_count);
 
   free(pindex);
   free(tower);
   free(outfile);
-  fclose(fp_out);
+  fclose(fp_newmcmc);
 }
