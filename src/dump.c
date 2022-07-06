@@ -306,6 +306,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_min,1,fp);
   DUMP(&opt_theta_max,1,fp);
   DUMP(&opt_est_theta,1,fp);
+  DUMP(&opt_linkedtheta,1,fp);
 
   /* write tau prior */
   DUMP(&opt_tau_dist,1,fp);
@@ -489,6 +490,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   unsigned int total_nodes;
   unsigned int hoffset;
   long i,j;
+  long ltheta_index;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
@@ -533,6 +535,13 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->prop_tau),1,fp);
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    ltheta_index = stree->nodes[i]->linked_theta ?
+                     (long)stree->nodes[i]->linked_theta->node_index : -1;
+    DUMP(&ltheta_index,1,fp);
+  }
 
 
   /* TODO: We do not need to write theta when !opt_est_theta */
