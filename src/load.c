@@ -487,6 +487,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read max of 'theta' tag");
   if (!LOAD(&opt_est_theta,1,fp))
     fatal("Cannot read est 'theta' tag");
+  if (!LOAD(&opt_linkedtheta,1,fp))
+    fatal("Cannot read linked theta tag");
   #if 0
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
   #endif
@@ -1115,6 +1117,18 @@ void load_chk_section_2(FILE * fp)
   {
     if (!LOAD(&(stree->nodes[i]->prop_tau),1,fp))
       fatal("Cannot read parent prop_tau for node %ld", i);
+  }
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    long ltheta_index;
+
+    if (!LOAD(&ltheta_index,1,fp))
+      fatal("Cannot read linked theta index for node %ld", i);     
+    if (ltheta_index == -1)
+      stree->nodes[i]->linked_theta = NULL;
+    else
+      stree->nodes[i]->linked_theta = stree->nodes[ltheta_index];
   }
 
   stree_label(stree);
