@@ -26,6 +26,7 @@ SRC_LIBPLL = \
 OBJ_BPP = \
 	arch.obj \
 	allfixed.obj \
+	bfdriver.obj \
 	bpp.obj \
 	cfile.obj \
 	compress.obj \
