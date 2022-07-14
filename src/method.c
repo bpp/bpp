@@ -33,7 +33,7 @@
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_MRATE_OUTPUT        4
-#define MAX_THETA_OUTPUT        3
+#define MAX_THETA_OUTPUT        10
 #define MAX_TAU_OUTPUT          3
 #define MAX_PHI_OUTPUT          3
 
@@ -3353,6 +3353,8 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
+  if (opt_exp_gibbs)
+    fprintf(stdout, "[EXPERIMENTAL] - Using Gibbs sampler for thetas\n");
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");
   else if (opt_linkedtheta == BPP_LINKEDTHETA_ALL)
