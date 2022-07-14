@@ -113,6 +113,20 @@ static int longint_len(long x)
   return x ? (int)floor(log10(abs(x))) + 1 : 1;
 }
 
+static double logPDFGamma(double x, double a, double b)
+{
+   /* gamma density: mean=a/b; var=a/b^2
+   */
+   if (x <= 0 || a <= 0 || b <= 0) {
+      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
+      fatal("x a b outside range in logPDFGamma()");
+   }
+   if (a > 30000)
+      fatal("large alpha in PDFGamma()");
+   return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
+}
+
+
 void print_network_table(stree_t * stree, FILE * fp)
 {
   long i;
@@ -2684,9 +2698,29 @@ static int propose_theta_gibbs_im(stree_t * stree,
   }
 
   a1 = opt_theta_alpha + coal_sum + migcount_sum;
-  b1 = opt_theta_beta  + T2h_sum;
 
-  snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+    b1 = opt_theta_beta  + T2h_sum;
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    b1 = opt_theta_beta * a1 * (a1+1) /
+         (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
+  }
+  
+  /* save old theta in case of gamma prior */
+  double oldtheta = snode->theta;
+
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+    snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    snode->theta = legacy_rndgamma(thread_index,a1) / b1;
+  }
+
+  /* new theta */
+  double newtheta = snode->theta;
 
   lcount = 1;
   stree->td[0] = snode;
@@ -2699,12 +2733,13 @@ static int propose_theta_gibbs_im(stree_t * stree,
 
       if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
       {
-        x->theta = snode->theta;
+        x->theta = newtheta;
         stree->td[lcount++] = x;
       }
     }
   }
 
+  double lnacceptance = 0;
   for (i = 0; i < opt_locus_count; ++i)
   {
     for (j = 0; j < lcount; ++j)
@@ -2720,6 +2755,39 @@ static int propose_theta_gibbs_im(stree_t * stree,
                                        thread_index);
       gtree[i]->logpr += x->logpr_contrib[i];
     }
+    lnacceptance += gtree[i]->logpr;
+  }
+
+  /* gamma prior acceptance-rejetion step */
+  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  {
+    /* prior ratio */
+    lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
+                    opt_theta_beta*(newtheta - oldtheta);
+
+    /* proposal ratio */
+    lnacceptance += logPDFGamma(oldtheta,a1,b1) - logPDFGamma(newtheta,a1,b1);
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      return 1;         /* accept */
+
+    /* reject */
+    for (i = 0; i < lcount; ++i)
+      stree->td[i]->theta = oldtheta;
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      for (j = 0; j < lcount; ++j)
+      {
+        snode_t * x = stree->td[j];
+
+        /* revert density contributions */
+        gtree[i]->logpr -= x->logpr_contrib[i];
+        gtree[i]->logpr += x->old_logpr_contrib[i];
+        x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      }
+    }
+    return 0;
   }
 
   return 1;
@@ -2749,6 +2817,7 @@ static int propose_theta_gibbs(stree_t * stree,
   assert(!opt_migration);
 
   /* TODO: Speed this up by using coal_event_sum variable as in NoTheta */
+  /* TODO: We can store T2h in the gtree_update_logprob_contrib function */
   for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
   {
     heredity = locus[msa_index]->heredity[0];
@@ -2781,9 +2850,29 @@ static int propose_theta_gibbs(stree_t * stree,
   /* MSC(i) model */
 
   a1 = opt_theta_alpha + coal_sum;
-  b1 = opt_theta_beta  + T2h_sum;
+
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+    b1 = opt_theta_beta  + T2h_sum;
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    b1 = opt_theta_beta * a1 * (a1+1) /
+         (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
+  }
   
-  snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  /* save old theta in case of gamma prior */
+  double oldtheta = snode->theta;
+
+  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+    snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  else
+  {
+    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    snode->theta = legacy_rndgamma(thread_index,a1) / b1;
+  }
+
+  /* new theta */
+  double newtheta = snode->theta;
 
   lcount = 1;
   stree->td[0] = snode;
@@ -2796,14 +2885,16 @@ static int propose_theta_gibbs(stree_t * stree,
 
       if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
       {
-        x->theta = snode->theta;
+        x->theta = newtheta;
         stree->td[lcount++] = x;
       }
     }
   }
 
+  double lnacceptance = 0;
   for (i = 0; i < opt_locus_count; ++i)
   {
+    lnacceptance -= gtree[i]->logpr;
     for (j = 0; j < lcount; ++j)
     {
       snode_t * x = stree->td[j];
@@ -2812,6 +2903,39 @@ static int propose_theta_gibbs(stree_t * stree,
       gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
       gtree[i]->logpr += x->logpr_contrib[i];
     }
+    lnacceptance += gtree[i]->logpr;
+  }
+
+  /* gamma prior acceptance-rejetion step */
+  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  {
+    /* prior ratio */
+    lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
+                    opt_theta_beta*(newtheta - oldtheta);
+
+    /* proposal ratio */
+    lnacceptance += logPDFGamma(oldtheta,a1,b1) - logPDFGamma(newtheta,a1,b1);
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      return 1;         /* accept */
+
+    /* reject */
+    for (i = 0; i < lcount; ++i)
+      stree->td[i]->theta = oldtheta;
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      for (j = 0; j < lcount; ++j)
+      {
+        snode_t * x = stree->td[j];
+
+        /* revert density contributions */
+        gtree[i]->logpr -= x->logpr_contrib[i];
+        gtree[i]->logpr += x->old_logpr_contrib[i];
+        x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      }
+    }
+    return 0;
   }
 
   return 1;
@@ -4455,19 +4579,6 @@ static long propose_tau(locus_t ** loci,
     }
   }
   return accepted;
-}
-
-static double logPDFGamma(double x, double a, double b)
-{
-   /* gamma density: mean=a/b; var=a/b^2
-   */
-   if (x <= 0 || a <= 0 || b <= 0) {
-      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("x a b outside range in logPDFGamma()");
-   }
-   if (a > 30000)
-      fatal("large alpha in PDFGamma()");
-   return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
 
 #define RB_MARK 1

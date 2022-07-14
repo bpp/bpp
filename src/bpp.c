@@ -789,9 +789,6 @@ void args_init(int argc, char ** argv)
   if (opt_prob_snl_shrink <= 0 || opt_prob_snl_shrink >= 1)
     fatal("Proportion of SHRINK moves must be between 0 and 1");
 
-  if (opt_exp_gibbs && opt_theta_dist != BPP_THETA_PRIOR_INVGAMMA)
-    fatal("Gibbs sampler for thetas requires an inverse gamma prior");
-
   /* if no command specified, turn on --help */
   if (!commands)
   {
