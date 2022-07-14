@@ -2742,6 +2742,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
   double lnacceptance = 0;
   for (i = 0; i < opt_locus_count; ++i)
   {
+    lnacceptance -= gtree[i]->logpr;
     for (j = 0; j < lcount; ++j)
     {
       snode_t * x = stree->td[j];
@@ -2766,7 +2767,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
                     opt_theta_beta*(newtheta - oldtheta);
 
     /* proposal ratio */
-    lnacceptance += logPDFGamma(oldtheta,a1,b1) - logPDFGamma(newtheta,a1,b1);
+    lnacceptance += (a1-1)*log(oldtheta / newtheta) - b1*(oldtheta - newtheta);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
       return 1;         /* accept */
