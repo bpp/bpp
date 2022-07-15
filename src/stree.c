@@ -481,6 +481,11 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
     memcpy(clone->brate, snode->brate, msa_count * sizeof(double));
   }
     
+  /* linked theta models */
+  if (snode->linked_theta)
+    clone->linked_theta = clone_stree->nodes[snode->linked_theta->node_index];
+  else
+    clone->linked_theta = NULL;
 
   /* seqin (incoming sequences to a population) counts per locus */
   if (!clone->seqin_count)
