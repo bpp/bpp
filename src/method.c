@@ -3353,8 +3353,12 @@ void cmd_run()
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
-  if (opt_exp_gibbs)
-    fprintf(stdout, "[EXPERIMENTAL] - Using Gibbs sampler for thetas\n");
+
+  assert(opt_theta_move==BPP_THETA_SLIDE || opt_theta_move==BPP_THETA_GIBBS);
+  fprintf(stdout, "Theta proposal: %s\n",
+          (opt_theta_move == BPP_THETA_SLIDE) ?
+            "sliding window" : "gibbs sampler");
+
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");
   else if (opt_linkedtheta == BPP_LINKEDTHETA_ALL)

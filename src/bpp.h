@@ -93,8 +93,8 @@
 
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 5
-#define VERSION_PATCH 2
+#define VERSION_MINOR 6
+#define VERSION_PATCH 0
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -241,6 +241,9 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_GAMMA           2
 #define BPP_THETA_PRIOR_BETA            3
 #define BPP_THETA_PRIOR_MAX             3
+
+#define BPP_THETA_SLIDE                 0
+#define BPP_THETA_GIBBS                 1
 
 #define BPP_LINKEDTHETA_NONE            0
 #define BPP_LINKEDTHETA_ALL             1       /* model M0 */
@@ -983,7 +986,6 @@ extern long opt_est_locusrate;
 extern long opt_est_mubar;
 extern long opt_est_stree;
 extern long opt_est_theta;
-extern long opt_exp_gibbs;
 extern long opt_exp_imrb;
 extern long opt_exp_randomize;
 extern long opt_exp_theta;
@@ -1024,6 +1026,7 @@ extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
 extern long opt_theta_dist;
+extern long opt_theta_move;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;

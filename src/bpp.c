@@ -82,7 +82,6 @@ long opt_est_locusrate;
 long opt_est_mubar;
 long opt_est_stree;
 long opt_est_theta;
-long opt_exp_gibbs;
 long opt_exp_imrb;
 long opt_exp_randomize;
 long opt_exp_theta;
@@ -123,6 +122,7 @@ long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
 long opt_theta_dist;
+long opt_theta_move;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -264,7 +264,7 @@ static struct option long_options[] =
   {"exp_imrb",     no_argument,       0, 0 },  /* 37 */
   {"bfdriver",     required_argument, 0, 0 },  /* 38 */
   {"points",       required_argument, 0, 0 },  /* 39 */
-  {"exp_gibbs",    no_argument,       0, 0 },  /* 40 */
+  {"theta-move",   required_argument, 0, 0 },  /* 40 */
   { 0, 0, 0, 0 }
 };
 
@@ -426,7 +426,7 @@ void args_init(int argc, char ** argv)
   opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
-  opt_exp_gibbs = 0;
+  opt_theta_move = BPP_THETA_GIBBS;
   opt_exp_imrb = 0;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
@@ -743,7 +743,12 @@ void args_init(int argc, char ** argv)
         break;
 
       case 40:
-        opt_exp_gibbs = 1;
+        if (!strcasecmp(optarg,"slide"))
+          opt_theta_move = BPP_THETA_SLIDE;
+        else if (!strcasecmp(optarg,"gibbs"))
+          opt_theta_move = BPP_THETA_GIBBS;
+        else
+          fatal("Invalid instruction set (%s)", optarg);
         break;
 
       default:
@@ -839,6 +844,7 @@ void cmd_help()
           "  --bfdriver FILENAME     create control files to calculate marginal likelihood\n"
           "  --points INTEGER        number of G-L quadrature points (used with --bfdriver)\n"
           "  --summary FILENAME      summarize results using specified control file\n"
+          "  --theta-move STRING     'slide' for sliding window or 'gibbs' (default: gibbs)\n"
           "\n"
          );
 

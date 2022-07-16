@@ -2,6 +2,66 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.6.0] - 2022-07-16
+### Changed
+ - Disabled twin towers unidentifiability algorithm when not using data
+ - Printouts from label switching algorithm are now included in output file
+ - Gibbs sampler is now the default move for thetas
+### Fixed
+ - Crash when resuming from checkpoint due to uninitialized IM variables
+ - Checkpointing when using linked theta models
+ - Copying of linked_theta attribute when cloning snodes -- fixes linked theta
+   models under IM
+### Added
+ - Consistency checks for tau definitions in --simulate
+ - Error when using MSCi and IM together
+ - Possibility of displaying multiple phi means on screen output
+ - Gibbs sampler for thetas under MSC,MSCi,IM with gamma prior
+
+## [4.5.2] - 2022-06-27
+### Fixed
+ - Phi proposal for assymetric beta priors -- phi proposed on the branch the 
+   parameter resides on
+### Added
+ - Gibbs sampler for population size parameters under the IM model with inverse
+   gamma prior
+ - Parallelization for freqs,qrates,alpha,brte moves when thetas integrated out
+ - 'defphi' keyword in species tree attributes to define the branch on which
+   the phi parameter is placed on
+
+## [4.5.1] - 2022-05-22
+### Changed
+ - Migration rate symbol from small m to big M in MCMC sample file
+ - Output seed value when seed<0
+ - Qrates in simulation option now sum to 1
+ - Order of qrates and base frequencies in the output file and added an
+   indicative label for each substitution rate and base frequency
+### Fixed
+ - Edge conditions for phi label switching
+ - Enabled --summary option  (previously disabled)
+ - Bug that corrupted opt_tau_alpha when reading control file
+ - Gene tree migration event move to save proposed time
+ - Segfault in msci generator when adding time-travelling BDIs (issue #158)
+ - Race condition due to migcount_sum
+ - Memory leaks, improved reallocation of migbuffer, issues in miginfo_extend
+ - Gene tree branch lengths in print_gene_trees output when using relaxed clocks
+### Added
+ - Indexing of migration events (improves performance)
+ - Option --bfdriver (issue #129)
+ - New rubberband algorithm under IM
+ - Linked theta models (none,all,inner,msci)
+ - Gene tree height and length in gene tree output file
+ - Gibbs sampler for population sizes under the MSC and MSCi models with
+   inverse gamma prior
+
+## [4.5.0] - 2021-12-21
+### Changed
+ - Proposal kernel to bactrial laplace
+ - Testbed generation hash
+### Added
+ - Isolation with migration model
+
+
 ## [4.4.1] - 2021-12-13
 ### Changed
  - Shortened MSci model information table

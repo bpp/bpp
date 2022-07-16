@@ -2947,11 +2947,11 @@ static int propose_theta_gibbs(stree_t * stree,
   return 1;
 }
 
-static int propose_theta(stree_t * stree,
-                         gtree_t ** gtree,
-                         locus_t ** locus,
-                         snode_t * snode,
-                         long thread_index)
+static int propose_theta_slide(stree_t * stree,
+                               gtree_t ** gtree,
+                               locus_t ** locus,
+                               snode_t * snode,
+                               long thread_index)
 {
   long i,j;
   long lcount = 0;
@@ -3098,7 +3098,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (opt_exp_gibbs)
+      if (opt_theta_move == BPP_THETA_GIBBS)
       {
         if (opt_migration)
           accepted += propose_theta_gibbs_im(stree,
@@ -3114,11 +3114,11 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
                                           thread_index);
       }
       else
-        accepted += propose_theta(stree,
-                                  gtree,
-                                  locus,
-                                  stree->nodes[i],
-                                  thread_index);
+        accepted += propose_theta_slide(stree,
+                                        gtree,
+                                        locus,
+                                        stree->nodes[i],
+                                        thread_index);
       theta_count++;
     }
   }
