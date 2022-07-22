@@ -97,6 +97,7 @@ long opt_max_species_count;
 long opt_method;
 long opt_migration;
 long opt_model;
+long opt_mrate_move;
 long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
@@ -265,6 +266,7 @@ static struct option long_options[] =
   {"bfdriver",     required_argument, 0, 0 },  /* 38 */
   {"points",       required_argument, 0, 0 },  /* 39 */
   {"theta-move",   required_argument, 0, 0 },  /* 40 */
+  {"mrate-move",   required_argument, 0, 0 },  /* 41 */
   { 0, 0, 0, 0 }
 };
 
@@ -426,7 +428,6 @@ void args_init(int argc, char ** argv)
   opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
-  opt_theta_move = BPP_THETA_GIBBS;
   opt_exp_imrb = 0;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
@@ -481,6 +482,7 @@ void args_init(int argc, char ** argv)
   opt_mig_target = NULL;
   opt_model = -1;
   opt_modelparafile = NULL;
+  opt_mrate_move = BPP_MRATE_SLIDE;
   opt_msafile = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
@@ -533,6 +535,7 @@ void args_init(int argc, char ** argv)
   opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
+  opt_theta_move = BPP_THETA_GIBBS;
   opt_theta_p = 0;
   opt_theta_q = 0;
   opt_threads = 1;
@@ -747,6 +750,15 @@ void args_init(int argc, char ** argv)
           opt_theta_move = BPP_THETA_SLIDE;
         else if (!strcasecmp(optarg,"gibbs"))
           opt_theta_move = BPP_THETA_GIBBS;
+        else
+          fatal("Invalid instruction set (%s)", optarg);
+        break;
+
+      case 41:
+        if (!strcasecmp(optarg,"slide"))
+          opt_mrate_move = BPP_MRATE_SLIDE;
+        else if (!strcasecmp(optarg,"gibbs"))
+          opt_mrate_move = BPP_MRATE_GIBBS;
         else
           fatal("Invalid instruction set (%s)", optarg);
         break;

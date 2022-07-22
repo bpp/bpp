@@ -78,6 +78,8 @@ static unsigned int * snode_contrib_count;
 static gnode_t * pruned_nodes[10000];
 static gnode_t * gsources_list[10000];
 
+static long * ts_indicator = NULL;
+
 #define SHRINK          1
 #define EXPAND          2
 
@@ -2560,6 +2562,9 @@ void stree_fini()
     free(snode_contrib_space);
     free(snode_contrib_count);
   }
+
+  if (ts_indicator)
+    free(ts_indicator);
 }
 
 static void all_partials_recursive(gnode_t * node,
@@ -8667,7 +8672,169 @@ long migration_valid(stree_t * stree, snode_t * from, snode_t * to)
   return 0;
 }
 
-long prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+double migrate_gibbs(stree_t * stree,
+                     gtree_t ** gtree,
+                     locus_t ** locus,
+                     unsigned int si,
+                     unsigned int ti)
+{
+  long i,j,k,n;
+  long asj = 0;
+  long msa_index;
+  double a1,b1;
+  double bsj = 0;
+  double heredity;
+  double tstart,tend;
+  size_t alloc_required;
+  dlist_item_t * event;
+  dlist_item_t * li;
+  migbuffer_t * migbuffer;
+
+  snode_t * src = stree->nodes[si];
+  snode_t * tgt = stree->nodes[ti];
+
+  const static long thread_index = 0;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  /* indicator: 1 if migration from si to ti is possible at time segment k */
+  if (!ts_indicator)
+    ts_indicator = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+
+
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    alloc_required = tgt->migevent_count[msa_index] +
+                     tgt->event_count[msa_index] +
+                     stree->inner_count+1;
+    migbuffer_check_and_realloc(thread_index,alloc_required);
+    migbuffer = global_migbuffer_r[thread_index];
+
+    heredity = locus[msa_index]->heredity[0];
+
+    /* calculate Asj */
+    asj += gtree[msa_index]->migcount[si][ti];
+
+    /* add taus and coalescence times in sortbuffer */
+    migbuffer[0].time = tgt->tau;
+    migbuffer[0].type = EVENT_TAU;
+    j = 1;
+    for (event = tgt->event[msa_index]->head; event; event = event->next)
+    {
+      gnode_t* gnode = (gnode_t*)(event->data);
+      migbuffer[j].time   = gnode->time;
+      migbuffer[j++].type = EVENT_COAL;
+    }
+
+    for (li = tgt->mig_source[msa_index]->head; li; li = li->next)
+    {
+      migevent_t * me     = (migevent_t *)(li->data);
+      migbuffer[j].time   = me->time;
+      migbuffer[j++].type = EVENT_MIG_SOURCE;
+    }
+    for (li = tgt->mig_target[msa_index]->head; li; li = li->next)
+    {
+      migevent_t * me     = (migevent_t *)(li->data);
+      migbuffer[j].time   = me->time;
+      migbuffer[j++].type = EVENT_MIG_TARGET;
+    }
+
+    /* add splitting of populations */
+    for (k = 0; k < tgt->mb_count; ++k)
+    {
+      migbuffer[j++] = tgt->migbuffer[k];
+    }
+
+    if (tgt->parent && !tgt->mb_count)
+      fatal("\nError when processing node %s", tgt->label);
+    /* TODO: Probably split the following qsort case into two:
+       in case tgt->parent then sort j-2 elements, otherwise
+       j-1 elements.
+    */
+
+    /* if there was at least one coalescent event, sort */
+    if (j > 1)
+      qsort(migbuffer + 1, j - 1, sizeof(migbuffer_t), cb_migbuf_asctime);
+
+    
+    /* fill indicator variable */
+    for (k = 0, tstart = tgt->tau; k < tgt->mb_count; ++k)
+    {
+      tend = tgt->migbuffer[k].time;
+      ts_indicator[k] = (src->tau <= tstart && src->parent->tau >= tend);
+      tstart = tend;
+    }
+
+    long epoch = 0;
+    assert(!tgt->parent || tgt->mb_count);
+    long ind = ts_indicator[epoch];
+
+    /* calculate Bsj */
+    for (k = 1, n = tgt->seqin_count[msa_index]; k < j; ++k)
+    {
+      double t = migbuffer[k].time - migbuffer[k-1].time;
+      if (n > 0 && tgt->parent)
+        bsj += 4*n*ind*t;
+
+      if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
+        --n;
+      else if (migbuffer[k].type == EVENT_MIG_TARGET)
+        ++n;
+      else if (migbuffer[k].type == EVENT_TAU && epoch < tgt->mb_count-1)
+        ind = ts_indicator[++epoch];
+    }
+    bsj /= heredity;
+  }
+  bsj /= stree->nodes[ti]->theta;
+
+  /* we have the new distribution */
+
+  a1 = opt_mig_alpha + asj;
+  b1 = opt_mig_beta  + bsj;
+
+  opt_migration_matrix[si][ti] = legacy_rndgamma(thread_index,a1) / b1;
+
+  stree_update_mig_subpops(stree,thread_index);
+
+  /* update gene tree density */
+  /* TODO: Update only necessary populations to improve computational speed */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree[i]->logpr = gtree_logprob_mig(stree,
+                                        gtree[i],
+                                        locus[i]->heredity[0],
+                                        i,
+                                        thread_index);
+  }
+
+  return 1;
+}
+
+static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+{
+  long i,j;
+  long accepted = 0;
+  long total = 0;
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+    {
+      if (!migration_valid(stree, stree->nodes[i], stree->nodes[j])) continue;
+
+      ++total;
+
+      accepted += migrate_gibbs(stree,gtree,locus,i,j);
+    }
+  }
+
+
+  return accepted / (double)total;
+
+}
+
+
+static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
   long i,j,k;
   long accepted = 0;
@@ -8758,4 +8925,12 @@ long prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
   }
   if (!total) return 0;
   return accepted / (double)total;
+}
+
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+{
+  if (opt_mrate_move == BPP_MRATE_GIBBS)
+    return prop_migrates_gibbs(stree,gtree,locus);
+
+  return prop_migrates_slide(stree,gtree,locus);
 }
