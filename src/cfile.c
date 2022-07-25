@@ -2317,6 +2317,15 @@ static void check_validity()
       fatal("Theta prior Beta(p,q,min,max) requires max > min");
   }
 
+  if (opt_migration)
+  {
+    if (opt_mig_alpha <= 0)
+      fatal("Alpha value of Gamma(a,b) of migprior must be > 0");
+
+    if (opt_mig_beta <= 0)
+      fatal("Beta value of Gamma(a,b) of migprior must be > 0");
+  }
+
   if (species_count > 1)
   {
     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
