@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 6
-#define VERSION_PATCH 0
+#define VERSION_PATCH 1
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -244,6 +244,9 @@ extern const char * global_freqs_strings[28];
 
 #define BPP_THETA_SLIDE                 0
 #define BPP_THETA_GIBBS                 1
+
+#define BPP_MRATE_SLIDE                 0
+#define BPP_MRATE_GIBBS                 1
 
 #define BPP_LINKEDTHETA_NONE            0
 #define BPP_LINKEDTHETA_ALL             1       /* model M0 */
@@ -1001,6 +1004,7 @@ extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
 extern long opt_model;
+extern long opt_mrate_move;
 extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_partition_count;
@@ -1373,7 +1377,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
 
-long prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 void stree_update_mig_subpops(stree_t * stree, long msa_index);
 

@@ -2,6 +2,14 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.6.1] - 2022-07-26
+### Changed
+ - Number of thetas,taus,phis and mrates on screen output
+### Added
+ - Gibbs sampler for migration rates
+### Fixed
+ - Priors on frogs example control files
+
 ## [4.6.0] - 2022-07-16
 ### Changed
  - Disabled twin towers unidentifiability algorithm when not using data

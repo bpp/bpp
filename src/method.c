@@ -33,9 +33,9 @@
 
 /* maximum number of theta/tau to output on screen during MCMC */
 #define MAX_MRATE_OUTPUT        4
-#define MAX_THETA_OUTPUT        10
+#define MAX_THETA_OUTPUT        3
 #define MAX_TAU_OUTPUT          3
-#define MAX_PHI_OUTPUT          3
+#define MAX_PHI_OUTPUT          4
 
 const static int rate_matrices = 1;
 const static long thread_index_zero = 0;
