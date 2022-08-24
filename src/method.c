@@ -250,7 +250,7 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_method == METHOD_11)
   {
     fprintf(fp, "  stree proposal:  %6.4f for Ssnl, %6.4f for Sspr\n", opt_prob_snl, 1 - opt_prob_snl);
-    fprintf(fp, "    sp: number of delimited specices\n");
+    fprintf(fp, "    sp: number of delimited species\n");
   }
   if (opt_method == METHOD_10 || opt_method == METHOD_11)
   {
@@ -262,7 +262,7 @@ static void print_mcmc_headerline(FILE * fp,
   }
   if (opt_method == METHOD_10 || opt_method == METHOD_11)
   {
-    fprintf(fp, "  mldp: most likelely delimitation and probability\n");
+    fprintf(fp, "  mldp: most likely delimitation and probability\n");
   }
   if (mean_theta_count == 1)
     fprintf(fp, "mthet1: root node mean theta\n");

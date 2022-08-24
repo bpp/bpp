@@ -1135,7 +1135,7 @@ void load_chk_section_2(FILE * fp)
 
   #if 0
   char * newick = stree_export_newick(stree->root,NULL);
-  printf("Current specices tree: %s\n", newick);
+  printf("Current species tree: %s\n", newick);
   free(newick);
   #endif
 
