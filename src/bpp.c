@@ -190,6 +190,8 @@ char * opt_constraintfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
+char * opt_datefile;
+char * opt_seqDates;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_msafile;
@@ -210,6 +212,7 @@ long ** opt_mig_bitmatrix;
 double ** opt_migration_events;
 double ** opt_migration_matrix;
 partition_t ** opt_partition_list;
+int opt_seqAncestral;
 
 long mmx_present;
 long sse_present;
@@ -413,7 +416,7 @@ void args_init(int argc, char ** argv)
   opt_debug_rates = 0;
   opt_debug_rj = 0;
   opt_debug_shrink_count = 0;
-  opt_debug_sim = 0;
+  opt_debug_sim = 1;
   opt_debug_snl = 0;
   opt_debug_sspr = 0;
   opt_debug_start = 0;
@@ -468,6 +471,8 @@ void args_init(int argc, char ** argv)
   opt_locus_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
+  opt_datefile = NULL;
+  opt_seqDates = NULL;
   opt_max_species_count = 0;
   opt_mcmcfile = NULL;
   opt_method = -1;
@@ -544,6 +549,7 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+  opt_seqAncestral = 0; 
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {
@@ -819,6 +825,8 @@ static void dealloc_switches()
   if (opt_cfile) free(opt_cfile);
   if (opt_constraintfile) free(opt_constraintfile);
   if (opt_mapfile) free(opt_mapfile);
+  if (opt_datefile) free(opt_datefile);
+  if (opt_seqDates) free(opt_seqDates);
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);

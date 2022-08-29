@@ -158,6 +158,79 @@ l_unwind:
   return ret;
 }
 
+list_t * parse_date_mapfile(const char * mapfile)
+{
+  long line_count = 0;
+  long ret = 1;
+  FILE * fp;
+  list_t * list;
+  mappingDate_t * mapping = NULL;
+  char * tag = NULL;
+  char * date = NULL;
+
+  fp = xopen(mapfile,"r");
+
+  list = (list_t *)xcalloc(1,sizeof(list_t));
+
+  regex_t regDecimal;
+  int regCompiled, regMatch;
+  char* ptr; /* Needed for the strtod function */
+   /* Regex of decimal number */
+   regCompiled = regcomp(&regDecimal, "^([0-9]*)((\\.)?([0-9]+))$" , REG_EXTENDED);
+   if (regCompiled == 1) {
+     fprintf(stderr, "Regular expression did not compile.\n");
+     exit(1);
+   }
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    if (is_emptyline(line)) continue;
+
+    if (!parse_mapping(line,&tag,&date))
+    {
+      ret = 0;
+      fprintf(stderr, "Invalid entry in %s (line %ld)\n", mapfile, line_count);
+      goto l_unwind;
+    }
+
+    /* construct a mapping record */
+    mapping = (mappingDate_t *)xmalloc(sizeof(mapping_t));
+    mapping->individual = tag;
+
+
+    /* Need to convert to double*/
+
+     regMatch = regexec(&regDecimal, date, 0, NULL, 0);
+      if (regMatch != 0) {
+        fprintf(stderr, "Problem reading datefile. Regular expression does not match a decimal number.\n");
+        exit(1);
+      }
+
+    mapping->date = strtod(date, &ptr);
+    free(date);
+
+    /* insert item into list */
+    list_append(list,(void *)mapping);
+
+    tag = date = NULL;
+  }
+
+
+l_unwind:
+  fclose(fp);
+  if (ret == 0)
+  {
+    list_clear(list,mapDate_dealloc);
+    free(list);
+    list = NULL;
+  }
+
+  regfree(&regDecimal);
+  return list;
+}
+
 list_t * parse_mapfile(const char * mapfile)
 {
   long line_count = 0;
@@ -205,4 +278,45 @@ l_unwind:
     list = NULL;
   }
   return list;
+}
+
+
+static int cmp_tipDates(const void * a, const void * b){
+  
+  mappingDate_t * const * x = a;
+  mappingDate_t * const * y = b;
+
+  if ((*x)->date - (*y)->date > 0) return 1;
+  return -1;
+} 
+
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList) {
+
+        *dateList = parse_date_mapfile(opt_datefile);
+
+
+	/* Checks the number of tip dates match the number of sequences to 
+	 * generate as specified by species&tree in the control file*/
+        list_item_t* list = (*dateList)->head;
+
+        mappingDate_t ** tipDateArray = xmalloc(((*dateList)->count) * sizeof(mappingDate_t *));
+        list = (*dateList)->head;
+
+	int i = 0; 
+
+	/* Creates an array that points to the mappingDate structs from the list
+	 * in order to sort the array. 
+	 * Note: For the sequences where phase = 1, two places in the array point
+	 * to the same struct */
+        while (list) {
+                tipDateArray[i] = (mappingDate_t *)list->data;
+		i++;
+                list = list->next;
+        }
+
+        qsort(tipDateArray, (*dateList)->count, sizeof(mappingDate_t *), cmp_tipDates);
+
+
+
+  return tipDateArray;
 }

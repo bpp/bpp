@@ -1958,14 +1958,23 @@ static void reorder(stree_t * stree)
     if (opt_reorder[i] == ',')
       commas_count++;
 
-  if (commas_count+1 != stree->tip_count)
-    fatal("Labels (%d) specified in --reorder do not match species tree (%d)", commas_count, stree->tip_count);
+  int hashSize = stree->tip_count;
 
-  hashtable_t * ht = hashtable_create(stree->tip_count);
+  if (commas_count+1 != stree->tip_count) {
+          if (!(opt_datefile && commas_count + 1 == stree->tip_count + stree->inner_count)) {
+                fatal("Labels (%d) specified in --reorder do not match species tree (%d)", commas_count, stree->tip_count);
+          } else {
+                hashSize = stree->tip_count + stree->inner_count;
+                opt_seqAncestral = stree->inner_count;
+          }
+  }
 
-  pairlist = (pair_t **)xmalloc(stree->tip_count * sizeof(pair_t *));
 
-  for (i = 0; i < stree->tip_count; ++i)
+  hashtable_t * ht = hashtable_create(hashSize);
+
+  pairlist = (pair_t **)xmalloc(hashSize * sizeof(pair_t *));
+
+  for (i = 0; i < hashSize; ++i)
   {
     pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
     pair->label = stree->nodes[i]->label;
@@ -2105,7 +2114,7 @@ stree_t * stree_from_ntree(ntree_t * ntree)
   /* apply diploid information */
   if (opt_diploid)
   {
-    if (opt_diploid_size != stree->tip_count)
+    if (opt_diploid_size != stree->tip_count + opt_seqAncestral)
       fatal("Number of 'phase' assignments mismatch number of species");
 
     for (i = 0; i < stree->tip_count; ++i)

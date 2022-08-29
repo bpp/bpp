@@ -1324,6 +1324,17 @@ void load_cfile_sim()
           fatal("Option 'imapfile' expects a string (line %ld)", line_count);
         valid = 1;
       }
+    else if (!strncasecmp(token,"datefile",8))
+      {
+        if (!get_string(value, &opt_datefile))
+          fatal("Option 'datefile' expects a string (line %ld)", line_count);
+        valid = 1;
+
+      } else if (!strncasecmp(token, "seqDates",8)) {
+        if (!get_string(value, &opt_seqDates))
+          fatal("Option 'seqDates' expects a string (line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 9)
     {

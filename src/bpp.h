@@ -35,6 +35,7 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <regex.h>
 
 #ifdef _MSC_VER
 #include <pmmintrin.h>
@@ -548,6 +549,10 @@ typedef struct stree_s
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
+
+  double * u_constraint;
+  double * l_constraint;
+
 } stree_t;
 
 typedef struct gnode_s
@@ -780,6 +785,13 @@ typedef struct mapping_s
   char * species;
   int lineno;
 } mapping_t;
+
+typedef struct mappingDate_s
+{
+  char * individual;
+  double date;
+  int lineno;
+} mappingDate_t;
 
 typedef struct mscidefs_s
 {
@@ -1097,6 +1109,8 @@ extern char * opt_concatfile;
 extern char * opt_constraintfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
+extern char * opt_datefile;
+extern char * opt_seqDates;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_msafile;
@@ -1118,6 +1132,7 @@ extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
 extern double ** opt_migration_matrix;
 extern partition_t ** opt_partition_list;
+extern int  opt_seqAncestral;
 
 /* common data */
 
@@ -1272,6 +1287,8 @@ hashtable_t * species_hash(stree_t * tree);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
+hashtable_t * datelist_hash(list_t * datelist);
+
 double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
@@ -1383,6 +1400,14 @@ void stree_update_mig_subpops(stree_t * stree, long msa_index);
 
 long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
 
+int stree_init_tau_recursive_constraint(stree_t * stree,
+                                     snode_t * node,
+                                     double prop,
+                                     long thread_index,
+                                     double *u_constraint,
+                                     double *l_constraint);
+
+
 /* functions in arch.c */
 
 uint64_t arch_get_memused(void);
@@ -1413,6 +1438,8 @@ int msa_remove_missing_sequences(msa_t * msa);
 void maplist_print(list_t * map_list);
 
 void map_dealloc(void * data);
+
+void mapDate_dealloc(void * data);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
@@ -1500,6 +1527,7 @@ void gtree_alloc_internals(gtree_t ** gtree,
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
+		      list_t * datelist,
                       int msa_count);
 void gtree_simulate_init(stree_t * stree, list_t * maplist);
 void gtree_simulate_fini(void);
@@ -1582,7 +1610,9 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
                                    locus_t ** locus,
                                    long thread_index);
 
-gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, 
+                        mappingDate_t ** tipDateArray,
+                        list_t * dateList);
 
 double prop_branch_rates_serial(gtree_t ** gtree,
                                 stree_t * stree,
@@ -1608,9 +1638,19 @@ double prop_locusrate_mui(gtree_t ** gtree,
                           stree_t * stree,
                           locus_t ** locus,
                           long thread_index);
+
+void update_tau_constraint_recursive_to_root(stree_t * stree,
+                                                snode_t * node,
+                                                double * constraint);
+
+void update_tau_constraint_recursive_to_tip(stree_t * stree,
+                                                snode_t * node,
+                                                double * constraint);
+
 double gtree_propose_migevent_ages_serial(locus_t ** locus,
                                           gtree_t ** gtree,
                                           stree_t * stree);
+
 void migbuffer_check_and_realloc(long thread_index, size_t alloc_required);
 int cb_migbuf_asctime(const void * x, const void * y);
 
@@ -2493,10 +2533,12 @@ stree_t * bpp_parse_newick_string(const char * line);
 ntree_t * bpp_parse_newick_string_ntree(const char * line);
 ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 stree_t * stree_from_ntree(ntree_t * ntree);
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList);
 
 /* functions in parsemap.c */
 
 list_t * parse_mapfile(const char * mapfile);
+list_t * parse_date_mapfile(const char * mapfile);
 
 /* functions in msci_gen.c */
 

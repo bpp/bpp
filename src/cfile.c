@@ -2450,6 +2450,13 @@ static void check_validity()
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");
+
+  if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
+    fatal("Cannot use species delimitation models when using tip dating.");
+
+  if (opt_datefile)
+    fatal("Tip dating is not currently implemented for inference.");
+
 }
 
 static void update_locusrate_information()
@@ -2693,6 +2700,11 @@ void load_cfile()
       if (!strncasecmp(token,"imapfile",8))
       {
         if (!get_string(value, &opt_mapfile))
+          fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"datefile",8)) {
+        if (!get_string(value, &opt_datefile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }

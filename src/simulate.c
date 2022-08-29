@@ -91,7 +91,7 @@ static void print_settings(stree_t * stree)
   long i;
 
   fprintf(stdout,"%d species:", stree->tip_count);
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     fprintf(stdout, " %s (%ld)", stree->nodes[i]->label, opt_sp_seqcount[i]);
   }
@@ -179,17 +179,17 @@ static void process_diploid(long species_count)
   long i;
 
   if (!opt_diploid)
-    opt_diploid = (long *)xcalloc((size_t)species_count, sizeof(long));
+    opt_diploid = (long *)xcalloc((size_t)species_count + opt_seqAncestral, sizeof(long));
 
   /* double the number of sequences for species indicated as diploid */
-  for (i = 0; i < species_count; ++i)
+  for (i = 0; i < species_count + opt_seqAncestral; ++i)
   {
     if (opt_diploid[i])
       opt_sp_seqcount[i] *= 2;
   }
 
   opt_cleandata = 1;
-  for (i = 0; i < species_count; ++i)
+  for (i = 0; i < species_count + opt_seqAncestral; ++i)
     if (opt_diploid[i])
     {
       opt_cleandata = 0;
@@ -674,7 +674,7 @@ static list_t * create_maplist(stree_t * stree)
 
   list_t * list = (list_t *)xcalloc(1,sizeof(list_t));
 
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     mapping_t * m = (mapping_t *)xmalloc(sizeof(mapping_t));
 
@@ -889,7 +889,7 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
   char ** label;
 
   long seq_sum = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     seq_sum += opt_sp_seqcount[i];
   assert(seq_sum == msa->count);
 
@@ -898,7 +898,7 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
   label    = (char **)xmalloc((size_t)hets_count * sizeof(char *));
 
   k = 0; j = 0; m = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     if (opt_diploid[i])
     {
@@ -1035,7 +1035,7 @@ static void write_seqs(FILE * fp, msa_t * msa, long species_count)
   fprintf(fp, "\n\n%d %ld \n\n", msa->count, opt_locus_simlen);
 
   long seq_sum = 0;
-  for (i = 0; i < species_count; ++i)
+  for (i = 0; i < species_count + opt_seqAncestral; ++i)
     seq_sum += opt_sp_seqcount[i] / (opt_diploid[i] ? 2 : 1);
   //assert(seq_sum == msa->count);
 
@@ -1063,7 +1063,7 @@ static void write_diploid_rand_seqs(FILE * fp_seqrand, stree_t * stree, msa_t * 
   new_msa->label = msa->label;
 
   long seq_sum = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     seq_sum += opt_sp_seqcount[i];
   assert(seq_sum == msa->count);
 
@@ -1073,7 +1073,7 @@ static void write_diploid_rand_seqs(FILE * fp_seqrand, stree_t * stree, msa_t * 
     sequence[i] = (char *)xmalloc((size_t)(msa->length) * sizeof(char));
 
   j = 0; m = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     if (opt_diploid[i])
     {
@@ -1223,6 +1223,145 @@ static void set_migration_rates(stree_t * stree)
     fatal("Please fix the migration matrix in the control file");
 }
 
+static int cmp_tipDates(const void * a, const void * b){
+  
+  mappingDate_t * const * x = a;
+  mappingDate_t * const * y = b;
+
+  if ((*x)->date - (*y)->date > 0) return 1;
+  return -1;
+} 
+
+/* Reads in tip dates
+ * Returns an array with mappingDate_t structs */
+/* Anna: this could probably be less redundant. Current it is
+ * written to do most of the error checking first */
+mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList) {
+
+        *dateList = parse_date_mapfile(opt_datefile);
+
+        int matchFound = 0;
+        long int* numSeqs = xcalloc(stree->tip_count + stree->inner_count, sizeof(long int));
+        long int totalSeqs = 0;
+
+	/* Checks the number of tip dates match the number of sequences to 
+	 * generate as specified by species&tree in the control file */
+        list_item_t* list = (*dateList)->head;
+
+        while (list) {
+
+		/* Checks that the labels in the tip date file match the names of species */
+                for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++ ) {
+                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
+                        if (matchFound) {
+                                numSeqs[j]++;
+                                break;
+                        }
+                }
+
+                if (! matchFound) {
+                        fatal("%s name in datefile not found as species name", ((mappingDate_t *)list->data)->individual);
+                }
+                list = list->next;
+        }
+
+       /* Checks the number of dates matches the number of sequences */
+       for (unsigned int j = 0; j < stree->tip_count +stree->inner_count; j++ ) {
+		if (opt_diploid[j]) {
+                	totalSeqs = totalSeqs + 2 * numSeqs[j];
+                	if ( numSeqs[j] * 2 != opt_sp_seqcount[j])
+                        fatal("There are %ld dates for species %s. This does not match the number of loci given in the input file, which is %ld", numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j] /2);
+		} else {
+                	totalSeqs = totalSeqs + numSeqs[j];
+                	if ( numSeqs[j] != opt_sp_seqcount[j])
+                        fatal("There are %ld dates for species %s. This does not match the number of loci given in the input file, which is %ld", numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j]);
+		}
+        }
+
+        free(numSeqs);
+
+        mappingDate_t ** tipDateArray = xmalloc(totalSeqs * sizeof(mappingDate_t *));
+        /* Anna: Will need to free later, also need to free mappingDate I assume */
+        list = (*dateList)->head;
+//        tipDateArray[0] = (mappingDate_t *)list->data;
+
+        //double timePresent = tipDateArray[0]->date;
+	int i = 0; 
+
+	/* Creates an array that points to the mappingDate structs from the list
+	 * in order to sort the array. 
+	 * Note: For the sequences where phase = 1, two places in the array point
+	 * to the same struct */
+        while (list) {
+                tipDateArray[i] = (mappingDate_t *)list->data;
+
+                for (unsigned int j = 0; j < stree->tip_count; j++ ) {
+                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
+                        if (matchFound) {
+				if (opt_diploid[j]) {
+					i++;
+                			tipDateArray[i] = (mappingDate_t *)list->data;
+				}
+                                break;
+                        }
+
+                }
+		
+         //       if (tipDateArray[i]->date > timePresent)
+          //              timePresent = tipDateArray[i]->date;
+		i++;
+                list = list->next;
+        }
+	assert(i == totalSeqs);
+
+      //  printf("Time present is %f\n", timePresent);
+
+	/* Adjust units of dates to be in coalescent time, and in backward time */
+	/* Anna: Need to change how you do timing */
+       /* double timeConstant = .02;
+        list = dateList->head;
+	while (list) {
+		((mappingDate_t *)list->data)->date = (timePresent - ((mappingDate_t *)list->data)->date) * timeConstant; 
+                list = list->next;
+        }*/
+
+        qsort(tipDateArray,totalSeqs, sizeof(mappingDate_t *), cmp_tipDates);
+
+
+	/* Checks that the sequences were sampled in the population, after
+	 * the species existed */
+        list = (*dateList)->head;
+
+        while (list) {
+                int matchFound = 0;
+
+                for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++ ) {
+                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
+
+                        if (matchFound) {
+				/* Anna: when sampling ancestral nodes, need to check daughter 
+				 * and parent ages */
+				if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau < ((mappingDate_t *) list->data)-> date) {
+					fatal("Sequences were not sampled before speciation for %s. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->parent->tau, ((mappingDate_t *) list->data)-> date);
+				}
+
+				if (j >= stree->tip_count && stree->nodes[j]->tau > ((mappingDate_t *) list->data)-> date ) {
+					fatal("Sequences sampled before ancestral population %s existed. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->tau, ((mappingDate_t *) list->data)-> date);
+				}
+                                break;
+                        }
+                }
+
+                if (! matchFound) {
+                        fatal("%s name in datefile not found as species name", ((mappingDate_t *)list->data)->individual);
+                }
+                list = list->next;
+        }
+
+
+  return tipDateArray;
+}
+
 static void simulate(stree_t * stree)
 {
   long i,j,k,m;
@@ -1239,6 +1378,7 @@ static void simulate(stree_t * stree)
   FILE * fp_map = NULL;
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
+  FILE * fp_seqDates = NULL;
 
   double H = -1, md_full = -1, md_rand = -1;
   double mH = 0, meand_full = 0, meand_rand = 0;
@@ -1255,6 +1395,8 @@ static void simulate(stree_t * stree)
   assert(opt_mapfile);
   if (opt_mapfile)
     fp_map = xopen(opt_mapfile, "w");
+  if (opt_seqDates)
+    fp_seqDates= xopen(opt_seqDates, "w");
 
   /* print list of output files */
   if (opt_msafile)
@@ -1267,12 +1409,14 @@ static void simulate(stree_t * stree)
     fprintf(stdout, "Model parameters for loci -> %s\n", opt_modelparafile);
   if (opt_mapfile)
     fprintf(stdout, "Tags to species mapping (Imap) -> %s\n", opt_mapfile);
+  if (opt_seqDates)
+    fprintf(stdout, "Sequence to date mapping (Imap) -> %s\n", opt_seqDates);
 
   if (opt_migration)
     set_migration_rates(stree);
 
   hets = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     hets += opt_sp_seqcount[i] / (opt_diploid[i] ? 2 : 1);
 
   /* print model parameter file header */
@@ -1337,7 +1481,7 @@ static void simulate(stree_t * stree)
 
   /* store number of sequences per locus (before collpasing diploid seqs) */
   locus_seqcount = 0;
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     locus_seqcount += opt_sp_seqcount[i];
 
   if (opt_msafile)
@@ -1363,6 +1507,11 @@ static void simulate(stree_t * stree)
   gtree_simulate_init(stree,maplist);
   list_clear(maplist,map_dealloc);
   free(maplist);
+
+  list_t* dateList = NULL;
+  mappingDate_t ** tipDateArray = NULL;
+  if (opt_datefile)
+         tipDateArray = prepareTipDates(stree, &dateList);
 
   /* allocate eigendecomposition structures */
   if (opt_model == BPP_DNA_MODEL_GTR)
@@ -1498,7 +1647,7 @@ static void simulate(stree_t * stree)
       msa[i]->sequence = (char**)xmalloc((size_t)locus_seqcount*sizeof(char *));
 
       /* create sequence labels and populate msa structure */
-      for (j = 0, m = 0; j < stree->tip_count; ++j)
+      for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
       {
         if (opt_diploid[j])
           for (k = 0; k < opt_sp_seqcount[j]; ++k)
@@ -1537,7 +1686,7 @@ static void simulate(stree_t * stree)
         fatal("Missing theta values for some of the species tree inner nodes");
 
     /* simulate gene tree */
-    gtree[i] = gtree_simulate(stree,msa[i],i);
+    gtree[i] = gtree_simulate(stree,msa[i],i, tipDateArray, dateList);
     gtree[i]->travbuffer = NULL;
 
     if (opt_est_locusrate)
@@ -1718,11 +1867,21 @@ static void simulate(stree_t * stree)
     }
   }
 
+  if (opt_seqDates) {
+      for(int i = 0; i < gtree[0]->tip_count; i++) {
+              fprintf(fp_seqDates, "%s %f\n", gtree[0]->nodes[i]->label, gtree[0]->nodes[i]->time);
+      }
+
+      list_clear(dateList,mapDate_dealloc);
+      free(dateList);
+      free(tipDateArray);
+  }
+
   if (mui_array)
     free(mui_array);
   if (vi_array)
     free(vi_array);
-  
+
   /* deallocate hashtables used for mapping sequences to species */
   gtree_simulate_fini();
 
@@ -1764,6 +1923,8 @@ static void simulate(stree_t * stree)
   assert(opt_mapfile);
   if (opt_mapfile)
     fclose(fp_map);
+  if (opt_seqDates)
+    fclose(fp_seqDates);
 
   if (fp_seqfull)
     fclose(fp_seqfull);

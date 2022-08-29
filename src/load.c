@@ -309,6 +309,19 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read name of map file");
   }
 
+  long datefile_present;
+  opt_datefile = NULL;
+  if (!LOAD(&datefile_present,1,fp))
+    fatal("Cannot read datefile information");
+
+  if (datefile_present)
+  {
+    /* read imap filename */
+    if (!load_string(fp,&opt_datefile))
+      fatal("Cannot read name of date file");
+    printf(" Map file: %s\n", opt_datefile);
+  }
+
   /* read output filename */
   if (!load_string(fp,&opt_outfile))
     fatal("Cannot read name of output file");

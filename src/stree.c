@@ -89,9 +89,9 @@ hashtable_t * species_hash(stree_t * tree)
   long i;
 
   /* using a hash table check whether there are duplicate nodes */
-  hashtable_t * ht = hashtable_create(tree->tip_count);
+  hashtable_t * ht = hashtable_create(tree->tip_count + opt_seqAncestral);
 
-  for (i = 0; i < tree->tip_count; ++i)
+  for (i = 0; i < tree->tip_count + opt_seqAncestral; ++i)
   {
     /* attempt to place the pair in the hash table and die with an
        error if a pair with the same label already exists */
@@ -1158,6 +1158,46 @@ static void network_init_tau_iterative(stree_t * stree,
     }
   }
 }
+
+int stree_init_tau_recursive_constraint(stree_t * stree, 
+				     snode_t * node,
+                                     double prop,
+                                     long thread_index, 
+				     double *u_constraint, 
+				     double *l_constraint)
+{
+  assert(!opt_msci);
+
+  /* end recursion if node is a tip */
+  if (!node->left && !node->right)
+  {
+    if (!node->parent->tau)
+      node->theta = -1;
+
+    return 1;
+  }
+
+  /* get species record associate with species tree node */
+  double tau_parent = node->parent->tau;
+
+  if (!node->parent->tau)
+    node->theta = -1;
+
+  int index = node->node_index - stree->tip_count;
+  if (node->parent->tau && node->tau > 0) {
+    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+    if ((u_constraint[index] && node->tau > u_constraint[index]) || (l_constraint[index] && node->tau < l_constraint[index])) {
+	    return 0; 
+    } 
+  }
+  else
+    node->tau = 0;
+
+  int ret1 = stree_init_tau_recursive_constraint(stree, node->left, prop, thread_index, u_constraint, l_constraint);
+  int ret2 = stree_init_tau_recursive_constraint(stree, node->right, prop, thread_index, u_constraint, l_constraint);
+  return (ret1 && ret2); 
+}
+
 
 static void stree_init_tau_recursive(snode_t * node,
                                      double prop,

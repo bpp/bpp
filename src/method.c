@@ -2070,6 +2070,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logpr_sum = 0;
   double * pjump;
   list_t * map_list = NULL;
+  list_t * date_list = NULL;
   stree_t * stree;
   const unsigned int * pll_map;
   FILE * fp_mcmc = NULL;
@@ -2300,6 +2301,15 @@ static FILE * init(stree_t ** ptr_stree,
     else
       printf(" Done\n");
   }
+
+  if (opt_datefile) {
+        printf("Parsing date file...");
+        if (! (date_list = parse_date_mapfile(opt_datefile)))
+                fatal("Failed to parse date file %s", opt_datefile);
+        else
+                printf(" Done\n");
+  }
+
   #if 0
   maplist_print(map_list);
   #endif
@@ -2635,7 +2645,7 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_migration)
     stree_update_mig_subpops(stree, thread_index);
 
-  gtree = gtree_init(stree,msa_list,map_list,msa_count);
+  gtree = gtree_init(stree,msa_list,map_list,date_list,msa_count);
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree[i]->original_index = msa_list[i]->original_index;
