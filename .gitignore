@@ -1,2 +1,3 @@
 *.o
 bpp
+test/anna/testSimple*.txt
