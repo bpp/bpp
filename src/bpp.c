@@ -750,8 +750,16 @@ void args_init(int argc, char ** argv)
           opt_theta_move = BPP_THETA_SLIDE;
         else if (!strcasecmp(optarg,"gibbs"))
           opt_theta_move = BPP_THETA_GIBBS;
+        else if (!strcasecmp(optarg,"mg_invg"))
+          opt_theta_move = BPP_THETA_MG_INVG;
+        else if (!strcasecmp(optarg,"mg_gamma"))
+          opt_theta_move = BPP_THETA_MG_GAMMA;
+        else if (!strcasecmp(optarg,"mg_cauchy"))
+          opt_theta_move = BPP_THETA_MG_CAUCHY;
+        else if (!strcasecmp(optarg,"mg_t4"))
+          opt_theta_move = BPP_THETA_MG_T4;
         else
-          fatal("Invalid instruction set (%s)", optarg);
+          fatal("Invalid theta move (%s)", optarg);
         break;
 
       case 41:
@@ -760,7 +768,7 @@ void args_init(int argc, char ** argv)
         else if (!strcasecmp(optarg,"gibbs"))
           opt_mrate_move = BPP_MRATE_GIBBS;
         else
-          fatal("Invalid instruction set (%s)", optarg);
+          fatal("Invalid mrate move (%s)", optarg);
         break;
 
       default:
