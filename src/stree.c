@@ -2916,6 +2916,13 @@ static int propose_theta_gibbs(stree_t * stree,
       a1 *= 1.01;
       b1 *= 0.99;
     }
+    else if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    {
+      a1 -= 2;
+      double a = opt_theta_alpha-2;
+      double b = (opt_theta_alpha-2)*(opt_theta_alpha-1) / opt_theta_beta;
+      b1 = b*a1*(a1+1)/(a*(a+1)+T2h_sum*b);
+    }
     else if (opt_theta_move == BPP_THETA_MG_CAUCHY ||
              opt_theta_move == BPP_THETA_MG_T4)
     {
