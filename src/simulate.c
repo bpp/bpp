@@ -1150,6 +1150,7 @@ static void set_migration_rates(stree_t * stree)
     
     opt_migration_matrix[s][t] = opt_mig_simrate[i];
   }
+  
   for (i = 0; i < opt_migration; ++i)
   {
     free(opt_mig_source[i]);
@@ -1219,6 +1220,7 @@ static void set_migration_rates(stree_t * stree)
       die = 1;
     }
   }
+  
   if (die)
     fatal("Please fix the migration matrix in the control file");
 }
@@ -1266,7 +1268,7 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList) {
         }
 
        /* Checks the number of dates matches the number of sequences */
-       for (unsigned int j = 0; j < stree->tip_count +stree->inner_count; j++ ) {
+       for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
 		if (opt_diploid[j]) {
                 	totalSeqs = totalSeqs + 2 * numSeqs[j];
                 	if ( numSeqs[j] * 2 != opt_sp_seqcount[j])

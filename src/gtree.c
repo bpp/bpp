@@ -1362,7 +1362,7 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
 void addSamples (mappingDate_t ** tipDateArray, int * tipDateIndex, double tmax, pop_t * pop, int msa_index, int * lineage_count, double maxTipDateIndex, int pop_count, int * dateUsed) {
 
 	gnode_t * tmp;
-	//printf("[Debug]: update Samples \n");
+//	printf("[Debug]: update Samples \n");
 
 	/* Until all samples taken at the same time have been added */
 	while (*tipDateIndex < maxTipDateIndex &&  tipDateArray[*tipDateIndex]->date <= tmax) {
@@ -1392,29 +1392,11 @@ void addSamples (mappingDate_t ** tipDateArray, int * tipDateIndex, double tmax,
 	      
 	      assert(popUpdate < pop_count);
 
-	      /* Check if any coalescent events have occur 
-	       * Otherwise, pointers do not need updating */
-	      // Or migration events... ???
-	      // I think this will be find if you add samples with migration but not if you remove them
 	      if (pop[popUpdate].snode->event_count[msa_index] > 0) {
 
 	     	 unsigned int  node1Index = pop[popUpdate].seq_count; 
-		 //I dont think this will be true with migration
-		 assert(pop[popUpdate].seq_count <= opt_sp_seqcount[popUpdate]);
-		 //Seq count is updated so I think this will be fine
 	     	 unsigned int  node2Index = pop[popUpdate].seq_count + pop[popUpdate].snode->event_count[msa_index];
 	
-		 /* Update daughter pointers since we are moving the parent */
-		 //Anna I think this is unnecessary because we are moving points to the gnodes, 
-		 //not the gnodes themselves. 
-/*		 if (pop[popUpdate].nodes[node1Index]->left) {
-
-			gnode_t * left =  pop[popUpdate].nodes[node1Index]->left;
-			gnode_t * right =  pop[popUpdate].nodes[node1Index]->right;
-
-			left->parent = pop[popUpdate].nodes[node2Index];
-			right->parent = pop[popUpdate].nodes[node2Index];
-		 }*/
 
 		 /* Swap the pointers from the sample (node) to be added
 		  * and the node that has been coalesced */
@@ -2221,6 +2203,7 @@ list_t* dateList)
 
     while (1)
     {
+
       if (!tmax) break;
 
       /* calculate poisson rates: ci[j] is coalescent rate for population j */
@@ -2468,8 +2451,9 @@ list_t* dateList)
         i = (long)(pop[j].seq_count * legacy_rndu(thread_index));
 
         /* shift up lineages in pop j */
-        pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
-        pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+        //pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+        //pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+	
         /* add migration info backwards in time (from j to k) */
         if (!opt_simulate)
           miginfo_append(&(pop[j].nodes[i]->mi),
@@ -2486,9 +2470,9 @@ list_t* dateList)
 	if (tipDateArray)
                 migrateTipDate(pop, i, j, k, maxSeqIndex);
         else {
-		//Anna: Why was this in the other one
-		//pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
-                //pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+        	/* shift up lineages in pop j */
+		pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+                pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
 
        		if (i != --pop[j].seq_count)
         	{
