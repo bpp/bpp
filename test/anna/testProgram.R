@@ -361,3 +361,19 @@ abs(theta - (mean(thirdCoal[rowNum, 3]) - .08)) / (theta)
 rowNum <- which(thirdCoal[,3] >.08)
 theta <- 2 / .05
 abs(1/theta - (mean(fourthCoal[rowNum, 3] - thirdCoal[rowNum, 3]))) / (1/theta)
+
+
+# 
+times <- read.csv("~/bpp/test/anna/testIM.txt", header =FALSE)
+print("testIM.ctl")
+firstCoal <- times[seq(from =1, to = dim(times)[1] -1, by = 2), ]
+secCoal <- times[seq(from =2, to = dim(times)[1], by = 2), ]
+mono <- intersect(which(firstCoal[, 1] != 2), which(firstCoal[, 2] != 2))
+empirical <- length(mono)/ dim(firstCoal)[1]
+
+M <- 0.3*4
+# See Takahata and Slatkin 1990 for formula
+theoretical <- (1 + 7*M/6 + M^2/3) / (1 + 5*M/2+M^2 )
+
+A <- sqrt(1 + 4 * M ^2)
+abs(empirical - theoretical) / theoretical
