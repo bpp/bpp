@@ -1,9 +1,9 @@
 seed =  1
 *seed =  -1
 
-seqfile = simulate_frogs.txt
+seqfile = simulate_4.txt
 treefile=simulate_trees.txt
-Imapfile = frogs.Imap.txt
+Imapfile = simple.Imap.txt
 datefile = dates_sim4.txt
 *outfile = out.txt
 *mcmcfile = mcmc.txt
@@ -14,9 +14,9 @@ seqDates = seqDates.txt
 
 # fixed species tree
 
-species&tree = 5  KK C D KC KCD
+species&tree = 5  A B C AB ABC
                   2  1 1 1  0
-		  ((KK #0.04, C #0.03)KC:.07 #.035, D)KCD:.08 #.05;
+		  ((A #0.04, B #0.03)AB:.07 #.035, C)ABC:.08 #.05;
 
 # phased data for population
 phase =   0 0 0 0 0

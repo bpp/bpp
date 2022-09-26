@@ -320,7 +320,7 @@ theta <- 5 * 4 /.05 # k chose 2 is where the 2 is from
 abs((1/theta) - (mean(firstCoal[rowNum, 3]) -0.08 )) / (1/theta)
 
 
-# Coalesce before first speciation time, next coalescent time is in KKC before next sequence is added
+# Coalesce before first speciation time, next coalescent time is in AB before next sequence is added
 b <- .074- .07
 theta <- 2 / .035
 rowNum <- which(firstCoal[,3] < .07)
@@ -328,35 +328,35 @@ rowNum2 <- which(secCoal[,3] < .074)
 rowsSecond <- intersect(rowNum2,rowNum) 
 abs((1/theta  -b *(exp(theta*b) -1)^-1) - (mean(secCoal[rowsSecond,3]) - .07) ) / (1/theta  -b *(exp(theta*b) -1)^-1)
 
-# Second coalescent event is in between sample added and KCD speciation
+# Second coalescent event is in between sample added and ABC  speciation
 b <- .08- .074
 theta <- 2 * 3 / .035
 rowNum2 <- intersect(intersect(which(secCoal[,3] > .074), which(secCoal[,3] < .08)), which(firstCoal[,3]<.074))
 abs((1/theta  -b *(exp(theta*b) -1)^-1) - (mean(secCoal[rowNum2,3]) - .074) ) / (1/theta  -b *(exp(theta*b) -1)^-1)
 
-# Second coalescent event older than KCD 
+# Second coalescent event older than ABC 
 rowNum <- intersect(which(secCoal[,3] >.08), which(firstCoal[,3] < .08))
 theta <- 1/(3 *4 / .05)
 abs(theta - (mean(secCoal[rowNum, 3]) - .08)) / (theta)
 
-# Second coalescent event older than KCD, finding waiting time until third
+# Second coalescent event older than ABC, finding waiting time until third
 rowNum <- which(secCoal[,3] >.08)
 theta <- 1/(3 *2 / .05)
 abs(theta - (mean(thirdCoal[rowNum, 3] - secCoal[rowNum, 3]))) / (theta)
 
-# If 3rd coalescent time is before KCD
+# If 3rd coalescent time is before ABC
 rowNum <- which(thirdCoal[,3] <.08)
 #mean(fourthCoal[rowNum, 3]) - .08
 theta <- 2  / .05
 abs(1/theta - (mean(fourthCoal[rowNum, 3]) - .08)) / (1/theta)
 
-# If 3rd coalescent after KCD and 2nd before 
+# If 3rd coalescent after ABC and 2nd before 
 # Third coal
 rowNum <- intersect(which(thirdCoal[,3] >.08), which(secCoal[,3] < .08))
 theta <- 1/(3 *2 / .05)
 abs(theta - (mean(thirdCoal[rowNum, 3]) - .08)) / (theta)
 
-# If 3rd coalescent after KCD
+# If 3rd coalescent after ABC
 # Fourth coal
 rowNum <- which(thirdCoal[,3] >.08)
 theta <- 2 / .05
