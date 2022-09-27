@@ -416,7 +416,7 @@ void args_init(int argc, char ** argv)
   opt_debug_rates = 0;
   opt_debug_rj = 0;
   opt_debug_shrink_count = 0;
-  opt_debug_sim = 1;
+  opt_debug_sim = 0;
   opt_debug_snl = 0;
   opt_debug_sspr = 0;
   opt_debug_start = 0;

@@ -922,6 +922,8 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
      list with j */
   if (j < count-1)
     memcpy(pop+j,pop+count-1,sizeof(pop_t));
+  
+
 }
 
 static int cb_cmp_spectime(const void * a, const void * b)
@@ -1877,50 +1879,50 @@ void tau_constraint_find(stree_t * stree, msa_t * msa, int msa_index) {
 
 void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
 
-	// Anna- you are changing seq count, which is problematic bc of the ordering of the nodes
-	// there is enough memory allocated for all of the sequences to be in any single population
-	// Need to move all of the memory from the things that are not yet sampled down one space
-	// in memory. Not sure how many there are??
 	
- // If there have been coalescent events, this code will work fine, jk, it depends on if
- // there are multiple migration events (does not work if there are more migration events than coalescent events
-	
-//	First, find memory to move. Save memory tmp, move memory. 
-//	Adjust seq counts and indicies 
+	/* First, find memory to move. Save memory tmp, move memory. 
+	Adjust seq counts and indicies */
 
 	void * startMove = pop[k].nodes + pop[k].seq_count;
 	void * moveTo;
 	gnode_t * tmp;
+	int * tmpInt; 
 	long  moveSize =   (maxSeqIndex[k] - (int) pop[k].seq_count) * (long) sizeof(gnode_t *); 
 
+	/* Moves memory one space to the "right" in the array to make room for new sequence 
+	that is migrating into the pop */
 	if (moveSize > 0) {
 
-		//I think you need to check you arent moving to where you already are 
 		moveTo = pop[k].nodes + (pop[k].seq_count + 1); 
 		tmp = xmalloc(moveSize);
 		memcpy(tmp, startMove,  (moveSize));
 		memcpy(moveTo, tmp, (moveSize));
 		
+		free(tmp);
 
+		startMove = pop[k].seq_indices + pop[k].seq_count;
 		moveTo = pop[k].seq_indices + (pop[k].seq_count + 1);
 		moveSize = sizeof(int) * (maxSeqIndex[k] - pop[k].seq_count); 
 		
-		memcpy(tmp, startMove,  (moveSize));
-		memcpy(moveTo, tmp, (moveSize));
-		free(tmp);
+		tmpInt = xmalloc(moveSize);
+		memcpy(tmpInt, startMove,  (moveSize));
+		memcpy(moveTo, tmpInt, (moveSize));
+		free(tmpInt);
 
-	} else {
+	} 
 
-		// something tells me I need to move all the seq indices
-        	pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
-	}
+	/* Update the index for the sequence that is being move */
+        pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
 	maxSeqIndex[k]++;
+
+	/* Move the sequence */
         pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
 
 
-//You might need to move the memory for the sequences where a tip is removed as well 
+	/* Move the memory to the left where the sequence is remove */
 	moveSize = (long) sizeof(gnode_t *) * (maxSeqIndex[j] - i - 1);
 	assert(i <= maxSeqIndex[j]);
+
 	if (moveSize > 0 ) {
 
 		startMove = pop[j].nodes + (i + 1);
@@ -1929,22 +1931,25 @@ void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
 		tmp = xmalloc(moveSize);
 		memcpy(tmp, startMove,  moveSize);
 		memcpy(moveTo, tmp, moveSize);
-		
-
-		moveTo = pop[k].seq_indices + (i + 1);
-		moveSize = sizeof(int) * (maxSeqIndex[j] - i); 
-		
-		memcpy(tmp, startMove,  (moveSize));
-		memcpy(moveTo, tmp, (moveSize));
 		free(tmp);
+
+		startMove = pop[k].seq_indices + (i + 1);
+		moveTo = pop[k].seq_indices + i;
+		moveSize = sizeof(int) * (maxSeqIndex[j] - i - 1); 
+		
+		tmpInt = xmalloc(moveSize);
+
+		memcpy(tmpInt, startMove,  (moveSize));
+		memcpy(moveTo, tmpInt, (moveSize));
+		free(tmpInt);
 		
 	}
+
 	maxSeqIndex[j]--;
 	--pop[j].seq_count;
 	
-	// you probably need to do something with the seq indicies, but I dont think you need the next line
-	// We only need to do this is the sequence isnt the last one, but we just move the 
-	// sequences anyway so I dont think this matters
+	/* This is moving the last sequence from the end to the middle where the sequence was removed
+	 * This isn't necessary with tip dating, as we just moved the memory around */
      /*   	if (i != --pop[j].seq_count)
         	{
         	  pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
@@ -2512,12 +2517,14 @@ list_t* dateList)
     free(pop[i].nodes);
   }
 
+  
   assert(lineage_count == 1);
   /* wrap the generated tree structure (made up of linked nodes) into gtree_t */
   gtree_t * gtree = gtree_wraptree(inner, (unsigned int)(msa->count));
 
   gtree->migcount = migcount;
 
+  assert(lineage_count == 1);
   /* set path flags for gene tree root lineage if root coalesces before root
      population */
   if (opt_msci)
@@ -2573,6 +2580,10 @@ list_t* dateList)
   free(pop);
   free(ci);
   free(epoch);
+  if (tipDateArray) {
+	free(maxSeqIndex);
+  }
+	  
   free(useDate);
 
 
