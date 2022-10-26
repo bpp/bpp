@@ -688,6 +688,25 @@ static list_t * create_maplist(stree_t * stree)
   return list;
 }
 
+static list_t * create_maplist_msa(stree_t * stree, msa_t ** msa)
+{
+  long j;
+
+  list_t * list = (list_t *)xcalloc(1,sizeof(list_t));
+
+  for (j = 0; j < msa[0]->count; ++j)
+  {
+    mapping_t * m = (mapping_t *)xmalloc(sizeof(mapping_t));
+
+    m->individual = xstrdup(strchr(msa[0]->label[j], '^')+1);
+    m->species    = strndup(msa[0]->label[j], strchr(msa[0]->label[j], '^') - msa[0]->label[j]);
+    m->lineno     = j+1;
+
+    list_append(list,(void *)m);
+  }
+
+  return list;
+}
 /* correlated clock, lognormal */
 static void simulate_correlated_rates_logn_recursive(snode_t * node, gtree_t * gtree)
 {
@@ -1238,7 +1257,7 @@ static int cmp_tipDates(const void * a, const void * b){
  * Returns an array with mappingDate_t structs */
 /* Anna: this could probably be less redundant. Current it is
  * written to do most of the error checking first */
-mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList) {
+mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDateArrayLength) {
 
         *dateList = parse_date_mapfile(opt_datefile);
 
@@ -1283,11 +1302,9 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList) {
         free(numSeqs);
 
         mappingDate_t ** tipDateArray = xmalloc(totalSeqs * sizeof(mappingDate_t *));
-        /* Anna: Will need to free later, also need to free mappingDate I assume */
+	*tipDateArrayLength = totalSeqs;
         list = (*dateList)->head;
-//        tipDateArray[0] = (mappingDate_t *)list->data;
 
-        //double timePresent = tipDateArray[0]->date;
 	int i = 0; 
 
 	/* Creates an array that points to the mappingDate structs from the list
@@ -1309,26 +1326,12 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList) {
 
                 }
 		
-         //       if (tipDateArray[i]->date > timePresent)
-          //              timePresent = tipDateArray[i]->date;
 		i++;
                 list = list->next;
         }
 	assert(i == totalSeqs);
 
-      //  printf("Time present is %f\n", timePresent);
-
-	/* Adjust units of dates to be in coalescent time, and in backward time */
-	/* Anna: Need to change how you do timing */
-       /* double timeConstant = .02;
-        list = dateList->head;
-	while (list) {
-		((mappingDate_t *)list->data)->date = (timePresent - ((mappingDate_t *)list->data)->date) * timeConstant; 
-                list = list->next;
-        }*/
-
         qsort(tipDateArray,totalSeqs, sizeof(mappingDate_t *), cmp_tipDates);
-
 
 	/* Checks that the sequences were sampled in the population, after
 	 * the species existed */
@@ -1453,8 +1456,9 @@ static void simulate(stree_t * stree)
   }
 
   /* print imap file */
-  for (i = 0; i < stree->tip_count; ++i)
-    fprintf(fp_map, "%s\t%s\n", stree->nodes[i]->label, stree->nodes[i]->label);
+  /* Anna: moved to later */
+  /*for (i = 0; i < stree->tip_count; ++i)
+    fprintf(fp_map, "%s\t%s\n", stree->nodes[i]->label, stree->nodes[i]->label); */
 
 
   /* allocate MSA structures */
@@ -1505,15 +1509,16 @@ static void simulate(stree_t * stree)
 
   /* 1. create maplist (Imap) and 2. initialize two hashtables which are used
      when calling gtree_simulate for quick access to a sequence population */
-  list_t * maplist = create_maplist(stree);
+  /*list_t * maplist = create_maplist(stree);
   gtree_simulate_init(stree,maplist);
   list_clear(maplist,map_dealloc);
-  free(maplist);
+  free(maplist); */
 
   list_t* dateList = NULL;
   mappingDate_t ** tipDateArray = NULL;
+  int tipDateArrayLen; 
   if (opt_datefile)
-         tipDateArray = prepareTipDates(stree, &dateList);
+         tipDateArray = prepareTipDates(stree, &dateList, &tipDateArrayLen);
 
   /* allocate eigendecomposition structures */
   if (opt_model == BPP_DNA_MODEL_GTR)
@@ -1654,18 +1659,23 @@ static void simulate(stree_t * stree)
         if (opt_diploid[j])
           for (k = 0; k < opt_sp_seqcount[j]; ++k)
             xasprintf(msa[i]->label+m++,
-                      "%s%ld%c^%s",
+                      "%s^%s%ld%c",
                       stree->nodes[j]->label, 
-                      k / 2 + 1,
-                      (char)('a' + k % 2),
-                      stree->nodes[j]->label);
-        else
-          for (k = 0; k < opt_sp_seqcount[j]; ++k)
+                      stree->nodes[j]->label,
+		      k / 2 + 1,
+		      (char)('a' + k % 2));
+         else
+          for (k = 0; k < opt_sp_seqcount[j]; ++k) 
             xasprintf(msa[i]->label+m++,
+                      "%s^%s%ld",
+                      stree->nodes[j]->label, 
+                      stree->nodes[j]->label, 
+		      k+1); 
+            /*xasprintf(msa[i]->label+m++,
                       "%s%ld^%s",
                       stree->nodes[j]->label, 
-                      k + 1,
-                      stree->nodes[j]->label);
+		      k+1,
+                      stree->nodes[j]->label); */
 
         msa[i]->count += opt_sp_seqcount[j];
       }
@@ -1673,9 +1683,28 @@ static void simulate(stree_t * stree)
 
       /* change all sequence labels to lowercase */
       for (j = 0; j < m; ++j)
-        for (k = 0; k < (long)strlen(msa[i]->label[j]) && msa[i]->label[j][k] != '^'; ++k)
-          msa[i]->label[j][k] = xtolower(msa[i]->label[j][k]);
+        for (char *c = strchr(msa[i]->label[j], '^') + 1; *c != '\0' ; ++c) {
+          *c = xtolower(*c);
+	}
+
+      if (i == 0) {
+   /* print imap file */
+     for (j = 0; j < m; ++j) {
+        char *c = strchr(msa[i]->label[j], '^') + 1; 
+
+    	 fprintf(stdout, "%s\t%.*s\n", c, c-(msa[i]->label[j]) - 1, msa[i]->label[j]);
+    	 fprintf(fp_map, "%s\t%.*s\n", c, c-(msa[i]->label[j]) - 1, msa[i]->label[j]);
+     }	
+      }
     }
+
+    //ANNA is this going to work without opt_msafile
+  if (i == 0 ) {
+  	list_t * maplist = create_maplist_msa(stree, msa);
+  	gtree_simulate_init(stree,maplist);
+  	list_clear(maplist,map_dealloc);
+  	free(maplist);
+  }
 
     for (j = 0; j < stree->tip_count; ++j)
       if (opt_sp_seqcount[j] > 1 && stree->nodes[j]->theta == 0)
@@ -1688,7 +1717,7 @@ static void simulate(stree_t * stree)
         fatal("Missing theta values for some of the species tree inner nodes");
 
     /* simulate gene tree */
-    gtree[i] = gtree_simulate(stree,msa[i],i, tipDateArray, dateList);
+    gtree[i] = gtree_simulate(stree,msa[i],i, tipDateArray, tipDateArrayLen);
     gtree[i]->travbuffer = NULL;
 
     if (opt_est_locusrate)

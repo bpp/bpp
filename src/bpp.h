@@ -493,6 +493,11 @@ typedef struct snode_s
   dlist_t ** mig_source;
   dlist_t ** mig_target;
 
+  /* tip dating */
+  int * epoch_count; /*Number of sampling epochs */
+  double ** tip_date; /* Date at time of epoch*/
+  int ** date_count;  /* Number of sequences sampled at the epoch */
+
   /* linked theta model */
   struct snode_s * linked_theta;
 } snode_t;
@@ -1443,6 +1448,7 @@ void mapDate_dealloc(void * data);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
+
 /* functions in list.c */
 
 void list_append(list_t * list, void * data);
@@ -1522,7 +1528,8 @@ int pll_compute_gamma_cats(double alpha,
 
 void gtree_alloc_internals(gtree_t ** gtree,
                            long msa_count,
-                           unsigned int stree_inner_count);
+                           unsigned int stree_inner_count, 
+			   int totEpochs);
 
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
@@ -1612,7 +1619,7 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, 
                         mappingDate_t ** tipDateArray,
-                        list_t * dateList);
+                        int tipDateArrayLen);
 
 double prop_branch_rates_serial(gtree_t ** gtree,
                                 stree_t * stree,
@@ -2533,7 +2540,7 @@ stree_t * bpp_parse_newick_string(const char * line);
 ntree_t * bpp_parse_newick_string_ntree(const char * line);
 ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 stree_t * stree_from_ntree(ntree_t * ntree);
-mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList);
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t **  dateList, int * tipDateArrayLen);
 
 /* functions in parsemap.c */
 

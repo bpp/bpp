@@ -297,6 +297,7 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
+    
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
@@ -315,6 +316,23 @@ void stree_destroy(stree_t * tree,
           dlist_destroy(tree->nodes[i]->event[j]);
         }
       free(node->event);
+    }
+
+    if (opt_datefile && !opt_simulate) {
+	if (node->node_index < tree->tip_count + opt_seqAncestral) {
+		for (j = 0; j < opt_locus_count; j++) {
+	
+			if (node->epoch_count[j]) {
+				free(node->date_count[j]);
+				free(node->tip_date[j]);
+			}	
+		} 
+		free(node->epoch_count);
+		free(node->tip_date);
+		free(node->date_count);
+	
+	}
+
     }
 
     if (opt_migration)
@@ -353,7 +371,7 @@ void stree_destroy(stree_t * tree,
         free(node->mig_source);
       }
     }
-    
+
     if (node->event_count)
       free(node->event_count);
 
@@ -426,6 +444,8 @@ void stree_destroy(stree_t * tree,
   if (tree->migcount_sum)
     free(tree->migcount_sum);
 
+  free(tree->u_constraint);
+  free(tree->l_constraint);
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);

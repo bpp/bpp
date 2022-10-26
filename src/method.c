@@ -1897,7 +1897,10 @@ static FILE * resume(stree_t ** ptr_stree,
   gtree_t ** gtree = *ptr_gtree;
   stree_t  * stree = *ptr_stree;
 
-  gtree_alloc_internals(gtree,opt_locus_count,stree->inner_count);
+  //ANNA
+  if (opt_datefile) 
+	  fatal("Check pointing is not yet implemented for tip dating");
+  gtree_alloc_internals(gtree,opt_locus_count,stree->inner_count, 0);
   reset_gene_leaves_count(stree,gtree);
   stree_reset_pptable(stree);
 
@@ -2303,6 +2306,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   if (opt_datefile) {
+	  //ANNA
         printf("Parsing date file...");
         if (! (date_list = parse_date_mapfile(opt_datefile)))
                 fatal("Failed to parse date file %s", opt_datefile);
@@ -2646,6 +2650,7 @@ static FILE * init(stree_t ** ptr_stree,
     stree_update_mig_subpops(stree, thread_index);
 
   gtree = gtree_init(stree,msa_list,map_list,date_list,msa_count);
+  free(date_list);
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree[i]->original_index = msa_list[i]->original_index;
@@ -3524,6 +3529,19 @@ void cmd_run()
 
   FILE * fp_debug = stdout;
 
+  //Anna set taus and thetas (wait jk the taus need to be set before the gene trees are simulated
+/*	stree->nodes[0]->theta =  .004; 
+ 	stree->nodes[1]->theta =  .004; 
+ 	stree->nodes[2]->theta =  .005; 
+ 	stree->nodes[3]->theta =  .006; 
+ 	stree->nodes[4]->theta =  .0035; */
+
+	stree->nodes[0]->theta =  .007; 
+ 	stree->nodes[1]->theta =  .004; 
+ 	stree->nodes[2]->theta =  .005; 
+ 	stree->nodes[3]->theta =  .006; 
+ 	stree->nodes[4]->theta =  .008; 
+
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3698,8 +3716,8 @@ void cmd_run()
     /* propose population sizes on species tree */
     if (opt_est_theta)
     {
-      ratio = stree_propose_theta(gtree,locus,stree);
-      pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
+      //ratio = stree_propose_theta(gtree,locus,stree);
+      //pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
@@ -3713,7 +3731,7 @@ void cmd_run()
     }
 
     /* propose species tree taus */
-    if (stree->tip_count > 1 && stree->root->tau > 0)
+   /* if (stree->tip_count > 1 && stree->root->tau > 0)
     {
       if (opt_migration)
         ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
@@ -3730,7 +3748,7 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "TAU");
       #endif
-    }
+    } */
 
     /* propose migration rates */
     if (opt_migration)
@@ -3742,9 +3760,10 @@ void cmd_run()
     }
 
     /* mixing step */
-    ratio = proposal_mixing(gtree, stree, locus);
+    /*ratio = proposal_mixing(gtree, stree, locus);
     pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX] * (ft_round - 1) + ratio) /
                                 (double)ft_round;
+				*/
     #ifdef CHECK_LOGL
     check_logl(stree, gtree, locus, i, "MIXING");
     #endif

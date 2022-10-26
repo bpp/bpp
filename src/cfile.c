@@ -2454,8 +2454,6 @@ static void check_validity()
   if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
     fatal("Cannot use species delimitation models when using tip dating.");
 
-  if (opt_datefile)
-    fatal("Tip dating is not currently implemented for inference.");
 
 }
 

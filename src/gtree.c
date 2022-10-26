@@ -62,6 +62,14 @@ __THREAD gnode_t * dbg_msci_a = NULL;
 __THREAD gnode_t * dbg_msci_s = NULL;
 __THREAD gnode_t * dbg_msci_t = NULL;
 
+static int cb_cmp_nodelabel(void * a, void * b) 
+{ 
+  snode_t * node = (snode_t *)a; 
+  char * label = (char * )b; 
+ 
+  return (!strcmp(node->label,label)); 
+}
+
 static long propose_spr_sim(locus_t * locus,
                             gtree_t * gtree,
                             stree_t * stree,
@@ -502,9 +510,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
     /* first get the species tag */
     char * label = msa->label[j];
     label = strchr(label, '^');
-    if (!label)
+    if (!label) 
       fatal("Cannot find species tag on sequence %s of locus %d",
             msa->label[j], msa_id);
+    
 
     /* skip the '^' mark */
     label++;
@@ -517,9 +526,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
                           (void *)label,
                           hash_fnv(label),
                           cb_cmp_pairlabel);
-    if (!pair)
+    if (!pair) 
       fatal("Cannot find species mapping for sequence %s of locus %d",
             label, msa_id);
+    
 
     snode_t * node = (snode_t *)(pair->data);
 
@@ -547,9 +557,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
     /* first get the species tag */
     char * label = msa->label[j];
     label = strchr(label, '^');
-    if (!label)
+    if (!label) 
       fatal("Cannot find species tag on sequence %s of locus %d",
             msa->label[j], msa_id);
+    
 
     /* skip the '^' mark */
     label++;
@@ -1119,6 +1130,25 @@ static void fill_seqin_counts_recursive(stree_t * stree,
     }
 
   }
+
+  if (opt_datefile && opt_cfile) {
+    int j;	
+    snode_t * node_l = node->left;
+    snode_t * node_r = node->right;
+
+    if (node_l && node_l->node_index < stree->tip_count+opt_seqAncestral) {
+    	for (j = 0; j < node_l->epoch_count[msa_index]; j++) 
+		node->seqin_count[msa_index] += node_l->date_count[msa_index][j];
+	
+    }
+    if (node_r && node_r->node_index < stree->tip_count+opt_seqAncestral) {
+    	for (j = 0; j < node_r->epoch_count[msa_index]; j++) 
+		node->seqin_count[msa_index] += node_r->date_count[msa_index][j];
+	
+    }
+	    
+  }
+
 }
 
 void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
@@ -1157,6 +1187,7 @@ void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
       }
     }
   }
+
 }
 
 static int cb_trav_full(snode_t * x)
@@ -1535,21 +1566,23 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 
 double set_tip_date_infer (stree_t * stree, 
 			   pop_t * pop, 
-			   list_t * dateList, 
+			   int tipDateArrayLen, 
 			   mappingDate_t ** tipDateArray,
 			   hashtable_t * mht,
 			   int * useDate, 
 			   int * lineage_count,
 			   int * tipDateIndex, 
 			   int pop_count, 
-			   int * seqCurrent 
+			   int * seqCurrent, 
+			   int msa_index
 			   ) {
 
 	int i, j, k;
 	pair_t * pair; 
-  	char * label; 
+  	char * label;
+	char * carrot; 
 
-	for (i = 0; i < dateList->count; i++) {
+	for (i = 0; i < tipDateArrayLen; i++) {
 		useDate[i] = -1; 
 	}
 
@@ -1558,13 +1591,10 @@ double set_tip_date_infer (stree_t * stree,
 		for (j = 0; j < pop[i].seq_count; ++j) {
 			label = pop[i].nodes[j]->label;
 			//look for ^
-			char * carrot = strchr(label, '^');
+			carrot = strchr(label, '^');
 
 			if (carrot) {
-				label++;
-			} else {
-			//ANNA 
-			fatal("Label not found\n");
+				label = carrot + 1; 
 			}
 
   			pair = hashtable_find(dht,
@@ -1574,8 +1604,9 @@ double set_tip_date_infer (stree_t * stree,
   			if ( ! pair) {
   			       fatal("pair not found\n");
   			     } else {
-			             if (pair)
+			             if (pair) 
 				     	pop[i].nodes[j]->time = *(double *)pair->data;
+				     
   			}
   		}
     	}
@@ -1585,10 +1616,14 @@ double set_tip_date_infer (stree_t * stree,
 		qsort(pop[i].nodes, pop[i].seq_count, sizeof(gnode_t *), cmp_Dates);
 	}
 
-	// Check if each date is used 
-	for (i = 0; i < dateList->count; i++) {
+	/* Check if each date is used */
+	for (i = 0; i < tipDateArrayLen; i++) {
 
   		label = tipDateArray[i]->individual;
+		carrot = strchr(label, '^');
+		if (carrot) {
+			label = carrot + 1; 
+		}
   		pair = hashtable_find(mht,
   	                (void *)label,
   	                hash_fnv(label),
@@ -1602,10 +1637,9 @@ double set_tip_date_infer (stree_t * stree,
 			for (j =0; j < pop[k].seq_count; j++){
 			
 				char * label2 = pop[k].nodes[j]->label;
-				//look for ^
 				char * carrot = strchr(label2, '^');
 				if (carrot) 
-					label2++;
+					label2 = carrot + 1;
 
 				if (! strcmp(label, label2)) {
 					useDate[i] = k; //Set to population index
@@ -1613,10 +1647,12 @@ double set_tip_date_infer (stree_t * stree,
 				}
 
 			}	
+			
 		}
+
 	}
-	int startingIndex; 
-	for (j = 0; j < dateList->count; j++ ) {
+	int startingIndex = 0; 
+	for (j = 0; j < tipDateArrayLen; j++ ) {
 		
 		if (useDate[j] != -1 ) {
 			startingIndex = j;
@@ -1624,9 +1660,57 @@ double set_tip_date_infer (stree_t * stree,
 		}
 	}
 
-	assert(j < dateList->count);
+	assert(j < tipDateArrayLen);
+
+	double * lastDate = (double *)xcalloc(stree->tip_count + opt_seqAncestral, sizeof(double));
+
+	/* Finds the number of epochs for each population */
+	for (j = 0; j < tipDateArrayLen ; j++ ) {
+		int n = useDate[j]; /* i is the population */
+		
+		/* If the date is used for this msa */
+		if (n >= 0) {
+			/* New date */
+			if (tipDateArray[j]->date > lastDate[n]) {
+				lastDate[n] = tipDateArray[j]->date;
+				stree->nodes[n]->epoch_count[msa_index]++; 
+			}
+		}
+	}
+
+	//ANNA is this going to work with missing data? 
+	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
+		if (stree->nodes[j]->epoch_count[msa_index]) {
+			stree->nodes[j]->tip_date[msa_index] = xmalloc(sizeof(double *) * (stree->nodes[j]->epoch_count[msa_index]));
+			stree->nodes[j]->date_count[msa_index] = (int *)xcalloc(sizeof(int *),  (stree->nodes[j]->epoch_count[msa_index]));
+		}
+		stree->nodes[j]->epoch_count[msa_index]= 0; 
+
+	}
+
+	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++)
+		lastDate[j] = 0;
+
+	for (j = 0; j < tipDateArrayLen ; j++ ) {
+		int n = useDate[j]; /* i is the population */
+		
+		/* If the date is used for this msa */
+		if (n >= 0) {
+			/* New date */
+			if (tipDateArray[j]->date > lastDate[n]) {
+				lastDate[n] = tipDateArray[j]->date;
+				stree->nodes[n]->tip_date[msa_index][stree->nodes[n]->epoch_count[msa_index]] = lastDate[n];
+				stree->nodes[n]->epoch_count[msa_index]++; 
+			} 
+
+			stree->nodes[n]->date_count[msa_index][stree->nodes[n]->epoch_count[msa_index]-1]++;
+			
+		}
+	}
+	free(lastDate);
+
 	// Now we need to set the starting population sizes and indeces
-	for (j = 0; j < dateList->count; j++ ) {
+	for (j = 0; j < tipDateArrayLen; j++ ) {
 		
 		int n = useDate[j]; /* i is the population */
 		if (n < 0) {
@@ -1671,10 +1755,7 @@ double set_tip_date_simulate (stree_t * stree,
 			   msa_t * msa
 			   ) {
 
-	//Anna- this is just checking things are equal to zero, does not
-	//check less than zero?
 	int i, j; 
-	pair_t * pair; 
 	char * label;
   	
   	for (j = 0; j < msa->count; j++ ) {
@@ -1683,18 +1764,19 @@ double set_tip_date_simulate (stree_t * stree,
 		 * the species tree */
   		if (stree->tip_count > 1) {
   			label = tipDateArray[j]->individual; 
-  			pair = hashtable_find(mht,
-  			                      (void *)label,
-  			                      hash_fnv(label),
-  			                      cb_cmp_pairlabel);
   			
-  			if (!pair)
+			   snode_t * node = hashtable_find(sht,
+                                    (void *)(label),
+                                    hash_fnv(label),
+                                    cb_cmp_nodelabel);
+
+  			if (!node)
   			  fatal("Cannot find species mapping for sequence %s from datefile",
   			        label);
   		 	
-  			snode_t * node = (snode_t *)(pair->data);
   			i = node->node_index;
   			assert(node == pop[i].snode);
+
 		/* With one population, the index in always zero */
   		} else {
   			i = 0; 
@@ -1725,7 +1807,6 @@ double set_tip_date_simulate (stree_t * stree,
   		pop[j].seq_count = seqCurrent[j];
   	}
 
-  	//free(seqIndex);
 	free(seqCurrent);
   	return  tipDateArray[0]->date;
 }
@@ -1772,9 +1853,10 @@ void set_constraints (stree_t * stree,
 			label = pop[i].nodes[j]->label;
 			//look for ^
 			char * carrot = strchr(label, '^');
-
 			if (carrot) {
-				label++;
+			
+				label = carrot + 1;
+				//carrot++;
 			} else {
 			//ANNA 
 			fatal("Label not found\n");
@@ -1960,8 +2042,9 @@ void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
 }
 
 
+
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, mappingDate_t ** tipDateArray,
-list_t* dateList)
+int tipDateArrayLen)
 {
   int lineage_count = 0;
   int scaler_index = 0;
@@ -2074,6 +2157,7 @@ list_t* dateList)
                          sizeof(pop_t));
   fill_pop(pop,stree,msa,msa_index);
 
+  //ANNA update- pop seq_count not yet been updated
   for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     stree->nodes[i]->seqin_count[msa_index] = pop[i].seq_count;
 
@@ -2089,9 +2173,11 @@ list_t* dateList)
     for (i = 0; i < opt_locus_count; ++i)
     {
       long seqs = 0;
+      //ANNA update- ask bruce what this is for
       for (j = 0; j < stree->tip_count + opt_seqAncestral; ++j)
         seqs += stree->nodes[j]->seqin_count[i];
 
+      /* The constant in ln(2) */
       stree->notheta_logpr   += (seqs-1)*0.6931471805599453;
       stree->notheta_sfactor += (seqs-1)*0.6931471805599453;
     }
@@ -2161,11 +2247,10 @@ list_t* dateList)
      to coalesce lineages in */
   unsigned int pop_count = stree->tip_count + opt_seqAncestral;
 
-  /* Anna: Need to make sure works without tipdates */
   int * seqCurrent = NULL;
-  int * maxSeqIndex = NULL; //First free location
+  int * maxSeqIndex = NULL; 
   int tipDateIndex = 0;
-  int maxTipDateIndex = msa->count;
+  int maxTipDateIndex = tipDateArrayLen;
   int * useDate = NULL;
 
   if (tipDateArray) {
@@ -2176,14 +2261,15 @@ list_t* dateList)
                 t = set_tip_date_simulate (stree, pop, tipDateArray, useDate,
                                 &lineage_count, &tipDateIndex, pop_count, seqCurrent, maxSeqIndex, msa);
         } else {
-                useDate = xcalloc(dateList->count, sizeof(int));
-                t = set_tip_date_infer(stree, pop, dateList, tipDateArray, mht,
-                           useDate, &lineage_count, &tipDateIndex, pop_count, seqCurrent);
+                useDate = xcalloc(maxTipDateIndex, sizeof(int));
+                t = set_tip_date_infer(stree, pop, tipDateArrayLen, tipDateArray, mht,
+                           useDate, &lineage_count, &tipDateIndex, pop_count, seqCurrent, msa_index);
         }
 
   }
 
 
+  // Anna: pop seq counts are reset right above here 
   pop_count = stree->tip_count;
 
   /* TODO: The below loop is written to match exactly the loop in the original
@@ -2492,6 +2578,7 @@ list_t* dateList)
 
     if (lineage_count == 1 || (pop_count == 1 && pop[0].snode == stree->root)) {
             if (!tipDateArray || tipDateIndex == maxTipDateIndex) break;
+	    
 
     }
 
@@ -2582,9 +2669,9 @@ list_t* dateList)
   free(epoch);
   if (tipDateArray) {
 	free(maxSeqIndex);
+  	free(useDate);
   }
 	  
-  free(useDate);
 
 
   snode_t ** mp = NULL;
@@ -2603,6 +2690,11 @@ list_t* dateList)
   /* Update the number of lineages coming into each ancestral population as the
      sum of lineages coming into its two children populations minus the
      coalescent events that have occured */
+
+  if (tipDateArray) {
+  	for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
+    		stree->nodes[i]->seqin_count[msa_index] = 0;
+  }	
   fill_seqin_counts(stree,gtree,msa_index);
 
   if (opt_migration)
@@ -2705,6 +2797,7 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
   if (node->right)
     reset_gene_leaves_count_recursive(node->right,locus_count);
 
+
   if (opt_msci && node->hybrid)
   {
     /* TODO: The below if block is only for testing correctness - it is not
@@ -2741,9 +2834,26 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
     return;
   }
 
-  for (j = 0; j < locus_count; ++j)
+ 
+  int datedTips; 
+  if (opt_datefile) {
+  	for (j = 0; j < locus_count; ++j) {
+  	        datedTips = 0;
+  	        if (opt_seqAncestral) {
+  	      	for (int i = 0; i < node->epoch_count[j]; i++) 
+  	      		datedTips += node->date_count[j][i];
+  	      	
+  	        } 
+  		node->gene_leaves[j] = node->left->gene_leaves[j] +
+  	                 node->right->gene_leaves[j] + datedTips;
+  	}
+  
+  } else {
+    for (j = 0; j < locus_count; ++j)
     node->gene_leaves[j] = node->left->gene_leaves[j] +
                            node->right->gene_leaves[j];
+  }
+
 
 }
 void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
@@ -2758,10 +2868,26 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
       reset_hybrid_gene_leaves_count(stree,gtree[i],i);
   }
 
+  //Anna
+  if (opt_datefile) {
+  	for (i = 0; i < stree->tip_count; ++i) {
+		snode_t * node = stree->nodes[i];
+  		for (j = 0; j < stree->locus_count; ++j) {
+  			int datedTips = 0;
+  		      	for (int k = 0; k < node->epoch_count[j]; k++) 
+  		      		datedTips += node->date_count[j][k];
+  		 
+  		node->gene_leaves[j] =  datedTips;
+		}	
+  	}
+
+  } else { 
   /* gene leaves is the same as sequences coming in for tip nodes */
-  for (i = 0; i < stree->tip_count; ++i)
-    for (j = 0; j < stree->locus_count; ++j)
-      stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
+   for (i = 0; i < stree->tip_count; ++i)
+     for (j = 0; j < stree->locus_count; ++j) {
+       stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
+     }
+  }
 
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
 
@@ -2776,7 +2902,8 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 
 void gtree_alloc_internals(gtree_t ** gtree,
                            long msa_count,
-                           unsigned int stree_inner_count)
+                           unsigned int stree_inner_count, 
+			   int totEpochs)
 {
   long i;
 
@@ -2808,19 +2935,19 @@ void gtree_alloc_internals(gtree_t ** gtree,
       opt_threads = DEBUG_THREADS_COUNT;
       global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
       opt_threads = 1;
     }
     else
     {
       global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
     }
     #else
     global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
     for (i = 0; i < opt_threads; ++i)
-      global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+      global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
     #endif
   }
 }
@@ -2901,9 +3028,10 @@ gtree_t ** gtree_init(stree_t * stree,
 
   dht = NULL;
 
+  int tipDateArrayLen = -1;
   if (opt_datefile && opt_cfile) {
         dht = datelist_hash(datelist);
-        tipDateArray = prepTipDatesInfer(stree, &datelist);
+        tipDateArray = prepTipDatesInfer(stree, &datelist, &tipDateArrayLen);
   }
 
   /* generate random starting gene trees for each alignment */
@@ -2922,12 +3050,18 @@ gtree_t ** gtree_init(stree_t * stree,
 
   /* Resets the speciation times so that they do not conflict the sample times*/
   if (!opt_simulate && opt_datefile) {
-        reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
+	  //ANNA
+	  /*stree->nodes[3]->tau = .2; 
+	  stree->nodes[4]->tau = .1; */
+	  
+	  stree->nodes[3]->tau = .016; 
+	  stree->nodes[4]->tau = .008;  
+        //reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
   }
 
   for (i = 0; i < msa_count; ++i)
   {
-    gtree[i] = gtree_simulate(stree, msalist[i],i, tipDateArray, datelist);
+    gtree[i] = gtree_simulate(stree, msalist[i],i, tipDateArray, tipDateArrayLen);
 
 
     /* in the gene tree SPR it is possible that this scenario happens:
@@ -2954,12 +3088,26 @@ gtree_t ** gtree_init(stree_t * stree,
     hashtable_destroy(mht,cb_dealloc_pairlabel);
   }
 
+  if (opt_datefile)
+  	hashtable_destroy(dht,cb_dealloc_pairlabel);
+
+  int maxEpochs = 0;
+  if (opt_datefile) { 
+	  for (i = 0; i < stree->tip_count + opt_seqAncestral; i++) {
+		  for(int j =0; j < opt_locus_count; j++) {
+		  if (maxEpochs < stree->nodes[i]->epoch_count[j])
+	  		maxEpochs = stree->nodes[i]->epoch_count[j];
+		  }
+	  }
+  }
   /* allocate static internal arrays sortbuffer */
-  gtree_alloc_internals(gtree,msa_count, stree->inner_count);
+  gtree_alloc_internals(gtree,msa_count, stree->inner_count, maxEpochs);
 
   /* reset number of gene leaves associated with each species tree subtree */
   reset_gene_leaves_count(stree,gtree);
 
+  list_clear(datelist, mapDate_dealloc);
+  free(tipDateArray);
   return gtree;
 }
 
@@ -3180,16 +3328,28 @@ double gtree_update_logprob_contrib(snode_t* snode,
   double logpr = 0;
   double T2h = 0;
   dlist_item_t* event;
-
+  int nextDateInd = -1; 
   double* sortbuffer = global_sortbuffer_r[thread_index];
 
   sortbuffer[0] = snode->tau;
   j = 1;
+  if (opt_datefile && (!snode->left || opt_seqAncestral)) {
+	nextDateInd = 0;
+  	for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ ) {
+		sortbuffer[j] = snode->tip_date[msa_index][k];
+  	}
+  }	
+
+  //Anna: Event = coalescent events. This is a list of coalescent events in a
+  // a population. Note that is all within a population
+  // So basically, I am going to want to sort the dates with the events
   for (event = snode->event[msa_index]->head; event; event = event->next)
   {
     gnode_t* gnode = (gnode_t*)(event->data);
     sortbuffer[j++] = gnode->time;
   }
+
+
   if (snode->parent)
     sortbuffer[j++] = snode->parent->tau;
 
@@ -3200,6 +3360,8 @@ double gtree_update_logprob_contrib(snode_t* snode,
   */
 
   /* if there was at least one coalescent event, sort */
+  //Anna: Don't need to sort the first or last elements since they are the speciation times
+  // and the coalescent times are inbetween the speciation times
   if (j > 1)
     qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
 
@@ -3222,11 +3384,25 @@ double gtree_update_logprob_contrib(snode_t* snode,
   printf("\n");
 #endif
 
+  // Anna: nothing can happen when there is one lineage
   /* skip the last step in case the last value of n was supposed to be 1 */
-  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
+  //Anna: need to update this
+
+//  printf("%s \n", snode->label);
+  //Anna does this need updating
+  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
   {
     T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+
+ //   printf("%d %f %f %f\n", n, sortbuffer[k], sortbuffer[k -1], T2h);
+     if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
+     	n += 1 + snode->date_count[msa_index][nextDateInd];
+     	if (nextDateInd + 1 < snode->epoch_count[msa_index])
+      	 	nextDateInd++;
+    	else
+    		nextDateInd = -1;
+     }
   }
 
   if (opt_msci && snode->hybrid)
@@ -3256,9 +3432,11 @@ double gtree_update_logprob_contrib(snode_t* snode,
   /* now distinguish between estimating theta and analytical computation */
   if (opt_est_theta)
   {
+	 //Anna: This is the 2/theta in the product over coalescent events
     if (snode->event_count[msa_index])
       logpr += snode->event_count[msa_index] * log(2.0 / (heredity*snode->theta));
 
+    //Anna: This is the j(j-1)/theta * coalescent times (in the product over coalescent events
     if (T2h)
       logpr -= T2h / snode->theta;
 
@@ -3269,6 +3447,9 @@ double gtree_update_logprob_contrib(snode_t* snode,
   }
   else
   {
+	  //ANNA
+	if (opt_datefile) 
+		fatal("Integrating out theta is not yet implemented with tipdating");
     snode->old_t2h[msa_index] = snode->t2h[msa_index];
 
     snode->t2h[msa_index] = T2h;
@@ -4197,6 +4378,7 @@ static long propose_ages(locus_t * locus,
            path from new population (excluding) to the old population */
         if (!opt_msci)
         {
+		//ANNA ?
           for (pop = node->pop; pop != oldpop; pop = pop->parent)
             pop->parent->seqin_count[msa_index]--;
         }
@@ -4310,6 +4492,7 @@ static long propose_ages(locus_t * locus,
         for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
+	  //ANNA
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
             x->hx[thread_index] = 0;  /* MSC density is not changed */
@@ -4633,6 +4816,7 @@ static long propose_ages(locus_t * locus,
                ( SWAP(node->pop,oldpop) ) and so, oldpop is actually the new
                population, and node->pop is the old population, and so the for
                loop below is correct */
+		  //ANNA
             for (pop=oldpop; pop != node->pop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]++;
           }
@@ -4998,6 +5182,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   target->parent = father;
   father->left = target;
   father->right = curnode;
+  //Anna
   father->leaves = father->left->leaves + father->right->leaves;
   if (target == gtree->root)
   {
@@ -5013,6 +5198,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
 
     /* update number of leaves all nodes from father's parent and up */
     gnode_t * temp;
+    //Anna
     for (temp = father->parent; temp; temp = temp->parent)
       temp->leaves = temp->left->leaves +
                      temp->right->leaves;
@@ -5605,8 +5791,9 @@ static long propose_spr(locus_t * locus,
           p = gtree->nodes[j];
           m = p->pop->node_index;
           if (p != curnode && p != gtree->root && p->time <= tnew &&
-              p->parent->time > tnew && stree->pptable[m][n])
+              p->parent->time > tnew && stree->pptable[m][n]) {
             travbuffer[target_count++] = (p == father) ? sibling : p;
+	  }
         }
       }
 
@@ -5670,6 +5857,10 @@ static long propose_spr(locus_t * locus,
         }
       }
 
+      if (! target_count ) {
+	      printf("%s %f %f\n", pop->label, tnew, curnode->time);
+	      return accepted;
+      }
       assert(target_count);
       assert(source_count);
       
@@ -6293,6 +6484,7 @@ static long propose_spr(locus_t * locus,
         }
         else
         {
+		//Anna?
           if (opt_est_theta)
             father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
           else

@@ -290,33 +290,64 @@ static int cmp_tipDates(const void * a, const void * b){
   return -1;
 } 
 
-mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList) {
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList, int * tipDateArrayLen) {
 
-        *dateList = parse_date_mapfile(opt_datefile);
-
+	int matchFound = 0;
+	int i = 0; 
 
 	/* Checks the number of tip dates match the number of sequences to 
 	 * generate as specified by species&tree in the control file*/
         list_item_t* list = (*dateList)->head;
 
-        mappingDate_t ** tipDateArray = xmalloc(((*dateList)->count) * sizeof(mappingDate_t *));
+	/* Anna: Need to double the number of sequences with unphased data, 
+	 * allocate a different amount of memory, store how many sequences you actually 
+	 * have. */
+
+	/* Find the number of dates to store whic is the length of the array */
+        while (list) {
+                for (unsigned int j = 0; j < stree->tip_count; j++ ) {
+	                matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
+                        if (matchFound) {
+                                if (opt_diploid[j]) i++;
+                                break;
+                        }
+                }
+
+                i++;
+                list = list->next;
+
+        }
+
+	*tipDateArrayLen = i; 
+        mappingDate_t ** tipDateArray = xmalloc(*tipDateArrayLen * sizeof(mappingDate_t *));
         list = (*dateList)->head;
 
-	int i = 0; 
-
+	i = 0; 
 	/* Creates an array that points to the mappingDate structs from the list
 	 * in order to sort the array. 
 	 * Note: For the sequences where phase = 1, two places in the array point
 	 * to the same struct */
         while (list) {
+                for (unsigned int j = 0; j < stree->tip_count; j++ ) {
+	                matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
+                        if (matchFound) {
+                                if (opt_diploid[j]) {
+                                        tipDateArray[i] = (mappingDate_t *)list->data;
+					i++;
+                                }
+                                break;
+                        }
+
+                }
+
                 tipDateArray[i] = (mappingDate_t *)list->data;
-		i++;
+
+                i++;
                 list = list->next;
+
         }
 
-        qsort(tipDateArray, (*dateList)->count, sizeof(mappingDate_t *), cmp_tipDates);
-
-
+        qsort(tipDateArray, *tipDateArrayLen, sizeof(mappingDate_t *), cmp_tipDates);
 
   return tipDateArray;
 }

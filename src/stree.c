@@ -635,6 +635,16 @@ static void stree_clone(stree_t * stree, stree_t * clone)
              stree->migcount_sum[i],
              nodes_count*sizeof(long));
   }
+  if (opt_datefile)  {
+
+    for (i = 0; i < nodes_count; ++i) {
+	memcpy(clone->nodes[i]->epoch_count, stree->nodes[i]->epoch_count, (size_t)opt_locus_count *  sizeof(int));
+	memcpy(clone->nodes[i]->tip_date, stree->nodes[i]->tip_date, (size_t)opt_locus_count *  sizeof(double *));
+	memcpy(clone->nodes[i]->date_count, stree->nodes[i]->date_count, (size_t)opt_locus_count *  sizeof(int * ));
+  	}
+	memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
+	memcpy(clone->l_constraint, stree->l_constraint, stree->inner_count * sizeof(double));
+  }
 }
 
 stree_t * stree_clone_init(stree_t * stree)
@@ -674,7 +684,33 @@ stree_t * stree_clone_init(stree_t * stree)
         x->mig_target[j] = dlist_create();
       }
     }
+
+    if (opt_datefile && i < stree->tip_count + opt_seqAncestral) {
+	    x->epoch_count = (int *)xcalloc((size_t)opt_locus_count , sizeof(int)); 
+	    x->tip_date = (double **)xcalloc((size_t)opt_locus_count, sizeof(double *));
+	    x->date_count = (int **)xcalloc((size_t)opt_locus_count, sizeof(int *));
+
+	    memcpy(x->epoch_count, stree->nodes[i]->epoch_count, (size_t)opt_locus_count *  sizeof(int));
+	//ANNA I'm not sure if this is okay- I'm only copying the outer arrays
+	// Might be problematics when tips can move between ancestral and current populations
+	    for (j = 0; j < opt_locus_count; j++) {
+		int epochs  = stree->nodes[i]->epoch_count;
+		x->tip_date[j] = xcalloc(epochs, sizeof(double));
+		x->date_count[j] = xcalloc(epochs, sizeof(int));
+
+		memcpy(x->tip_date[j], stree->nodes[i]->tip_date[j], epochs *  sizeof(double ));
+		memcpy(x->date_count[j], stree->nodes[i]->date_count[j], epochs * sizeof(int ));
+	    }
+
+    }
   }
+  if (opt_datefile) {
+	clone->u_constraint = xcalloc(stree->inner_count, sizeof(double));
+	clone->l_constraint = xcalloc(stree->inner_count, sizeof(double));
+	memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
+	memcpy(clone->l_constraint, stree->l_constraint, stree->inner_count * sizeof(double));
+  }
+
   for (i = 0; i < nodes_count; ++i)
     snode_clone(stree->nodes[i], clone->nodes[i], clone);
 
@@ -705,6 +741,7 @@ stree_t * stree_clone_init(stree_t * stree)
     clone->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
   }
+
 
   return clone;
 }
@@ -971,9 +1008,10 @@ static int ** populations_seqcount(stree_t * stree,
       /* first get the species tag */
       char * label = msa->label[j];
       label = strchr(label, '^');
-      if (!label)
+      if (!label) 
         fatal("Cannot find species tag on sequence %s of locus %d",
               msa->label[j], i);
+      
 
       /* skip the '^' mark */
       label++;
@@ -2517,6 +2555,19 @@ void stree_init(stree_t * stree,
     }
 
     stree->migcount_sum = migcount_sum;
+  }
+
+  if (opt_datefile) {
+
+    for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i) {
+      stree->nodes[i]->epoch_count = (int *)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(int));
+      stree->nodes[i]->tip_date= (double **)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(double *));
+      stree->nodes[i]->date_count= (int **)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(int *));
+    }
+	  
   }
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
@@ -5247,10 +5298,10 @@ void stree_rootdist(stree_t * stree,
     {
       char * label = msalist[i]->label[j];
       label = strchr(label, '^');
-      if (!label)
+      if (!label) 
         fatal("Cannot find species tag on sequence %s of locus %d",
               msalist[i]->label[j], i);
-
+	
       /* skip the '^' mark */
       label++;
       if (!(*label))

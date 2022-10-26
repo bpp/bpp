@@ -90,6 +90,7 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht)
 /* hashtable for indexing species tree labels */
 hashtable_t * datelist_hash(list_t * datelist) {
   long i;
+  char * label;
 
   /* using a hash table check whether there are duplicate nodes */
   hashtable_t * ht = hashtable_create(datelist->count);
@@ -103,7 +104,13 @@ hashtable_t * datelist_hash(list_t * datelist) {
 
     // Anna: I feel like it is possible to do this with the list structure I already have,
     // you just point to the list instead of the pair
-    pair->label = xstrdup(((mappingDate_t *) current->data)->individual);
+
+    char * carrot = strchr(((mappingDate_t *) current->data)->individual, '^');
+    if (carrot ) 
+	    label = carrot + 1;
+    else
+	    label = ((mappingDate_t *) current->data)->individual;
+    pair->label = xstrdup(label);
     pair->data = (void *)(&(((mappingDate_t *) current->data)->date));
 
     if (!hashtable_insert(ht,
