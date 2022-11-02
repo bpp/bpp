@@ -535,7 +535,7 @@ void args_init(int argc, char ** argv)
   opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
-  opt_theta_move = BPP_THETA_GIBBS;
+  opt_theta_move = BPP_THETA_SLIDE;
   opt_theta_p = 0;
   opt_theta_q = 0;
   opt_threads = 1;
