@@ -694,7 +694,7 @@ stree_t * stree_clone_init(stree_t * stree)
 	//ANNA I'm not sure if this is okay- I'm only copying the outer arrays
 	// Might be problematics when tips can move between ancestral and current populations
 	    for (j = 0; j < opt_locus_count; j++) {
-		int epochs  = stree->nodes[i]->epoch_count;
+		int epochs  = stree->nodes[i]->epoch_count[j];
 		x->tip_date[j] = xcalloc(epochs, sizeof(double));
 		x->date_count[j] = xcalloc(epochs, sizeof(int));
 
@@ -978,8 +978,8 @@ static int ** populations_seqcount(stree_t * stree,
   }
 
   /* create perloci sequence counters for tip and inner nodes */
-  int ** seqcount = (int **)xmalloc(stree->tip_count * sizeof(int *));
-  for (i = 0; i < stree->tip_count; ++i)
+  int ** seqcount = (int **)xmalloc((stree->tip_count + opt_seqAncestral )* sizeof(int *));
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     seqcount[i] = (int *)xcalloc(msa_count, sizeof(int));
 
   /* one species case */
@@ -1209,6 +1209,7 @@ int stree_init_tau_recursive_constraint(stree_t * stree,
   /* end recursion if node is a tip */
   if (!node->left && !node->right)
   {
+	  //Anna ??
     if (!node->parent->tau)
       node->theta = -1;
 
@@ -1222,14 +1223,14 @@ int stree_init_tau_recursive_constraint(stree_t * stree,
     node->theta = -1;
 
   int index = node->node_index - stree->tip_count;
-  if (node->parent->tau && node->tau > 0) {
+  if (node->tau && node->tau > 0) {
     node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
     if ((u_constraint[index] && node->tau > u_constraint[index]) || (l_constraint[index] && node->tau < l_constraint[index])) {
 	    return 0; 
     } 
   }
-  else
-    node->tau = 0;
+  //else
+   // node->tau = 0;
 
   int ret1 = stree_init_tau_recursive_constraint(stree, node->left, prop, thread_index, u_constraint, l_constraint);
   int ret2 = stree_init_tau_recursive_constraint(stree, node->right, prop, thread_index, u_constraint, l_constraint);
@@ -2069,7 +2070,7 @@ static void stree_init_theta(stree_t * stree,
   }
 
   /* deallocate seqcount */
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     free(seqcount[i]);
   free(seqcount);
 }
@@ -3189,6 +3190,7 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
 
   long thread_index = 0;
 
+  opt_theta_move = BPP_THETA_SLIDE;
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
     snode = stree->nodes[i];
@@ -3363,6 +3365,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
     {
       /* process events for current population */
+	    //Anna- there can be events even if seqin_count = 0 or 1 with tip dating
       if (affected[j]->seqin_count[i] > 1)
       {
         dlist_item_t * event;
@@ -4217,6 +4220,12 @@ static long propose_tau(locus_t ** loci,
   {
     if (snode->parent)
       maxage = snode->parent->tau;
+  }
+
+  if (opt_datefile) {
+
+	  //Check constraints
+
   }
 
   /* propose new tau */

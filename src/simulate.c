@@ -932,9 +932,10 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
       for (j = m; j < m+opt_sp_seqcount[i]; j += 2)
       {
         #ifdef SIM_OLD_FORMAT
-        xasprintf(label+k, "%s%ld_%ld^%s", seqname, j-m+1, j-m+2, stree->nodes[i]->label);
+        xasprintf(label+k, "%s^%s%ld_%ld", stree->nodes[i]->label, seqname, j-m+1, j-m+2);
         #else
-        xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
+        xasprintf(label+k, "%s^%s%ld", stree->nodes[i]->label, seqname, ++index);
+//xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
         #endif
         sequence[k] = consensus(msa->sequence[j],msa->sequence[j+1],msa->length);
 
@@ -1278,6 +1279,9 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDat
                                 numSeqs[j]++;
                                 break;
                         }
+			if (j >= stree->tip_count && !opt_seqAncestral) {
+				fatal("There are sequences from ancestral populations but the species&tree line does not specify ancestral sampling");
+			}
                 }
 
                 if (! matchFound) {
@@ -1314,7 +1318,7 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDat
         while (list) {
                 tipDateArray[i] = (mappingDate_t *)list->data;
 
-                for (unsigned int j = 0; j < stree->tip_count; j++ ) {
+                for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
                         matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
                         if (matchFound) {
 				if (opt_diploid[j]) {
@@ -1688,13 +1692,25 @@ static void simulate(stree_t * stree)
 	}
 
       if (i == 0) {
+	      int l = 0;
    /* print imap file */
-     for (j = 0; j < m; ++j) {
-        char *c = strchr(msa[i]->label[j], '^') + 1; 
-
-    	 fprintf(stdout, "%s\t%.*s\n", c, c-(msa[i]->label[j]) - 1, msa[i]->label[j]);
-    	 fprintf(fp_map, "%s\t%.*s\n", c, c-(msa[i]->label[j]) - 1, msa[i]->label[j]);
-     }	
+      for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
+      {
+        for (k = 0; k < opt_sp_seqcount[j]; ++k) {
+        char *c = strchr(msa[i]->label[l], '^') + 1; 
+        if (opt_diploid[j]) {
+    	 	fprintf(stdout, "%.*s\t%.*s\n", strlen(c) - 1,  c, c-(msa[i]->label[l]) - 1, msa[i]->label[l]);
+    	 	fprintf(fp_map, "%.*s\t%.*s\n", strlen(c) - 1, c, c-(msa[i]->label[l]) - 1, msa[i]->label[l]);
+		l++;
+		k++;
+	}
+         else {
+    	 	fprintf(stdout, "%s\t%.*s\n", c, c-(msa[i]->label[l]) - 1, msa[i]->label[l]);
+    	 	fprintf(fp_map, "%s\t%.*s\n", c, c-(msa[i]->label[l]) - 1, msa[i]->label[l]);
+	 }
+	 l++;
+	}
+      }
       }
     }
 
@@ -1900,7 +1916,14 @@ static void simulate(stree_t * stree)
 
   if (opt_seqDates) {
       for(int i = 0; i < gtree[0]->tip_count; i++) {
-              fprintf(fp_seqDates, "%s %f\n", gtree[0]->nodes[i]->label, gtree[0]->nodes[i]->time);
+	      char * label = gtree[0]->nodes[i]->label;
+	      int length = strlen(label);
+	      if (label[length-1] == 'a') {
+              	fprintf(fp_seqDates, "%.*s %f\n",length -1, label, gtree[0]->nodes[i]->time);
+		i++;
+	      } else
+              	fprintf(fp_seqDates, "%s %f\n", label, gtree[0]->nodes[i]->time);
+
       }
 
       list_clear(dateList,mapDate_dealloc);

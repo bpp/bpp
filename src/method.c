@@ -3536,11 +3536,14 @@ void cmd_run()
  	stree->nodes[3]->theta =  .006; 
  	stree->nodes[4]->theta =  .0035; */
 
-	stree->nodes[0]->theta =  .007; 
- 	stree->nodes[1]->theta =  .004; 
- 	stree->nodes[2]->theta =  .005; 
- 	stree->nodes[3]->theta =  .006; 
- 	stree->nodes[4]->theta =  .008; 
+//	stree->nodes[0]->theta =  .007; 
+// 	stree->nodes[1]->theta =  .004; 
+// 	stree->nodes[2]->theta =  .005; 
+ 	//stree->nodes[3]->theta =  .006; 
+ 	//stree->nodes[4]->theta =  .008; 
+ 	//stree->nodes[2]->theta =  .008; 
+ 	//stree->nodes[3]->theta =  .008; 
+ 	//stree->nodes[4]->theta =  .006; 
 
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
@@ -3716,8 +3719,8 @@ void cmd_run()
     /* propose population sizes on species tree */
     if (opt_est_theta)
     {
-      //ratio = stree_propose_theta(gtree,locus,stree);
-      //pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
+      ratio = stree_propose_theta(gtree,locus,stree);
+      pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
                                     (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");

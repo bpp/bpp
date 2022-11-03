@@ -1463,7 +1463,7 @@ void update_tau_constraint_recursive_to_root(stree_t * stree, snode_t * node, do
 		return;
 	int index = node->node_index - stree->tip_count;
 	int indexP = parent->node_index - stree->tip_count;
-	if (constraint[index] > constraint[indexP]){
+	if (index >= 0 && constraint[index] > constraint[indexP]){
 		constraint[indexP] = constraint[index];
 	}
 	update_tau_constraint_recursive_to_root(stree, node->parent, constraint);
@@ -1472,13 +1472,20 @@ void update_tau_constraint_recursive_to_root(stree_t * stree, snode_t * node, do
 void update_tau_constraint_recursive_to_tip(stree_t * stree, snode_t * node, double * constraint) {
 	/* These are upper bounds */
 
-	snode_t * daughter = node->left;
-	if (!daughter)
+	snode_t * daughterL = node->left;
+	snode_t * daughterR = node->right;
+	if (!daughterR)
 		return;
+
 	int index = node->node_index - stree->tip_count;
-	int indexD = daughter->node_index - stree->tip_count;
-	if (constraint[index] <  constraint[indexD])
+	int indexD = daughterL->node_index - stree->tip_count;
+	if (indexD >= 0 && (constraint[index] <  constraint[indexD] && constraint[index] != 0))
 		constraint[indexD] = constraint[index];
+
+	indexD = daughterR->node_index - stree->tip_count;
+	if (indexD >= 0 && (constraint[index] <  constraint[indexD] || constraint[index] != 0))
+		constraint[indexD] = constraint[index];
+
 	update_tau_constraint_recursive_to_tip(stree, node->left, constraint);
 	update_tau_constraint_recursive_to_tip(stree, node->right, constraint);
 }
@@ -1487,13 +1494,14 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 	double * u_constraint = stree->u_constraint;
 	double * l_constraint = stree->l_constraint;
 
-	int left, right, max; 
-	double t_left, t_right;
+	int left, right; 
+	double t_left, t_right, max;
+	snode_t * popl;
+	snode_t * popr;
 
 	// If there are no ancestral sequences, there is only memory allocated for the tip nodes,
 	// This means that there are only lower bounds on the speciations times
 	if(opt_seqAncestral) {
-		printf("opt_\n");
 	for (unsigned i = stree->tip_count; i < stree->tip_count+stree->inner_count; i++) {
 		t_left = 0;
 		t_right = 0;
@@ -1506,39 +1514,44 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 		 */
 		
 		/* Find the population of the daughter */
-		left = pop[i].snode->left->node_index;
-		right = pop[i].snode->left->node_index;
+		popl = pop[i].snode->left;
+		if (popl) {
+			left = popl->node_index;
+		}
+		popr = pop[i].snode->right;
+		if (popr)
+			right = popr->node_index;
 		
 		/* Oldest sample from left daughter */
-		if (pop[left].nodes[pop[left].seq_count] > 0 ) {
+		if (popl && pop[left].nodes[pop[left].seq_count - 1]->time > 0 ) {
 			t_left = pop[left].nodes[pop[left].seq_count - 1]->time;
 
 		}
 
 		/* Oldest sample from right daughter */
-		if (pop[right].nodes[pop[right].seq_count] > 0 ) {
+		if (popr && pop[right].nodes[pop[right].seq_count - 1] > 0 ) {
 			t_right = pop[right].nodes[pop[right].seq_count - 1]->time;
 		}
 
 		if (t_left && t_right ) {
 
-			max = (t_left > t_right) ? t_left : t_right;
-			if (max > l_constraint[i]) 
-				l_constraint[i] = max;
+			max = MAX(t_left, t_right);
+			if (max > l_constraint[i - stree->tip_count]) 
+				l_constraint[i - stree->tip_count] = max;
 		}
-		else if (t_left && t_left > l_constraint[i])
-			l_constraint[i] = t_left;
-		else if (t_right && t_right > l_constraint[i])
-			l_constraint[i] = t_right;
+		else if (t_left && t_left > l_constraint[i - stree->tip_count])
+			l_constraint[i - stree->tip_count] = t_left;
+		else if (t_right && t_right > l_constraint[i - stree->tip_count])
+			l_constraint[i - stree->tip_count] = t_right;
 		
 
-		/* Find the population of the parent */
-		snode_t * parent = pop[i].snode->parent;
-		if (parent && opt_seqAncestral) {
-			int parent_index = parent->node_index;
-			if ((pop[parent_index].seq_count > 0) && (u_constraint[i]> pop[parent_index].nodes[0]->time)) 
-				u_constraint[i] = pop[parent_index].nodes[0]->time;
+		int index = pop[i].snode->node_index;
+
+		if ((pop[index].seq_count > 0) && (u_constraint[i - stree->tip_count] > pop[index].nodes[0]->time || ! u_constraint[i - stree->tip_count]))  {
+			u_constraint[i - stree->tip_count] = pop[index].nodes[0]->time;
 		}
+		
+		
 		
 	// Would be good to check constraints that are removed a node
 	
@@ -1560,7 +1573,6 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 	//Anna you really need to check this is working
 	if (opt_seqAncestral)
 		update_tau_constraint_recursive_to_tip(stree, stree->root, u_constraint);
-
 
 }
 
@@ -1651,6 +1663,7 @@ double set_tip_date_infer (stree_t * stree,
 		}
 
 	}
+
 	int startingIndex = 0; 
 	for (j = 0; j < tipDateArrayLen; j++ ) {
 		
@@ -1663,10 +1676,13 @@ double set_tip_date_infer (stree_t * stree,
 	assert(j < tipDateArrayLen);
 
 	double * lastDate = (double *)xcalloc(stree->tip_count + opt_seqAncestral, sizeof(double));
+	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
+		lastDate[j] = -1;
+	}
 
 	/* Finds the number of epochs for each population */
 	for (j = 0; j < tipDateArrayLen ; j++ ) {
-		int n = useDate[j]; /* i is the population */
+		int n = useDate[j]; /* n is the population */
 		
 		/* If the date is used for this msa */
 		if (n >= 0) {
@@ -1689,7 +1705,7 @@ double set_tip_date_infer (stree_t * stree,
 	}
 
 	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++)
-		lastDate[j] = 0;
+		lastDate[j] = -1;
 
 	for (j = 0; j < tipDateArrayLen ; j++ ) {
 		int n = useDate[j]; /* i is the population */
@@ -1704,6 +1720,8 @@ double set_tip_date_infer (stree_t * stree,
 			} 
 
 			stree->nodes[n]->date_count[msa_index][stree->nodes[n]->epoch_count[msa_index]-1]++;
+
+
 			
 		}
 	}
@@ -3043,7 +3061,6 @@ gtree_t ** gtree_init(stree_t * stree,
         stree->u_constraint = xcalloc(stree->inner_count, sizeof(double));
         stree->l_constraint = xcalloc(stree->inner_count, sizeof(double));
         for (i = 0; i < msa_count; ++i) {
-
                 tau_constraint_find(stree, msalist[i], i);
         }
   }
@@ -3053,9 +3070,9 @@ gtree_t ** gtree_init(stree_t * stree,
 	  //ANNA
 	  /*stree->nodes[3]->tau = .2; 
 	  stree->nodes[4]->tau = .1; */
-	  
-	  stree->nodes[3]->tau = .016; 
-	  stree->nodes[4]->tau = .008;  
+	  stree->nodes[3]->tau = .008; 
+	  stree->nodes[4]->tau = .016;  
+	  //stree->nodes[2]->tau = .008;
         //reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
   }
 
@@ -3106,8 +3123,10 @@ gtree_t ** gtree_init(stree_t * stree,
   /* reset number of gene leaves associated with each species tree subtree */
   reset_gene_leaves_count(stree,gtree);
 
-  list_clear(datelist, mapDate_dealloc);
-  free(tipDateArray);
+  if (opt_datefile) {
+  	list_clear(datelist, mapDate_dealloc);
+  	free(tipDateArray);
+  }
   return gtree;
 }
 
@@ -3334,7 +3353,8 @@ double gtree_update_logprob_contrib(snode_t* snode,
   sortbuffer[0] = snode->tau;
   j = 1;
   if (opt_datefile && (!snode->left || opt_seqAncestral)) {
-	nextDateInd = 0;
+	  if (snode->epoch_count[msa_index])
+		nextDateInd = 0;
   	for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ ) {
 		sortbuffer[j] = snode->tip_date[msa_index][k];
   	}
@@ -3388,14 +3408,11 @@ double gtree_update_logprob_contrib(snode_t* snode,
   /* skip the last step in case the last value of n was supposed to be 1 */
   //Anna: need to update this
 
-//  printf("%s \n", snode->label);
-  //Anna does this need updating
   if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
   {
     T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
 
- //   printf("%d %f %f %f\n", n, sortbuffer[k], sortbuffer[k -1], T2h);
      if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
      	n += 1 + snode->date_count[msa_index][nextDateInd];
      	if (nextDateInd + 1 < snode->epoch_count[msa_index])
@@ -4379,8 +4396,10 @@ static long propose_ages(locus_t * locus,
         if (!opt_msci)
         {
 		//ANNA ?
-          for (pop = node->pop; pop != oldpop; pop = pop->parent)
+          for (pop = node->pop; pop != oldpop; pop = pop->parent) {
             pop->parent->seqin_count[msa_index]--;
+	  assert( 0!= pop->parent->seqin_count[msa_index]);
+	  }
         }
       }
     }
@@ -5736,6 +5755,7 @@ static long propose_spr(locus_t * locus,
           break;
     }
 
+
     /* TODO: Set age limits. 999 is set for backwards compatibility with bpp */
     minage = MAX(curnode->time, pop->tau);
     maxage = 999;
@@ -5858,9 +5878,9 @@ static long propose_spr(locus_t * locus,
       }
 
       if (! target_count ) {
-	      printf("%s %f %f\n", pop->label, tnew, curnode->time);
-	      return accepted;
+	     continue;
       }
+
       assert(target_count);
       assert(source_count);
       
@@ -7250,6 +7270,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
     if (!x->left && !x->right && !x->parent && x != gtree->root) continue;
 
     /* coalescent events */
+    //Anna - this is because x->time of the tips = 0, needs to change
     if (i >= gtree->tip_count)
     {
       if (x->pop == snode)

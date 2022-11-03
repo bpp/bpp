@@ -1986,6 +1986,7 @@ static void reorder(stree_t * stree)
           } else {
                 hashSize = stree->tip_count + stree->inner_count;
                 opt_seqAncestral = stree->inner_count;
+
           }
   }
 
@@ -1996,11 +1997,14 @@ static void reorder(stree_t * stree)
 
   for (i = 0; i < hashSize; ++i)
   {
+    if (!stree->nodes[i]->label) {
+	    fatal("Internal nodes are not all labeled. They must be labeled with sampling from ancestral populations.");
+    }
     pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
     pair->label = stree->nodes[i]->label;
+
     pair->data = (void *)(uintptr_t)i;
     pairlist[i] = pair;
-
     if (!hashtable_insert(ht,
                           (void *)pair,
                           hash_fnv(stree->nodes[i]->label),
