@@ -2,6 +2,15 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.6.2] - 2022-11-03
+### Changed
+ - Default theta proposal to the original sliding window move
+ - Default number of thetas on monitor output set back to 3
+### Added
+ - Gibbs sampler for thetas with t1/t4 conditions
+### Fixed
+ - Typos
+
 ## [4.6.1] - 2022-07-26
 ### Changed
  - Number of thetas,taus,phis and mrates on screen output

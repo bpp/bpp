@@ -2970,6 +2970,23 @@ void load_cfile()
 
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
+
+  /* update theta method depending on prior */
+  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  {
+    opt_theta_move = BPP_THETA_SLIDE;
+  }
+  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  {
+    if (opt_theta_move == BPP_THETA_GIBBS)
+      opt_theta_move = BPP_THETA_MG_GAMMA;
+  }
+  else if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  {
+    /* all ok -- do nothing */
+  }
+  else
+    fatal("Invalid theta prior distribution");
 }
 
 int parsefile_doubles(const char * filename,

@@ -442,7 +442,8 @@ static gtree_t * gtree_wraptree(gnode_t * root,
   tree->rb_lcount = 0;
 
   if (tip_count < 2 && tip_count != 0)
-    fatal("Invalid number of tips in input tree (%u).", tip_count);
+    fatal("Invalid number of tips in input tree (%u).\n"
+          "Please ensure all loci have at least two sequences.", tip_count);
 
   if (tip_count == 0)
   {

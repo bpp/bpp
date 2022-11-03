@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 6
-#define VERSION_PATCH 1
+#define VERSION_PATCH 2
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -244,6 +244,10 @@ extern const char * global_freqs_strings[28];
 
 #define BPP_THETA_SLIDE                 0
 #define BPP_THETA_GIBBS                 1
+#define BPP_THETA_MG_INVG               2
+#define BPP_THETA_MG_GAMMA              3
+#define BPP_THETA_MG_CAUCHY             4
+#define BPP_THETA_MG_T4                 5
 
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1

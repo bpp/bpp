@@ -2804,6 +2804,46 @@ static int propose_theta_gibbs_im(stree_t * stree,
   return 1;
 }
 
+static double rndCauchy(long thread_index)
+{
+   /* Standard Cauchy variate, generated using inverse CDF
+   */
+   return tan(BPP_PI*(legacy_rndu(thread_index) - 0.5));
+}
+
+static double rndt4(long thread_index)
+{
+   /* Student's t_4 variate, with d.f. = 4.
+      This has variance 1, and is the standard t4 variate divided by sqrt(2).
+      The standard t4 variate has variance 2.
+   */
+   double u, v, w, c2, r2, t4, sqrt2 = 0.7071067811865475244;
+
+   for ( ; ; ) {
+      u = 2 * legacy_rndu(thread_index) - 1;
+      v = 2 * legacy_rndu(thread_index) - 1;
+      w = u*u + v*v;
+      if (w < 1) break;
+   }
+   c2 = u*u / w;
+   r2 = 4 / sqrt(w) - 4;
+   t4 = sqrt(r2*c2);
+   if (legacy_rndu(thread_index) < 0.5) t4 = -t4;
+
+   return t4 * sqrt2;
+}
+
+static double PDFt4(double x, double m, double s)
+{
+   /* This t4 PDF has mean m and variance s*s.  Note that the standard t4 has variance 2*s*s.
+   */
+   double z = (x - m) / s, pdf;
+
+   pdf = 3 / (4 * 1.414213562*s)*pow(1 + z*z / 2, -2.5);
+
+   return pdf;
+}
+
 static int propose_theta_gibbs(stree_t * stree,
                                gtree_t ** gtree,
                                locus_t ** locus,
@@ -2818,6 +2858,9 @@ static int propose_theta_gibbs(stree_t * stree,
   double T2h_sum = 0;
   double a1, b1;
   double heredity;
+  double oldtheta,newtheta;
+  double xm,xs,ym,ys;
+  double znew,zold,ynew,yold;
   double * sortbuffer = global_sortbuffer_r[thread_index];
   dlist_item_t * event;
 
@@ -2862,28 +2905,95 @@ static int propose_theta_gibbs(stree_t * stree,
 
   a1 = opt_theta_alpha + coal_sum;
 
+  xm = xs = ym = ys = 0;
   if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  {
     b1 = opt_theta_beta  + T2h_sum;
+
+    if (opt_theta_move == BPP_THETA_MG_INVG)
+    {
+      /* debugging step -- metropolized gibbs */
+      a1 *= 1.01;
+      b1 *= 0.99;
+    }
+    else if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    {
+      a1 -= 2;
+      double a = opt_theta_alpha-2;
+      double b = (opt_theta_alpha-2)*(opt_theta_alpha-1) / opt_theta_beta;
+      b1 = b*a1*(a1+1)/(a*(a+1)+T2h_sum*b);
+    }
+    else if (opt_theta_move == BPP_THETA_MG_CAUCHY ||
+             opt_theta_move == BPP_THETA_MG_T4)
+    {
+      /* mean and variance for logx ~ InvG(a1,b1) */
+      xm = b1/(a1-1);
+      xs = b1/((a1-1)*sqrt(a1-2));
+      ym = log(xm) - 0.5*xs*xs/(xm*xm);
+      ys = xs/xm;
+    }
+
+  }
   else
   {
     assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
-    b1 = opt_theta_beta * a1 * (a1+1) /
-         (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
+
+    if (opt_theta_move == BPP_THETA_MG_INVG)
+    {
+      /* invgamma */
+      a1 += 2;
+      b1  = opt_theta_alpha*(opt_theta_alpha+1) / opt_theta_beta + T2h_sum;
+    }
+    else
+    {
+      /* gamma (also cauchy and t4) */
+      b1  = opt_theta_beta * a1 * (a1+1) /
+            (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
+    }
+
+    if (opt_theta_move == BPP_THETA_MG_CAUCHY || opt_theta_move == BPP_THETA_MG_T4)
+    {
+      /* mean and variance for logx ~ Gamma(a1,b1) */
+      xm = a1/b1;
+      xs = sqrt(a1)/b1;
+      ym = log(xm) - 0.5*xs*xs/(xm*xm);
+      ys = xs/xm;
+    }
   }
   
-  /* save old theta in case of gamma prior */
-  double oldtheta = snode->theta;
+  /* save old theta in case of metropolized gibbs */
+  oldtheta = snode->theta;
 
   if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
-    snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  {
+    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+      snode->theta = legacy_rndgamma(thread_index,a1) / b1; 
+    else if (opt_theta_move == BPP_THETA_GIBBS ||
+             opt_theta_move == BPP_THETA_MG_INVG)
+      snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  }
   else
   {
     assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
-    snode->theta = legacy_rndgamma(thread_index,a1) / b1;
+
+    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+      snode->theta = legacy_rndgamma(thread_index,a1) / b1; 
+    else if (opt_theta_move == BPP_THETA_MG_INVG)
+      snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
+  }
+
+  yold = ynew = znew = 0;
+  if (opt_theta_move == BPP_THETA_MG_CAUCHY || opt_theta_move == BPP_THETA_MG_T4)
+  {
+    znew = opt_theta_move == BPP_THETA_MG_CAUCHY ?
+             rndCauchy(thread_index) : rndt4(thread_index);
+    ynew = znew*ys + ym;
+    yold = log(oldtheta);
+    snode->theta = exp(ynew);
   }
 
   /* new theta */
-  double newtheta = snode->theta;
+  newtheta = snode->theta;
 
   lcount = 1;
   stree->td[0] = snode;
@@ -2901,7 +3011,6 @@ static int propose_theta_gibbs(stree_t * stree,
       }
     }
   }
-
   double lnacceptance = 0;
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -2918,14 +3027,35 @@ static int propose_theta_gibbs(stree_t * stree,
   }
 
   /* gamma prior acceptance-rejetion step */
-  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA ||
+      opt_theta_move != BPP_THETA_GIBBS)
   {
     /* prior ratio */
-    lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
-                    opt_theta_beta*(newtheta - oldtheta);
+    if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
+                      opt_theta_beta*(newtheta - oldtheta);
+    else
+      lnacceptance += (-opt_theta_alpha-1) * log(newtheta / oldtheta) -
+                      opt_theta_beta*(1/newtheta - 1/oldtheta);
 
     /* proposal ratio */
-    lnacceptance += logPDFGamma(oldtheta,a1,b1) - logPDFGamma(newtheta,a1,b1);
+    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+      lnacceptance += (a1-1) * log(oldtheta / newtheta) -
+                      b1*(oldtheta - newtheta);
+    else if (opt_theta_move == BPP_THETA_MG_INVG)
+      lnacceptance += (-a1 - 1) * log(oldtheta/newtheta) -
+                      b1*(1/oldtheta - 1/newtheta);
+    else if (opt_theta_move == BPP_THETA_MG_CAUCHY)
+    {
+      zold = (yold - ym) / ys;
+      lnacceptance += log((1 + znew*znew) / (1+zold*zold)) + ynew - yold;
+    }
+    else if (opt_theta_move == BPP_THETA_MG_T4)
+    {
+      zold = (yold - ym) / ys;
+      lnacceptance += ynew - yold;
+      lnacceptance += log(PDFt4(zold,0,1)/PDFt4(znew,0,1));
+    }
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
       return 1;         /* accept */
@@ -2948,6 +3078,9 @@ static int propose_theta_gibbs(stree_t * stree,
     }
     return 0;
   }
+
+  assert(opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA &&
+         opt_theta_move == BPP_THETA_GIBBS);
 
   return 1;
 }
@@ -3103,7 +3236,13 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (opt_theta_move == BPP_THETA_GIBBS)
+      if (opt_theta_move == BPP_THETA_SLIDE)
+        accepted += propose_theta_slide(stree,
+                                        gtree,
+                                        locus,
+                                        stree->nodes[i],
+                                        thread_index);
+      else
       {
         if (opt_migration)
           accepted += propose_theta_gibbs_im(stree,
@@ -3118,12 +3257,6 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
                                           stree->nodes[i],
                                           thread_index);
       }
-      else
-        accepted += propose_theta_slide(stree,
-                                        gtree,
-                                        locus,
-                                        stree->nodes[i],
-                                        thread_index);
       theta_count++;
     }
   }

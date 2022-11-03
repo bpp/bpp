@@ -250,7 +250,7 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_method == METHOD_11)
   {
     fprintf(fp, "  stree proposal:  %6.4f for Ssnl, %6.4f for Sspr\n", opt_prob_snl, 1 - opt_prob_snl);
-    fprintf(fp, "    sp: number of delimited specices\n");
+    fprintf(fp, "    sp: number of delimited species\n");
   }
   if (opt_method == METHOD_10 || opt_method == METHOD_11)
   {
@@ -262,7 +262,7 @@ static void print_mcmc_headerline(FILE * fp,
   }
   if (opt_method == METHOD_10 || opt_method == METHOD_11)
   {
-    fprintf(fp, "  mldp: most likelely delimitation and probability\n");
+    fprintf(fp, "  mldp: most likely delimitation and probability\n");
   }
   if (mean_theta_count == 1)
     fprintf(fp, "mthet1: root node mean theta\n");
@@ -3354,10 +3354,20 @@ void cmd_run()
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
 
-  assert(opt_theta_move==BPP_THETA_SLIDE || opt_theta_move==BPP_THETA_GIBBS);
-  fprintf(stdout, "Theta proposal: %s\n",
-          (opt_theta_move == BPP_THETA_SLIDE) ?
-            "sliding window" : "gibbs sampler");
+  assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MG_T4);
+  fprintf(stdout, "Theta proposal: ");
+  if (opt_theta_move == BPP_THETA_SLIDE)
+    fprintf(stdout, "Sliding window\n");
+  else if (opt_theta_move == BPP_THETA_GIBBS)
+    fprintf(stdout, "Gibbs sampler (Inv-G conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    fprintf(stdout, "Metropolised Gibbs sampler (Gamma conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_INVG)
+    fprintf(stdout, "Metropolised Gibbs sampler (Inv-G conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_CAUCHY)
+    fprintf(stdout, "Metropolised Gibbs sampler (Cauchy conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_T4)
+    fprintf(stdout, "Metropolised Gibbs sampler (t-4 conditional)\n");
 
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");
