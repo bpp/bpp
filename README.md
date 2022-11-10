@@ -220,6 +220,7 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 * Tom&aacute;&scaron; Flouri
 * Bruce Rannala
+* Anna Nagel
 * Ziheng Yang
 
 ## Code
