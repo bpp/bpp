@@ -764,7 +764,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         bidir_count++;
       }
 
-    if (bidir_count)
+    if (bidir_count && opt_linkedtheta != BPP_LINKEDTHETA_MSCI)
       lswitch(stree, header, matrix, col_count, fp_out);
   }
 
