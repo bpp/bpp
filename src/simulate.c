@@ -1707,8 +1707,8 @@ static void simulate(stree_t * stree)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         opt_migration_events[i][j] /= opt_locus_count;
 
-    printf("\nCounts of migration events averaged over replicates: %8.4f\n",
-           tmrca / opt_locus_count);
+    printf("\nMean tMRCA = %8.4f\n", tmrca / opt_locus_count);
+    printf("\nCounts of migration events averaged over replicates\n");
     /* print migration matrix on screen */
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
