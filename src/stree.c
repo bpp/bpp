@@ -4968,7 +4968,7 @@ static long propose_tau_mig(locus_t ** loci,
                             unsigned int candidate_count,
                             long thread_index)
 {
-  unsigned int i, j;
+  unsigned int i, j, k;
 
   int theta_method = 2;   /* how we change theta */
   long accepted = 0;
@@ -5158,6 +5158,125 @@ static long propose_tau_mig(locus_t ** loci,
 
   if (opt_exp_imrb)
     free(affected);
+
+  #if 1
+  /* Pseudo prior implementation */
+
+  /* if no pseudoprior given then pseudoprior = prior and terms cancel out */
+  if (opt_pseudo_alpha)
+  {
+    snode_t * nodes[3];
+    double atau[3], old_atau[3];
+    double ptau[3], old_ptau[3];
+    double amodel;
+    double bmodel;
+      
+    /* collect the tau boundaries for each of the two (if snode is root) or
+       three  "migration bands" affected by the tau change. See diagram below */
+    k = 0;
+    if (snode->parent)
+    {
+      nodes[k] = snode;
+      atau[k] = newage;             old_atau[k]   = oldage;
+      ptau[k] = snode->parent->tau; old_ptau[k++] = snode->parent->tau;
+    }
+
+    nodes[k] = snode->left;
+    atau[k] = snode->left->tau;     old_atau[k]   = snode->left->tau;
+    ptau[k] = newage;               old_ptau[k++] = oldage;
+
+    nodes[k] = snode->right;
+    atau[k] = snode->right->tau;    old_atau[k]   = snode->right->tau;
+    ptau[k] = newage;               old_ptau[k++] = oldage;
+
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      if (!stree->nodes[i]->parent) continue;
+
+      unsigned int yi = stree->nodes[i]->node_index;
+
+      for (j = 0; j < k; ++j)
+      {
+
+        unsigned int xi = nodes[j]->node_index;
+
+        if (!opt_mig_bitmatrix[xi][yi] && !opt_mig_bitmatrix[yi][xi]) continue;
+
+        /* check whether a flip (migration appearing or disappearing) occurs.
+
+           The following figures show all possible tau configurations between two
+           edges p-a and q-b and whether migration is possible for each case
+
+           (a)       (b)         (c)           (d)           (e)           (f)
+                                                  
+           q o    p o              q o    p o      
+             |      |                |      |       
+           b o    a o       p o      |      |    q o    p o                  q o
+                              | <--> |      | <--> |      |    q o    p o      |
+        p o          q o      |    b o    a o      |      | <--> |      | <--> |
+          |            |      |                    |      |    b o    a o      |
+        a o          b o    a o                  b o    a o                  b o
+
+           
+          No migration in a and b (model H0) and migration in c,d,e,f (model H1)
+
+          Now determine the model we were before the tau change (H0 or H1), and
+          whether we flipped to the other model after the change.
+        */
+
+        double a = old_atau[j];
+        double p = old_ptau[j];
+        double b = stree->nodes[i]->tau;
+        double q = stree->nodes[i]->parent->tau;
+
+        /* get the model *before* tau change (0: no migration, 1: migration) */
+        amodel = !(p < b || a > q);  /* check cases (a) and (b) */
+
+        a = atau[j];
+        p = ptau[j];
+
+        /* now get the model *after* the change to tau */
+        bmodel = !(p < b || a > q);
+
+        /* flip = -1 if no flip, 1: migration appearing or 0: disappearing */
+        long flip = (amodel == bmodel) ? -1 : bmodel;
+
+        if (flip == 0)
+        {
+          /* M disappearing */
+
+          if (opt_mig_bitmatrix[xi][yi])
+          {
+            lnacceptance += logPDFGamma(opt_migration_matrix[xi][yi], opt_pseudo_alpha, opt_pseudo_beta);
+            lnacceptance -= logPDFGamma(opt_migration_matrix[xi][yi], opt_mig_alpha, opt_mig_beta);
+          }
+
+          if (opt_mig_bitmatrix[yi][xi])
+          {
+            lnacceptance += logPDFGamma(opt_migration_matrix[yi][xi], opt_pseudo_alpha, opt_pseudo_beta);
+            lnacceptance -= logPDFGamma(opt_migration_matrix[yi][xi], opt_mig_alpha, opt_mig_beta);
+          }
+        }
+        else if (flip == 1)
+        {
+          /* M appearing */
+
+          if (opt_mig_bitmatrix[xi][yi])
+          {
+            lnacceptance -= logPDFGamma(opt_migration_matrix[xi][yi], opt_pseudo_alpha, opt_pseudo_beta);
+            lnacceptance += logPDFGamma(opt_migration_matrix[xi][yi], opt_mig_alpha, opt_mig_beta);
+          }
+
+          if (opt_mig_bitmatrix[yi][xi])
+          {
+            lnacceptance -= logPDFGamma(opt_migration_matrix[yi][xi], opt_pseudo_alpha, opt_pseudo_beta);
+            lnacceptance += logPDFGamma(opt_migration_matrix[yi][xi], opt_mig_alpha, opt_mig_beta);
+          }
+        }
+      }
+    }
+  }
+  #endif
 
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
