@@ -808,7 +808,7 @@ static void load_chk_section_1(FILE * fp,
   }
 
   *mean_phi = NULL;
-  if (mean_phi_count)
+  if (*mean_phi_count)
   {
     *mean_phi = (double *)xmalloc((size_t)(*mean_phi_count)*sizeof(double));
     
@@ -1335,9 +1335,6 @@ void load_chk_section_2(FILE * fp)
       if (!LOAD(x->migbuffer, x->mb_count, fp))
         fatal("Cannot load node migbuffers");
     }
-
-    stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
-                                              sizeof(miginfo_t *));
   }
 }
 
@@ -1561,8 +1558,10 @@ static void load_gene_tree(FILE * fp, long index)
     }
 
     gt->migpops = (snode_t **)xcalloc((size_t)total_snodes, sizeof(snode_t *));
-    gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
-                                        sizeof(snode_t *));
+    gt->rb_linked = NULL;
+    if (opt_exp_imrb)
+      gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
+                                          sizeof(snode_t *));
     gt->rb_lcount = 0;
   }
 }
