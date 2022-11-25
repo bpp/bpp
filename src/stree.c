@@ -9064,11 +9064,13 @@ double migrate_gibbs(stree_t * stree,
   bsj /= stree->nodes[ti]->theta;
 
   /* we have the new distribution */
-
-  a1 = opt_mig_alpha + asj;
-  b1 = opt_mig_beta  + bsj;
-
   long mindex = opt_migration_matrix[si][ti];
+  assert(mindex >= 0);
+  migspec_t * spec = opt_mig_specs+mindex;
+
+  a1 = spec->alpha + asj;
+  b1 = spec->beta  + bsj;
+
   opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
 
   stree_update_mig_subpops(stree,thread_index);
@@ -9121,6 +9123,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
   double rate_old,rate_new;
   double logpr_diff;
   double lnacceptance;
+  migspec_t * spec;
   
   assert(opt_est_theta);
 
@@ -9135,7 +9138,9 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       ++total;
 
       mindex = opt_migration_matrix[i][j];
-      rate_old = opt_mig_specs[mindex].M;
+      spec = opt_mig_specs+mindex;
+
+      rate_old = spec->M;
 
       #if 1
       lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
@@ -9143,7 +9148,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       rate_new = rate_old * c;
 
-      lnacceptance = lnc + lnc*(opt_mig_alpha-1) - (rate_new-rate_old)*opt_mig_beta;
+      lnacceptance = lnc + lnc*(spec->alpha-1) - (rate_new-rate_old)*spec->beta;
       #else
       double lograte_old, lograte_new;
       double minv = -99, maxv = 99;
@@ -9156,11 +9161,11 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       rate_new = exp(lograte_new);
 
       lnacceptance = lograte_new - lograte_old;
-      lnacceptance += (opt_mig_alpha-1)*log(rate_new/rate_old) -
-                      (opt_mig_beta)*(rate_new - rate_old);
+      lnacceptance += (spec->alpha-1)*log(rate_new/rate_old) -
+                      spec->beta*(rate_new - rate_old);
       #endif
 
-      opt_mig_specs[mindex].M = rate_new;
+      spec->M = rate_new;
 
       /* TODO: improve the following */
       stree_update_mig_subpops(stree,thread_index_zero);
@@ -9189,7 +9194,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       }
       else
       {
-        opt_mig_specs[mindex].M = rate_old;
+        spec->M = rate_old;
 
         /* TODO: improve the following */
         stree_update_mig_subpops(stree,thread_index_zero);
