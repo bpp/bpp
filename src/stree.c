@@ -3339,8 +3339,15 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
       {
         snode_t * y = epoch[j];
 
-        if (y->tau <= tstart && y->parent->tau >= tend)
-          xm[k].mrsum += opt_migration_matrix[y->node_index][x->node_index];
+        unsigned int xi = x->node_index;
+        unsigned int yi = y->node_index;
+
+        if (opt_mig_bitmatrix[yi][xi] &&
+            y->tau <= tstart && y->parent->tau >= tend)
+        {
+          long mindex = opt_migration_matrix[yi][xi];
+          xm[k].mrsum += opt_mig_specs[mindex].M;
+        }
 
       }
       tstart = tend;
@@ -5163,13 +5170,14 @@ static long propose_tau_mig(locus_t ** loci,
   /* Pseudo prior implementation */
 
   /* if no pseudoprior given then pseudoprior = prior and terms cancel out */
-  if (opt_pseudo_alpha)
+  if (opt_pseudop_exist)
   {
     snode_t * nodes[3];
     double atau[3], old_atau[3];
     double ptau[3], old_ptau[3];
     double amodel;
     double bmodel;
+    migspec_t * spec;
       
     /* collect the tau boundaries for each of the two (if snode is root) or
        three  "migration bands" affected by the tau change. See diagram below */
@@ -5247,14 +5255,22 @@ static long propose_tau_mig(locus_t ** loci,
 
           if (opt_mig_bitmatrix[xi][yi])
           {
-            lnacceptance += logPDFGamma(opt_migration_matrix[xi][yi], opt_pseudo_alpha, opt_pseudo_beta);
-            lnacceptance -= logPDFGamma(opt_migration_matrix[xi][yi], opt_mig_alpha, opt_mig_beta);
+            spec = opt_mig_specs+opt_migration_matrix[xi][yi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
           }
 
           if (opt_mig_bitmatrix[yi][xi])
           {
-            lnacceptance += logPDFGamma(opt_migration_matrix[yi][xi], opt_pseudo_alpha, opt_pseudo_beta);
-            lnacceptance -= logPDFGamma(opt_migration_matrix[yi][xi], opt_mig_alpha, opt_mig_beta);
+            spec = opt_mig_specs+opt_migration_matrix[yi][xi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
           }
         }
         else if (flip == 1)
@@ -5263,14 +5279,22 @@ static long propose_tau_mig(locus_t ** loci,
 
           if (opt_mig_bitmatrix[xi][yi])
           {
-            lnacceptance -= logPDFGamma(opt_migration_matrix[xi][yi], opt_pseudo_alpha, opt_pseudo_beta);
-            lnacceptance += logPDFGamma(opt_migration_matrix[xi][yi], opt_mig_alpha, opt_mig_beta);
+            spec = opt_mig_specs+opt_migration_matrix[xi][yi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, opt_pseudo_beta);
+              lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
           }
 
           if (opt_mig_bitmatrix[yi][xi])
           {
-            lnacceptance -= logPDFGamma(opt_migration_matrix[yi][xi], opt_pseudo_alpha, opt_pseudo_beta);
-            lnacceptance += logPDFGamma(opt_migration_matrix[yi][xi], opt_mig_alpha, opt_mig_beta);
+            spec = opt_mig_specs+opt_migration_matrix[yi][xi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
           }
         }
       }
@@ -9044,7 +9068,8 @@ double migrate_gibbs(stree_t * stree,
   a1 = opt_mig_alpha + asj;
   b1 = opt_mig_beta  + bsj;
 
-  opt_migration_matrix[si][ti] = legacy_rndgamma(thread_index,a1) / b1;
+  long mindex = opt_migration_matrix[si][ti];
+  opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
 
   stree_update_mig_subpops(stree,thread_index);
 
@@ -9091,6 +9116,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
   long i,j,k;
   long accepted = 0;
   long total = 0;
+  long mindex;
   double c,lnc;
   double rate_old,rate_new;
   double logpr_diff;
@@ -9108,7 +9134,8 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       ++total;
 
-      rate_old = opt_migration_matrix[i][j];
+      mindex = opt_migration_matrix[i][j];
+      rate_old = opt_mig_specs[mindex].M;
 
       #if 1
       lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
@@ -9133,7 +9160,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
                       (opt_mig_beta)*(rate_new - rate_old);
       #endif
 
-      opt_migration_matrix[i][j]  = rate_new;
+      opt_mig_specs[mindex].M = rate_new;
 
       /* TODO: improve the following */
       stree_update_mig_subpops(stree,thread_index_zero);
@@ -9162,7 +9189,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       }
       else
       {
-        opt_migration_matrix[i][j] = rate_old;
+        opt_mig_specs[mindex].M = rate_old;
 
         /* TODO: improve the following */
         stree_update_mig_subpops(stree,thread_index_zero);

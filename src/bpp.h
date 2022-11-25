@@ -405,6 +405,21 @@ typedef struct dlist_s
   dlist_item_t * tail;
 } dlist_t;
 
+typedef struct migspec_s
+{
+  char * source;
+  char * target;
+  double am; /* shape param for variable migration rates among loci */
+  double alpha;
+  double beta;
+  double pseudo_a;
+  double pseudo_b;
+  long params;
+
+  double M;
+  double * Mi;
+} migspec_t;
+
 typedef struct migbuffer_s
 {
   double time;
@@ -628,6 +643,9 @@ typedef struct gtree_s
   snode_t ** migpops;
   snode_t ** rb_linked;  /* per-locus affected snodes in new rubberband */
   long rb_lcount;
+
+  /* per locus migration rate */
+  double locus_mig_rate;
 
 } gtree_t;
 
@@ -1019,6 +1037,7 @@ extern long opt_print_locusrate;
 extern long opt_print_qmatrix;
 extern long opt_print_rates;
 extern long opt_print_samples;
+extern long opt_pseudop_exist;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rate_prior;
@@ -1115,12 +1134,10 @@ extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
 extern double * opt_qrates_params;
-extern double * opt_mig_simrate;
-extern char ** opt_mig_source;
-extern char ** opt_mig_target;
+extern migspec_t * opt_mig_specs;
+extern long ** opt_migration_matrix;
 extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
-extern double ** opt_migration_matrix;
 extern partition_t ** opt_partition_list;
 
 /* common data */
