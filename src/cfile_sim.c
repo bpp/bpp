@@ -699,11 +699,9 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
   ret = 0;
 
   if (!is_emptyline(p)) goto l_unwind;
-  
-  opt_mig_source  = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
-  opt_mig_target  = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
-  opt_mig_simrate = (double *)xcalloc((size_t)opt_migration, sizeof(double));
 
+  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
+  
   /* start reading potential migration between populations */
   for (i = 0; i < opt_migration; ++i)
   {
@@ -713,18 +711,31 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
     char * ss = xstrdup(line);
     p = ss;
 
-    count = get_delstring(p, " \t\r\n*#,-", opt_mig_source+i);
+    count = get_delstring(p, " \t\r\n*#,-", &(opt_mig_specs[i].source));
     if (!count) goto l_unwind;
     p += count;
 
-    count = get_delstring(p, " \t\r\n*#,-", opt_mig_target+i);
+    count = get_delstring(p, " \t\r\n*#,-", &(opt_mig_specs[i].target));
     if (!count) goto l_unwind;
     p += count;
 
-    count = get_double(p, opt_mig_simrate+i);
+    count = get_double(p, &(opt_mig_specs[i].M));
     if (!count) goto l_unwind;
     p += count;
-    
+
+    opt_mig_specs[i].params = 0;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    count = get_double(p, &(opt_mig_specs[i].am));
+    if (!count) goto l_unwind;
+    p += count;
+
+    opt_mig_specs[i].params = 1;
+
+    if (!is_emptyline(p)) goto l_unwind;
+
+l_deallocline:
     free(ss);
   }
   ret = 1;
