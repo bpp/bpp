@@ -2199,6 +2199,7 @@ l_deallocline:
         break;
       case 1:
         opt_mig_specs[i].am       = a;
+        opt_mig_vrates_exist      = 1;
         break;
       case 2:
         opt_mig_specs[i].alpha    = a;
@@ -2208,6 +2209,7 @@ l_deallocline:
         opt_mig_specs[i].alpha    = a;
         opt_mig_specs[i].beta     = b;
         opt_mig_specs[i].am       = c;
+        opt_mig_vrates_exist      = 1;
         break;
       case 4:
         opt_mig_specs[i].alpha    = a;
@@ -2223,6 +2225,7 @@ l_deallocline:
         opt_mig_specs[i].pseudo_a = d;
         opt_mig_specs[i].pseudo_b = e;
         opt_pseudop_exist         = 1;
+        opt_mig_vrates_exist      = 1;
         break;
       default:
         fatal("Internal error when processing 'migration' tag (line %ld)",

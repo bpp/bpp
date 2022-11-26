@@ -377,6 +377,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_snl_lambda_shrink,1,fp);
 
   DUMP(&opt_pseudop_exist,1,fp);
+  DUMP(&opt_mig_vrates_exist,1,fp);
 
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
@@ -489,6 +490,8 @@ static void dump_chk_section_1(FILE * fp,
       migspec_t * spec = opt_mig_specs+i;
       DUMP(spec->source, strlen(spec->source)+1, fp);
       DUMP(spec->target, strlen(spec->target)+1, fp);
+      DUMP(&(spec->si), 1, fp);
+      DUMP(&(spec->ti), 1, fp);
       DUMP(&(spec->am), 1, fp);
       DUMP(&(spec->alpha), 1, fp);
       DUMP(&(spec->beta), 1, fp);

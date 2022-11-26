@@ -96,6 +96,7 @@ long opt_locus_simlen;
 long opt_max_species_count;
 long opt_method;
 long opt_migration;
+long opt_mig_vrates_exist;
 long opt_model;
 long opt_mrate_move;
 long opt_msci;
@@ -479,6 +480,7 @@ void args_init(int argc, char ** argv)
   opt_mig_alpha = 0;
   opt_mig_beta = 0;
   opt_mig_specs = NULL;
+  opt_mig_vrates_exist = 0;
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_mrate_move = BPP_MRATE_SLIDE;
