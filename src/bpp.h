@@ -409,6 +409,9 @@ typedef struct migspec_s
 {
   char * source;
   char * target;
+  unsigned int si;
+  unsigned int ti;
+
   double am; /* shape param for variable migration rates among loci */
   double alpha;
   double beta;
@@ -424,7 +427,7 @@ typedef struct migbuffer_s
 {
   double time;
   long type;
-  double mrsum;
+  double mrsum; /* per locus total migration rate (variable mig rates) */
 } migbuffer_t;
 
 
@@ -1025,6 +1028,7 @@ extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
+extern long opt_mig_vrates_exist;
 extern long opt_model;
 extern long opt_mrate_move;
 extern long opt_msci;

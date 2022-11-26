@@ -1147,6 +1147,22 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    /* print migration rates */
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%sMi_%s->%s",
+                tab_required ? "\t" : "",
+                opt_mig_specs[j].source, opt_mig_specs[j].target);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars header */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1289,6 +1305,20 @@ static void print_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%s%.6f",
+                tab_required ? "\t" : "", opt_mig_specs[j].Mi[i]);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1764,6 +1794,8 @@ static void create_mig_bitmatrix(stree_t * stree)
 
     migspec_t * spec = opt_mig_specs+i;
     spec->Mi = NULL;
+    spec->si = s;
+    spec->ti = t;
     switch (spec->params)
     {
       case 0:

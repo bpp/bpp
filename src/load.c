@@ -615,6 +615,8 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(&opt_pseudop_exist,1,fp))
     fatal("Cannot read information on pseudo priors");
+  if (!LOAD(&opt_mig_vrates_exist,1,fp))
+    fatal("Cannot read information on variable migration rates");
 
   #if 0
   printf(" Current finetune: %ld: %f %f %f %f %f",
@@ -869,28 +871,32 @@ static void load_chk_section_1(FILE * fp,
     {
       migspec_t * spec = opt_mig_specs+i;
       if (!load_string(fp,&(spec->source)))
-        fatal("Cannot read list of migrations (migration %ld - source)", i);
+        fatal("Cannot read list of migrations (migration %ld - source)", i+1);
       if (!load_string(fp,&(spec->target)))
-        fatal("Cannot read list of migrations (migration %ld - target)", i);
+        fatal("Cannot read list of migrations (migration %ld - target)", i+1);
+      if (!LOAD(&(spec->si), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - si)", i+1);
+      if (!LOAD(&(spec->ti), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - ti)", i+1);
       if (!LOAD(&(spec->am), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - am)", i);
+        fatal("Cannot read list of migrations (migration %ld - am)", i+1);
       if (!LOAD(&(spec->alpha), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - alpha)", i);
+        fatal("Cannot read list of migrations (migration %ld - alpha)", i+1);
       if (!LOAD(&(spec->beta), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - beta)", i);
+        fatal("Cannot read list of migrations (migration %ld - beta)", i+1);
       if (!LOAD(&(spec->pseudo_a), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - pseudo_a)", i);
+        fatal("Cannot read list of migrations (migration %ld - pseudo_a)", i+1);
       if (!LOAD(&(spec->pseudo_b), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - pseudo_b)", i);
+        fatal("Cannot read list of migrations (migration %ld - pseudo_b)", i+1);
       if (!LOAD(&(spec->params), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - params)", i);
+        fatal("Cannot read list of migrations (migration %ld - params)", i+1);
       if (!LOAD(&(spec->M), 1, fp))
-        fatal("Cannot read list of migrations (migration %ld - M)", i);
+        fatal("Cannot read list of migrations (migration %ld - M)", i+1);
       if (spec->params == 1 || spec->params == 3 || spec->params == 5)
       {
         spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
         if (!LOAD(spec->Mi, opt_locus_count, fp))
-          fatal("Cannot read list of migrations (migration %ld - Mi)", i);
+          fatal("Cannot read list of migrations (migration %ld - Mi)", i+1);
       }
     }
   }

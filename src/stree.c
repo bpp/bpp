@@ -9129,6 +9129,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
   const static long thread_index_zero = 0;
 
+  /* TODO: Change the nested for loops with one loop over opt_mig_spec */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
@@ -9217,4 +9218,54 @@ double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
     return prop_migrates_gibbs(stree,gtree,locus);
 
   return prop_migrates_slide(stree,gtree,locus);
+}
+
+double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
+{
+  long i,j;
+  long accepted = 0;
+  long total = 0;
+  double c,lnc;
+  double mbar_old,mbar_new;
+  double lnacceptance;
+  migspec_t * spec;
+  
+  assert(opt_est_theta);
+
+  const static long thread_index_zero = 0;
+
+  for (i = 0; i < opt_migration; ++i)
+  {
+    spec = opt_mig_specs+i;
+
+    if (!migration_valid(stree, stree->nodes[spec->si], stree->nodes[spec->ti]))
+      continue;
+
+    ++total;
+
+    mbar_old = spec->M;
+
+    lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
+    c = exp(lnc);
+
+    mbar_new = mbar_old * c;
+    lnacceptance = lnc + lnc*(spec->alpha-1) - (mbar_new-mbar_old)*spec->beta;
+
+    double a = spec->am;
+    double bnew = a / mbar_new;
+    double bold = a / mbar_old;
+
+    lnacceptance += opt_locus_count*a*log(bnew/bold);
+    for (j = 0; j < opt_locus_count; ++j)
+      lnacceptance -= (bnew - bold)*spec->Mi[j];
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+    {
+      /* accepted */
+      spec->M = mbar_new;
+      accepted++;
+    }
+  }
+  if (!total) return 0;
+  return accepted / (double)total;
 }
