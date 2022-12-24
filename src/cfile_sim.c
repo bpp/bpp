@@ -733,6 +733,12 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
 
     opt_mig_specs[i].params = 1;
 
+    if (is_emptyline(p)) goto l_deallocline;
+
+    count = get_delstring(p, " \t\r\n*#,-", &(opt_mig_specs[i].outfile));
+    if (!count) goto l_unwind;
+    p += count;
+
     if (!is_emptyline(p)) goto l_unwind;
 
 l_deallocline:

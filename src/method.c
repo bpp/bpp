@@ -219,7 +219,12 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "   tau: species tree tau proposal\n");
   fprintf(fp, "   mix: mixing proposal\n");
   if (opt_migration)
+  {
     fprintf(fp, "  mrte: migration rates proposal\n");
+    if (opt_mig_vrates_exist)
+      fprintf(fp, "  mr_i: variable migration rates across loci proposal\n");
+
+  }
   if (enabled_hrdt)
     fprintf(fp, "  hrdt: heredity proposal\n");
   if (enabled_lrht)
@@ -346,6 +351,7 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += opt_method == METHOD_10 ? 7 : 0;
   ap_width += opt_method == METHOD_11 ? 7*(2+!!opt_prob_snl) : 0;
   ap_width += opt_migration ? 5 : 0;
+  ap_width += opt_mig_vrates_exist ? 5 : 0;
   ap_width += 1;
   
   if (opt_method == METHOD_10)
@@ -394,6 +400,11 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_migration)
   {
     fprintf(fp," mrte");    linewidth += 5;
+    if (opt_mig_vrates_exist)
+    {
+      fprintf(fp," mr_i");  linewidth += 5;
+    }
+
   }
   if (enabled_mubar)
   {
@@ -624,9 +635,16 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "brte");
     }
     if (opt_migration)
+    {
       fprintf(fp[j], " %*s", prec_ft+spacing, "mrte");    /* 15 */
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*s", prec_ft+spacing, "mr_i");  /* 16 */
+    }
     else
+    {
       fprintf(fp[j], " %*s", empty, "mrte");
+      fprintf(fp[j], " %*s", empty, "mr_i");
+    }
   }
   for (j = 0; j < 2; ++j)
   {
@@ -699,10 +717,13 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     if (opt_migration)
     {
       fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MRATE_INDEX]);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MIGVR_INDEX]);
+
     }
     else
     {
-      fprintf(fp[j], " %*s", empty, "- ");
+      fprintf(fp[j], " %*s", empty, "- - ");
     }
 
 
@@ -780,9 +801,15 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     }
 
     if (opt_migration)
+    {
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mig_Mi);
+    }
     else
-      fprintf(fp[j], " %*s", empty, "- ");
+    {
+      fprintf(fp[j], " %*s", empty, "- - ");
+    }
 
     fprintf(fp[j], "\n");
   }
@@ -821,7 +848,12 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_BRANCHRATE_INDEX], &opt_finetune_branchrate);
   }
   if (opt_migration)
+  {
     reset_finetune_onestep(pjump[BPP_MOVE_MRATE_INDEX], &opt_finetune_migrates);
+    if (opt_mig_vrates_exist)
+      reset_finetune_onestep(pjump[BPP_MOVE_MIGVR_INDEX], &opt_finetune_mig_Mi);
+
+  }
 
   for (j = 0; j < 2; ++j)
   {
@@ -885,9 +917,15 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "- ");
     }
     if (opt_migration)
+    {
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mig_Mi);
+    }
     else
-      fprintf(fp[j], " %*s", empty, "- ");
+    {
+      fprintf(fp[j], " %*s", empty, "- - ");
+    }
 
     fprintf(fp[j], "\n");
   }
@@ -984,7 +1022,11 @@ static void status_print_pjump(FILE * fp,
   if (enabled_prop_alpha)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
   if (opt_migration)
+  {
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_MRATE_INDEX]);
+    if (opt_mig_vrates_exist)
+      fprintf(fp, " %4.2f", pjump[BPP_MOVE_MIGVR_INDEX]);
+  }
 
   /* print pjump for species tree SPR */
   if (opt_method == METHOD_01)
@@ -1759,6 +1801,7 @@ static void create_mig_bitmatrix(stree_t * stree)
   assert(!opt_msci);
   assert(opt_migration);
 
+  const long thread_index_zero = 0;
   unsigned int total_nodes = stree->tip_count + stree->inner_count;
 
   opt_mig_bitmatrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
@@ -1815,11 +1858,24 @@ static void create_mig_bitmatrix(stree_t * stree)
         break;
     }
 
+    spec->M = spec->alpha / spec->beta;
+
     /* if rate variation across loci then allocate array */
     if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+    {
       spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
 
-    spec->M = spec->alpha / spec->beta;
+      double a = spec->am;
+      double b = spec->am / spec->M;
+      for (j = 0; j < opt_locus_count; ++j)
+        spec->Mi[j] = legacy_rndgamma(thread_index_zero,a) / b;
+
+      /* set flag that indicates stree->nodes[t]->migbuffer[...]->mrsum must be
+         an array of size opt_locus_count */
+      stree->nodes[t]->mb_mrsum_isarray = 1;
+
+    }
+
   }
 
 }
@@ -3013,7 +3069,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* initialize pjump and finetune rounds */
 
-  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
   pjump = (double *)xcalloc(pjump_size,sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
@@ -3592,7 +3648,7 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
 
       if (opt_finetune_reset && opt_burnin >= 200)
       {
@@ -3791,6 +3847,12 @@ void cmd_run()
       pjump[BPP_MOVE_MRATE_INDEX] = (pjump[BPP_MOVE_MRATE_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
 
+      if (opt_mig_vrates_exist)
+      {
+        ratio = prop_mig_vrates(stree,gtree,locus);
+        pjump[BPP_MOVE_MIGVR_INDEX] = (pjump[BPP_MOVE_MIGVR_INDEX]*(ft_round-1)+ratio) /
+                                    (double)ft_round;
+      }
     }
 
     /* mixing step */

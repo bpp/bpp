@@ -142,6 +142,7 @@ double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
 double opt_finetune_migrates;
+double opt_finetune_mig_Mi;
 double opt_finetune_mix;
 double opt_finetune_mubar;
 double opt_finetune_mui;
@@ -449,6 +450,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
   opt_finetune_migrates = 0.1;
+  opt_finetune_mig_Mi = 0.1;
   opt_finetune_mui = 0.1;
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;

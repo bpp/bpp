@@ -94,7 +94,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 6
-#define VERSION_PATCH 2
+#define VERSION_PATCH 3
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -290,7 +290,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_NUI_INDEX              13
 #define BPP_MOVE_BRANCHRATE_INDEX       14
 #define BPP_MOVE_MRATE_INDEX            15
-#define BPP_MOVE_INDEX_MAX              15
+#define BPP_MOVE_MIGVR_INDEX            16
+#define BPP_MOVE_INDEX_MAX              16
 
 #define BPP_MSCIDEFS_TREE               1
 #define BPP_MSCIDEFS_DEFINE             2
@@ -421,13 +422,16 @@ typedef struct migspec_s
 
   double M;
   double * Mi;
+
+  char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
 
 typedef struct migbuffer_s
 {
   double time;
   long type;
-  double mrsum; /* per locus total migration rate (variable mig rates) */
+  double * mrsum; /* per locus total migration rate (variable mig rates) */
+  long active_count; /* number of active elements (1 or nloci) */
 } migbuffer_t;
 
 
@@ -510,6 +514,7 @@ typedef struct snode_s
   /* migration events associated with population across loci */
   long * migevent_count;
   migbuffer_t * migbuffer;
+  long mb_mrsum_isarray;
   long mb_count;
   dlist_t ** mig_source;
   dlist_t ** mig_target;
@@ -1074,6 +1079,7 @@ extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
 extern double opt_finetune_migrates;
+extern double opt_finetune_mig_Mi;
 extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
@@ -1403,6 +1409,8 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 void stree_reset_leaves(stree_t * stree);
 
 double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+
+double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 void stree_update_mig_subpops(stree_t * stree, long msa_index);
 

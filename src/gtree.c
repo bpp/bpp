@@ -1259,7 +1259,8 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
       if (mpop_count)
       {
         /* calculate migration rate (coalescence not possible) */
-        mrate = 4*snode->migbuffer[i].mrsum / snode->theta;
+        long idx = snode->migbuffer[i].active_count == 1 ? 0 : msa_index;
+        mrate = 4*snode->migbuffer[i].mrsum[idx] / snode->theta;
         double tnew  = legacy_rndexp(thread_index_zero,1/mrate);
 
         if (t+tnew <= snode->migbuffer[i].time)
@@ -1282,9 +1283,13 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
       {
         long s = migsource[j]->node_index;
         long t = snode->node_index;
+        long mindex = opt_migration_matrix[s][t];
 
         assert(opt_mig_bitmatrix[s][t]);
-        sum += 4 * opt_mig_specs[opt_migration_matrix[s][t]].M / snode->theta;
+        if (opt_mig_specs[mindex].am)
+          sum += 4 * opt_mig_specs[mindex].Mi[msa_index] / snode->theta;
+        else
+          sum += 4 * opt_mig_specs[mindex].M / snode->theta;
         if (r < sum) break;
       }
 
@@ -1570,10 +1575,19 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
           {
             long mindexk = pop[k].snode->node_index;
             long mindexj = pop[j].snode->node_index;
+            long mindex = opt_migration_matrix[mindexk][mindexj];
             if (opt_mig_bitmatrix[mindexk][mindexj])
-              migrate[j] += pop[j].seq_count *
-                            opt_mig_specs[opt_migration_matrix[mindexk][mindexj]].M /
-                            pop[j].snode->theta*4;
+            {
+              if (opt_mig_specs[mindex].am)
+                migrate[j] += pop[j].seq_count *
+                              opt_mig_specs[mindex].Mi[msa_index] /
+                              pop[j].snode->theta*4;
+              else
+                migrate[j] += pop[j].seq_count *
+                              opt_mig_specs[mindex].M /
+                              pop[j].snode->theta*4;
+
+            }
           }
           msum += migrate[j];
         }
@@ -1707,9 +1721,17 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         {
           mindexk = pop[k].snode->node_index;
           if (opt_mig_bitmatrix[mindexk][mindexj])
-            tmp += pop[j].seq_count * 
-                   opt_mig_specs[opt_migration_matrix[mindexk][mindexj]].M /
-                   pop[j].snode->theta*4;
+          {
+            long mindex = opt_migration_matrix[mindexk][mindexj];
+            if (opt_mig_specs[mindex].am)
+              tmp += pop[j].seq_count * 
+                     opt_mig_specs[mindex].Mi[msa_index] /
+                     pop[j].snode->theta*4;
+            else
+              tmp += pop[j].seq_count * 
+                     opt_mig_specs[mindex].M /
+                     pop[j].snode->theta*4;
+          }
           if (r < tmp)
             break;
         }
@@ -2259,6 +2281,7 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
                                         long thread_index)
 {
   unsigned int i, j, k, n;
+  long idx;
   double logpr = 0;
   double T2h = 0;
   dlist_item_t* event;
@@ -2333,7 +2356,15 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   }
   long epoch = 0;
   assert(!snode->parent || snode->mb_count);
-  double mrsum = snode->migbuffer[epoch].mrsum;
+
+  double mrsum = 0;
+  if (epoch < snode->mb_count)
+  {
+    assert(snode->migbuffer[epoch].active_count == 1 || snode->migbuffer[epoch].active_count == opt_locus_count);
+    idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+    mrsum = snode->migbuffer[epoch].mrsum[idx];
+    //printf("snode->mb_count: %ld epoch: %ld  active count: %ld idx: %ld\n", snode->mb_count, epoch, snode->migbuffer[epoch].active_count, idx);
+  }
 
   /* TODO: Probably split the following qsort case into two:
      in case snode->parent then sort j-2 elements, otherwise
@@ -2356,7 +2387,11 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
     else if (migbuffer[k].type == EVENT_MIG_TARGET)
       ++n;
     else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
-      mrsum = snode->migbuffer[++epoch].mrsum;
+    {
+      ++epoch;
+      idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+      mrsum = snode->migbuffer[epoch].mrsum[idx];
+    }
   }
 
   /* now distinguish between estimating theta and analytical computation */
@@ -2371,8 +2406,13 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
       if (mc[i][j])
       {
         assert(snode->theta > 0);
-        logpr += mc[i][j] * log(4*opt_mig_specs[opt_migration_matrix[i][j]].M /
-                                (heredity*snode->theta));
+        long mindex = opt_migration_matrix[i][j];
+        if (opt_mig_specs[mindex].am)
+          logpr += mc[i][j] * log(4*opt_mig_specs[mindex].Mi[msa_index] /
+                                  (heredity*snode->theta));
+        else
+          logpr += mc[i][j] * log(4*opt_mig_specs[mindex].M /
+                                  (heredity*snode->theta));
       }
 
     if (T2h)
@@ -6397,7 +6437,8 @@ static double simulate_coalescent_mig(stree_t * stree,
         }
       }
       /* rate */
-      mrate = snode->parent ? 4*snode->migbuffer[epoch].mrsum/snode->theta : 0;
+      long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+      mrate = snode->parent ? 4*snode->migbuffer[epoch].mrsum[idx]/snode->theta : 0;
 
       crate = 2*lineages / snode->theta;
       rate = mrate + crate;
@@ -6451,7 +6492,10 @@ static double simulate_coalescent_mig(stree_t * stree,
       {
         assert(opt_mig_bitmatrix[migsource[j]->node_index][snode->node_index]);
         long mindex = opt_migration_matrix[migsource[j]->node_index][snode->node_index];
-        sum += 4*opt_mig_specs[mindex].M / snode->theta;
+        if (opt_mig_specs[mindex].am)
+          sum += 4*opt_mig_specs[mindex].Mi[msa_index] / snode->theta;
+        else
+          sum += 4*opt_mig_specs[mindex].M / snode->theta;
         if (r < sum) break;
       }
 

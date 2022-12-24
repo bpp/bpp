@@ -136,7 +136,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
      size_section += opt_locus_count*sizeof(long);
     
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -353,6 +353,7 @@ static void dump_chk_section_1(FILE * fp,
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_migrates,1,fp);
+  DUMP(&opt_finetune_mig_Mi,1,fp);
   DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
@@ -401,7 +402,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 
@@ -672,12 +673,20 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   if (opt_migration)
   {
     for (i = 0; i < total_nodes; ++i)
+    {
       DUMP(stree->nodes[i]->migevent_count,opt_locus_count,fp);
+      DUMP(&(stree->nodes[i]->mb_mrsum_isarray),1,fp);
+    }
 
     for (i = 0; i < total_nodes; ++i)
     {
       DUMP(&(stree->nodes[i]->mb_count),1,fp);
       DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
+
+      for (j = 0; j < stree->inner_count; ++j)
+        DUMP(stree->nodes[i]->migbuffer[j].mrsum,
+             stree->nodes[i]->migbuffer[j].active_count,fp);
+
     }
   }
 }

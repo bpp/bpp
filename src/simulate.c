@@ -1112,6 +1112,8 @@ static void set_migration_rates(stree_t * stree)
 {
   long i,j;
 
+  const long thread_index_zero = 0;
+
   assert(!opt_msci);
 
   long nodes_count = stree->tip_count + stree->inner_count;
@@ -1135,23 +1137,24 @@ static void set_migration_rates(stree_t * stree)
   for (i = 0; i < opt_migration; ++i)
   {
     long s,t;
+    migspec_t * spec = opt_mig_specs+i;
 
     s = t = -1;
     for (j = 0; j < nodes_count; ++j)
     {
-      if (s == -1 && !strcmp(opt_mig_specs[i].source, stree->nodes[j]->label))
+      if (s == -1 && !strcmp(spec->source, stree->nodes[j]->label))
         s = j;
 
-      if (t == -1 && !strcmp(opt_mig_specs[i].target, stree->nodes[j]->label))
+      if (t == -1 && !strcmp(spec->target, stree->nodes[j]->label))
         t = j;
     }
 
     if (s == -1)
       fatal("Invalid population name %s specified as source in 'migration' tag",
-            opt_mig_specs[i].source);
+            spec->source);
     if (t == -1)
       fatal("Invalid population name %s specified as target in 'migration' tag",
-            opt_mig_specs[i].target);
+            spec->target);
     if (s == t)
       fatal("Cannot create migration from one species to itself (species: %s)",
             stree->nodes[s]->label);
@@ -1173,6 +1176,25 @@ static void set_migration_rates(stree_t * stree)
     
     opt_migration_matrix[s][t] = i;
     opt_mig_bitmatrix[s][t] = 1;
+
+    if (spec->am)
+    {
+      spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+
+      double a = spec->am;
+      double b = spec->am / spec->M;
+
+      for (j = 0; j < opt_locus_count; ++j)
+        spec->Mi[j] = legacy_rndgamma(thread_index_zero,a) / b;
+
+      if (spec->outfile)
+      {
+        FILE * fp = xopen(spec->outfile,"w");
+        for (j = 0; j < opt_locus_count; ++j)
+          fprintf(fp, "%f\n", spec->Mi[j]);
+        fclose(fp);
+      }
+    }
   }
 
   /* print migration matrix on screen */
@@ -2061,6 +2083,9 @@ void cmd_simulate()
       free(opt_mig_specs[i].target);
       if (opt_mig_specs[i].Mi)
         free(opt_mig_specs[i].Mi);
+      if (opt_mig_specs[i].outfile)
+        free(opt_mig_specs[i].outfile);
+
     }
     free(opt_mig_specs);
 

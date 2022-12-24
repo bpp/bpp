@@ -533,8 +533,16 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
       clone->migevent_count[i] = snode->migevent_count[i];
 
     clone->mb_count = snode->mb_count;
+    clone->mb_mrsum_isarray = snode->mb_mrsum_isarray;
     for (i = 0; i < clone_stree->inner_count; ++i)
-      clone->migbuffer[i] = snode->migbuffer[i];
+    {
+      clone->migbuffer[i].time = snode->migbuffer[i].time;
+      clone->migbuffer[i].type = snode->migbuffer[i].type;
+      clone->migbuffer[i].active_count= snode->migbuffer[i].active_count;
+      memcpy(clone->migbuffer[i].mrsum,
+             snode->migbuffer[i].mrsum,
+             snode->migbuffer[i].active_count * sizeof(double));
+    }
   }
 }
 
@@ -662,6 +670,10 @@ stree_t * stree_clone_init(stree_t * stree)
       x->migevent_count = (long *)xcalloc((size_t)opt_locus_count,sizeof(long));
       x->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
                                             sizeof(migbuffer_t));
+      size_t allocsize = stree->nodes[i]->mb_mrsum_isarray ? opt_locus_count : 1;
+      for (j = 0; j < stree->inner_count; ++j)
+        x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
+
       x->mb_count = 0;
 
       x->mig_source = (dlist_t **)xcalloc((size_t)opt_locus_count,
@@ -2451,6 +2463,10 @@ void stree_init(stree_t * stree,
 
       x->migbuffer  = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
                                              sizeof(migbuffer_t));
+      size_t allocsize = x->mb_mrsum_isarray ? opt_locus_count : 1;
+      for (j = 0; j < stree->inner_count; ++j)
+        x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
+        
       x->mig_source = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                           sizeof(dlist_t *));
       x->mig_target = (dlist_t **)xmalloc((size_t)opt_locus_count *
@@ -2680,7 +2696,8 @@ static int propose_theta_gibbs_im(stree_t * stree,
     }
     long epoch = 0;
     assert(!snode->parent || snode->mb_count);
-    double mrsum = snode->migbuffer[epoch].mrsum;
+    long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+    double mrsum = snode->migbuffer[epoch].mrsum[idx];
 
     /* TODO: Probably split the following qsort case into two:
        in case snode->parent then sort j-2 elements, otherwise
@@ -2703,7 +2720,11 @@ static int propose_theta_gibbs_im(stree_t * stree,
       else if (migbuffer[k].type == EVENT_MIG_TARGET)
         ++n;
       else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
-        mrsum = snode->migbuffer[++epoch].mrsum;
+      {
+        ++epoch;
+        idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+        mrsum = snode->migbuffer[epoch].mrsum[idx];
+      }
     }
   }
 
@@ -3276,7 +3297,7 @@ static int cb_cmp_pspectime(const void * a, const void * b)
 
 void stree_update_mig_subpops(stree_t * stree, long thread_index)
 {
-  long i,j,k;
+  long i,j,k,m;
   long total_nodes = stree->tip_count+stree->inner_count;
   snode_t ** epoch;
   double tstart,tend;
@@ -3318,7 +3339,8 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
       {
         xm[x->mb_count].time  = z->tau;
         xm[x->mb_count].type  = EVENT_TAU;
-        xm[x->mb_count].mrsum = 0;
+        xm[x->mb_count].mrsum[0] = 0;
+        xm[x->mb_count].active_count = 1;
         x->mb_count++;
         z->mark[thread_index] = 1;
       }
@@ -3346,7 +3368,36 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
             y->tau <= tstart && y->parent->tau >= tend)
         {
           long mindex = opt_migration_matrix[yi][xi];
-          xm[k].mrsum += opt_mig_specs[mindex].M;
+
+          /* if variables rates then we have one mrsum per locus */
+          if (opt_mig_specs[mindex].am)
+          {
+            /* if we reached the first migration with variables rates for the
+               current segment, duplicate mrsum[0] to the rest of the loci */
+            if (xm[k].active_count == 1)
+              for (m = 1; m < opt_locus_count; ++m)
+                xm[k].mrsum[m] = xm[k].mrsum[0];
+
+            xm[k].active_count = opt_locus_count;
+          }
+
+          if (xm[k].active_count == 1)
+          {
+            /* if we didn't encounter a migration with variable rates yet */
+            xm[k].mrsum[0] += opt_mig_specs[mindex].M;
+          }
+          else
+          {
+            /* we have already encountered a migration with variables rates, and
+               we must decide if the current migration has variable rates */
+            assert(xm[k].active_count == opt_locus_count);
+            if (opt_mig_specs[mindex].am)
+              for (m = 0; m < xm[k].active_count; ++m)
+                xm[k].mrsum[m] += opt_mig_specs[mindex].Mi[m];
+            else
+              for (m = 0; m < xm[k].active_count; ++m)
+                xm[k].mrsum[m] += opt_mig_specs[mindex].M;
+          }
         }
 
       }
@@ -5258,6 +5309,7 @@ static long propose_tau_mig(locus_t ** loci,
             spec = opt_mig_specs+opt_migration_matrix[xi][yi];
             if (spec->pseudo_a)
             {
+              assert(spec->am == 0);  /* TODO: 5 params in mig specification */
               lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
               lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
             }
@@ -5268,6 +5320,7 @@ static long propose_tau_mig(locus_t ** loci,
             spec = opt_mig_specs+opt_migration_matrix[yi][xi];
             if (spec->pseudo_a)
             {
+              assert(spec->am == 0);  /* TODO: 5 params in mig specification */
               lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
               lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
             }
@@ -5282,6 +5335,7 @@ static long propose_tau_mig(locus_t ** loci,
             spec = opt_mig_specs+opt_migration_matrix[xi][yi];
             if (spec->pseudo_a)
             {
+              assert(spec->am == 0);  /* TODO: 5 params in mig specification */
               lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, opt_pseudo_beta);
               lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
             }
@@ -5292,6 +5346,7 @@ static long propose_tau_mig(locus_t ** loci,
             spec = opt_mig_specs+opt_migration_matrix[yi][xi];
             if (spec->pseudo_a)
             {
+              assert(spec->am == 0);  /* TODO: 5 params in mig specification */
               lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
               lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
             }
@@ -9071,7 +9126,10 @@ double migrate_gibbs(stree_t * stree,
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
-  opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
+  if (opt_mig_specs[mindex].am)
+    assert(0);  /* TODO: Go through all loci and propose Mi? */
+  else
+    opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
 
   stree_update_mig_subpops(stree,thread_index);
 
@@ -9112,6 +9170,43 @@ static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
 }
 
+static long prop_migrates_mbar_slide(migspec_t * spec)
+{
+  long i;
+  long accepted = 0;
+  double c,lnc;
+  double mbar_old,mbar_new;
+  double lnacceptance;
+  
+  assert(opt_est_theta);
+
+  const static long thread_index_zero = 0;
+
+  mbar_old = spec->M;
+
+  lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
+  c = exp(lnc);
+
+  mbar_new = mbar_old * c;
+  lnacceptance = lnc + lnc*(spec->alpha-1) - (mbar_new-mbar_old)*spec->beta;
+
+  double a = spec->am;
+  double bnew = a / mbar_new;
+  double bold = a / mbar_old;
+
+  lnacceptance += opt_locus_count*a*log(bnew/bold);
+  for (i = 0; i < opt_locus_count; ++i)
+    lnacceptance -= (bnew - bold)*spec->Mi[i];
+
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+  {
+    /* accepted */
+    spec->M = mbar_new;
+    accepted = 1;
+  }
+
+  return accepted;
+}
 
 static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
@@ -9140,6 +9235,15 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       mindex = opt_migration_matrix[i][j];
       spec = opt_mig_specs+mindex;
+
+      /* in case of Mbar */
+      if (spec->am)
+      {
+        accepted += prop_migrates_mbar_slide(spec);
+        continue;
+      }
+      
+      /* in case of M */
 
       rate_old = spec->M;
 
@@ -9212,6 +9316,115 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
   return accepted / (double)total;
 }
 
+#if 1
+static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+{
+  long i,j,k;
+  long accepted = 0;
+  long total = 0;
+  double alpha,beta;
+  double c,lnc;
+  double rate_old,rate_new;
+  double logpr_diff;
+  double lnacceptance;
+  migspec_t * spec;
+  
+  assert(opt_est_theta);
+
+  const static long thread_index_zero = 0;
+
+  /* TODO: Change the nested for loops with one loop over opt_mig_spec */
+  for (i = 0; i < opt_migration; ++i)
+  {
+    spec = opt_mig_specs+i;
+
+    if (!spec->am || !migration_valid(stree, stree->nodes[spec->si], stree->nodes[spec->ti]))
+      continue;
+
+    total += opt_locus_count;;
+
+    for (j = 0; j < opt_locus_count; ++j)
+    {
+      rate_old = spec->Mi[j];
+      alpha = spec->am;
+      beta = alpha / spec->M;
+
+      #if 1
+      lnc = opt_finetune_mig_Mi * legacy_rnd_symmetrical(thread_index_zero);
+      c = exp(lnc);
+
+      rate_new = rate_old * c;
+
+      lnacceptance = lnc + lnc*(alpha-1) - (rate_new-rate_old)*beta;
+      #else
+      double lograte_old, lograte_new;
+      double minv = -99, maxv = 99;
+
+      lograte_old = log(rate_old);
+
+      lograte_new = lograte_old + opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
+      lograte_new = reflect(lograte_new, minv, maxv, thread_index_zero);
+
+      rate_new = exp(lograte_new);
+
+      lnacceptance = lograte_new - lograte_old;
+      lnacceptance += (alpha-1)*log(rate_new/rate_old)-beta*(rate_new-rate_old);
+      #endif
+
+      spec->Mi[j] = rate_new;
+
+      /* TODO: improve the following. This is very expensive, we need to modify it to
+         update only those node migbuffer elements affected by Mi[j] */
+      stree_update_mig_subpops(stree,thread_index_zero);
+
+      /* TODO: We probably change only one locus */
+      for (k = 0; k < opt_locus_count; ++k)
+      {
+        logpr_diff   = -stree->nodes[spec->ti]->logpr_contrib[k];
+        logpr_diff  += gtree_update_logprob_contrib_mig(stree->nodes[spec->ti],
+                                                        stree,
+                                                        gtree[k],
+                                                        locus[k]->heredity[0],
+                                                        k,
+                                                        thread_index_zero);
+                                
+        lnacceptance += logpr_diff;
+
+        /* update gene tree density */
+        gtree[k]->old_logpr = gtree[k]->logpr;
+        gtree[k]->logpr += logpr_diff;
+      }
+
+      if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+      {
+        /* accepted */
+        accepted++;
+      }
+      else
+      {
+        spec->Mi[j] = rate_old;
+
+        /* TODO: improve the following, see previous TODO */
+        stree_update_mig_subpops(stree,thread_index_zero);
+
+        /* TODO: Same here, change only one locus */
+        for (k = 0; k < opt_locus_count; ++k)
+        {
+          gtree[k]->logpr = gtree[k]->old_logpr;
+          stree->nodes[spec->ti]->logpr_contrib[k] = stree->nodes[spec->ti]->old_logpr_contrib[k];
+        }
+      }
+    }
+  }
+  if (!total) return 0;
+  return accepted / (double)total;
+}
+double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+{
+  return prop_mig_vrates_slide(stree,gtree,locus);
+}
+#endif
+
 double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
   if (opt_mrate_move == BPP_MRATE_GIBBS)
@@ -9220,6 +9433,7 @@ double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
   return prop_migrates_slide(stree,gtree,locus);
 }
 
+#if 0
 double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
 {
   long i,j;
@@ -9269,3 +9483,4 @@ double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
   if (!total) return 0;
   return accepted / (double)total;
 }
+#endif

@@ -570,6 +570,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'finetune' tag");
   if (!LOAD(&opt_finetune_migrates,1,fp))
     fatal("Cannot read migration rates finetune parameter");
+  if (!LOAD(&opt_finetune_mig_Mi,1,fp))
+    fatal("Cannot read migration rates Mi finetune parameter");
   if (!LOAD(&opt_finetune_phi,1,fp))
     fatal("Cannot read gene tree phi finetune parameter");
   if (!LOAD(&opt_finetune_gtage,1,fp))
@@ -681,7 +683,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ndspecies,1,fp))
     fatal("Cannot read number of delimited species");
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))
@@ -1350,6 +1352,9 @@ void load_chk_section_2(FILE * fp)
       if (!LOAD(x->migevent_count,opt_locus_count,fp))
         fatal("Cannot read migevent_count");
 
+      if (!LOAD(&(x->mb_mrsum_isarray), 1, fp))
+        fatal("Cannot read mb_mrsum_isarray");
+
     }
     for (i = 0; i < total_nodes; ++i)
     {
@@ -1370,6 +1375,16 @@ void load_chk_section_2(FILE * fp)
 
       if (!LOAD(x->migbuffer, x->mb_count, fp))
         fatal("Cannot load node migbuffers");
+
+
+      size_t allocsize = x->mb_mrsum_isarray ? opt_locus_count : 1;
+      for (j = 0; j < stree->inner_count; ++j)
+      {
+        x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
+
+        if (!LOAD(x->migbuffer[j].mrsum, x->migbuffer[j].active_count, fp))
+          fatal("Cannot load mrsum for node with index %ld", i);
+      }
     }
   }
 }
