@@ -3339,8 +3339,15 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
       {
         snode_t * y = epoch[j];
 
-        if (y->tau <= tstart && y->parent->tau >= tend)
-          xm[k].mrsum += opt_migration_matrix[y->node_index][x->node_index];
+        unsigned int xi = x->node_index;
+        unsigned int yi = y->node_index;
+
+        if (opt_mig_bitmatrix[yi][xi] &&
+            y->tau <= tstart && y->parent->tau >= tend)
+        {
+          long mindex = opt_migration_matrix[yi][xi];
+          xm[k].mrsum += opt_mig_specs[mindex].M;
+        }
 
       }
       tstart = tend;
@@ -4968,7 +4975,7 @@ static long propose_tau_mig(locus_t ** loci,
                             unsigned int candidate_count,
                             long thread_index)
 {
-  unsigned int i, j;
+  unsigned int i, j, k;
 
   int theta_method = 2;   /* how we change theta */
   long accepted = 0;
@@ -5158,6 +5165,142 @@ static long propose_tau_mig(locus_t ** loci,
 
   if (opt_exp_imrb)
     free(affected);
+
+  #if 1
+  /* Pseudo prior implementation */
+
+  /* if no pseudoprior given then pseudoprior = prior and terms cancel out */
+  if (opt_pseudop_exist)
+  {
+    snode_t * nodes[3];
+    double atau[3], old_atau[3];
+    double ptau[3], old_ptau[3];
+    double amodel;
+    double bmodel;
+    migspec_t * spec;
+      
+    /* collect the tau boundaries for each of the two (if snode is root) or
+       three  "migration bands" affected by the tau change. See diagram below */
+    k = 0;
+    if (snode->parent)
+    {
+      nodes[k] = snode;
+      atau[k] = newage;             old_atau[k]   = oldage;
+      ptau[k] = snode->parent->tau; old_ptau[k++] = snode->parent->tau;
+    }
+
+    nodes[k] = snode->left;
+    atau[k] = snode->left->tau;     old_atau[k]   = snode->left->tau;
+    ptau[k] = newage;               old_ptau[k++] = oldage;
+
+    nodes[k] = snode->right;
+    atau[k] = snode->right->tau;    old_atau[k]   = snode->right->tau;
+    ptau[k] = newage;               old_ptau[k++] = oldage;
+
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      if (!stree->nodes[i]->parent) continue;
+
+      unsigned int yi = stree->nodes[i]->node_index;
+
+      for (j = 0; j < k; ++j)
+      {
+
+        unsigned int xi = nodes[j]->node_index;
+
+        if (!opt_mig_bitmatrix[xi][yi] && !opt_mig_bitmatrix[yi][xi]) continue;
+
+        /* check whether a flip (migration appearing or disappearing) occurs.
+
+           The following figures show all possible tau configurations between two
+           edges p-a and q-b and whether migration is possible for each case
+
+           (a)       (b)         (c)           (d)           (e)           (f)
+                                                  
+           q o    p o              q o    p o      
+             |      |                |      |       
+           b o    a o       p o      |      |    q o    p o                  q o
+                              | <--> |      | <--> |      |    q o    p o      |
+        p o          q o      |    b o    a o      |      | <--> |      | <--> |
+          |            |      |                    |      |    b o    a o      |
+        a o          b o    a o                  b o    a o                  b o
+
+           
+          No migration in a and b (model H0) and migration in c,d,e,f (model H1)
+
+          Now determine the model we were before the tau change (H0 or H1), and
+          whether we flipped to the other model after the change.
+        */
+
+        double a = old_atau[j];
+        double p = old_ptau[j];
+        double b = stree->nodes[i]->tau;
+        double q = stree->nodes[i]->parent->tau;
+
+        /* get the model *before* tau change (0: no migration, 1: migration) */
+        amodel = !(p < b || a > q);  /* check cases (a) and (b) */
+
+        a = atau[j];
+        p = ptau[j];
+
+        /* now get the model *after* the change to tau */
+        bmodel = !(p < b || a > q);
+
+        /* flip = -1 if no flip, 1: migration appearing or 0: disappearing */
+        long flip = (amodel == bmodel) ? -1 : bmodel;
+
+        if (flip == 0)
+        {
+          /* M disappearing */
+
+          if (opt_mig_bitmatrix[xi][yi])
+          {
+            spec = opt_mig_specs+opt_migration_matrix[xi][yi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
+          }
+
+          if (opt_mig_bitmatrix[yi][xi])
+          {
+            spec = opt_mig_specs+opt_migration_matrix[yi][xi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance += logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance -= logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
+          }
+        }
+        else if (flip == 1)
+        {
+          /* M appearing */
+
+          if (opt_mig_bitmatrix[xi][yi])
+          {
+            spec = opt_mig_specs+opt_migration_matrix[xi][yi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, opt_pseudo_beta);
+              lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
+          }
+
+          if (opt_mig_bitmatrix[yi][xi])
+          {
+            spec = opt_mig_specs+opt_migration_matrix[yi][xi];
+            if (spec->pseudo_a)
+            {
+              lnacceptance -= logPDFGamma(spec->M, spec->pseudo_a, spec->pseudo_b);
+              lnacceptance += logPDFGamma(spec->M, spec->alpha, spec->beta);
+            }
+          }
+        }
+      }
+    }
+  }
+  #endif
 
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
@@ -8921,11 +9064,14 @@ double migrate_gibbs(stree_t * stree,
   bsj /= stree->nodes[ti]->theta;
 
   /* we have the new distribution */
+  long mindex = opt_migration_matrix[si][ti];
+  assert(mindex >= 0);
+  migspec_t * spec = opt_mig_specs+mindex;
 
-  a1 = opt_mig_alpha + asj;
-  b1 = opt_mig_beta  + bsj;
+  a1 = spec->alpha + asj;
+  b1 = spec->beta  + bsj;
 
-  opt_migration_matrix[si][ti] = legacy_rndgamma(thread_index,a1) / b1;
+  opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
 
   stree_update_mig_subpops(stree,thread_index);
 
@@ -8972,15 +9118,18 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
   long i,j,k;
   long accepted = 0;
   long total = 0;
+  long mindex;
   double c,lnc;
   double rate_old,rate_new;
   double logpr_diff;
   double lnacceptance;
+  migspec_t * spec;
   
   assert(opt_est_theta);
 
   const static long thread_index_zero = 0;
 
+  /* TODO: Change the nested for loops with one loop over opt_mig_spec */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
@@ -8989,7 +9138,10 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       ++total;
 
-      rate_old = opt_migration_matrix[i][j];
+      mindex = opt_migration_matrix[i][j];
+      spec = opt_mig_specs+mindex;
+
+      rate_old = spec->M;
 
       #if 1
       lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
@@ -8997,7 +9149,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       rate_new = rate_old * c;
 
-      lnacceptance = lnc + lnc*(opt_mig_alpha-1) - (rate_new-rate_old)*opt_mig_beta;
+      lnacceptance = lnc + lnc*(spec->alpha-1) - (rate_new-rate_old)*spec->beta;
       #else
       double lograte_old, lograte_new;
       double minv = -99, maxv = 99;
@@ -9010,11 +9162,11 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       rate_new = exp(lograte_new);
 
       lnacceptance = lograte_new - lograte_old;
-      lnacceptance += (opt_mig_alpha-1)*log(rate_new/rate_old) -
-                      (opt_mig_beta)*(rate_new - rate_old);
+      lnacceptance += (spec->alpha-1)*log(rate_new/rate_old) -
+                      spec->beta*(rate_new - rate_old);
       #endif
 
-      opt_migration_matrix[i][j]  = rate_new;
+      spec->M = rate_new;
 
       /* TODO: improve the following */
       stree_update_mig_subpops(stree,thread_index_zero);
@@ -9043,7 +9195,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       }
       else
       {
-        opt_migration_matrix[i][j] = rate_old;
+        spec->M = rate_old;
 
         /* TODO: improve the following */
         stree_update_mig_subpops(stree,thread_index_zero);
@@ -9066,4 +9218,54 @@ double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
     return prop_migrates_gibbs(stree,gtree,locus);
 
   return prop_migrates_slide(stree,gtree,locus);
+}
+
+double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
+{
+  long i,j;
+  long accepted = 0;
+  long total = 0;
+  double c,lnc;
+  double mbar_old,mbar_new;
+  double lnacceptance;
+  migspec_t * spec;
+  
+  assert(opt_est_theta);
+
+  const static long thread_index_zero = 0;
+
+  for (i = 0; i < opt_migration; ++i)
+  {
+    spec = opt_mig_specs+i;
+
+    if (!migration_valid(stree, stree->nodes[spec->si], stree->nodes[spec->ti]))
+      continue;
+
+    ++total;
+
+    mbar_old = spec->M;
+
+    lnc = opt_finetune_migrates * legacy_rnd_symmetrical(thread_index_zero);
+    c = exp(lnc);
+
+    mbar_new = mbar_old * c;
+    lnacceptance = lnc + lnc*(spec->alpha-1) - (mbar_new-mbar_old)*spec->beta;
+
+    double a = spec->am;
+    double bnew = a / mbar_new;
+    double bold = a / mbar_old;
+
+    lnacceptance += opt_locus_count*a*log(bnew/bold);
+    for (j = 0; j < opt_locus_count; ++j)
+      lnacceptance -= (bnew - bold)*spec->Mi[j];
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+    {
+      /* accepted */
+      spec->M = mbar_new;
+      accepted++;
+    }
+  }
+  if (!total) return 0;
+  return accepted / (double)total;
 }

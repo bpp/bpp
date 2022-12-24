@@ -1147,6 +1147,22 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    /* print migration rates */
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%sMi_%s->%s",
+                tab_required ? "\t" : "",
+                opt_mig_specs[j].source, opt_mig_specs[j].target);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars header */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1289,6 +1305,20 @@ static void print_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%s%.6f",
+                tab_required ? "\t" : "", opt_mig_specs[j].Mi[i]);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1544,7 +1574,7 @@ static void mcmc_logsample(FILE * fp,
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         if (opt_mig_bitmatrix[i][j])
-          fprintf(fp, "\t%.6f", opt_migration_matrix[i][j]);
+          fprintf(fp, "\t%.6f", opt_mig_specs[opt_migration_matrix[i][j]].M);
   }
 
   /* 5. print log-likelihood if usedata=1 */
@@ -1734,9 +1764,12 @@ static void create_mig_bitmatrix(stree_t * stree)
   opt_mig_bitmatrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
     opt_mig_bitmatrix[i] = (long *)xcalloc((size_t)total_nodes,sizeof(long));
-  opt_migration_matrix = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+  opt_migration_matrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
-    opt_migration_matrix[i] = (double *)xcalloc((size_t)total_nodes,sizeof(double));
+  {
+    opt_migration_matrix[i] = (long *)xcalloc((size_t)total_nodes,sizeof(long));
+    memset(opt_migration_matrix[i],-1,total_nodes*sizeof(long));
+  }
 
   /* go through source-target pairs */
   for (i = 0; i < opt_migration; ++i)
@@ -1744,32 +1777,51 @@ static void create_mig_bitmatrix(stree_t * stree)
     s = t = -1;
     for (j = 0; j < total_nodes; ++j)
     {
-      if (s == -1 && !strcmp(stree->nodes[j]->label,opt_mig_source[i]))
+      if (s == -1 && !strcmp(stree->nodes[j]->label,opt_mig_specs[i].source))
         s = j;
-      if (t == -1 && !strcmp(stree->nodes[j]->label,opt_mig_target[i]))
+      if (t == -1 && !strcmp(stree->nodes[j]->label,opt_mig_specs[i].target))
         t = j;
     }
     if (s == -1 || t == -1)
       fatal("Cannot create migration band for pair %s %s",
-            opt_mig_source[i], opt_mig_target[i]);
+            opt_mig_specs[i].source, opt_mig_specs[i].target);
     if (s == t)
       fatal("Cannot create migration from one species to itself (species: %s)",
             stree->nodes[s]->label);
 
     opt_mig_bitmatrix[s][t] = 1;
+    opt_migration_matrix[s][t] = i;
 
-    opt_migration_matrix[s][t] = opt_mig_alpha / opt_mig_beta;
+    migspec_t * spec = opt_mig_specs+i;
+    spec->Mi = NULL;
+    spec->si = s;
+    spec->ti = t;
+    switch (spec->params)
+    {
+      case 0:
+      case 1:
+        spec->alpha    = opt_mig_alpha;
+        spec->beta     = opt_mig_beta;
+        spec->pseudo_a = opt_pseudo_alpha;
+        spec->pseudo_b = opt_pseudo_beta;
+        break;
+      case 2:
+      case 3:
+        spec->pseudo_a = opt_pseudo_alpha;
+        spec->pseudo_b = opt_pseudo_beta;
+        break;
+      case 4:
+      case 5:
+        break;
+    }
 
+    /* if rate variation across loci then allocate array */
+    if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+      spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+
+    spec->M = spec->alpha / spec->beta;
   }
 
-  for (i = 0; i < opt_migration; ++i)
-  {
-    free(opt_mig_target[i]);
-    free(opt_mig_source[i]);
-  }
-  free(opt_mig_target);
-  free(opt_mig_source);
-  opt_mig_target = opt_mig_source = NULL;
 }
 
 static FILE * resume(stree_t ** ptr_stree,
@@ -3946,7 +3998,8 @@ void cmd_run()
     {
       for (j = 0; j < mean_mrate_count; ++j)
       {
-        double mv = opt_migration_matrix[mean_mrate_row[j]][mean_mrate_col[j]];
+        long mindex = opt_migration_matrix[mean_mrate_row[j]][mean_mrate_col[j]];
+        double mv = opt_mig_specs[mindex].M;
         if (migration_valid(stree,
                             stree->nodes[mean_mrate_row[j]],
                             stree->nodes[mean_mrate_col[j]]))
@@ -4412,6 +4465,16 @@ void cmd_run()
     }
     free(opt_mig_bitmatrix);
     free(opt_migration_matrix);
+
+    /* free migration specifications */
+    for (i = 0; i < opt_migration; ++i)
+    {
+      free(opt_mig_specs[i].source);
+      free(opt_mig_specs[i].target);
+      if (opt_mig_specs[i].Mi)
+        free(opt_mig_specs[i].Mi);
+    }
+    free(opt_mig_specs);
   }
 
 

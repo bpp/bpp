@@ -613,6 +613,10 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_snl_lambda_shrink,1,fp))
     fatal("Cannot read lambda for SNL shrink");
 
+  if (!LOAD(&opt_pseudop_exist,1,fp))
+    fatal("Cannot read information on pseudo priors");
+  if (!LOAD(&opt_mig_vrates_exist,1,fp))
+    fatal("Cannot read information on variable migration rates");
 
   #if 0
   printf(" Current finetune: %ld: %f %f %f %f %f",
@@ -808,7 +812,7 @@ static void load_chk_section_1(FILE * fp,
   }
 
   *mean_phi = NULL;
-  if (mean_phi_count)
+  if (*mean_phi_count)
   {
     *mean_phi = (double *)xmalloc((size_t)(*mean_phi_count)*sizeof(double));
     
@@ -846,12 +850,10 @@ static void load_chk_section_1(FILE * fp,
     assert(stree_hybrid_count == 0);
     unsigned int total_nodes = stree_tip_count+stree_inner_count;
 
-    opt_migration_matrix = (double **)xmalloc((size_t)total_nodes *
-                                              sizeof(double *));
+    opt_migration_matrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
     for (i = 0; i < total_nodes; ++i)
     {
-     opt_migration_matrix[i] = (double *)xmalloc((size_t)total_nodes *
-                                                 sizeof(double));
+     opt_migration_matrix[i] = (long*)xmalloc((size_t)total_nodes*sizeof(long));
      if (!LOAD(opt_migration_matrix[i],total_nodes,fp))
        fatal("Cannot load migration matrix");
     }
@@ -862,6 +864,40 @@ static void load_chk_section_1(FILE * fp,
       opt_mig_bitmatrix[i] = (long *)xmalloc((size_t)total_nodes*sizeof(long));
       if (!LOAD(opt_mig_bitmatrix[i],total_nodes,fp))
         fatal("Cannot load migration bitmatrix");
+    }
+
+    opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
+    for (i = 0; i < opt_migration; ++i)
+    {
+      migspec_t * spec = opt_mig_specs+i;
+      if (!load_string(fp,&(spec->source)))
+        fatal("Cannot read list of migrations (migration %ld - source)", i+1);
+      if (!load_string(fp,&(spec->target)))
+        fatal("Cannot read list of migrations (migration %ld - target)", i+1);
+      if (!LOAD(&(spec->si), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - si)", i+1);
+      if (!LOAD(&(spec->ti), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - ti)", i+1);
+      if (!LOAD(&(spec->am), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - am)", i+1);
+      if (!LOAD(&(spec->alpha), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - alpha)", i+1);
+      if (!LOAD(&(spec->beta), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - beta)", i+1);
+      if (!LOAD(&(spec->pseudo_a), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - pseudo_a)", i+1);
+      if (!LOAD(&(spec->pseudo_b), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - pseudo_b)", i+1);
+      if (!LOAD(&(spec->params), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - params)", i+1);
+      if (!LOAD(&(spec->M), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - M)", i+1);
+      if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+      {
+        spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+        if (!LOAD(spec->Mi, opt_locus_count, fp))
+          fatal("Cannot read list of migrations (migration %ld - Mi)", i+1);
+      }
     }
   }
 
@@ -1335,9 +1371,6 @@ void load_chk_section_2(FILE * fp)
       if (!LOAD(x->migbuffer, x->mb_count, fp))
         fatal("Cannot load node migbuffers");
     }
-
-    stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
-                                              sizeof(miginfo_t *));
   }
 }
 
@@ -1561,8 +1594,10 @@ static void load_gene_tree(FILE * fp, long index)
     }
 
     gt->migpops = (snode_t **)xcalloc((size_t)total_snodes, sizeof(snode_t *));
-    gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
-                                        sizeof(snode_t *));
+    gt->rb_linked = NULL;
+    if (opt_exp_imrb)
+      gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
+                                          sizeof(snode_t *));
     gt->rb_lcount = 0;
   }
 }

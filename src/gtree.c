@@ -1283,7 +1283,8 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
         long s = migsource[j]->node_index;
         long t = snode->node_index;
 
-        sum += 4 * opt_migration_matrix[s][t] / snode->theta;
+        assert(opt_mig_bitmatrix[s][t]);
+        sum += 4 * opt_mig_specs[opt_migration_matrix[s][t]].M / snode->theta;
         if (r < sum) break;
       }
 
@@ -1569,9 +1570,10 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
           {
             long mindexk = pop[k].snode->node_index;
             long mindexj = pop[j].snode->node_index;
-            migrate[j] += pop[j].seq_count *
-                          opt_migration_matrix[mindexk][mindexj] /
-                          pop[j].snode->theta*4;
+            if (opt_mig_bitmatrix[mindexk][mindexj])
+              migrate[j] += pop[j].seq_count *
+                            opt_mig_specs[opt_migration_matrix[mindexk][mindexj]].M /
+                            pop[j].snode->theta*4;
           }
           msum += migrate[j];
         }
@@ -1704,9 +1706,10 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         for (k = 0; k < pop_count-1; ++k)
         {
           mindexk = pop[k].snode->node_index;
-          tmp += pop[j].seq_count * 
-                 opt_migration_matrix[mindexk][mindexj] /
-                 pop[j].snode->theta*4;
+          if (opt_mig_bitmatrix[mindexk][mindexj])
+            tmp += pop[j].seq_count * 
+                   opt_mig_specs[opt_migration_matrix[mindexk][mindexj]].M /
+                   pop[j].snode->theta*4;
           if (r < tmp)
             break;
         }
@@ -2368,7 +2371,8 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
       if (mc[i][j])
       {
         assert(snode->theta > 0);
-        logpr += mc[i][j] * log(4*opt_migration_matrix[i][j]/(heredity*snode->theta));
+        logpr += mc[i][j] * log(4*opt_mig_specs[opt_migration_matrix[i][j]].M /
+                                (heredity*snode->theta));
       }
 
     if (T2h)
@@ -6445,7 +6449,9 @@ static double simulate_coalescent_mig(stree_t * stree,
       double sum = 0;
       for (j = 0; j < mpop_count - 1; ++j)
       {
-        sum += 4*opt_migration_matrix[migsource[j]->node_index][snode->node_index] / snode->theta;
+        assert(opt_mig_bitmatrix[migsource[j]->node_index][snode->node_index]);
+        long mindex = opt_migration_matrix[migsource[j]->node_index][snode->node_index];
+        sum += 4*opt_mig_specs[mindex].M / snode->theta;
         if (r < sum) break;
       }
 

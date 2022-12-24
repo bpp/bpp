@@ -1631,6 +1631,7 @@ static long parse_migprior(const char * line)
 
   p += count;
 
+  opt_pseudop_exist = 1;
   if (is_emptyline(p)) ret = 1;
 
   
@@ -2107,8 +2108,11 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
   long i;
   long ret = 1;
   long count;
+  double a,b,c,d,e;
   char * s = xstrdup(firstline);
   char * p = s;
+
+  long params;
 
   count = get_long(p, &opt_migration);
   if (!count) goto l_unwind;
@@ -2121,8 +2125,7 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
 
   if (!is_emptyline(p)) goto l_unwind;
 
-  opt_mig_source = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
-  opt_mig_target = (char **)xcalloc((size_t)opt_migration, sizeof(char *));
+  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
 
   /* start reading potential migration between populations */
   for (i = 0; i < opt_migration; ++i)
@@ -2133,15 +2136,102 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
     char * ss = xstrdup(line);
     p = ss;
 
-    count = get_delstring(p, " \t\r\n*#,-", opt_mig_source+i);
+    count = get_delstring(p, " \t\r\n*#,-", &(opt_mig_specs[i].source));
     if (!count) goto l_unwind;
     p += count;
 
-    count = get_delstring(p, " \t\r\n*#,-", opt_mig_target+i);
+    count = get_delstring(p, " \t\r\n*#,-", &(opt_mig_specs[i].target));
     if (!count) goto l_unwind;
     p += count;
+
+    params = 0;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    /* get a */
+    count = get_double(p, &a);
+    if (!count) goto l_unwind;
+    p += count;
+    params = 1;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    /* get b */
+    count = get_double(p, &b);
+    if (!count) goto l_unwind;
+    p += count;
+    params = 2;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    /* get c */
+    count = get_double(p, &c);
+    if (!count) goto l_unwind;
+    p += count;
+    params = 3;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    /* get d */
+    count = get_double(p, &d);
+    if (!count) goto l_unwind;
+    p += count;
+    params = 4;
+
+    if (is_emptyline(p)) goto l_deallocline;
+
+    /* get e */
+    count = get_double(p, &e);
+    if (!count) goto l_unwind;
+    p += count;
+    params = 5;
+
+    if (!is_emptyline(p)) goto l_unwind;
+    
+l_deallocline:
     
     free(ss);
+
+    opt_mig_specs[i].params       = params;
+    switch (params)
+    {
+      case 0:
+        break;
+      case 1:
+        opt_mig_specs[i].am       = a;
+        opt_mig_vrates_exist      = 1;
+        break;
+      case 2:
+        opt_mig_specs[i].alpha    = a;
+        opt_mig_specs[i].beta     = b;
+        break;
+      case 3:
+        opt_mig_specs[i].alpha    = a;
+        opt_mig_specs[i].beta     = b;
+        opt_mig_specs[i].am       = c;
+        opt_mig_vrates_exist      = 1;
+        break;
+      case 4:
+        opt_mig_specs[i].alpha    = a;
+        opt_mig_specs[i].beta     = b;
+        opt_mig_specs[i].pseudo_a = c;
+        opt_mig_specs[i].pseudo_b = d;
+        opt_pseudop_exist         = 1;
+        break;
+      case 5:
+        opt_mig_specs[i].alpha    = a;
+        opt_mig_specs[i].beta     = b;
+        opt_mig_specs[i].am       = c;
+        opt_mig_specs[i].pseudo_a = d;
+        opt_mig_specs[i].pseudo_b = e;
+        opt_pseudop_exist         = 1;
+        opt_mig_vrates_exist      = 1;
+        break;
+      default:
+        fatal("Internal error when processing 'migration' tag (line %ld)",
+              line_count+1);
+    }
+
   }
   ret = 1;
 
