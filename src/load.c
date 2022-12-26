@@ -245,6 +245,7 @@ static void load_chk_section_1(FILE * fp,
                                long * out_offset,
                                long ** gtree_offset,
                                long ** rates_offset,
+                               long ** migcount_offset,
                                long * dparam_count,
                                double ** posterior,
                                double ** pspecies,
@@ -273,8 +274,9 @@ static void load_chk_section_1(FILE * fp,
   long total_nodes;
   char ** labels;
 
-  *gtree_offset = NULL;
-  *rates_offset = NULL;
+  *gtree_offset    = NULL;
+  *rates_offset    = NULL;
+  *migcount_offset = NULL;
 
   if (!LOAD(&opt_seed,1,fp))
     fatal("Cannot read seed");
@@ -698,6 +700,9 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_bfbeta,1,fp))
     fatal("Cannot read bfbeta");
 
+  if (!LOAD(&opt_debug_migration, 1, fp))
+    fatal("Cannot read debug migration flag");
+
   if (opt_print_genetrees)
   {
     *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
@@ -710,6 +715,14 @@ static void load_chk_section_1(FILE * fp,
     *rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
     if (!LOAD(*rates_offset,opt_locus_count,fp))
       fatal("Cannot read rates files offsets");
+  }
+
+  printf("Opt_debug_migration: %ld\n", opt_debug_migration);
+  if (opt_debug_migration)
+  {
+    *migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+    if (!LOAD(*migcount_offset,opt_locus_count,fp))
+      fatal("Cannot read migcount files offsets");
   }
 
   if (!LOAD(dparam_count,1,fp))
@@ -1827,6 +1840,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * out_offset,
                     long ** gtree_offset,
                     long ** rates_offset,
+                    long ** migcount_offset,
                     long * dparam_count,
                     double ** posterior,
                     double ** pspecies,
@@ -1881,6 +1895,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      out_offset,
                      gtree_offset,
                      rates_offset,
+                     migcount_offset,
                      dparam_count,
                      posterior,
                      pspecies,

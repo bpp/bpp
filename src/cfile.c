@@ -3002,6 +3002,13 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
+      if (!strncasecmp(token, "debug_migration", 15))
+      {
+        if (!get_long(value,&opt_debug_migration) || opt_debug_migration < 0)
+          fatal("Option 'debug_migration' expects a non-negative integer "
+                "(line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 17)
     {

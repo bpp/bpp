@@ -174,6 +174,7 @@ static void dump_chk_section_1(FILE * fp,
                                long out_offset,
                                long * gtree_offset,
                                long * rates_offset,
+                               long * migcount_offset,
                                long dparam_count,
                                double * posterior,
                                double * pspecies,
@@ -415,12 +416,19 @@ static void dump_chk_section_1(FILE * fp,
   /* write bfbeta */
   DUMP(&opt_bfbeta,1,fp);
 
+  /* write opt_debug_migration */
+  DUMP(&opt_debug_migration,1,fp);
+
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
 
   if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
+
+  assert(opt_migration);
+  if (opt_debug_migration)
+    DUMP(migcount_offset,opt_locus_count,fp);
 
   DUMP(&dparam_count,1,fp);
 
@@ -917,6 +925,7 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long * rates_offset,
+                    long * migcount_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -972,6 +981,7 @@ int checkpoint_dump(stree_t * stree,
                      out_offset,
                      gtree_offset,
                      rates_offset,
+                     migcount_offset,
                      dparam_count,
                      posterior,
                      pspecies,

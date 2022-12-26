@@ -1633,6 +1633,50 @@ static void mcmc_logsample(FILE * fp,
     fprintf(fp, "\n");
 }
 
+static void print_header_migcount(FILE ** fp, stree_t * stree)
+{
+  int tab_required = 0;
+  long i,j;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    tab_required = 0;
+    for (j = 0; j < opt_migration; ++j)
+    {
+      migspec_t * spec = opt_mig_specs+j;
+      snode_t * s = stree->nodes[spec->si];
+      snode_t * t = stree->nodes[spec->ti];
+
+      fprintf(fp[i], "%sM_%s->%s", tab_required ? "\t" : "", s->label, t->label);
+      tab_required = 1;
+    }
+    if (tab_required)
+      fprintf(fp[i], "\n");
+  }
+}
+
+static void print_migcount(FILE ** fp, gtree_t ** gtree)
+{
+  int tab_required = 0;
+  long i,j;
+  assert(opt_migration);
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    tab_required = 0;
+    for (j = 0; j < opt_migration; ++j)
+    {
+      migspec_t * spec = opt_mig_specs+j;
+      long mc = gtree[i]->migcount[spec->si][spec->ti];
+
+      fprintf(fp[i], "%s%ld", tab_required ? "\t" : "", mc);
+      tab_required = 1;
+    }
+    if (tab_required)
+      fprintf(fp[i], "\n");
+  }
+}
+
 static void print_gtree(FILE ** fp, stree_t * stree, gtree_t ** gtree)
 {
   long i,j;
@@ -1915,6 +1959,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
                      FILE *** ptr_fp_locus,
+                     FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out)
 {
   long i,j;
@@ -1924,7 +1969,9 @@ static FILE * resume(stree_t ** ptr_stree,
   long out_offset;
   long * gtree_offset;
   long * rates_offset;
+  long * migcount_offset;
   char ** gtree_files = NULL;
+  char ** migcount_files = NULL;
 
   if (sizeof(BYTE) != 1)
     fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
@@ -1941,6 +1988,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   &out_offset,
                   &gtree_offset,
                   &rates_offset,
+                  &migcount_offset,
                   ptr_dparam_count,
                   ptr_posterior,
                   ptr_pspecies,
@@ -1970,6 +2018,22 @@ static FILE * resume(stree_t ** ptr_stree,
 
   /* truncate output file to specific offset */
   checkpoint_truncate(opt_outfile, out_offset);
+
+  /* truncate migcount files if available */
+  if (opt_migration && opt_debug_migration)
+  {
+    assert(migcount_offset);
+    migcount_files = (char **)xmalloc((size_t)opt_locus_count*sizeof(char *));
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, "%s.migcount.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
+      migcount_files[i] = s;
+      checkpoint_truncate(s,migcount_offset[i]);
+    }
+    free(migcount_offset);
+  }
 
   /* truncate gene tree files if available */
   if (opt_print_genetrees)
@@ -2066,6 +2130,21 @@ static FILE * resume(stree_t ** ptr_stree,
   if (!(fp_out = fopen(opt_outfile, "a")))
     fatal("Cannot open file %s for appending...", opt_outfile);
   *ptr_fp_out = fp_out;
+
+  /* open potential truncated migcount files for appending */
+  *ptr_fp_migcount = NULL;
+  if (opt_migration && opt_debug_migration)
+  {
+    FILE ** fp_migcount = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (!(fp_migcount[i] = fopen(migcount_files[i], "a")))
+        fatal("Cannot open file %s for appending...", migcount_files[i]);
+      free(migcount_files[i]);
+    }
+    free(migcount_files);
+    *ptr_fp_migcount = fp_migcount;
+  }
 
   /* open potential truncated gene trees files for appending */
   *ptr_fp_gtree = NULL;
@@ -2168,6 +2247,7 @@ static FILE * init(stree_t ** ptr_stree,
                    gtree_t *** ptr_gclones,
                    FILE *** ptr_fp_gtree,
                    FILE *** ptr_fp_locus,
+                   FILE *** ptr_fp_migcount,
                    FILE ** ptr_fp_out)
 {
   long i,j;
@@ -2184,6 +2264,7 @@ static FILE * init(stree_t ** ptr_stree,
   FILE * fp_out;
   FILE ** fp_gtree;
   FILE ** fp_locus = NULL;
+  FILE ** fp_migcount = NULL;
   msa_t ** msa_list;
   gtree_t ** gtree;
   locus_t ** locus;
@@ -2564,6 +2645,23 @@ static FILE * init(stree_t ** ptr_stree,
     }
     threads_pin_master();
   }
+
+  *ptr_fp_migcount = NULL;
+  if (opt_migration && opt_debug_migration)
+  {
+    fp_migcount = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, "%s.migcount.L%d", opt_outfile, msa_list[i]->original_index+1);
+      fp_migcount[i] = xopen(s,"w");
+      free(s);
+    }
+  }
+  else
+    fp_migcount = NULL;
+
+  *ptr_fp_migcount = fp_migcount;
 
   /* gene tree and locus output files */
   *ptr_fp_gtree = NULL;
@@ -3086,6 +3184,9 @@ static FILE * init(stree_t ** ptr_stree,
         mcmc_printheader(fp_mcmc,stree);
     }
 
+    if (opt_migration && opt_debug_migration)
+      print_header_migcount(fp_migcount, stree);
+
     if (opt_print_locusfile)
       mcmc_printheader_rates(fp_locus,stree,locus);
   }
@@ -3290,10 +3391,12 @@ void cmd_run()
   stree_t * stree;
   FILE ** fp_gtree = NULL;
   FILE ** fp_locus = NULL;
+  FILE ** fp_migcount = NULL;
   gtree_t ** gtree;
   locus_t ** locus;
   long * gtree_offset = NULL;   /* for checkpointing when printing gene trees */
   long * rates_offset = NULL;
+  long * migcount_offset = NULL;
   double ratio;
   long ndspecies;
 
@@ -3384,6 +3487,7 @@ void cmd_run()
                      &gclones,
                      &fp_gtree,
                      &fp_locus,
+                     &fp_migcount,
                      &fp_out);
   else
   {
@@ -3406,6 +3510,7 @@ void cmd_run()
                    &gclones,
                    &fp_gtree,
                    &fp_locus,
+                   &fp_migcount,
                    &fp_out);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
@@ -3449,6 +3554,8 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+  if (opt_checkpoint && opt_migration && opt_debug_migration)
+    migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_checkpoint && opt_print_locusfile)
     rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_exp_randomize)
@@ -4033,6 +4140,10 @@ void cmd_run()
     {
       mcmc_logsample(fp_mcmc,i+1,stree,gtree,locus,dparam_count,ndspecies);
 
+      /* log migcount */
+      if (opt_migration && opt_debug_migration)
+        print_migcount(fp_migcount,gtree);
+
       /* log gene trees */
       if (opt_print_genetrees)
         print_gtree(fp_gtree,stree,gtree);
@@ -4331,6 +4442,10 @@ void cmd_run()
           (opt_checkpoint_step && ((long)curstep > opt_checkpoint_initial) &&
            (((long)curstep-opt_checkpoint_initial) % opt_checkpoint_step == 0)))
       {
+        /* if migcount printing is enabled get current file offsets */
+        if (opt_migration && opt_debug_migration)
+          for (j = 0; j < opt_locus_count; ++j)
+            migcount_offset[j] = ftell(fp_migcount[j]);
 
         /* if gene tree printing is enabled get current file offsets */
         if (opt_print_genetrees)
@@ -4353,6 +4468,7 @@ void cmd_run()
                         ftell(fp_out),
                         gtree_offset,
                         rates_offset,
+                        migcount_offset,
                         dparam_count,
                         posterior,
                         pspecies,
@@ -4453,6 +4569,15 @@ void cmd_run()
       fatal("Found %ld samples in file %s",opt_samples,opt_mcmcfile);
     else
       fprintf(stdout,"Read %ld samples from file %s\n",opt_samples,opt_mcmcfile);
+  }
+
+  if (opt_migration && opt_debug_migration)
+  {
+    for (i = 0; i < opt_locus_count; ++i)
+      fclose(fp_migcount[i]);
+    free(fp_migcount);
+    if (opt_checkpoint)
+      free(migcount_offset);
   }
 
   if (opt_print_genetrees)

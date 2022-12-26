@@ -999,6 +999,7 @@ extern long opt_debug_full;
 extern long opt_debug_gage;
 extern long opt_debug_gspr;
 extern long opt_debug_hs;
+extern long opt_debug_migration;
 extern long opt_debug_mix;
 extern long opt_debug_mui;
 extern long opt_debug_parser;
@@ -1849,6 +1850,7 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long * rates_offset,
+                    long * migcount_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -1887,6 +1889,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * out_offset,
                     long ** gtree_offset,
                     long ** rates_offset,
+                    long ** migcount_offset,
                     long * dparam_count,
                     double ** posterior,
                     double ** pspecies,

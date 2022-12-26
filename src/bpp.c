@@ -61,6 +61,7 @@ long opt_debug_abort;
 long opt_debug_sim;
 long opt_debug_gage;
 long opt_debug_gspr;
+long opt_debug_migration;
 long opt_debug_mui;
 long opt_debug_hs;
 long opt_debug_mix;
@@ -410,6 +411,7 @@ void args_init(int argc, char ** argv)
   opt_debug_hs = 0;
   opt_debug_gage = 0;
   opt_debug_gspr = 0;
+  opt_debug_migration = 0;
   opt_debug_mix = 0;
   opt_debug_mui = 0;
   opt_debug_parser = 0;
