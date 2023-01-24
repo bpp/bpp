@@ -223,6 +223,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_MIN           0
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
+#define BPP_LOCRATE_PRIOR_NONE  	2
 #define BPP_LOCRATE_PRIOR_MAX           1
 #define BPP_LOCRATE_PRIOR_DIR           2
 
@@ -362,6 +363,7 @@ extern const char * global_freqs_strings[28];
 #define MUTRATE_CONSTANT                0
 #define MUTRATE_ESTIMATE                1
 #define MUTRATE_FROMFILE                2
+#define MUTRATE_ONLY                    3
 #define HEREDITY_ESTIMATE               1
 #define HEREDITY_FROMFILE               2
 
@@ -565,6 +567,7 @@ typedef struct gnode_s
   char * label;
   double length;
   double time;
+  double time_fixed;
   double old_time;
   struct gnode_s * left;
   struct gnode_s * right;
@@ -1405,13 +1408,18 @@ void stree_update_mig_subpops(stree_t * stree, long msa_index);
 
 long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
 
-int stree_init_tau_recursive_constraint(stree_t * stree,
+void stree_init_tau_recursive_constraint(stree_t * stree,
                                      snode_t * node,
                                      double prop,
                                      long thread_index,
                                      double *u_constraint,
                                      double *l_constraint);
 
+double tipDate_prop_locusrate_mubar(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index);
+double find_maxMu(gtree_t ** gtree);
 
 /* functions in arch.c */
 
@@ -2540,7 +2548,8 @@ stree_t * bpp_parse_newick_string(const char * line);
 ntree_t * bpp_parse_newick_string_ntree(const char * line);
 ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 stree_t * stree_from_ntree(ntree_t * ntree);
-mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t **  dateList, int * tipDateArrayLen);
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t **  dateList, int * tipDateArrayLen, 
+		 double mu_bar);
 
 /* functions in parsemap.c */
 

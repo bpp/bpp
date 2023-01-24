@@ -596,9 +596,9 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", prec_ft+spacing, "alfa");    /*  9 */
     else
       fprintf(fp[j], " %*s", empty, "alfa");
-    if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+    if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-        opt_est_mubar)
+        opt_est_mubar) || opt_est_locusrate == MUTRATE_ONLY)
       fprintf(fp[j], " %*s", prec_ft+spacing, "mubr");    /* 10 */
     else
       fprintf(fp[j], " %*s", empty, "mubr");
@@ -665,8 +665,13 @@ static void reset_finetune(FILE * fp_out, double * pjump)
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
       fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUBAR_INDEX]);
+
+    else if (opt_est_locusrate == MUTRATE_ONLY &&
+        opt_datefile )
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUBAR_INDEX]);
     else
       fprintf(fp[j], " %*s", empty, "- ");
+
     
     /* nubar pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
@@ -748,6 +753,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
+    else if (opt_est_locusrate ==MUTRATE_ONLY)
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -804,9 +811,9 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_QRATES_INDEX], &opt_finetune_qrates);
   if (enabled_prop_alpha)
     reset_finetune_onestep(pjump[BPP_MOVE_ALPHA_INDEX], &opt_finetune_alpha);
-  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-      opt_est_mubar)
+      opt_est_mubar) || opt_est_locusrate == MUTRATE_ONLY)
     reset_finetune_onestep(pjump[BPP_MOVE_MUBAR_INDEX], &opt_finetune_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
@@ -857,6 +864,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
+    else if (opt_est_locusrate == MUTRATE_ONLY)
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
@@ -952,7 +961,7 @@ static void status_print_pjump(FILE * fp,
   long j;
   int extra = (opt_est_heredity == HEREDITY_ESTIMATE ||
                (opt_est_locusrate == MUTRATE_ESTIMATE &&
-                opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
+                opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR) );
 
   for (j = 0; j < PROP_COUNT; ++j)
     fprintf(fp, " %4.2f", pjump[j]);
@@ -967,9 +976,9 @@ static void status_print_pjump(FILE * fp,
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_NUI_INDEX]);
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
   }
-  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-      opt_est_mubar)
+      opt_est_mubar )|| opt_est_locusrate == MUTRATE_ONLY )
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_MUBAR_INDEX]);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
@@ -1095,10 +1104,11 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     }
   }
 
-  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+  if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
-      opt_est_mubar)
-    fprintf(fp, "\tmu_bar");
+      opt_est_mubar) || (opt_est_locusrate == MUTRATE_ONLY &&
+     opt_datefile ))
+    	fprintf(fp, "\tmu_bar");
     
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
@@ -1531,6 +1541,10 @@ static void mcmc_logsample(FILE * fp,
       opt_est_mubar &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     fprintf(fp,"\t%.6f",stree->locusrate_mubar);
+
+  if (opt_est_locusrate == MUTRATE_ONLY &&
+      opt_datefile)
+    fprintf(fp,"\t%.10f",stree->locusrate_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
     if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
@@ -2137,7 +2151,7 @@ static FILE * init(stree_t ** ptr_stree,
     opt_locus_count = msa_count;
 
   /* check for locusrate and one locus */
-  if (opt_locus_count == 1 && opt_est_locusrate)
+  if (opt_locus_count == 1 && opt_est_locusrate && ! opt_datefile)
     fatal("Cannot use option 'locusrate' with only one locus");
 
   /* set the data type for each multiple sequence alignment */
@@ -2593,7 +2607,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* initialize locus mutation rates if estimation was selected */
-  if (opt_est_locusrate == MUTRATE_ESTIMATE &&
+  if (opt_est_locusrate == MUTRATE_ESTIMATE && !opt_datefile &&
       (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR ||
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR))
   {
@@ -2637,7 +2651,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* disable estimation of mutation rates */
     opt_est_locusrate = MUTRATE_CONSTANT;
-  }
+  } 
 
   /* We must first link tip sequences (gene tips) to populations */
   if (opt_est_delimit)          /* species delimitation */
@@ -3421,6 +3435,8 @@ void cmd_run()
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL && opt_est_mubar)
     enabled_mubar = 1;
+  if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile)
+    enabled_mubar = 1;
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     enabled_nubar = 1;
@@ -3529,16 +3545,16 @@ void cmd_run()
 
   FILE * fp_debug = stdout;
 
-  //Anna set taus and thetas (wait jk the taus need to be set before the gene trees are simulated
+  //Anna: Set thetas to check proposals
 /*	stree->nodes[0]->theta =  .004; 
  	stree->nodes[1]->theta =  .004; 
- 	stree->nodes[2]->theta =  .005; 
+ 	stree->nodes[2]->theta =  .004;
  	stree->nodes[3]->theta =  .006; 
  	stree->nodes[4]->theta =  .0035; */
 
 //	stree->nodes[0]->theta =  .007; 
-// 	stree->nodes[1]->theta =  .004; 
-// 	stree->nodes[2]->theta =  .005; 
+//	stree->nodes[1]->theta =  .004;
+//	stree->nodes[2]->theta =  .005;
  	//stree->nodes[3]->theta =  .006; 
  	//stree->nodes[4]->theta =  .008; 
  	//stree->nodes[2]->theta =  .008; 
@@ -3734,14 +3750,16 @@ void cmd_run()
     }
 
     /* propose species tree taus */
-   /* if (stree->tip_count > 1 && stree->root->tau > 0)
+    if (stree->tip_count > 1 && stree->root->tau > 0)
     {
-      if (opt_migration)
-        ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
+
+      if (opt_migration) 
+	      ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
       else
         ratio = stree_propose_tau(gtree,stree,locus);
       pjump[BPP_MOVE_TAU_INDEX] = (pjump[BPP_MOVE_TAU_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
+				  
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "TAU");
       #endif
@@ -3751,7 +3769,7 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "TAU");
       #endif
-    } */
+    } 
 
     /* propose migration rates */
     if (opt_migration)
@@ -3763,10 +3781,11 @@ void cmd_run()
     }
 
     /* mixing step */
-    /*ratio = proposal_mixing(gtree, stree, locus);
-    pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX] * (ft_round - 1) + ratio) /
+    if (!opt_datefile) {
+   	 ratio = proposal_mixing(gtree, stree, locus);
+    	pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX] * (ft_round - 1) + ratio) /
                                 (double)ft_round;
-				*/
+    }
     #ifdef CHECK_LOGL
     check_logl(stree, gtree, locus, i, "MIXING");
     #endif
@@ -3889,6 +3908,14 @@ void cmd_run()
         #endif
       }
     }
+
+    
+    if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
+
+        ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
+        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
+                                       (double)ft_round;
+    } 
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {

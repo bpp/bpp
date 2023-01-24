@@ -290,7 +290,8 @@ static int cmp_tipDates(const void * a, const void * b){
   return -1;
 } 
 
-mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList, int * tipDateArrayLen) {
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList, int * tipDateArrayLen, 
+		 double mu_bar) {
 
 	int matchFound = 0;
 	int i = 0; 
@@ -303,7 +304,7 @@ mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList, int * tip
 	 * allocate a different amount of memory, store how many sequences you actually 
 	 * have. */
 
-	/* Find the number of dates to store whic is the length of the array */
+	/* Find the number of dates to store which is the length of the array */
         while (list) {
                 for (unsigned int j = 0; j < stree->tip_count; j++ ) {
 	                matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
@@ -328,6 +329,7 @@ mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t** dateList, int * tip
 	 * Note: For the sequences where phase = 1, two places in the array point
 	 * to the same struct */
         while (list) {
+		((mappingDate_t *) list->data)->date = ((mappingDate_t *) list->data )->date * mu_bar;
                 for (unsigned int j = 0; j < stree->tip_count; j++ ) {
 	                matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
                         if (matchFound) {

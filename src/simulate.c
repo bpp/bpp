@@ -1350,11 +1350,11 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDat
                         if (matchFound) {
 				/* Anna: when sampling ancestral nodes, need to check daughter 
 				 * and parent ages */
-				if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau < ((mappingDate_t *) list->data)-> date) {
+				if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau <= ((mappingDate_t *) list->data)-> date) {
 					fatal("Sequences were not sampled before speciation for %s. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->parent->tau, ((mappingDate_t *) list->data)-> date);
 				}
 
-				if (j >= stree->tip_count && stree->nodes[j]->tau > ((mappingDate_t *) list->data)-> date ) {
+				if (j >= stree->tip_count && stree->nodes[j]->tau >= ((mappingDate_t *) list->data)-> date ) {
 					fatal("Sequences sampled before ancestral population %s existed. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->tau, ((mappingDate_t *) list->data)-> date);
 				}
                                 break;

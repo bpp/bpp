@@ -914,7 +914,27 @@ static long parse_locusrate(const char * line)
     
     p += count;
   }
-  else
+  else if (opt_est_locusrate == MUTRATE_ONLY) {
+  
+    /* get a_mubar */
+    count = get_double(p, &opt_mubar_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    if (is_emptyline(p))
+      fatal("The syntax for 'locusrate' tag has changed since BPP v4.1.4.\n"
+            "Please refer to the BPP manual for the new syntax.\n");
+
+    /* get b_mubar */
+    count = get_double(p, &opt_mubar_beta);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    opt_locusrate_prior == MUTRATE_ONLY;
+
+  } else
     goto l_unwind;
 
 
@@ -2454,7 +2474,11 @@ static void check_validity()
   if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
     fatal("Cannot use species delimitation models when using tip dating.");
 
+  if (opt_datefile)
+	opt_theta_move = BPP_THETA_SLIDE;
 
+  if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
+	fatal("locusrate must be 3 for tip dating.\n");
 }
 
 static void update_locusrate_information()
@@ -2475,6 +2499,7 @@ static void update_locusrate_information()
       else
         opt_est_mubar = 1;
     }
+    
 }
 
 
