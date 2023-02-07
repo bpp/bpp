@@ -2798,6 +2798,8 @@ static FILE * init(stree_t ** ptr_stree,
     }
 
     /* set rate of evolution and heredity scalar for each locus */
+    if (opt_est_locusrate == MUTRATE_ONLY)
+	    locusrate[i] = stree->locusrate_mubar; 
     gtree[i]->rate_mui = locusrate[i];
     locus_set_heredity_scalers(locus[i],heredity+i);
 
@@ -3911,8 +3913,9 @@ void cmd_run()
 
     
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
+	ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
 
-        ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
+        //ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
         pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
                                        (double)ft_round;
     } 

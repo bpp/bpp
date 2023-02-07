@@ -3050,7 +3050,8 @@ gtree_t ** gtree_init(stree_t * stree,
   int tipDateArrayLen = -1;
   if (opt_datefile && opt_cfile) {
         dht = datelist_hash(datelist);
-	stree->locusrate_mubar = opt_mubar_alpha / opt_mubar_beta;
+	stree->locusrate_mubar = opt_mubar_alpha / (opt_mubar_beta);
+	printf("%f %f %f\n", opt_mubar_beta, opt_mubar_alpha, stree->locusrate_mubar);
         tipDateArray = prepTipDatesInfer(stree, &datelist, &tipDateArrayLen, stree->locusrate_mubar);
   }
 
@@ -3067,10 +3068,6 @@ gtree_t ** gtree_init(stree_t * stree,
         for (i = 0; i < msa_count; ++i) {
                 tau_constraint_find(stree, msalist[i], i);
         }
-	for (i =0 ; i <stree->inner_count; i++) {
-		int b = i + stree->tip_count;
-		printf("%s %f %f\n", stree->nodes[b]->label, stree->u_constraint[i], stree->l_constraint[i]);
-	}
   }
 
   /* Resets the speciation times so that they do not conflict the sample times*/
@@ -4255,6 +4252,10 @@ static long propose_ages(locus_t * locus,
     else
       maxage = node->parent ? node->parent->time : 999;
 
+    /*if (node->node_index == 20)
+    	printf("%d %f %d %f %d %f %d %f\n", node->node_index, node->time, node->left->node_index, node->left->time, node->right->node_index, node->right->time, node->parent->node_index, node->parent->time);
+
+    printf("max min %.10f %.10f\n", maxage, minage); */
     assert(maxage > minage);
 
     tnew = node->time + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);

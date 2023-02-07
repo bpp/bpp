@@ -1419,7 +1419,18 @@ double tipDate_prop_locusrate_mubar(gtree_t ** gtree,
                           stree_t * stree,
                           locus_t ** locus,
                           long thread_index);
+
+double prop_tipDate_muGtree(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index); 
+
 double find_maxMu(gtree_t ** gtree);
+double find_maxMuGtree(stree_t * stree);
+void reset_mu_coal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double old_mui);
+double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
+double prop_mu_updateCoal2(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
+void reset_mu_coal2(gtree_t * gtree);
 
 /* functions in arch.c */
 
