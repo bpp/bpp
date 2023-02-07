@@ -1489,6 +1489,7 @@ void update_tau_constraint_recursive_to_tip(stree_t * stree, snode_t * node, dou
 }
 
 void update_tau_constraint(stree_t * stree, pop_t * pop) {
+
 	double * u_constraint = stree->u_constraint;
 	double * l_constraint = stree->l_constraint;
 
@@ -1556,22 +1557,31 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 	}	
 	/* Only constraints are from the tips */
 	} else {
-		for (unsigned i = 0; i < stree->tip_count; i++) {
-			int parent = pop[i].snode->parent->node_index;
-			double time = pop[i].nodes[pop[i].seq_count - 1]->time;
-			if (time > l_constraint[parent-stree->tip_count]) {
-				l_constraint[parent-stree->tip_count] = time;
+		if (stree->tip_count == 1) {
+			l_constraint[0] = 0;
+			u_constraint[0] = 0;
+
+		} else {
+			for (unsigned i = 0; i < stree->tip_count; i++) {
+				int parent = pop[i].snode->parent->node_index;
+				double time = pop[i].nodes[pop[i].seq_count - 1]->time;
+				if (time > l_constraint[parent-stree->tip_count]) {
+					l_constraint[parent-stree->tip_count] = time;
+				}
 			}
 		}
 	
 	}
-	for (unsigned i = 0; i < stree->tip_count; i++) {
-		update_tau_constraint_recursive_to_root(stree, stree->nodes[i]->parent, l_constraint);
-	}
+	
+	if (stree->tip_count > 1) {
+		for (unsigned i = 0; i < stree->tip_count; i++) {
+			update_tau_constraint_recursive_to_root(stree, stree->nodes[i]->parent, l_constraint);
+		}
 
-	//Anna you really need to check this is working
-	if (opt_seqAncestral)
-		update_tau_constraint_recursive_to_tip(stree, stree->root, u_constraint);
+		//Anna you really need to check this is working
+		if (opt_seqAncestral)
+			update_tau_constraint_recursive_to_tip(stree, stree->root, u_constraint);
+	}
 
 }
 
@@ -1637,18 +1647,37 @@ double set_tip_date_infer (stree_t * stree,
 		if (carrot) {
 			label = carrot + 1; 
 		}
-  		pair = hashtable_find(mht,
-  	                (void *)label,
-  	                hash_fnv(label),
-  	                cb_cmp_pairlabel);
+		if (stree->tip_count > 1) {
+  			pair = hashtable_find(mht,
+  	        	        (void *)label,
+  	        	        hash_fnv(label),
+  	        	        cb_cmp_pairlabel);
 
-		/* Finds the population with the sequence */
-  		if (pair) {
-			snode_t * node = (snode_t*) pair->data;
-			k = node->node_index;
+			/* Finds the population with the sequence */
+  			if (pair) {
+				snode_t * node = (snode_t*) pair->data;
+				k = node->node_index;
 
-			for (unsigned j =0; j < pop[k].seq_count; j++){
-			
+				for (unsigned j =0; j < pop[k].seq_count; j++){
+				
+					char * label2 = pop[k].nodes[j]->label;
+					char * carrot = strchr(label2, '^');
+					if (carrot) 
+						label2 = carrot + 1;
+
+					if (! strcmp(label, label2)) {
+						useDate[i] = k; //Set to population index
+						break;
+					}
+
+				}	
+				
+			}
+
+		} else {
+
+			k = 0;
+			for (unsigned j = 0; j < pop[k].seq_count; j++){
 				char * label2 = pop[k].nodes[j]->label;
 				char * carrot = strchr(label2, '^');
 				if (carrot) 
@@ -1658,11 +1687,8 @@ double set_tip_date_infer (stree_t * stree,
 					useDate[i] = k; //Set to population index
 					break;
 				}
-
-			}	
-			
+			}
 		}
-
 	}
 
 	int startingIndex = 0; 
@@ -3051,7 +3077,6 @@ gtree_t ** gtree_init(stree_t * stree,
   if (opt_datefile && opt_cfile) {
         dht = datelist_hash(datelist);
 	stree->locusrate_mubar = opt_mubar_alpha / (opt_mubar_beta);
-	printf("%f %f %f\n", opt_mubar_beta, opt_mubar_alpha, stree->locusrate_mubar);
         tipDateArray = prepTipDatesInfer(stree, &datelist, &tipDateArrayLen, stree->locusrate_mubar);
   }
 
@@ -3081,13 +3106,13 @@ gtree_t ** gtree_init(stree_t * stree,
 	  //stree->nodes[3]->tau = .008; 
 	  //stree->nodes[4]->tau = .016;  
 	  //stree->nodes[2]->tau = .5;
-        reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
+	if (stree->tip_count > 1)	
+        	reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
   }
 
   for (i = 0; i < msa_count; ++i)
   {
     gtree[i] = gtree_simulate(stree, msalist[i],i, tipDateArray, tipDateArrayLen);
-
 
     /* in the gene tree SPR it is possible that this scenario happens:
 

@@ -7131,6 +7131,8 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 {
   if (opt_seqAncestral) 
 	  fatal("Sampling of ancestral samples is not implemented with estimation of mu");
+  if (stree->tip_count == 1)
+	  fatal("Mu proposal not yet implemented for single population");
   unsigned int j;
   unsigned int total_nodes;
   long i;
@@ -7204,8 +7206,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
-    lnacceptance += prop_mu_updateCoal2(gtree[i], stree, rateMultiplier, new_mui);
-    //lnacceptance += prop_mu_updateCoal(gtree[i], stree, rateMultiplier, new_mui);
+    lnacceptance += prop_mu_updateCoal(gtree[i], stree, rateMultiplier, new_mui);
 
     for (j = 0; j < gtree[i]->inner_count + gtree[i]->tip_count; j ++) {
 	    if (gtree[i]->nodes[j]->parent) {
@@ -7331,255 +7332,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 
 	for (i = 0; i < opt_locus_count; ++i) {
 
-		reset_mu_coal2(gtree[i]);
-		
-		/* Reset rate */
-		gtree[i]->rate_mui = old_mui;
-		
-		/* reset selected locus */
-		gnodeptr[i] = gtree[i]->nodes;
-		total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
-		
-		for (j = 0; j < total_nodes; ++j)
-		{
-		  if (gnodeptr[i][j]->parent)
-		    gnodeptr[i][j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
-		                                                 gnodeptr[i][j]->pmatrix_index);
-		}
-		
-		for (j = gtree[i]->tip_count; j < total_nodes; ++j)
-		{
-		  gnodeptr[i][j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-		                                          gnodeptr[i][j]->clv_index);
-		  if (opt_scaling)
-		    gnodeptr[i][j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-		                                                  gnodeptr[i][j]->scaler_index);
-		}
-      
-		for (j = 0; j < stree->inner_count + stree->tip_count; j++) {
-			pop = stree->nodes[j];
-        	    	if (opt_est_theta) {
-        	      		pop->logpr_contrib[i] = pop->old_logpr_contrib[i];
-
-			}
-        	    	else
-        	      		logprob_revert_notheta(pop,i);
-        	  }
-		if (!opt_est_theta)
-			stree->notheta_logpr = stree->notheta_old_logpr;
-
-		gtree[i]->logpr = gtree[i]->old_logpr;
-	}
-  }
-
-  free(gnodeptr);
-  free(logl);
-
-  return accepted;
-}
-
-double tipDate_prop_locusrate_mubar(gtree_t ** gtree,
-                          stree_t * stree,
-                          locus_t ** locus,
-                          long thread_index)
-{
-  if (opt_seqAncestral) 
-	  fatal("Sampling of ancestral samples is not implemented with estimation of mu");
-  unsigned int j;
-  unsigned int total_nodes;
-  long i;
-  long accepted = 0;
-  double old_mui, old_logmui;
-  double new_mui, new_logmui;
-  double lnacceptance = 0;
-  double * logl = xcalloc(opt_locus_count, sizeof(double)) ;
-  double logpr_sum, logpr_old, logpr; 
-  gnode_t *** gnodeptr;
-  snode_t * pop;
-
-  old_mui = stree->locusrate_mubar;
-  old_logmui = log(old_mui);
-  double r = old_logmui + opt_finetune_mubar * legacy_rnd_symmetrical(thread_index);
-  double mu_bound  = find_maxMu(gtree);
-
-  if (!mu_bound)
-  	new_logmui = reflect(r,-99, 99, thread_index);
-  else
-  	new_logmui = reflect(r,-99, log(mu_bound), thread_index);
-  
-  stree->locusrate_mubar = new_mui = exp(new_logmui);
-  if (mu_bound)
-  	assert(mu_bound > new_mui);
-
-  /* Proposal ratio */
-  lnacceptance = new_logmui - old_logmui;
-
-  /*Calculate prior */
-  lnacceptance += (opt_mubar_alpha-1)*log(new_mui/old_mui) -
-                  opt_mubar_beta*(new_mui-old_mui);
-
-  double rateMultiplier = stree->locusrate_mubar / old_mui;
-  /* Update constraints based on new times */
-  for (i = 0; i < stree->inner_count;  i++) {
-  	stree->u_constraint[i] = stree->u_constraint[i] * rateMultiplier;
-  	stree->l_constraint[i] = stree->l_constraint[i] * rateMultiplier;
-
-      /* Check for conflicts between the constraints and the taus */
-      if ((stree->nodes[i + stree->tip_count]->tau < stree->l_constraint[i]) || 
-      		((stree->u_constraint[i]  != 0) && (stree->nodes[i + stree->tip_count]->tau > stree->u_constraint[i]))) {
-
-	      	/* If there is a conflict, reset constraints and rate and exit */
-  		for ( ; i >= 0;  i--) {
-  			stree->u_constraint[i] = stree->u_constraint[i] / rateMultiplier;
-  			stree->l_constraint[i] = stree->l_constraint[i] / rateMultiplier;
-
-  			stree->locusrate_mubar= old_mui;
-  		}
-  		return 0;
-      }
-  }
-    
-
-  for (i = 0; i < opt_locus_count; ++i) {
-	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
-		snode_t* snode = stree->nodes[j];
-
-		for (int k = 0; k < snode->epoch_count[i]; k++) {
-               		snode->tip_date[i][k] = snode->tip_date[i][k] * rateMultiplier; 
-		}
-	}
-
-  }
-
-  gnodeptr = xmalloc(opt_locus_count * sizeof(gnode_t **));
-
-  for (i = 0; i < opt_locus_count; ++i)
-  {
-      /* Update the tip dates */
-      for (j = 0; j < gtree[i]->tip_count; j++) {
-              gtree[i]->nodes[j]->time = gtree[i]->nodes[j]->time_fixed * new_mui;
-      }
-
-    //We are enforcing a strict clock
-    // ANNA: add code to check this in control file
-    assert (opt_clock == BPP_CLOCK_GLOBAL);
-    
-      /* swap pmatrices */
-
-      gnodeptr[i] = gtree[i]->nodes;
-      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
-
-      for (j = 0; j < total_nodes; ++j)
-        if (gnodeptr[i][j]->parent)
-          gnodeptr[i][j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
-                                                    gnodeptr[i][j]->pmatrix_index);
-
-
-    gtree[i]->rate_mui = new_mui;
-
-    /* recompute pmatrices, CLVs and log-L */
-    locus_update_all_matrices(locus[i],gtree[i],stree,i);
-
-    gnodeptr[i] = gtree[i]->nodes;
-
-    for (j = gtree[i]->tip_count; j < total_nodes; ++j)
-    {
-      gnodeptr[i][j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                              gnodeptr[i][j]->clv_index);
-      if (opt_scaling)
-        gnodeptr[i][j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                   gnodeptr[i][j]->scaler_index);
-    }
-
-    locus_update_all_partials(locus[i],gtree[i]);
-
-    logl[i] = locus_root_loglikelihood(locus[i],
-                                    gtree[i]->root,
-                                    locus[i]->param_indices,
-                                    NULL);
-
-    lnacceptance += logl[i] - gtree[i]->logl;
-
-  }
-  
-  logpr_sum = 0;
-  logpr_old = 0;
-  if (!opt_est_theta) {
-  	logpr_old = stree->notheta_logpr;
-	stree->notheta_old_logpr = stree->notheta_logpr;
-  }
-
-  else 
-	for (i = 0; i < opt_locus_count; i++ ) {
-		logpr_old += gtree[i]->logpr;
-		gtree[i]->old_logpr = gtree[i]->logpr;
-	}
-  
-  /* Anna: We might not need to recalculate the coalescent for every population */
-  for (i = 0; i < opt_locus_count; ++i) { 
-    if (opt_est_theta)
-    {
-      if (opt_migration)
-	      fatal("Tip dating not implemented with migration.");
-      else{
-        logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
-        gtree[i]->logpr = logpr;
-        logpr_sum += logpr;
-      }
-    }
-    else
-    {
-      if (opt_migration)
-        fatal("Integrating out thetas not implemented yet for IM model");
-
-      for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
-        logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],
-                                                  locus[i]->heredity[0],
-                                                  i,
-                                                  thread_index);
-      stree->notheta_logpr = logpr_sum;
-    }
-  }
-
-    lnacceptance += logpr_sum - logpr_old;
-
-    /* Accept or reject */
-    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
-    {
-	accepted++;
-
-	for (i = 0; i < opt_locus_count; ++i) {
-		/* update log-likelihood */
-		gtree[i]->logl = logl[i];
-	}
-
-    } else {
-	/* rejected */
-    	stree->locusrate_mubar = old_mui;
-
-	/* Reset constraints */
-    	for (i = 0; i < stree->inner_count;  i++) {
-    		stree->u_constraint[i] = stree->u_constraint[i] / rateMultiplier;
-    		stree->l_constraint[i] = stree->l_constraint[i] / rateMultiplier;
-    	}
-
-	/* Reset the epoch dates */
-  	for (i = 0; i < opt_locus_count; ++i) {
-  	      for (j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
-  	      	snode_t* snode = stree->nodes[j];
-
-  	      	for (int k = 0; k < snode->epoch_count[i]; k++) {
-  	             		snode->tip_date[i][k] = snode->tip_date[i][k] / rateMultiplier; 
-		}
-  	      }
-
-  	}
-
-	for (i = 0; i < opt_locus_count; ++i) {
-		/* Reset the tip dates */
-		for (j = 0; j < gtree[i]->tip_count; j++) {
-		        gtree[i]->nodes[j]->time = gtree[i]->nodes[j]->time_fixed * old_mui;
-		}
+		reset_mu_coal(gtree[i]);
 		
 		/* Reset rate */
 		gtree[i]->rate_mui = old_mui;
@@ -7652,7 +7405,7 @@ double prop_mu_updateCoal_recursive(gnode_t * gnode, stree_t * stree, double rat
 	return (b);
 }
 
-double prop_mu_updateCoal2(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui) {
+double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui) {
 
 	/* Update the tip dates */
 	double prop_ratio = 0;
@@ -7666,141 +7419,11 @@ double prop_mu_updateCoal2(gtree_t * gtree, stree_t * stree, double rateMultipli
 	return prop_ratio;
 }
 
-void reset_mu_coal2(gtree_t * gtree) {
+void reset_mu_coal(gtree_t * gtree) {
 
 	for (unsigned i = 0; i < gtree->inner_count + gtree->tip_count; i++)
 		gtree->nodes[i]->time = gtree->nodes[i]->old_time;
 }
-
-double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui) {
-
-	double prop_ratio = 0;
-	double * time_old = xcalloc(stree->tip_count, sizeof(double));
-	double * scaleRat = xcalloc(stree->tip_count, sizeof(double));
-	snode_t * pop; 
-	double tau;
-	unsigned index;
-	
-	for (unsigned int i = 0; i < gtree->tip_count; i++) {
-		pop = gtree->nodes[i]->pop;
-		for (index = 0; index < stree->tip_count; index++) {
-			if (pop == stree->nodes[index])
-				break;
-		}
-		assert (index < stree->tip_count);
-		if (gtree->nodes[i]->time > time_old[index])
-			time_old[index] = gtree->nodes[i]->time;
-	}	
-	
-	for (unsigned int i = 0; i < stree->tip_count; i++) {
-		double tau = stree->nodes[i]->parent->tau;
-		scaleRat[i] = (tau - time_old[i] * rateMultiplier) / (tau - time_old[i]);
-	}
-
-      /* Update the tip dates */
-      for (unsigned j = 0; j < gtree->tip_count; j++) {
-		gtree->nodes[j]->old_time = gtree->nodes[j]->time;
-              gtree->nodes[j]->time = gtree->nodes[j]->time_fixed * new_mui;
-      }
-     
-
-      /* Update the coalescent times */
-      for (unsigned j = gtree->tip_count; j < gtree->tip_count + gtree->inner_count; j++) {
-		gtree->nodes[j]->old_time = gtree->nodes[j]->time;
-		pop = gtree->nodes[j]->pop;
-
-		for (index = 0; index < stree->tip_count; index++) {
-			if (pop == stree->nodes[index])
-				break;
-	      	}
-
-	      	if (index < stree->tip_count) {
-	      		tau = pop->parent->tau;
-              		gtree->nodes[j]->time = tau - scaleRat[index] * (tau - gtree->nodes[j]->time)  ;
-	      		prop_ratio += log(scaleRat[index]);
-		}
-      }
-      free(time_old);
-      free(scaleRat);
-      return prop_ratio;
-}
-
-void reset_mu_coal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double old_mui) {
-
-	double * time_old = xcalloc(stree->tip_count, sizeof(double));
-	double * scaleRat = xcalloc(stree->tip_count, sizeof(double));
-	double tau;
-	snode_t * pop;
-	unsigned index;
-
-	/* Reset the tip dates */
-	for (unsigned j = 0; j < gtree->tip_count; j++) {
-	        gtree->nodes[j]->time = gtree->nodes[j]->time_fixed * old_mui;
-	}
-
-	for (unsigned i = 0; i < gtree->tip_count; i++) {
-		pop = gtree->nodes[i]->pop;
-
-		for (index = 0; index < stree->tip_count; index++) {
-			if (pop == stree->nodes[index])
-				break;
-	      	}
-		
-		if (gtree->nodes[i]->time > time_old[index])
-			time_old[index] = gtree->nodes[i]->time;
-	}	
-	
-	for (unsigned i = 0; i < stree->tip_count; i++) {
-		double tau = stree->nodes[i]->parent->tau;
-		scaleRat[i] = (tau - time_old[i] * rateMultiplier) / (tau - time_old[i]);
-	}
-     
-      /* Update the coalescent times */
-      for (unsigned j = gtree->tip_count; j < gtree->tip_count + gtree->inner_count; j++) {
-	      pop = gtree->nodes[j]->pop;
-		for (index = 0; index < stree->tip_count; index++) {
-			if (pop == stree->nodes[index])
-				break;
-	      	}
-	      if (index < stree->tip_count) {
-	      	tau = pop->parent->tau;
-              	gtree->nodes[j]->time = tau - 1/scaleRat[index] * (tau - gtree->nodes[j]->time);
-	      }
-      }
-
-
-      free(time_old);
-      free(scaleRat);
-      return;
-
-}
-
-double find_maxMu(gtree_t ** gtree) {
-	double max_i, max;
-
-	/* Fix the maximum possible mu to ensure the parent is older than the tip
-	 * for each tip */
-	max = gtree[0]->nodes[0]->parent->time / gtree[0]->nodes[0]->time_fixed;
-
-	for (int i = 0; i < opt_locus_count; ++i) {
-		for (unsigned j = 0; j < gtree[i]->tip_count; j++) {
-
-			if (gtree[i]->nodes[j]->time_fixed) {
-				max_i = gtree[i]->nodes[j]->parent->time / gtree[i]->nodes[j]->time_fixed;
-
-				/* Find the maximum possible mu for all the tips in the tree */
-				if (max_i < max) 
-					max = max_i;
-			
-			}
-		}
-	}
-	if (isinf(max))
-		return 0; 
-
-	return max; 
-}
-
 
 double find_maxMuGtree(stree_t * stree) {
 	double max_i, max;
@@ -7814,7 +7437,6 @@ double find_maxMuGtree(stree_t * stree) {
 
 	for (unsigned i = stree->tip_count; i < stree->tip_count + stree->inner_count; i++) {
 
-		//printf("find max %f %f %f\n", stree->nodes[i]->tau, stree->l_constraint[i -stree->tip_count], stree->l_constraint[i - stree->tip_count]  /stree->locusrate_mubar);
 		max_i = stree->nodes[i]->tau * stree->locusrate_mubar / stree->l_constraint[i - stree->tip_count];
 				/* Find the maximum possible mu for all the tips in the tree */
 				if (max_i < max) 

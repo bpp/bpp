@@ -2320,7 +2320,6 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   if (opt_datefile) {
-	  //ANNA
         printf("Parsing date file...");
         if (! (date_list = parse_date_mapfile(opt_datefile)))
                 fatal("Failed to parse date file %s", opt_datefile);
@@ -3911,7 +3910,6 @@ void cmd_run()
       }
     }
 
-    
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
 	ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
 
