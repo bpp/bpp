@@ -286,6 +286,7 @@ Special thanks to:
  * Paul M. Hime
  * Jiayi Ji
  * Paschalia Kapli
+ * Daniel Kornai
  * Mario dos Reis Barros
  * Yuttapong Thawornwattana,
 
