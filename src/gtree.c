@@ -6952,7 +6952,7 @@ static long propose_spr_sim(locus_t * locus,
         tmp = travbuffer[j];
         tmp->clv_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->clv_index);
         if (opt_scaling)
-          tmp->scaler_index = SWAP_CLV_INDEX(gtree->tip_count,tmp->scaler_index);
+          tmp->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,tmp->scaler_index);
       }
 
       /* now reset branch lengths and pmatrices */
