@@ -2279,7 +2279,7 @@ static FILE * init(stree_t ** ptr_stree,
   gtree_t ** gclones = NULL;
 
   if (!(fp_out = fopen(opt_outfile, "w")))
-    fatal("Cannot open file %s for writing...");
+    fatal("Cannot open file %s for writing...", opt_outfile);
   *ptr_fp_out = fp_out;
   init_outfile(fp_out);
 
