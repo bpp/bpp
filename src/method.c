@@ -2800,6 +2800,8 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_est_locusrate == MUTRATE_ONLY)
 	    locusrate[i] = stree->locusrate_mubar; 
     gtree[i]->rate_mui = locusrate[i];
+    if (opt_datefile )
+	gtree[i]->rate_mui = 1;
     locus_set_heredity_scalers(locus[i],heredity+i);
 
     /* set pattern weights and free the weights array */

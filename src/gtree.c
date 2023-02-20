@@ -3393,9 +3393,8 @@ double gtree_update_logprob_contrib(snode_t* snode,
   	}
   }	
 
-  //Anna: Event = coalescent events. This is a list of coalescent events in a
-  // a population. Note that is all within a population
-  // So basically, I am going to want to sort the dates with the events
+  /* Events are coalescent events. This is a list of coalescent events in a
+   a population. Note that is all within a population */
   for (event = snode->event[msa_index]->head; event; event = event->next)
   {
     gnode_t* gnode = (gnode_t*)(event->data);
@@ -3413,8 +3412,8 @@ double gtree_update_logprob_contrib(snode_t* snode,
   */
 
   /* if there was at least one coalescent event, sort */
-  //Anna: Don't need to sort the first or last elements since they are the speciation times
-  // and the coalescent times are inbetween the speciation times
+  /* We don't need to sort the first or last elements since they are the speciation times
+   and the coalescent times are inbetween the speciation times */
   if (j > 1)
     qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
 
@@ -3437,9 +3436,7 @@ double gtree_update_logprob_contrib(snode_t* snode,
   printf("\n");
 #endif
 
-  // Anna: nothing can happen when there is one lineage
   /* skip the last step in case the last value of n was supposed to be 1 */
-  //Anna: need to update this
 
   if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
@@ -3482,11 +3479,11 @@ double gtree_update_logprob_contrib(snode_t* snode,
   /* now distinguish between estimating theta and analytical computation */
   if (opt_est_theta)
   {
-	 //Anna: This is the 2/theta in the product over coalescent events
+    /* This is the 2/theta in the product over coalescent events */
     if (snode->event_count[msa_index])
       logpr += snode->event_count[msa_index] * log(2.0 / (heredity*snode->theta));
 
-    //Anna: This is the j(j-1)/theta * coalescent times (in the product over coalescent events
+    /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
     if (T2h)
       logpr -= T2h / snode->theta;
 
@@ -5236,7 +5233,6 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   target->parent = father;
   father->left = target;
   father->right = curnode;
-  //Anna
   father->leaves = father->left->leaves + father->right->leaves;
   if (target == gtree->root)
   {
@@ -5252,7 +5248,6 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
 
     /* update number of leaves all nodes from father's parent and up */
     gnode_t * temp;
-    //Anna
     for (temp = father->parent; temp; temp = temp->parent)
       temp->leaves = temp->left->leaves +
                      temp->right->leaves;
@@ -6539,7 +6534,6 @@ static long propose_spr(locus_t * locus,
         }
         else
         {
-		//Anna?
           if (opt_est_theta)
             father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
           else

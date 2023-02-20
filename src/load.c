@@ -649,7 +649,6 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read nui_sum value");
 
   /* read diploid */
-  //ANNA?
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
   if (!LOAD(opt_diploid,stree_tip_count,fp))
     fatal("Cannot read 'diploid' tag");

@@ -7142,7 +7142,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
   double lnacceptance = 0;
   double * logl = xcalloc(opt_locus_count, sizeof(double)) ;
   double logpr_sum, logpr_old, logpr; 
-  gnode_t *** gnodeptr;
+  gnode_t ** gnodeptr;
   snode_t * pop;
   int reject = 0;
 
@@ -7150,6 +7150,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
   old_logmui = log(old_mui);
   double r = old_logmui + opt_finetune_mubar * legacy_rnd_symmetrical(thread_index);
   double mu_bound  = find_maxMuGtree(stree);
+  
 
   if (!mu_bound)
   	new_logmui = reflect(r,-99, 99, thread_index);
@@ -7202,7 +7203,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 
   }
 
-  gnodeptr = xmalloc(opt_locus_count * sizeof(gnode_t **));
+  //gnodeptr = xmalloc(opt_locus_count * sizeof(gnode_t **));
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -7221,29 +7222,29 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
     
       /* swap pmatrices */
 
-      gnodeptr[i] = gtree[i]->nodes;
+      gnodeptr = gtree[i]->nodes;
       total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
 
       for (j = 0; j < total_nodes; ++j)
-        if (gnodeptr[i][j]->parent)
-          gnodeptr[i][j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
-                                                    gnodeptr[i][j]->pmatrix_index);
+        if (gnodeptr[j]->parent)
+          gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                    gnodeptr[j]->pmatrix_index);
 
 
-    gtree[i]->rate_mui = new_mui;
+    //gtree[i]->rate_mui = new_mui;
 
     /* recompute pmatrices, CLVs and log-L */
     locus_update_all_matrices(locus[i],gtree[i],stree,i);
 
-    gnodeptr[i] = gtree[i]->nodes;
+    gnodeptr = gtree[i]->nodes;
 
     for (j = gtree[i]->tip_count; j < total_nodes; ++j)
     {
-      gnodeptr[i][j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-                                              gnodeptr[i][j]->clv_index);
+      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                              gnodeptr[j]->clv_index);
       if (opt_scaling)
-        gnodeptr[i][j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-                                                   gnodeptr[i][j]->scaler_index);
+        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                   gnodeptr[j]->scaler_index);
     }
 
     locus_update_all_partials(locus[i],gtree[i]);
@@ -7335,26 +7336,26 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 		reset_mu_coal(gtree[i]);
 		
 		/* Reset rate */
-		gtree[i]->rate_mui = old_mui;
+		//gtree[i]->rate_mui = old_mui;
 		
 		/* reset selected locus */
-		gnodeptr[i] = gtree[i]->nodes;
+		gnodeptr = gtree[i]->nodes;
 		total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
 		
 		for (j = 0; j < total_nodes; ++j)
 		{
-		  if (gnodeptr[i][j]->parent)
-		    gnodeptr[i][j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
-		                                                 gnodeptr[i][j]->pmatrix_index);
+		  if (gnodeptr[j]->parent)
+		    gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+		                                                 gnodeptr[j]->pmatrix_index);
 		}
 		
 		for (j = gtree[i]->tip_count; j < total_nodes; ++j)
 		{
-		  gnodeptr[i][j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
-		                                          gnodeptr[i][j]->clv_index);
+		  gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+		                                          gnodeptr[j]->clv_index);
 		  if (opt_scaling)
-		    gnodeptr[i][j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
-		                                                  gnodeptr[i][j]->scaler_index);
+		    gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+		                                                  gnodeptr[j]->scaler_index);
 		}
       
 		for (j = 0; j < stree->inner_count + stree->tip_count; j++) {
@@ -7373,7 +7374,7 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 	}
   }
 
-  free(gnodeptr);
+  //free(gnodeptr);
   free(logl);
 
   return accepted;
@@ -7409,7 +7410,7 @@ double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplie
 
 	/* Update the tip dates */
 	double prop_ratio = 0;
-	double oldestTime = prop_mu_updateCoal_recursive (gtree->root, stree, rateMultiplier, &prop_ratio);
+	prop_mu_updateCoal_recursive (gtree->root, stree, rateMultiplier, &prop_ratio);
 	
 	/* Update the tip dates */
 	for (unsigned j = 0; j < gtree->tip_count; j++) {

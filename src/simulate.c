@@ -1714,7 +1714,6 @@ static void simulate(stree_t * stree)
       }
     }
 
-    //ANNA is this going to work without opt_msafile
   if (i == 0 ) {
   	list_t * maplist = create_maplist_msa(stree, msa);
   	gtree_simulate_init(stree,maplist);
