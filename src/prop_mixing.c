@@ -378,7 +378,23 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     logpr = stree->notheta_logpr;
 
   if (opt_migration)
+  {
+    #if 1
     stree_update_mig_subpops(stree, thread_index);
+    #else
+    /* TODO: Note, the following loop should be a correct and faster alternative
+       than calling the stree_update_mig_subpops function. However, those
+       multiplications cause the migbuffer[j].time to differ numerically with
+       the taus in the species tree. We need to include an snode pointer in the
+       structure and copy the values instead of multiplying */
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+    {
+      snode_t * x = stree->nodes[i];
+      for (j = 0; j < x->mb_count; ++j)
+        x->migbuffer[j].time *= c;
+    }
+    #endif
+  }
 
   /* update gene trees with either parallel or serial code. Note, for thetas
      integrated out we use the serial version */
@@ -554,7 +570,23 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         gtree[i]->lnprior_rates = gtree[i]->old_lnprior_rates;
     }
     if (opt_migration)
+    {
+      #if 1
       stree_update_mig_subpops(stree, thread_index);
+      #else
+    /* TODO: Note, the following loop should be a correct and faster alternative
+       than calling the stree_update_mig_subpops function. However, those
+       divisions cause the migbuffer[j].time to differ numerically with
+       the taus in the species tree. We need to include an snode pointer in the
+       structure and copy the values instead of dividing */
+      for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      {
+        snode_t * x = stree->nodes[i];
+        for (j = 0; j < x->mb_count; ++j)
+          x->migbuffer[j].time /= c;
+      }
+      #endif
+    }
   }
   free(snodes);
 

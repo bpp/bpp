@@ -3295,6 +3295,8 @@ static int cb_cmp_pspectime(const void * a, const void * b)
   return -1;
 }
 
+/* Expensive but generic function that updates the sums of incoming migration
+   rates for all time segments of each populations */
 void stree_update_mig_subpops(stree_t * stree, long thread_index)
 {
   long i,j,k,m;
@@ -3373,7 +3375,7 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
           if (opt_mig_specs[mindex].am)
           {
             /* if we reached the first migration with variables rates for the
-               current segment, duplicate mrsum[0] to the rest of the loci */
+               current segment, propagate mrsum[0] to the other loci */
             if (xm[k].active_count == 1)
               for (m = 1; m < opt_locus_count; ++m)
                 xm[k].mrsum[m] = xm[k].mrsum[0];
@@ -3407,6 +3409,86 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
   assert(!stree->root->mark[thread_index]);
   free(epoch);
 }
+
+#if 1
+/* faster function that updates the sums of incoming migration rates for all
+   time segments of a single population x when M_yx changes. It assumes taus
+   haven't changed, and that only M_yx has changed */
+void stree_update_mig_subpops_single(stree_t * stree,
+                                     snode_t * x,
+                                     snode_t * y,
+                                     double oldM)
+{
+  long k,m;
+  migbuffer_t * xm = x->migbuffer;
+  unsigned int xi = x->node_index;
+  unsigned int yi = y->node_index;
+  double tstart,tend;
+
+  assert(opt_mig_bitmatrix[yi][xi]);
+  long mindex = opt_migration_matrix[yi][xi];
+  assert(!opt_mig_specs[mindex].am);
+
+  tstart = x->tau;
+  for (k = 0; k < x->mb_count; ++k)
+  {
+    tend = x->migbuffer[k].time;
+
+    if (y->tau <= tstart && y->parent->tau >= tend)
+    {
+      if (xm[k].active_count == 1)
+      {
+        xm[k].mrsum[0] -= oldM;
+        xm[k].mrsum[0] += opt_mig_specs[mindex].M;
+      }
+      else
+      {
+        assert(xm[k].active_count == opt_locus_count);
+        for (m = 0; m < xm[k].active_count; ++m)
+        {
+          xm[k].mrsum[m] -= oldM;
+          xm[k].mrsum[m] += opt_mig_specs[mindex].M;
+        }
+      }
+    }
+    tstart = tend;
+  }
+}
+
+/* faster function that updates the sums of incoming migration rates for all
+   time segments of a single population x when the migration rate for a
+   particular locus i M_{yx_i} has changed. It assumes taus haven't changed. */
+void stree_update_mig_subpops_single_vrates(stree_t * stree,
+                                            snode_t * x,
+                                            snode_t * y,
+                                            long msa_index,
+                                            double oldMi)
+{
+  long k,m;
+  migbuffer_t * xm = x->migbuffer;
+  unsigned int xi = x->node_index;
+  unsigned int yi = y->node_index;
+  double tstart,tend;
+
+  assert(opt_mig_bitmatrix[yi][xi]);
+  long mindex = opt_migration_matrix[yi][xi];
+  assert(opt_mig_specs[mindex].am);
+
+  tstart = x->tau;
+  for (k = 0; k < x->mb_count; ++k)
+  {
+    tend = x->migbuffer[k].time;
+
+    if (y->tau <= tstart && y->parent->tau >= tend)
+    {
+      assert(xm[k].active_count == opt_locus_count);
+      xm[k].mrsum[msa_index] -= oldMi;
+      xm[k].mrsum[msa_index] += opt_mig_specs[mindex].Mi[msa_index];
+    }
+    tstart = tend;
+  }
+}
+#endif
 
 #if 1
 void propose_tau_update_gtrees(locus_t ** loci,
@@ -9273,7 +9355,11 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       spec->M = rate_new;
 
       /* TODO: improve the following */
+      #if 0
       stree_update_mig_subpops(stree,thread_index_zero);
+      #else
+      stree_update_mig_subpops_single(stree, stree->nodes[j], stree->nodes[i], rate_old);
+      #endif
 
       for (k = 0; k < opt_locus_count; ++k)
       {
@@ -9302,7 +9388,11 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
         spec->M = rate_old;
 
         /* TODO: improve the following */
+        #if 0
         stree_update_mig_subpops(stree,thread_index_zero);
+        #else
+        stree_update_mig_subpops_single(stree, stree->nodes[j], stree->nodes[i], rate_new);
+        #endif
 
         for (k = 0; k < opt_locus_count; ++k)
         {
@@ -9373,9 +9463,13 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
 
       spec->Mi[j] = rate_new;
 
+      #if 0
       /* TODO: improve the following. This is very expensive, we need to modify it to
          update only those node migbuffer elements affected by Mi[j] */
       stree_update_mig_subpops(stree,thread_index_zero);
+      #else
+      stree_update_mig_subpops_single_vrates(stree, stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_old);
+      #endif
 
       /* TODO: We probably change only one locus */
       for (k = 0; k < opt_locus_count; ++k)
@@ -9404,8 +9498,12 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
       {
         spec->Mi[j] = rate_old;
 
+        #if 0
         /* TODO: improve the following, see previous TODO */
         stree_update_mig_subpops(stree,thread_index_zero);
+        #else
+        stree_update_mig_subpops_single_vrates(stree, stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_new);
+        #endif
 
         /* TODO: Same here, change only one locus */
         for (k = 0; k < opt_locus_count; ++k)

@@ -1414,6 +1414,15 @@ double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 void stree_update_mig_subpops(stree_t * stree, long msa_index);
+void stree_update_mig_subpops_single(stree_t * stree,
+                                     snode_t * x,
+                                     snode_t * y,
+                                     double oldM);
+void stree_update_mig_subpops_single_vrates(stree_t * stree,
+                                            snode_t * x,
+                                            snode_t * y,
+                                            long msa_index,
+                                            double oldMi);
 
 long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
 
