@@ -1425,6 +1425,8 @@ double find_maxMuGtree(stree_t * stree);
 double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
 void reset_mu_coal(gtree_t * gtree);
 
+
+
 /* functions in arch.c */
 
 uint64_t arch_get_memused(void);
@@ -1859,6 +1861,7 @@ unsigned int pll_popcount64(unsigned long x);
 unsigned long ** diploid_resolve(stree_t * stree,
                                  msa_t ** msa_list,
                                  list_t * maplist,
+                                 list_t * datelist,
                                  unsigned int ** weights,
                                  int msa_count);
 
@@ -2552,7 +2555,7 @@ stree_t * bpp_parse_newick_string(const char * line);
 ntree_t * bpp_parse_newick_string_ntree(const char * line);
 ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 stree_t * stree_from_ntree(ntree_t * ntree);
-mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t **  dateList, int * tipDateArrayLen, 
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t *  dateList, 
 		 double mu_bar);
 
 /* functions in parsemap.c */

@@ -3073,11 +3073,11 @@ gtree_t ** gtree_init(stree_t * stree,
 
   dht = NULL;
 
-  int tipDateArrayLen = -1;
+  int tipDateArrayLen = datelist->count;
   if (opt_datefile && opt_cfile) {
         dht = datelist_hash(datelist);
 	stree->locusrate_mubar = opt_mubar_alpha / (opt_mubar_beta);
-        tipDateArray = prepTipDatesInfer(stree, &datelist, &tipDateArrayLen, stree->locusrate_mubar);
+        tipDateArray = prepTipDatesInfer(stree, datelist, stree->locusrate_mubar);
   }
 
   /* generate random starting gene trees for each alignment */

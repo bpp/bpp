@@ -139,6 +139,73 @@ static int cb_cmp_nodelabel(void * a, void * b)
   return (!strcmp(node->label,label));
 }
 
+static void update_date_list(list_t * maplist, list_t * datelist)
+{
+  mappingDate_t * newmap;
+
+  list_t * newlist = (list_t *)xcalloc(1,sizeof(list_t));
+
+  list_item_t * list = datelist->head;
+  while (list)
+  {
+	mappingDate_t * map = (mappingDate_t *)list->data;
+
+	/* Finds the unique sequence name */
+        char * carrot = strchr(map->individual, '^');
+        if (carrot)
+                carrot++;
+        else
+                carrot = map->individual;
+        pair_t * pair = hashtable_find(mht,
+                    (void *)(carrot),
+                    hash_fnv(carrot),
+                    cb_cmp_pairlabel);
+        if(!pair)
+                fatal("Cannot find date mapping for sequence %s", carrot);
+
+    	snode_t * node = (snode_t *)(pair->data);
+
+
+    /* Updates the labeling and adds two sequence to new list if diploid */
+    if (node->diploid)
+    {
+      /* add first label mapping */
+      newmap = (mappingDate_t *)xmalloc(sizeof(mappingDate_t));
+      xasprintf(&(newmap->individual), "%s.1", map->individual);
+      newmap->date = map->date;
+      newmap->lineno = map->lineno;
+      list_append(newlist, (void *)newmap);
+
+      /* add second label mapping */
+      newmap = (mapping_t *)xmalloc(sizeof(mapping_t));
+      xasprintf(&(newmap->individual), "%s.2", map->individual);
+      newmap->date = map->date;
+      newmap->lineno = map->lineno;
+      list_append(newlist, (void *)newmap);
+    }
+
+    /* Adds the sequence without changing the name to the new list if phased */
+    else
+    {
+      newmap = (mapping_t *)xmalloc(sizeof(mapping_t));
+      newmap->individual = xstrdup(map->individual);
+      newmap->date    = map->date;
+      newmap->lineno = map->lineno;
+      list_append(newlist,(void *)newmap);
+    }
+   list = list->next;
+  }
+
+
+  list_clear(datelist,mapDate_dealloc);
+
+  memcpy(datelist,newlist,sizeof(list_t));
+
+  free(newlist);
+
+}
+
+
 static void update_map_list(list_t * maplist)
 {
   mapping_t * newmap;
@@ -580,6 +647,7 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
 unsigned long ** diploid_resolve(stree_t * stree,
                                  msa_t ** msa_list,
                                  list_t * maplist,
+                                 list_t * datelist,
                                  unsigned int ** weights,
                                  int msa_count)
 {
@@ -617,6 +685,10 @@ unsigned long ** diploid_resolve(stree_t * stree,
                                                 cleandata+i,
                                                 map);
   }
+
+  /* Updates list of list of dates with new labels */
+  if (opt_datefile)
+	  update_date_list(maplist, datelist);
 
   /* update map file with new labels */
   if (stree->tip_count > 1)

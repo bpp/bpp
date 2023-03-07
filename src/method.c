@@ -2363,6 +2363,7 @@ static FILE * init(stree_t ** ptr_stree,
     resolution_count = diploid_resolve(stree,
                                        msa_list,
                                        map_list,
+                                       date_list,
                                        weights,
                                        msa_count);
 
@@ -3913,7 +3914,12 @@ void cmd_run()
     }
 
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
-	ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
+	    if (stree->tip_count > 1)
+		ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
+	    else {
+		    fatal("Mutation rate proposal not implemented for one population\n");
+		//ratio = prop_tipDate_muOnePop(gtree, stree, locus, thread_index_zero);
+	    }
 
         //ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
         pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
