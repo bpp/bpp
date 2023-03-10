@@ -2312,7 +2312,7 @@ static FILE * init(stree_t ** ptr_stree,
   /* parse map file */
   if (stree->tip_count > 1)
   {
-    printf("Parsing map file...");
+    printf("Parsing map file...\n");
     if (!(map_list = parse_mapfile(opt_mapfile)))
       fatal("Failed parsing map file %s", opt_mapfile);
     else

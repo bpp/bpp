@@ -1228,8 +1228,7 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   if (node->tau && node->tau > 0) {
 
     newage = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
-    //node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
-    if ((u_constraint[index] && node->tau > u_constraint[index]) || (l_constraint[index] && node->tau < l_constraint[index])) {
+    if ((u_constraint[index] && newage > u_constraint[index]) || (l_constraint[index] && newage < l_constraint[index])) {
 	minage = l_constraint[index];
 	maxage = tau_parent;
 	if (u_constraint[index]) {
