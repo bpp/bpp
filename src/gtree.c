@@ -1409,7 +1409,7 @@ void addSamples (mappingDate_t ** tipDateArray, int * tipDateIndex, double tmax,
 		}
 		/* Inference */
 		else {
-			unsigned snode_index = dateUsed[*tipDateIndex];
+			int snode_index = (int) dateUsed[*tipDateIndex];
 			if (snode_index < 0) {
 				(*tipDateIndex)++;
 				continue;
@@ -1421,7 +1421,7 @@ void addSamples (mappingDate_t ** tipDateArray, int * tipDateIndex, double tmax,
 			}
 			popUpdate = i;
 		}
-	      
+		
 	      assert(popUpdate < pop_count);
 
 	      if (pop[popUpdate].snode->event_count[msa_index] > 0) {
