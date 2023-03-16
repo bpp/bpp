@@ -4119,7 +4119,7 @@ void cmd_run()
         ratio = prop_branch_rates_serial(gtree,stree,locus);
       else
       {
-        td.locus = locus; td.gtree = gtree;
+        td.locus = locus; td.gtree = gtree; td.stree = stree;
         threads_wakeup(THREAD_WORK_BRATE,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
