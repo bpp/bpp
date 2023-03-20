@@ -1918,10 +1918,10 @@ static void simulate(stree_t * stree)
 	      char * label = gtree[0]->nodes[i]->label;
 	      int length = strlen(label);
 	      if (label[length-1] == 'a') {
-              	fprintf(fp_seqDates, "%.*s %f\n",length -1, label, gtree[0]->nodes[i]->time);
+              	fprintf(fp_seqDates, "%.*s %.12f\n",length -1, label, gtree[0]->nodes[i]->time);
 		i++;
 	      } else
-              	fprintf(fp_seqDates, "%s %f\n", label, gtree[0]->nodes[i]->time);
+              	fprintf(fp_seqDates, "%s %.12f\n", label, gtree[0]->nodes[i]->time);
 
       }
 

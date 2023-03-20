@@ -1544,7 +1544,7 @@ static void mcmc_logsample(FILE * fp,
 
   if (opt_est_locusrate == MUTRATE_ONLY &&
       opt_datefile)
-    fprintf(fp,"\t%.10f",stree->locusrate_mubar);
+    fprintf(fp,"\t%.12f",stree->locusrate_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
     if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
