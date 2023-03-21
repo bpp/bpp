@@ -426,9 +426,11 @@ static void dump_chk_section_1(FILE * fp,
   if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
 
-  assert(opt_migration);
   if (opt_debug_migration)
+  {
+    assert(opt_migration);
     DUMP(migcount_offset,opt_locus_count,fp);
+  }
 
   DUMP(&dparam_count,1,fp);
 
