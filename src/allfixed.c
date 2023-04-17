@@ -665,7 +665,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     col_count += stree->hybrid_count;
 
   /* column for mubar */
-  if (opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+  if ((opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL) || opt_datefile )
     ++col_count;
 
   /* add one more for log-L if usedata is on */
@@ -783,8 +783,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       sum += matrix[i][j];
 
     mean[i] = sum/opt_samples;
-    fprintf(stdout, "  %f", mean[i]);
-    fprintf(fp_out, "  %f", mean[i]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", mean[i]);
+    	fprintf(fp_out, "  %.12f", mean[i]);
+    } else {
+    	fprintf(stdout, "  %f", mean[i]);
+    	fprintf(fp_out, "  %f", mean[i]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -819,8 +824,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       median /= 2;
     }
 
-    fprintf(stdout, "  %f", median);
-    fprintf(fp_out, "  %f", median);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", median);
+    	fprintf(fp_out, "  %.12f", median);
+    } else {
+    	fprintf(stdout, "  %f", median);
+    	fprintf(fp_out, "  %f", median);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -830,8 +840,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "S.D     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", stdev[i]);
-    fprintf(fp_out, "  %f", stdev[i]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", stdev[i]);
+    	fprintf(fp_out, "  %.12f", stdev[i]);
+    } else {
+    	fprintf(stdout, "  %f", stdev[i]);
+    	fprintf(fp_out, "  %f", stdev[i]);
+  }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -841,8 +856,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "min     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][0]);
-    fprintf(fp_out, "  %f", matrix[i][0]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", matrix[i][0]);
+    	fprintf(fp_out, "  %.12f", matrix[i][0]);
+    } else {
+    	fprintf(stdout, "  %f", matrix[i][0]);
+    	fprintf(fp_out, "  %f", matrix[i][0]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -852,8 +872,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "max     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][opt_samples-1]);
-    fprintf(fp_out, "  %f", matrix[i][opt_samples-1]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", matrix[i][opt_samples-1]);
+    	fprintf(fp_out, "  %.12f", matrix[i][opt_samples-1]);
+    } else {
+    	fprintf(stdout, "  %f", matrix[i][opt_samples-1]);
+    	fprintf(fp_out, "  %f", matrix[i][opt_samples-1]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -863,8 +888,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "2.5%%    ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.025)]);
-    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.025)]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", matrix[i][(long)(opt_samples*.025)]);
+    	fprintf(fp_out, "  %.12f", matrix[i][(long)(opt_samples*.025)]);
+    } else {
+    	fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.025)]);
+    	fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.025)]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -874,8 +904,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "97.5%%   ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.975)]);
-    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.975)]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", matrix[i][(long)(opt_samples*.975)]);
+    	fprintf(fp_out, "  %.12f", matrix[i][(long)(opt_samples*.975)]);
+    } else {
+    	fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.975)]);
+    	fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.975)]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -889,8 +924,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "2.5%%HPD ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", hpd025[i]);
-    fprintf(fp_out, "  %f", hpd025[i]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", hpd025[i]);
+    	fprintf(fp_out, "  %.12f", hpd025[i]);
+    } else {
+    	fprintf(stdout, "  %f", hpd025[i]);
+    	fprintf(fp_out, "  %f", hpd025[i]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -900,8 +940,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "97.5%%HPD");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", hpd975[i]);
-    fprintf(fp_out, "  %f", hpd975[i]);
+    if (opt_datefile && i == col_count - 1) {
+    	fprintf(stdout, "  %.12f", hpd975[i]);
+    	fprintf(fp_out, "  %.12f", hpd975[i]);
+    } else {
+    	fprintf(stdout, "  %f", hpd975[i]);
+    	fprintf(fp_out, "  %f", hpd975[i]);
+    }
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
