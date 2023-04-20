@@ -1109,6 +1109,20 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       opt_est_mubar) || (opt_est_locusrate == MUTRATE_ONLY &&
      opt_datefile ))
     	fprintf(fp, "\tmu_bar");
+
+  if (opt_datefile && opt_est_locusrate == MUTRATE_ONLY) {
+
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    if (stree->nodes[i]->tau)
+    {
+      if (print_labels)
+        fprintf(fp, "\tr_tau_%d%s", i+1, stree->nodes[i]->label);
+      else
+        fprintf(fp, "\tr_tau_%d", i+1);
+    }
+  }
+  }
     
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
@@ -1501,7 +1515,7 @@ static void mcmc_logsample(FILE * fp,
   /* 2. Print taus for inner nodes */
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau)
-      fprintf(fp, "\t%.6f", stree->nodes[i]->tau);
+      fprintf(fp, "\t%.10f", stree->nodes[i]->tau);
 
   /* 2a. Print phi for hybridization nodes */
   if (opt_msci)
@@ -1543,8 +1557,16 @@ static void mcmc_logsample(FILE * fp,
     fprintf(fp,"\t%.6f",stree->locusrate_mubar);
 
   if (opt_est_locusrate == MUTRATE_ONLY &&
-      opt_datefile)
+      opt_datefile) {
     fprintf(fp,"\t%.12f",stree->locusrate_mubar);
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->tau)
+      fprintf(fp, "\t%.6f", stree->nodes[i]->tau / stree->locusrate_mubar);
+
+  }
+
+
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
     if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
