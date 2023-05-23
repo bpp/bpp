@@ -46,7 +46,7 @@ static int longint_len(long x)
   return x ? (int)floor(log10(abs(x)))+1 : 1;
 }
 
-double * getpriorA11()
+double * getpriorA11(void)
 {
   return prior_A11;
 }
@@ -376,17 +376,17 @@ void delimit_summary(FILE * fp_out, stree_t * stree)
   fclose(fp);
 }
 
-long delimitation_getparam_count()
+long delimitation_getparam_count(void)
 {
   return dmodels_count;
 }
 
-char * delimitation_getparam_string()
+char * delimitation_getparam_string(void)
 {
   return dmodels[dmodel_curindex];
 }
 
-long delimitation_getcurindex()
+long delimitation_getcurindex(void)
 {
   return dmodel_curindex;
 }
@@ -439,7 +439,7 @@ void delimit_setindex(long index)
   dmodel_curindex = index;
 }
 
-void delimit_resetpriors()
+void delimit_resetpriors(void)
 {
   long i;
   
@@ -465,7 +465,7 @@ long delimitations_count(stree_t * stree)
   return delimitations_count_recursive(stree->root);
 }
 
-static void print()
+static void print(void)
 {
   int i;
   const long thread_index = 0;
@@ -624,7 +624,7 @@ long delimitations_init(stree_t * stree)
   return dmodels_count;
 }
 
-void delimitations_fini()
+void delimitations_fini(void)
 {
   long i;
 

@@ -21,7 +21,7 @@
 
 #include "bpp.h"
 
-uint64_t arch_get_memused()
+uint64_t arch_get_memused(void)
 {
 #ifdef _WIN32
 
@@ -47,7 +47,7 @@ uint64_t arch_get_memused()
 #endif
 }
 
-uint64_t arch_get_memtotal()
+uint64_t arch_get_memtotal(void)
 {
 #ifdef _WIN32
 
@@ -83,7 +83,7 @@ uint64_t arch_get_memtotal()
 #endif
 }
 
-long arch_get_cores()
+long arch_get_cores(void)
 {
 #ifdef _WIN32
   SYSTEM_INFO si;
@@ -119,7 +119,7 @@ void arch_get_user_system_time(double * user_time, double * system_time)
 #endif
 }
 
-void arch_srandom()
+void arch_srandom(void)
 {
   /* initialize pseudo-random number generator */
   unsigned int seed = opt_seed;
@@ -147,7 +147,7 @@ void arch_srandom()
     }
 }
 
-long arch_random()
+long arch_random(void)
 {
 #ifdef _WIN32
   return rand();

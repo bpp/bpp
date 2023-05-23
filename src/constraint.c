@@ -1758,7 +1758,7 @@ l_unwind:
   free(constlist);
 }
 
-void cmd_comply()
+void cmd_comply(void)
 {
   long line_count = 0;
   long max_line_count = 0;

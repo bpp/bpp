@@ -2110,7 +2110,7 @@ void gtree_simulate_init(stree_t * stree, list_t * maplist)
   }
 }
 
-void gtree_simulate_fini()
+void gtree_simulate_fini(void)
 {
   if (sht)
     hashtable_destroy(sht,NULL);

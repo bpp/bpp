@@ -74,7 +74,7 @@
     }
   #endif
 
-void cpu_features_detect()
+void cpu_features_detect(void)
 {
   unsigned int a,b,c,d;
 
@@ -152,7 +152,7 @@ void cpu_features_detect()
 
 #endif
 
-void cpu_features_show()
+void cpu_features_show(void)
 {
   fprintf(stderr, "Detected CPU features:");
   if (altivec_present)
@@ -180,7 +180,7 @@ void cpu_features_show()
   fprintf(stderr, "\n");
 }
 
-void cpu_setarch()
+void cpu_setarch(void)
 {
   /* if arch specified by user, leave it be */
   if (opt_arch != -1)

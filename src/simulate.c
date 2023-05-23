@@ -197,7 +197,7 @@ static void process_diploid(long species_count)
     }
 }
 
-static void process_subst_model()
+static void process_subst_model(void)
 {
   long i;
 
@@ -251,7 +251,7 @@ static void process_subst_model()
   }
 }
 
-static void process_basefreqs()
+static void process_basefreqs(void)
 {
   long i;
   char dna[4] = "TCAG";
@@ -1951,7 +1951,7 @@ static void check_taus(stree_t * stree)
   }
 }
 
-void cmd_simulate()
+void cmd_simulate(void)
 {
   long i;
   stree_t * stree;

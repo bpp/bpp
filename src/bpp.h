@@ -1459,7 +1459,7 @@ void dlist_clear(dlist_t * dlist, void (*cb_dealloc)(void *));
 void dlist_item_remove(dlist_item_t * item);
 void dlist_item_append(dlist_t * dlist, dlist_item_t * item);
 void dlist_item_prepend(dlist_t * dlist, dlist_item_t * item);
-dlist_t * dlist_create();
+dlist_t * dlist_create(void);
 void dlist_destroy(dlist_t *);
 
 /* functions in hash.c */
@@ -1670,7 +1670,7 @@ long prop_join(gtree_t ** gtree,
 
 void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count);
 
-void rj_fini();
+void rj_fini(void);
 
 /* functions in prop_gamma.c */
 
@@ -2105,8 +2105,8 @@ void delimitation_set(stree_t * stree, long index);
 
 long delimitation_getparam_count(void);
 
-char * delimitation_getparam_string();
-long delimitation_getcurindex();
+char * delimitation_getparam_string(void);
+long delimitation_getcurindex(void);
 
 long delimit_getindex(stree_t * stree);
 long delimit_getindexfromstring(char * model);
@@ -2529,7 +2529,7 @@ void cmd_msci_create(void);
 
 /* functions in constraint.c */
 void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
-void cmd_comply();
+void cmd_comply(void);
 
 /* functions in debug.c */
 void debug_print_gtree(gtree_t * gtree);
@@ -2564,7 +2564,7 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list);
 
 /* functions in miginfo.c */
 miginfo_t * miginfo_create(size_t alloc_size, int alloc_dlist);
-miginfo_t * miginfo_create_default();
+miginfo_t * miginfo_create_default(void);
 void miginfo_destroy(miginfo_t * mi, long msa_index, int dealloc_dlist);
 miginfo_t * miginfo_extend(miginfo_t * mi, size_t units);
 void miginfo_append(miginfo_t ** miptr, snode_t * s, snode_t * t, double time, long msa_index);
@@ -2591,4 +2591,4 @@ int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
           double x[], double xb[][2], double space[], double e, int n);
 
 /* functions in bfdriver.c */
-void cmd_bfdriver();
+void cmd_bfdriver(void);

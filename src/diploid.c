@@ -219,7 +219,7 @@ static void diploid_resolution_init(stree_t * stree, list_t * maplist)
   mht = maplist_hash(maplist,sht);
 }
 
-static void diploid_resolution_fini()
+static void diploid_resolution_fini(void)
 {
   hashtable_destroy(sht,NULL);
   hashtable_destroy(mht,cb_dealloc_pairlabel);

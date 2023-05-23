@@ -61,7 +61,7 @@ static int prec_logpr = 8;
 
 static int prec_ft = 6;
 
-static void timer_start()
+static void timer_start(void)
 {
   time_start = time(NULL);
 }
@@ -3222,7 +3222,7 @@ static void fill_mean_mrate_indices(stree_t * stree, long * row, long * col, lon
       }
 }
 
-void cmd_run()
+void cmd_run(void)
 {
   /* common variables for all methods */
   long i,j,k;

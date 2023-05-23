@@ -824,7 +824,7 @@ void args_init(int argc, char ** argv)
   }
 }
 
-static void dealloc_switches()
+static void dealloc_switches(void)
 {
   if (opt_cfile) free(opt_cfile);
   if (opt_constraintfile) free(opt_constraintfile);
@@ -846,7 +846,7 @@ static void dealloc_switches()
   if (opt_treefile) free(opt_treefile);
 }
 
-void cmd_help()
+void cmd_help(void)
 {
   /*         0         1         2         3         4         5         6         7          */
   /*         01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
@@ -892,7 +892,7 @@ void getentirecommandline(int argc, char * argv[])
   }
 }
 
-void fillheader()
+void fillheader(void)
 {
   snprintf(progheader, 80,
            "%s %s_%s, %1.fGB RAM, %ld cores",
@@ -901,7 +901,7 @@ void fillheader()
            arch_get_cores());
 }
 
-void show_header()
+void show_header(void)
 {
   fprintf(stdout, "%s\n", progheader);
   fprintf(stdout, "https://github.com/bpp/bpp\n");

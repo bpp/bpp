@@ -1832,7 +1832,7 @@ char * msci_export_newick(const snode_t * root,
   return newick;
 }
 
-void cmd_msci_create()
+void cmd_msci_create(void)
 {
   long i;
   list_t * list;

@@ -133,7 +133,7 @@ void dlist_item_prepend(dlist_t * dlist, dlist_item_t * item)
   dlist->head = item;
 }
 
-dlist_t * dlist_create()
+dlist_t * dlist_create(void)
 {
   return (dlist_t *)xcalloc(1,sizeof(dlist_t));
 }

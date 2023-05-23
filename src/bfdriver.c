@@ -1158,7 +1158,7 @@ static void gauss_legendre_rule(const double ** x, const double ** w, int npoint
   }
 }
 
-void cmd_bfdriver()
+void cmd_bfdriver(void)
 {
   long i, ixw;
   double beta, sign, weight;

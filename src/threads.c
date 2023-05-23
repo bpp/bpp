@@ -209,14 +209,14 @@ static void * threads_worker(void * vp)
   pthread_exit(NULL);
 }
 
-void threads_pin_master()
+void threads_pin_master(void)
 {
   #if (defined(__linux__) && !defined(DISABLE_COREPIN))
     pin_to_core(opt_threads_start-1);
   #endif
 }
 
-thread_info_t * threads_ti()
+thread_info_t * threads_ti(void)
 {
   return ti;
 }
@@ -448,7 +448,7 @@ void threads_lb_stats(locus_t ** locus, FILE * fp_out)
   free(load);
 }
 
-void threads_init()
+void threads_init(void)
 {
   long t;
 
@@ -588,7 +588,7 @@ void threads_wakeup(int work_type, thread_data_t * data)
     assert(0);
 }
 
-void threads_exit()
+void threads_exit(void)
 {
   long t;
 

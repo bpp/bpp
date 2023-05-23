@@ -92,7 +92,7 @@ void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count)
                             sizeof(int));
   partials_count = (unsigned int *)xcalloc(stree->locus_count,sizeof(unsigned int));
 }
-void rj_fini()
+void rj_fini(void)
 {
   free(nodevec);
   free(nodevec_offset);

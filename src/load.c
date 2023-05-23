@@ -37,7 +37,7 @@ static stree_t * stree;
 static gtree_t ** gtree;
 static locus_t ** locus;
 
-static void alloc_gtree()
+static void alloc_gtree(void)
 {
   long i,j;
 
@@ -225,7 +225,7 @@ int load_string(FILE * fp, char ** buffer)
   return 1;
 }
 
-static void print_filepaths()
+static void print_filepaths(void)
 {
   fprintf(stdout,
           "Control file     : %s\n"

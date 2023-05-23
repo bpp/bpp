@@ -31,7 +31,7 @@
 /* legacy random number generators */
 static unsigned int * z_rndu = NULL;
 
-void legacy_init()
+void legacy_init(void)
 {
    int seed = (int)opt_seed;
    long i;
@@ -67,7 +67,7 @@ void legacy_init()
      z_rndu[i] = (unsigned int)seed;
 }
 
-void legacy_fini()
+void legacy_fini(void)
 {
   free(z_rndu);
 }
@@ -77,7 +77,7 @@ unsigned int get_legacy_rndu_status(long index)
   return z_rndu[index];
 }
 
-unsigned int * get_legacy_rndu_array()
+unsigned int * get_legacy_rndu_array(void)
 {
   return z_rndu;
 }

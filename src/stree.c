@@ -2543,7 +2543,7 @@ void stree_init(stree_t * stree,
   free(locus_seqcount);
 }
 
-void stree_fini()
+void stree_fini(void)
 {
   free(__gt_nodes);
   free(__aux);

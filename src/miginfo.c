@@ -52,7 +52,7 @@ miginfo_t * miginfo_create(size_t alloc_size, int alloc_dlist)
   return mi;
 }
 
-miginfo_t * miginfo_create_default()
+miginfo_t * miginfo_create_default(void)
 {
   return miginfo_create(alloc_initial, MI_DLI_ALLOC);
 }

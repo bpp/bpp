@@ -63,7 +63,7 @@ void progress_update(unsigned long progress)
   }
 }
 
-void progress_done()
+void progress_done(void)
 {
   if (!opt_quiet)
     fprintf(stderr, "  \r%s %.0f%%\n", progress_prompt, 100.0);

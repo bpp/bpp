@@ -357,7 +357,7 @@ static void print_stree_with_support(FILE * fp_out,
   stree_destroy(stree,NULL);
 }
 
-void summary_dealloc_hashtables()
+void summary_dealloc_hashtables(void)
 {
   hashtable_destroy(ht_biparts,cb_bipartition_dealloc);
   hashtable_destroy(ht_trivial,cb_bptrivial_dealloc);

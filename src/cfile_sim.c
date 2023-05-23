@@ -1112,7 +1112,7 @@ l_unwind:
   return ret;
 }
 
-static void update_sp_seqcount()
+static void update_sp_seqcount(void)
 {
   long i;
 
@@ -1125,7 +1125,7 @@ static void update_sp_seqcount()
  
 }
 
-static void check_validity()
+static void check_validity(void)
 {
   long i;
 
@@ -1211,7 +1211,7 @@ static void check_validity()
   }
 }
 
-void load_cfile_sim()
+void load_cfile_sim(void)
 {
   long line_count = 0;
   FILE * fp;

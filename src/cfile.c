@@ -1120,7 +1120,7 @@ static void validate_partitions(list_t * list)
   free(tmp);
 }
 
-static list_t * parse_partition_file()
+static list_t * parse_partition_file(void)
 {
   long line_count = 0;
   long ret = 0;
@@ -2295,7 +2295,7 @@ static long get_token(char * line, char ** token, char ** value)
   return p - *token + 1;
 }
 
-static void update_sp_seqcount()
+static void update_sp_seqcount(void)
 {
   long i;
 
@@ -2359,7 +2359,7 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
   return pa;
 }
 
-static void check_validity()
+static void check_validity(void)
 {
   if (!opt_streenewick)
     fatal("Initial species tree newick format is required in 'species&tree'");
@@ -2542,7 +2542,7 @@ static void check_validity()
     fatal("Invalid 'clock' value");
 }
 
-static void update_locusrate_information()
+static void update_locusrate_information(void)
 {
 
     if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR)
@@ -2563,14 +2563,14 @@ static void update_locusrate_information()
 }
 
 
-static void set_print_locusfile()
+static void set_print_locusfile(void)
 {
   if (opt_print_rates || opt_print_locusrate ||
       opt_print_hscalars || opt_print_qmatrix)
     opt_print_locusfile = 1;
 }
 
-static void set_debug_flags()
+static void set_debug_flags(void)
 {
   long * flagptr;
   long i;
@@ -2604,7 +2604,7 @@ static void set_debug_flags()
   }
 }
 
-void load_cfile()
+void load_cfile(void)
 {
   long line_count = 0;
   FILE * fp;
