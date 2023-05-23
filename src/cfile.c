@@ -3005,6 +3005,9 @@ void load_cfile()
 
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
+
+  if ( opt_checkpoint == 1 && opt_datefile)
+	  fatal("Checkpointing is not implemented with tip dating");
 }
 
 int parsefile_doubles(const char * filename,
