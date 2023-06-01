@@ -1198,6 +1198,13 @@ static void check_validity()
               opt_siterate_alpha);
 
   }
+
+  if ((opt_datefile && ! opt_seqDates) || (!opt_datefile && opt_seqDates) ) 
+	  fatal("Both datefile and seqDates must be specified when simulating with tip dates");
+  if (opt_datefile && opt_clock != BPP_CLOCK_GLOBAL) 
+	  fatal("Simulating with tip dates requires a strict clock");
+
+
 }
 
 void load_cfile_sim()

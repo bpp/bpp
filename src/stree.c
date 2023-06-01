@@ -7214,9 +7214,8 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 		    reject = 1;
 	    }
     }
-
-    //We are enforcing a strict clock
-    // ANNA: add code to check this in control file
+if (! reject) {
+    //We are enforcing a strict clock, this is also checked in the control file
     assert (opt_clock == BPP_CLOCK_GLOBAL);
     
       /* swap pmatrices */
@@ -7297,9 +7296,9 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
   }
 
     lnacceptance += logpr_sum - logpr_old;
-
+}
     /* Accept or reject */
-    if ((lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance)) && !reject)
+    if (! reject && (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance)))
     {
 	accepted++;
 

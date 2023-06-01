@@ -2685,8 +2685,12 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_migration)
     stree_update_mig_subpops(stree, thread_index);
 
+
   gtree = gtree_init(stree,msa_list,map_list,date_list,msa_count);
-  free(date_list);
+
+  if (opt_datefile)
+  	free(date_list);
+
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree[i]->original_index = msa_list[i]->original_index;

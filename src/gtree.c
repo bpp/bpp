@@ -3073,8 +3073,9 @@ gtree_t ** gtree_init(stree_t * stree,
 
   dht = NULL;
 
-  int tipDateArrayLen = datelist->count;
+  int tipDateArrayLen;
   if (opt_datefile && opt_cfile) {
+        tipDateArrayLen = datelist->count;  
         dht = datelist_hash(datelist);
 	stree->locusrate_mubar = opt_mubar_alpha / (opt_mubar_beta);
         tipDateArray = prepTipDatesInfer(stree, datelist, stree->locusrate_mubar);
