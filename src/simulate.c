@@ -1256,7 +1256,7 @@ static int cmp_tipDates(const void * a, const void * b){
 
 /* Reads in tip dates
  * Returns an array with mappingDate_t structs */
-/* Anna: this could probably be less redundant. Current it is
+/* This could probably be less redundant. Current it is
  * written to do most of the error checking first */
 mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDateArrayLength) {
 
@@ -1348,7 +1348,7 @@ mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDat
                         matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
 
                         if (matchFound) {
-				/* Anna: when sampling ancestral nodes, need to check daughter 
+				/* When sampling ancestral nodes, need to check daughter 
 				 * and parent ages */
 				if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau <= ((mappingDate_t *) list->data)-> date) {
 					fatal("Sequences were not sampled before speciation for %s. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->parent->tau, ((mappingDate_t *) list->data)-> date);
@@ -1458,11 +1458,6 @@ static void simulate(stree_t * stree)
     
     fprintf(fp_param, "\n");
   }
-
-  /* print imap file */
-  /* Anna: moved to later */
-  /*for (i = 0; i < stree->tip_count; ++i)
-    fprintf(fp_map, "%s\t%s\n", stree->nodes[i]->label, stree->nodes[i]->label); */
 
 
   /* allocate MSA structures */

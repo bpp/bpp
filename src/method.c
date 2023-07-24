@@ -3575,22 +3575,6 @@ void cmd_run()
 
   FILE * fp_debug = stdout;
 
-  //Anna: Set thetas to check proposals
-/*	stree->nodes[0]->theta =  .004; 
- 	stree->nodes[1]->theta =  .004; 
- 	stree->nodes[2]->theta =  .004;
- 	stree->nodes[3]->theta =  .006; 
- 	stree->nodes[4]->theta =  .0035; */
-
-//	stree->nodes[0]->theta =  .007; 
-//	stree->nodes[1]->theta =  .004;
-//	stree->nodes[2]->theta =  .005;
- 	//stree->nodes[3]->theta =  .006; 
- 	//stree->nodes[4]->theta =  .008; 
- 	//stree->nodes[2]->theta =  .008; 
- 	//stree->nodes[3]->theta =  .008; 
- 	//stree->nodes[4]->theta =  .006; 
-
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3944,7 +3928,6 @@ void cmd_run()
 		ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
 	    else {
 		    fatal("Mutation rate proposal not implemented for one population\n");
-		//ratio = prop_tipDate_muOnePop(gtree, stree, locus, thread_index_zero);
 	    }
 
         //ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);

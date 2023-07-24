@@ -102,9 +102,6 @@ hashtable_t * datelist_hash(list_t * datelist) {
        error if a pair with the same label already exists */
     pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
 
-    // Anna: I feel like it is possible to do this with the list structure I already have,
-    // you just point to the list instead of the pair
-
     char * carrot = strchr(((mappingDate_t *) current->data)->individual, '^');
     if (carrot ) 
 	    label = carrot + 1;

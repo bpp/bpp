@@ -873,7 +873,7 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
   if (opt_migration)
     alloc_size = msa->count;
   else{
-          //Anna: add number of sampled lineages
+        /* add number of sampled lineages in ancestral population*/
         if (opt_seqAncestral) {
                 snode_t * parent = pop[i].snode->parent;
                 for (unsigned l = stree->tip_count; l < stree->tip_count + stree->inner_count; l++){
@@ -911,7 +911,6 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
                   pop[parentIndex].nodes,
                   pop[parentIndex].seq_count*sizeof(gnode_t *));
         free(pop[parentIndex].nodes);
-        // Anna: Do I need to copy this??
         free(pop[parentIndex].seq_indices);
   }
   pop[i].seq_count += pop[j].seq_count;
@@ -1578,7 +1577,6 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 			update_tau_constraint_recursive_to_root(stree, stree->nodes[i]->parent, l_constraint);
 		}
 
-		//Anna you really need to check this is working
 		if (opt_seqAncestral)
 			update_tau_constraint_recursive_to_tip(stree, stree->root, u_constraint);
 	}
@@ -1722,7 +1720,6 @@ double set_tip_date_infer (stree_t * stree,
 		}
 	}
 
-	//ANNA is this going to work with missing data? 
 	for (unsigned j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
 		if (stree->nodes[j]->epoch_count[msa_index]) {
 			stree->nodes[j]->tip_date[msa_index] = xmalloc(sizeof(double *) * (stree->nodes[j]->epoch_count[msa_index]));
@@ -1902,8 +1899,7 @@ void set_constraints (stree_t * stree,
 				label = carrot + 1;
 				//carrot++;
 			} else {
-			//ANNA 
-			fatal("Label not found\n");
+				fatal("Label not found\n");
 			}
 
   			pair = hashtable_find(dht,
@@ -1929,7 +1925,6 @@ void set_constraints (stree_t * stree,
 
 }
 
-// Anna: This may cause problems bc it appears to not be in the development branch
 void tau_constraint_find(stree_t * stree, msa_t * msa, int msa_index) {
 
   unsigned int i,j,k;
@@ -2202,7 +2197,6 @@ int tipDateArrayLen)
                          sizeof(pop_t));
   fill_pop(pop,stree,msa,msa_index);
 
-  //ANNA update- pop seq_count not yet been updated
   for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     stree->nodes[i]->seqin_count[msa_index] = pop[i].seq_count;
 
@@ -2297,6 +2291,7 @@ int tipDateArrayLen)
   int maxTipDateIndex = tipDateArrayLen;
   int * useDate = NULL;
 
+  /* Pop seq counts are reset */
   if (tipDateArray) {
         seqCurrent = xcalloc(pop_count, sizeof(int));
         maxSeqIndex = xcalloc(pop_count, sizeof(int));
@@ -2314,7 +2309,6 @@ int tipDateArrayLen)
 
 
   
-  // Anna: pop seq counts are reset right above here 
   pop_count = stree->tip_count;
 
   /* TODO: The below loop is written to match exactly the loop in the original
@@ -2913,7 +2907,7 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
       reset_hybrid_gene_leaves_count(stree,gtree[i],i);
   }
 
-  //Anna
+  /* Add the number of leaves from tip dated seqeunces*/
   if (opt_datefile) {
   	for (i = 0; i < stree->tip_count; ++i) {
 		snode_t * node = stree->nodes[i];
@@ -3098,15 +3092,6 @@ gtree_t ** gtree_init(stree_t * stree,
 
   /* Resets the speciation times so that they do not conflict the sample times*/
   if (!opt_simulate && opt_datefile) {
-	  //ANNA
-	  //stree->nodes[3]->tau = .2; 
-	  //stree->nodes[4]->tau = .1; 
-	  //stree->nodes[3]->tau = .016; 
-	  //stree->nodes[4]->tau = .008;  
-	  //stree->nodes[2]->tau = .008;
-	  //stree->nodes[3]->tau = .008; 
-	  //stree->nodes[4]->tau = .016;  
-	  //stree->nodes[2]->tau = .5;
 	if (stree->tip_count > 1)	
         	reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
   }
@@ -4275,10 +4260,6 @@ static long propose_ages(locus_t * locus,
     else
       maxage = node->parent ? node->parent->time : 999;
 
-    /*if (node->node_index == 20)
-    	printf("%d %f %d %f %d %f %d %f\n", node->node_index, node->time, node->left->node_index, node->left->time, node->right->node_index, node->right->time, node->parent->node_index, node->parent->time);
-
-    printf("max min %.10f %.10f\n", maxage, minage); */
     assert(maxage > minage);
 
     tnew = node->time + opt_finetune_gtage*legacy_rnd_symmetrical(thread_index);
@@ -4428,7 +4409,6 @@ static long propose_ages(locus_t * locus,
            path from new population (excluding) to the old population */
         if (!opt_msci)
         {
-		//ANNA ?
           for (pop = node->pop; pop != oldpop; pop = pop->parent) {
             pop->parent->seqin_count[msa_index]--;
 	  assert( 0!= pop->parent->seqin_count[msa_index]);
@@ -7162,33 +7142,13 @@ static double simulate_coalescent(gtree_t * gtree,
   dlist_item_t * dlitem;
   snode_t * snode = gnode->pop;
   snode_t * sibling = NULL;
-  int epoch = -1; 
-  int j = 0;
-  
-  //fatal("This function does not work for tipdating. Anna needs to fix it");
+
   wtimes = (double *)xmalloc((size_t)(gtree->inner_count+1) * sizeof(double));
 
   t = gnode->time;
 
   /* start with the lineages entering the current population */
   lineages = snode->seqin_count[msa_index];
-
-  if (opt_datefile && snode->epoch_count && snode->epoch_count[msa_index]) {
-	  epoch = 0;
-	  
-	  for (j = 0; j < snode->epoch_count[msa_index]; j++) {
-		  if (t >= snode->tip_date[msa_index][j])
-		  	lineages += snode->date_count[msa_index][j];
-		  else 
-			  break;
-	  }
-	  if (j == snode->epoch_count[msa_index])
-	  	epoch = -1;
-	  else
-	  	epoch = j;
-		
-	  
-  }
 
   /* make a list of waiting times older than t and at the same time reduces
      number of lineages by the amount of coalescent events younger than t
@@ -7205,50 +7165,28 @@ static double simulate_coalescent(gtree_t * gtree,
   /* subtract the pruned lineage (branch) */
   --lineages;
 
-  if (!lineages && epoch != -1 ) {
-	lineages += snode->date_count[msa_index][epoch];
-	t = snode->tip_date[msa_index][epoch];
-	epoch++;
-	if (epoch == snode->epoch_count[msa_index])
-	       	epoch = -1;
-  }
-
   /* determine time to coalesce */
   while (1)
   {
 
-  /* determine time to coalesce */
-    if (lineages || epoch != -1 )
+    if (lineages)
     {
       /* if not root population add tau and sort waiting times */
       if (snode->parent)
         wtimes[k++] = snode->parent->tau;
       qsort(wtimes,k, sizeof(double), cb_cmp_double);
-
       /* simulate until all waiting times are exhausted */
-      /* Anna: this loop is within a population */
       for (i = 0; i < k; ++i)
       {
         /* generate time */
         rate = 2*lineages / snode->theta;
         tnew = legacy_rndexp(thread_index, 1/rate);
 
-
-        if (t+tnew <= wtimes[i] && (epoch == -1 || t+tnew <= snode->tip_date[msa_index][epoch]))
+        if (t+tnew <= wtimes[i])
         {
-	
-          	t += tnew;
-          	break;
-
-        } else if (epoch != -1 && t+tnew > snode->tip_date[msa_index][epoch]) {
-
-		lineages += snode->date_count[msa_index][epoch];
-		epoch++;
-			if (epoch == snode->epoch_count[msa_index]) 
-				epoch = -1;
-		i--;
-		continue;
-	}
+          t += tnew;
+          break;
+        }
 
         t = wtimes[i];
 
@@ -7256,9 +7194,8 @@ static double simulate_coalescent(gtree_t * gtree,
       }
 
       /* stop if coalescence happened */
-      if (i != k) {
+      if (i != k)
         break;
-      }
 
       /* also stop if we were in the root population */
       if (!snode->parent)
@@ -7270,8 +7207,6 @@ static double simulate_coalescent(gtree_t * gtree,
         t += legacy_rndexp(thread_index, 1/rate);
         break;
       }
-
-      //Anna? Why though?
       else
         ++lineages;
     }
@@ -7288,12 +7223,6 @@ static double simulate_coalescent(gtree_t * gtree,
 
     lineages += sibling->seqin_count[msa_index] - sibling->event_count[msa_index];
 
-    if (sibling->epoch_count) {
-	  for (int j = 0; j < sibling->epoch_count[msa_index]; j++)
-		  lineages += sibling->date_count[msa_index][j];
-    }
-
-
 
     snode = snode->parent;
     /* make a list of waiting times older than t and at the same time reduces
@@ -7306,13 +7235,6 @@ static double simulate_coalescent(gtree_t * gtree,
       if (coal->time > t)
         wtimes[k++] = coal->time;
     }
-
-
-  if (opt_datefile && snode->epoch_count && snode->epoch_count[msa_index])
-	  epoch = 0;
-   else 
-	  epoch = -1;
-  
   }
 
   free(wtimes);
@@ -7361,7 +7283,6 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
     if (!x->left && !x->right && !x->parent && x != gtree->root) continue;
 
     /* coalescent events */
-    //Anna - this is because x->time of the tips = 0, needs to change
     if (i >= gtree->tip_count)
     {
       if (x->pop == snode)
@@ -7424,6 +7345,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
   *wtimes_count = k;
   return wtimes;
 }
+
 static double simulate_coalescent_mig(stree_t * stree,
                                       gtree_t * gtree,
                                       gnode_t * gnode,

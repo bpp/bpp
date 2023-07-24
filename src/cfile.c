@@ -2474,9 +2474,6 @@ static void check_validity()
   if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
     fatal("Cannot use species delimitation models when using tip dating.");
 
-  if (opt_datefile)
-	opt_theta_move = BPP_THETA_SLIDE;
-
   if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
 	fatal("locusrate must be 3 for tip dating.\n");
 }
