@@ -960,7 +960,7 @@ int checkpoint_dump(stree_t * stree,
 
   fprintf(stdout,"\n\nWriting checkpoint file %s\n\n",s);
 
-  fp = fopen(s,"w");
+  fp = fopen(s,"wb");
   free(s);
   if (!fp)
   {

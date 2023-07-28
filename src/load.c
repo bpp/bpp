@@ -1871,7 +1871,7 @@ int checkpoint_load(gtree_t *** gtreep,
   assert(opt_resume);
 
   fprintf(stdout, "\nResuming from checkpoint file %s\n\n", opt_resume);
-  fp = fopen(opt_resume,"r");
+  fp = fopen(opt_resume,"rb");
   if (!fp)
     fatal("Cannot open checkpoint file %s", opt_resume);
 
