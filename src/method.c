@@ -110,7 +110,7 @@ static void init_outfile(FILE * fp)
     fprintf(fp, "Seed: %ld (fixed by user)\n", opt_seed);
   else
   {
-    unsigned int rseed = get_legacy_rndu_status(0);
+    uint32_t rseed = get_legacy_rndu_status(0);
     fprintf(fp, "Seed: %d (randomly generated)\n", rseed);
   }
 }
@@ -530,7 +530,7 @@ static stree_t * load_tree_or_network(void)
     printf("Seed: %ld (fixed by user)\n", opt_seed);
   else
   {
-    unsigned int rseed = get_legacy_rndu_status(0);
+    uint32_t rseed = get_legacy_rndu_status(0);
     printf("Seed: %d (randomly generated)\n", rseed);
   }
 
