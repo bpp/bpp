@@ -52,21 +52,19 @@ static void gtree_all_partials(gnode_t * root,
 void prop_mixing_update_gtrees(locus_t ** locus,
                                gtree_t ** gtree,
                                stree_t * stree,
-                               long locus_start,
-                               long locus_count,
                                double c,
-                               long thread_index,
                                double * ret_lnacceptance,
                                double * ret_logpr)
 {
-  long i;
-  unsigned int j,k;
   double lnacceptance = 0;
   double logpr = 0;
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
 
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: lnacceptance, logpr) shared(nodes_count)
+  for (long i = 0; i < opt_locus_count; ++i)
   {
+    long thread_index = omp_get_thread_num();
+    unsigned int j,k;
     gtree_t * gt = gtree[i];
 
     /* go through all gene nodes */
@@ -407,7 +405,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     thread_data_t td;
     td.locus = locus; td.gtree = gtree; td.stree = stree;
     td.c = c;
-    threads_wakeup(THREAD_WORK_MIXING,&td);
+    prop_mixing_update_gtrees(td.locus, td.gtree, td.stree, c, &td.lnacceptance, NULL);
     lnacceptance += td.lnacceptance;
   }
   else
@@ -417,10 +415,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     prop_mixing_update_gtrees(locus,
                               gtree,
                               stree,
-                              0,
-                              stree->locus_count,
                               c,
-                              0,
                               &lnacc_contrib,
                               &logpr_change);
     lnacceptance += lnacc_contrib;

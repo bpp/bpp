@@ -197,21 +197,16 @@ double locus_propose_alpha_serial(stree_t * stree, locus_t ** locus, gtree_t ** 
 void locus_propose_alpha_parallel(stree_t * stree,
                                   locus_t ** locus,
                                   gtree_t ** gtree,
-                                  long locus_start,
-                                  long locus_count,
-                                  long thread_index,
                                   long * p_proposal_count,
                                   long * p_accepted)
 {
-  unsigned int i;
   long accepted = 0;
   long candidates = 0;
 
-  assert(locus_start >= 0);
-  assert(locus_count > 0);
-
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: accepted, candidates)
+  for (unsigned int i = 0; i < opt_locus_count; ++i)
   {
+    long thread_index = omp_get_thread_num();
     if (locus[i]->dtype == BPP_DATA_DNA && locus[i]->rate_cats > 1)
     {
       ++candidates;

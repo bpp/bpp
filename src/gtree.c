@@ -4171,25 +4171,20 @@ double gtree_propose_migevent_ages_serial(locus_t ** locus,
 void gtree_propose_ages_parallel(locus_t ** locus,
                                  gtree_t ** gtree,
                                  stree_t * stree,
-                                 long locus_start,
-                                 long locus_count,
-                                 long thread_index,
                                  long * p_proposal_count,
                                  long * p_accepted)
 {
-  unsigned int i;
-  long proposal_count = 0;
   long accepted = 0;
-  assert(locus_start >= 0);
-  assert(locus_count > 0);
+  long proposal_count = 0;
 
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: accepted, proposal_count)
+  for (unsigned int i = 0; i < opt_locus_count; ++i)
   {
+    long thread_index = omp_get_thread_num();
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->inner_count;
     accepted += propose_ages(locus[i],gtree[i],stree,i,thread_index);
   }
-
   *p_proposal_count = proposal_count;
   *p_accepted = accepted;
 }
@@ -5742,21 +5737,16 @@ double gtree_propose_spr_serial(locus_t ** locus,
 void gtree_propose_spr_parallel(locus_t ** locus,
                                 gtree_t ** gtree,
                                 stree_t * stree,
-                                long locus_start,
-                                long locus_count,
-                                long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted)
 {
-  unsigned int i;
   long proposal_count = 0;
   long accepted = 0;
 
-  assert(locus_start >= 0);
-  assert(locus_count > 0);
-
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: proposal_count, accepted)
+  for (unsigned int i = 0; i < opt_locus_count; ++i)
   {
+    long thread_index = omp_get_thread_num();
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->edge_count;
     if (!opt_exp_sim && !opt_migration)
