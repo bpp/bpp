@@ -19,9 +19,9 @@
          phase =   1  1  1  1
                   
        usedata = 1  * 0: no data (prior); 1:seq like
-         nloci = 5  * number of data sets in seqfile
+         nloci = 1  * number of data sets in seqfile
 
-     cleandata = 1    * remove sites with ambiguity data (1:yes, 0:no)?
+     cleandata = 0    * remove sites with ambiguity data (1:yes, 0:no)?
 
    thetaprior = gamma 2 2000 # gamma(a, b) for theta (estimate theta)
      tauprior = gamma 2 1000 # gamma(a, b) for root tau & Dirichlet(a) for other tau's
