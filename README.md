@@ -186,7 +186,7 @@ More documentation regarding control files, will be available soon on the [wiki]
 
 ## Documentation
 
-The most up-to-date documentation of BPP is [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.6.2/bppDOC.pdf) distribution together with BPP.
+The most up-to-date documentation for BPP is now available through the [BPP Documentation Project](https://bpp.github.io/bpp-manual/). The original manual [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.6.2/bppDOC.pdf) is found in the current BPP distribution.
 
 A tutorial on BPP was recently published as a book chapter:
 [A Tutorial on the Use of BPP for Species Tree Estimation and Species Delimitation](https://hal.inria.fr/PGE/hal-02536475)
