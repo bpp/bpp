@@ -36,6 +36,10 @@
 #include <ctype.h>
 #include <pthread.h>
 
+#ifdef SIMDCONFIG
+#include "simdconfig.h"
+#endif
+
 #ifdef _MSC_VER
 #include <pmmintrin.h>
 #include <immintrin.h>
