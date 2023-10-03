@@ -406,7 +406,11 @@ void stree_destroy(stree_t * tree,
       free(node->migevent_count);
 
     if (opt_migration && node->migbuffer)
+    {
+      for (j = 0; j < tree->inner_count; ++j)
+        free(node->migbuffer[j].mrsum);
       free(node->migbuffer);
+    }
 
     free(node);
   }

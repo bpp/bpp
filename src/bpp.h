@@ -95,7 +95,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 6
-#define VERSION_PATCH 1
+#define VERSION_PATCH 3
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -246,6 +246,10 @@ extern const char * global_freqs_strings[28];
 
 #define BPP_THETA_SLIDE                 0
 #define BPP_THETA_GIBBS                 1
+#define BPP_THETA_MG_INVG               2
+#define BPP_THETA_MG_GAMMA              3
+#define BPP_THETA_MG_CAUCHY             4
+#define BPP_THETA_MG_T4                 5
 
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
@@ -288,7 +292,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_MOVE_NUI_INDEX              13
 #define BPP_MOVE_BRANCHRATE_INDEX       14
 #define BPP_MOVE_MRATE_INDEX            15
-#define BPP_MOVE_INDEX_MAX              15
+#define BPP_MOVE_MIGVR_INDEX            16
+#define BPP_MOVE_INDEX_MAX              16
 
 #define BPP_MSCIDEFS_TREE               1
 #define BPP_MSCIDEFS_DEFINE             2
@@ -404,11 +409,32 @@ typedef struct dlist_s
   dlist_item_t * tail;
 } dlist_t;
 
+typedef struct migspec_s
+{
+  char * source;
+  char * target;
+  unsigned int si;
+  unsigned int ti;
+
+  double am; /* shape param for variable migration rates among loci */
+  double alpha;
+  double beta;
+  double pseudo_a;
+  double pseudo_b;
+  long params;
+
+  double M;
+  double * Mi;
+
+  char * outfile;       /* used only to store rates when simulating  */
+} migspec_t;
+
 typedef struct migbuffer_s
 {
   double time;
   long type;
-  double mrsum;
+  double * mrsum; /* per locus total migration rate (variable mig rates) */
+  long active_count; /* number of active elements (1 or nloci) */
 } migbuffer_t;
 
 
@@ -491,6 +517,7 @@ typedef struct snode_s
   /* migration events associated with population across loci */
   long * migevent_count;
   migbuffer_t * migbuffer;
+  long mb_mrsum_isarray;
   long mb_count;
   dlist_t ** mig_source;
   dlist_t ** mig_target;
@@ -637,6 +664,9 @@ typedef struct gtree_s
   snode_t ** migpops;
   snode_t ** rb_linked;  /* per-locus affected snodes in new rubberband */
   long rb_lcount;
+
+  /* per locus migration rate */
+  double locus_mig_rate;
 
 } gtree_t;
 
@@ -989,6 +1019,7 @@ extern long opt_debug_full;
 extern long opt_debug_gage;
 extern long opt_debug_gspr;
 extern long opt_debug_hs;
+extern long opt_debug_migration;
 extern long opt_debug_mix;
 extern long opt_debug_mui;
 extern long opt_debug_parser;
@@ -1023,6 +1054,7 @@ extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
+extern long opt_mig_vrates_exist;
 extern long opt_model;
 extern long opt_mrate_move;
 extern long opt_msci;
@@ -1035,6 +1067,7 @@ extern long opt_print_locusrate;
 extern long opt_print_qmatrix;
 extern long opt_print_rates;
 extern long opt_print_samples;
+extern long opt_pseudop_exist;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rate_prior;
@@ -1067,6 +1100,7 @@ extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
 extern double opt_finetune_migrates;
+extern double opt_finetune_mig_Mi;
 extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
@@ -1133,12 +1167,10 @@ extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
 extern double * opt_qrates_params;
-extern double * opt_mig_simrate;
-extern char ** opt_mig_source;
-extern char ** opt_mig_target;
+extern migspec_t * opt_mig_specs;
+extern long ** opt_migration_matrix;
 extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
-extern double ** opt_migration_matrix;
 extern partition_t ** opt_partition_list;
 extern int  opt_seqAncestral;
 
@@ -1404,7 +1436,18 @@ void stree_reset_leaves(stree_t * stree);
 
 double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
+double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+
 void stree_update_mig_subpops(stree_t * stree, long msa_index);
+void stree_update_mig_subpops_single(stree_t * stree,
+                                     snode_t * x,
+                                     snode_t * y,
+                                     double oldM);
+void stree_update_mig_subpops_single_vrates(stree_t * stree,
+                                            snode_t * x,
+                                            snode_t * y,
+                                            long msa_index,
+                                            double oldMi);
 
 long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
 
@@ -1878,6 +1921,7 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long * rates_offset,
+                    long * migcount_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -1916,6 +1960,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * out_offset,
                     long ** gtree_offset,
                     long ** rates_offset,
+                    long ** migcount_offset,
                     long * dparam_count,
                     double ** posterior,
                     double ** pspecies,

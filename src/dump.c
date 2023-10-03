@@ -136,7 +136,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
      size_section += opt_locus_count*sizeof(long);
     
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -174,6 +174,7 @@ static void dump_chk_section_1(FILE * fp,
                                long out_offset,
                                long * gtree_offset,
                                long * rates_offset,
+                               long * migcount_offset,
                                long dparam_count,
                                double * posterior,
                                double * pspecies,
@@ -353,6 +354,7 @@ static void dump_chk_section_1(FILE * fp,
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_migrates,1,fp);
+  DUMP(&opt_finetune_mig_Mi,1,fp);
   DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
@@ -376,6 +378,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_snl_lambda_expand,1,fp);
   DUMP(&opt_snl_lambda_shrink,1,fp);
 
+  DUMP(&opt_pseudop_exist,1,fp);
+  DUMP(&opt_mig_vrates_exist,1,fp);
+
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
   DUMP(&(stree->nui_sum),1,fp);
@@ -398,7 +403,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 
@@ -411,12 +416,21 @@ static void dump_chk_section_1(FILE * fp,
   /* write bfbeta */
   DUMP(&opt_bfbeta,1,fp);
 
+  /* write opt_debug_migration */
+  DUMP(&opt_debug_migration,1,fp);
+
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
 
   if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
+
+  if (opt_debug_migration)
+  {
+    assert(opt_migration);
+    DUMP(migcount_offset,opt_locus_count,fp);
+  }
 
   DUMP(&dparam_count,1,fp);
 
@@ -481,6 +495,24 @@ static void dump_chk_section_1(FILE * fp,
 
     for (i = 0; i < total_nodes; ++i)
       DUMP(opt_mig_bitmatrix[i],total_nodes,fp);
+
+    for (i = 0; i < opt_migration; ++i)
+    {
+      migspec_t * spec = opt_mig_specs+i;
+      DUMP(spec->source, strlen(spec->source)+1, fp);
+      DUMP(spec->target, strlen(spec->target)+1, fp);
+      DUMP(&(spec->si), 1, fp);
+      DUMP(&(spec->ti), 1, fp);
+      DUMP(&(spec->am), 1, fp);
+      DUMP(&(spec->alpha), 1, fp);
+      DUMP(&(spec->beta), 1, fp);
+      DUMP(&(spec->pseudo_a), 1, fp);
+      DUMP(&(spec->pseudo_b), 1, fp);
+      DUMP(&(spec->params), 1, fp);
+      DUMP(&(spec->M), 1, fp);
+      if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+        DUMP(spec->Mi, opt_locus_count, fp);
+    }
   }
 }
 
@@ -651,12 +683,20 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   if (opt_migration)
   {
     for (i = 0; i < total_nodes; ++i)
+    {
       DUMP(stree->nodes[i]->migevent_count,opt_locus_count,fp);
+      DUMP(&(stree->nodes[i]->mb_mrsum_isarray),1,fp);
+    }
 
     for (i = 0; i < total_nodes; ++i)
     {
       DUMP(&(stree->nodes[i]->mb_count),1,fp);
       DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
+
+      for (j = 0; j < stree->inner_count; ++j)
+        DUMP(stree->nodes[i]->migbuffer[j].mrsum,
+             stree->nodes[i]->migbuffer[j].active_count,fp);
+
     }
   }
 }
@@ -887,6 +927,7 @@ int checkpoint_dump(stree_t * stree,
                     long out_offset,
                     long * gtree_offset,
                     long * rates_offset,
+                    long * migcount_offset,
                     long dparam_count,
                     double * posterior,
                     double * pspecies,
@@ -942,6 +983,7 @@ int checkpoint_dump(stree_t * stree,
                      out_offset,
                      gtree_offset,
                      rates_offset,
+                     migcount_offset,
                      dparam_count,
                      posterior,
                      pspecies,

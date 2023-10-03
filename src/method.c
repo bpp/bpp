@@ -219,7 +219,12 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "   tau: species tree tau proposal\n");
   fprintf(fp, "   mix: mixing proposal\n");
   if (opt_migration)
+  {
     fprintf(fp, "  mrte: migration rates proposal\n");
+    if (opt_mig_vrates_exist)
+      fprintf(fp, "  mr_i: variable migration rates across loci proposal\n");
+
+  }
   if (enabled_hrdt)
     fprintf(fp, "  hrdt: heredity proposal\n");
   if (enabled_lrht)
@@ -346,6 +351,7 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += opt_method == METHOD_10 ? 7 : 0;
   ap_width += opt_method == METHOD_11 ? 7*(2+!!opt_prob_snl) : 0;
   ap_width += opt_migration ? 5 : 0;
+  ap_width += opt_mig_vrates_exist ? 5 : 0;
   ap_width += 1;
   
   if (opt_method == METHOD_10)
@@ -394,6 +400,11 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_migration)
   {
     fprintf(fp," mrte");    linewidth += 5;
+    if (opt_mig_vrates_exist)
+    {
+      fprintf(fp," mr_i");  linewidth += 5;
+    }
+
   }
   if (enabled_mubar)
   {
@@ -624,9 +635,16 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "brte");
     }
     if (opt_migration)
+    {
       fprintf(fp[j], " %*s", prec_ft+spacing, "mrte");    /* 15 */
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*s", prec_ft+spacing, "mr_i");  /* 16 */
+    }
     else
+    {
       fprintf(fp[j], " %*s", empty, "mrte");
+      fprintf(fp[j], " %*s", empty, "mr_i");
+    }
   }
   for (j = 0; j < 2; ++j)
   {
@@ -704,10 +722,13 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     if (opt_migration)
     {
       fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MRATE_INDEX]);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MIGVR_INDEX]);
+
     }
     else
     {
-      fprintf(fp[j], " %*s", empty, "- ");
+      fprintf(fp[j], " %*s", empty, "- - ");
     }
 
 
@@ -787,9 +808,15 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     }
 
     if (opt_migration)
+    {
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mig_Mi);
+    }
     else
-      fprintf(fp[j], " %*s", empty, "- ");
+    {
+      fprintf(fp[j], " %*s", empty, "- - ");
+    }
 
     fprintf(fp[j], "\n");
   }
@@ -828,7 +855,12 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     reset_finetune_onestep(pjump[BPP_MOVE_BRANCHRATE_INDEX], &opt_finetune_branchrate);
   }
   if (opt_migration)
+  {
     reset_finetune_onestep(pjump[BPP_MOVE_MRATE_INDEX], &opt_finetune_migrates);
+    if (opt_mig_vrates_exist)
+      reset_finetune_onestep(pjump[BPP_MOVE_MIGVR_INDEX], &opt_finetune_mig_Mi);
+
+  }
 
   for (j = 0; j < 2; ++j)
   {
@@ -894,9 +926,15 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "- ");
     }
     if (opt_migration)
+    {
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
+      if (opt_mig_vrates_exist)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mig_Mi);
+    }
     else
-      fprintf(fp[j], " %*s", empty, "- ");
+    {
+      fprintf(fp[j], " %*s", empty, "- - ");
+    }
 
     fprintf(fp[j], "\n");
   }
@@ -993,7 +1031,11 @@ static void status_print_pjump(FILE * fp,
   if (enabled_prop_alpha)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
   if (opt_migration)
+  {
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_MRATE_INDEX]);
+    if (opt_mig_vrates_exist)
+      fprintf(fp, " %4.2f", pjump[BPP_MOVE_MIGVR_INDEX]);
+  }
 
   /* print pjump for species tree SPR */
   if (opt_method == METHOD_01)
@@ -1171,6 +1213,22 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    /* print migration rates */
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%sMi_%s->%s",
+                tab_required ? "\t" : "",
+                opt_mig_specs[j].source, opt_mig_specs[j].target);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars header */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1313,6 +1371,20 @@ static void print_rates(FILE ** fp_locus,
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
+
+    if (opt_migration && opt_mig_vrates_exist)
+    {
+      for (j = 0; j < opt_migration; ++j)
+      {
+        if (!opt_mig_specs[j].Mi) continue;
+
+        fprintf(fp_locus[i],
+                "%s%.6f",
+                tab_required ? "\t" : "", opt_mig_specs[j].Mi[i]);
+        tab_required = 1;
+      }
+    }
+
     /* print heredity scalars */
     if (opt_est_heredity == HEREDITY_ESTIMATE && opt_print_hscalars)
     {
@@ -1580,7 +1652,7 @@ static void mcmc_logsample(FILE * fp,
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         if (opt_mig_bitmatrix[i][j])
-          fprintf(fp, "\t%.6f", opt_migration_matrix[i][j]);
+          fprintf(fp, "\t%.6f", opt_mig_specs[opt_migration_matrix[i][j]].M);
   }
 
   /* 5. print log-likelihood if usedata=1 */
@@ -1595,6 +1667,50 @@ static void mcmc_logsample(FILE * fp,
   }
   else
     fprintf(fp, "\n");
+}
+
+static void print_header_migcount(FILE ** fp, stree_t * stree)
+{
+  int tab_required = 0;
+  long i,j;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    tab_required = 0;
+    for (j = 0; j < opt_migration; ++j)
+    {
+      migspec_t * spec = opt_mig_specs+j;
+      snode_t * s = stree->nodes[spec->si];
+      snode_t * t = stree->nodes[spec->ti];
+
+      fprintf(fp[i], "%sM_%s->%s", tab_required ? "\t" : "", s->label, t->label);
+      tab_required = 1;
+    }
+    if (tab_required)
+      fprintf(fp[i], "\n");
+  }
+}
+
+static void print_migcount(FILE ** fp, gtree_t ** gtree)
+{
+  int tab_required = 0;
+  long i,j;
+  assert(opt_migration);
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    tab_required = 0;
+    for (j = 0; j < opt_migration; ++j)
+    {
+      migspec_t * spec = opt_mig_specs+j;
+      long mc = gtree[i]->migcount[spec->si][spec->ti];
+
+      fprintf(fp[i], "%s%ld", tab_required ? "\t" : "", mc);
+      tab_required = 1;
+    }
+    if (tab_required)
+      fprintf(fp[i], "\n");
+  }
 }
 
 static void print_gtree(FILE ** fp, stree_t * stree, gtree_t ** gtree)
@@ -1765,14 +1881,18 @@ static void create_mig_bitmatrix(stree_t * stree)
   assert(!opt_msci);
   assert(opt_migration);
 
+  const long thread_index_zero = 0;
   unsigned int total_nodes = stree->tip_count + stree->inner_count;
 
   opt_mig_bitmatrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
     opt_mig_bitmatrix[i] = (long *)xcalloc((size_t)total_nodes,sizeof(long));
-  opt_migration_matrix = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+  opt_migration_matrix = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
-    opt_migration_matrix[i] = (double *)xcalloc((size_t)total_nodes,sizeof(double));
+  {
+    opt_migration_matrix[i] = (long *)xcalloc((size_t)total_nodes,sizeof(long));
+    memset(opt_migration_matrix[i],-1,total_nodes*sizeof(long));
+  }
 
   /* go through source-target pairs */
   for (i = 0; i < opt_migration; ++i)
@@ -1780,32 +1900,64 @@ static void create_mig_bitmatrix(stree_t * stree)
     s = t = -1;
     for (j = 0; j < total_nodes; ++j)
     {
-      if (s == -1 && !strcmp(stree->nodes[j]->label,opt_mig_source[i]))
+      if (s == -1 && !strcmp(stree->nodes[j]->label,opt_mig_specs[i].source))
         s = j;
-      if (t == -1 && !strcmp(stree->nodes[j]->label,opt_mig_target[i]))
+      if (t == -1 && !strcmp(stree->nodes[j]->label,opt_mig_specs[i].target))
         t = j;
     }
     if (s == -1 || t == -1)
       fatal("Cannot create migration band for pair %s %s",
-            opt_mig_source[i], opt_mig_target[i]);
+            opt_mig_specs[i].source, opt_mig_specs[i].target);
     if (s == t)
       fatal("Cannot create migration from one species to itself (species: %s)",
             stree->nodes[s]->label);
 
     opt_mig_bitmatrix[s][t] = 1;
+    opt_migration_matrix[s][t] = i;
 
-    opt_migration_matrix[s][t] = opt_mig_alpha / opt_mig_beta;
+    migspec_t * spec = opt_mig_specs+i;
+    spec->Mi = NULL;
+    spec->si = s;
+    spec->ti = t;
+    switch (spec->params)
+    {
+      case 0:
+      case 1:
+        spec->alpha    = opt_mig_alpha;
+        spec->beta     = opt_mig_beta;
+        spec->pseudo_a = opt_pseudo_alpha;
+        spec->pseudo_b = opt_pseudo_beta;
+        break;
+      case 2:
+      case 3:
+        spec->pseudo_a = opt_pseudo_alpha;
+        spec->pseudo_b = opt_pseudo_beta;
+        break;
+      case 4:
+      case 5:
+        break;
+    }
+
+    spec->M = spec->alpha / spec->beta;
+
+    /* if rate variation across loci then allocate array */
+    if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+    {
+      spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+
+      double a = spec->am;
+      double b = spec->am / spec->M;
+      for (j = 0; j < opt_locus_count; ++j)
+        spec->Mi[j] = legacy_rndgamma(thread_index_zero,a) / b;
+
+      /* set flag that indicates stree->nodes[t]->migbuffer[...]->mrsum must be
+         an array of size opt_locus_count */
+      stree->nodes[t]->mb_mrsum_isarray = 1;
+
+    }
 
   }
 
-  for (i = 0; i < opt_migration; ++i)
-  {
-    free(opt_mig_target[i]);
-    free(opt_mig_source[i]);
-  }
-  free(opt_mig_target);
-  free(opt_mig_source);
-  opt_mig_target = opt_mig_source = NULL;
 }
 
 static FILE * resume(stree_t ** ptr_stree,
@@ -1843,6 +1995,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
                      FILE *** ptr_fp_locus,
+                     FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out)
 {
   long i,j;
@@ -1852,7 +2005,9 @@ static FILE * resume(stree_t ** ptr_stree,
   long out_offset;
   long * gtree_offset;
   long * rates_offset;
+  long * migcount_offset;
   char ** gtree_files = NULL;
+  char ** migcount_files = NULL;
 
   if (sizeof(BYTE) != 1)
     fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
@@ -1869,6 +2024,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   &out_offset,
                   &gtree_offset,
                   &rates_offset,
+                  &migcount_offset,
                   ptr_dparam_count,
                   ptr_posterior,
                   ptr_pspecies,
@@ -1898,6 +2054,22 @@ static FILE * resume(stree_t ** ptr_stree,
 
   /* truncate output file to specific offset */
   checkpoint_truncate(opt_outfile, out_offset);
+
+  /* truncate migcount files if available */
+  if (opt_migration && opt_debug_migration)
+  {
+    assert(migcount_offset);
+    migcount_files = (char **)xmalloc((size_t)opt_locus_count*sizeof(char *));
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, "%s.migcount.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
+      migcount_files[i] = s;
+      checkpoint_truncate(s,migcount_offset[i]);
+    }
+    free(migcount_offset);
+  }
 
   /* truncate gene tree files if available */
   if (opt_print_genetrees)
@@ -1997,6 +2169,21 @@ static FILE * resume(stree_t ** ptr_stree,
   if (!(fp_out = fopen(opt_outfile, "a")))
     fatal("Cannot open file %s for appending...", opt_outfile);
   *ptr_fp_out = fp_out;
+
+  /* open potential truncated migcount files for appending */
+  *ptr_fp_migcount = NULL;
+  if (opt_migration && opt_debug_migration)
+  {
+    FILE ** fp_migcount = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (!(fp_migcount[i] = fopen(migcount_files[i], "a")))
+        fatal("Cannot open file %s for appending...", migcount_files[i]);
+      free(migcount_files[i]);
+    }
+    free(migcount_files);
+    *ptr_fp_migcount = fp_migcount;
+  }
 
   /* open potential truncated gene trees files for appending */
   *ptr_fp_gtree = NULL;
@@ -2099,6 +2286,7 @@ static FILE * init(stree_t ** ptr_stree,
                    gtree_t *** ptr_gclones,
                    FILE *** ptr_fp_gtree,
                    FILE *** ptr_fp_locus,
+                   FILE *** ptr_fp_migcount,
                    FILE ** ptr_fp_out)
 {
   long i,j;
@@ -2116,6 +2304,7 @@ static FILE * init(stree_t ** ptr_stree,
   FILE * fp_out;
   FILE ** fp_gtree;
   FILE ** fp_locus = NULL;
+  FILE ** fp_migcount = NULL;
   msa_t ** msa_list;
   gtree_t ** gtree;
   locus_t ** locus;
@@ -2130,7 +2319,7 @@ static FILE * init(stree_t ** ptr_stree,
   gtree_t ** gclones = NULL;
 
   if (!(fp_out = fopen(opt_outfile, "w")))
-    fatal("Cannot open file %s for writing...");
+    fatal("Cannot open file %s for writing...", opt_outfile);
   *ptr_fp_out = fp_out;
   init_outfile(fp_out);
 
@@ -2506,6 +2695,23 @@ static FILE * init(stree_t ** ptr_stree,
     }
     threads_pin_master();
   }
+
+  *ptr_fp_migcount = NULL;
+  if (opt_migration && opt_debug_migration)
+  {
+    fp_migcount = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      char * s = NULL;
+      xasprintf(&s, "%s.migcount.L%d", opt_outfile, msa_list[i]->original_index+1);
+      fp_migcount[i] = xopen(s,"w");
+      free(s);
+    }
+  }
+  else
+    fp_migcount = NULL;
+
+  *ptr_fp_migcount = fp_migcount;
 
   /* gene tree and locus output files */
   *ptr_fp_gtree = NULL;
@@ -3020,7 +3226,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* initialize pjump and finetune rounds */
 
-  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
   pjump = (double *)xcalloc(pjump_size,sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
@@ -3036,6 +3242,9 @@ static FILE * init(stree_t ** ptr_stree,
       if (opt_method != METHOD_11)
         mcmc_printheader(fp_mcmc,stree);
     }
+
+    if (opt_migration && opt_debug_migration)
+      print_header_migcount(fp_migcount, stree);
 
     if (opt_print_locusfile)
       mcmc_printheader_rates(fp_locus,stree,locus);
@@ -3241,10 +3450,12 @@ void cmd_run()
   stree_t * stree;
   FILE ** fp_gtree = NULL;
   FILE ** fp_locus = NULL;
+  FILE ** fp_migcount = NULL;
   gtree_t ** gtree;
   locus_t ** locus;
   long * gtree_offset = NULL;   /* for checkpointing when printing gene trees */
   long * rates_offset = NULL;
+  long * migcount_offset = NULL;
   double ratio;
   long ndspecies;
 
@@ -3335,6 +3546,7 @@ void cmd_run()
                      &gclones,
                      &fp_gtree,
                      &fp_locus,
+                     &fp_migcount,
                      &fp_out);
   else
   {
@@ -3357,6 +3569,7 @@ void cmd_run()
                    &gclones,
                    &fp_gtree,
                    &fp_locus,
+                   &fp_migcount,
                    &fp_out);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
@@ -3400,6 +3613,8 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+  if (opt_checkpoint && opt_migration && opt_debug_migration)
+    migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_checkpoint && opt_print_locusfile)
     rates_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_exp_randomize)
@@ -3413,10 +3628,20 @@ void cmd_run()
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
 
-  assert(opt_theta_move==BPP_THETA_SLIDE || opt_theta_move==BPP_THETA_GIBBS);
-  fprintf(stdout, "Theta proposal: %s\n",
-          (opt_theta_move == BPP_THETA_SLIDE) ?
-            "sliding window" : "gibbs sampler");
+  assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MG_T4);
+  fprintf(stdout, "Theta proposal: ");
+  if (opt_theta_move == BPP_THETA_SLIDE)
+    fprintf(stdout, "Sliding window\n");
+  else if (opt_theta_move == BPP_THETA_GIBBS)
+    fprintf(stdout, "Gibbs sampler (Inv-G conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    fprintf(stdout, "Metropolised Gibbs sampler (Gamma conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_INVG)
+    fprintf(stdout, "Metropolised Gibbs sampler (Inv-G conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_CAUCHY)
+    fprintf(stdout, "Metropolised Gibbs sampler (Cauchy conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MG_T4)
+    fprintf(stdout, "Metropolised Gibbs sampler (t-4 conditional)\n");
 
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");
@@ -3591,7 +3816,7 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration;
+      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
 
       if (opt_finetune_reset && opt_burnin >= 200)
       {
@@ -3792,6 +4017,12 @@ void cmd_run()
       pjump[BPP_MOVE_MRATE_INDEX] = (pjump[BPP_MOVE_MRATE_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
 
+      if (opt_mig_vrates_exist)
+      {
+        ratio = prop_mig_vrates(stree,gtree,locus);
+        pjump[BPP_MOVE_MIGVR_INDEX] = (pjump[BPP_MOVE_MIGVR_INDEX]*(ft_round-1)+ratio) /
+                                    (double)ft_round;
+      }
     }
 
     /* mixing step */
@@ -3965,7 +4196,7 @@ void cmd_run()
         ratio = prop_branch_rates_serial(gtree,stree,locus);
       else
       {
-        td.locus = locus; td.gtree = gtree;
+        td.locus = locus; td.gtree = gtree; td.stree = stree;
         threads_wakeup(THREAD_WORK_BRATE,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
@@ -3985,6 +4216,10 @@ void cmd_run()
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
       mcmc_logsample(fp_mcmc,i+1,stree,gtree,locus,dparam_count,ndspecies);
+
+      /* log migcount */
+      if (opt_migration && opt_debug_migration)
+        print_migcount(fp_migcount,gtree);
 
       /* log gene trees */
       if (opt_print_genetrees)
@@ -4013,7 +4248,8 @@ void cmd_run()
     {
       for (j = 0; j < mean_mrate_count; ++j)
       {
-        double mv = opt_migration_matrix[mean_mrate_row[j]][mean_mrate_col[j]];
+        long mindex = opt_migration_matrix[mean_mrate_row[j]][mean_mrate_col[j]];
+        double mv = opt_mig_specs[mindex].M;
         if (migration_valid(stree,
                             stree->nodes[mean_mrate_row[j]],
                             stree->nodes[mean_mrate_col[j]]))
@@ -4283,6 +4519,10 @@ void cmd_run()
           (opt_checkpoint_step && ((long)curstep > opt_checkpoint_initial) &&
            (((long)curstep-opt_checkpoint_initial) % opt_checkpoint_step == 0)))
       {
+        /* if migcount printing is enabled get current file offsets */
+        if (opt_migration && opt_debug_migration)
+          for (j = 0; j < opt_locus_count; ++j)
+            migcount_offset[j] = ftell(fp_migcount[j]);
 
         /* if gene tree printing is enabled get current file offsets */
         if (opt_print_genetrees)
@@ -4305,6 +4545,7 @@ void cmd_run()
                         ftell(fp_out),
                         gtree_offset,
                         rates_offset,
+                        migcount_offset,
                         dparam_count,
                         posterior,
                         pspecies,
@@ -4407,6 +4648,15 @@ void cmd_run()
       fprintf(stdout,"Read %ld samples from file %s\n",opt_samples,opt_mcmcfile);
   }
 
+  if (opt_migration && opt_debug_migration)
+  {
+    for (i = 0; i < opt_locus_count; ++i)
+      fclose(fp_migcount[i]);
+    free(fp_migcount);
+    if (opt_checkpoint)
+      free(migcount_offset);
+  }
+
   if (opt_print_genetrees)
   {
     for (i = 0; i < opt_locus_count; ++i)
@@ -4479,6 +4729,16 @@ void cmd_run()
     }
     free(opt_mig_bitmatrix);
     free(opt_migration_matrix);
+
+    /* free migration specifications */
+    for (i = 0; i < opt_migration; ++i)
+    {
+      free(opt_mig_specs[i].source);
+      free(opt_mig_specs[i].target);
+      if (opt_mig_specs[i].Mi)
+        free(opt_mig_specs[i].Mi);
+    }
+    free(opt_mig_specs);
   }
 
 

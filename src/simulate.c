@@ -1132,16 +1132,24 @@ static void set_migration_rates(stree_t * stree)
 {
   long i,j;
 
+  const long thread_index_zero = 0;
+
   assert(!opt_msci);
 
   long nodes_count = stree->tip_count + stree->inner_count;
 
   /* allocate migration matrix */
-  opt_migration_matrix = (double **)xmalloc(nodes_count*sizeof(double *));
+  opt_migration_matrix = (long **)xmalloc(nodes_count*sizeof(long *));
   opt_migration_events = (double **)xmalloc(nodes_count*sizeof(double *));
+  opt_mig_bitmatrix = (long **)xmalloc((size_t)nodes_count*sizeof(long *));
   for (i = 0; i < nodes_count; ++i)
   {
-    opt_migration_matrix[i] = (double *)xcalloc(nodes_count,sizeof(double));
+    opt_migration_matrix[i] = (long *)xmalloc(nodes_count*sizeof(long));
+
+    /* this is not necessary but we set entries to -1 such that in case of bugs
+       we get a segfault */
+    memset(opt_migration_matrix[i],-1,nodes_count*sizeof(long));
+    opt_mig_bitmatrix[i] = (long *)xcalloc(nodes_count,sizeof(long));
     opt_migration_events[i] = (double *)xcalloc(nodes_count,sizeof(double));
   }
 
@@ -1149,100 +1157,84 @@ static void set_migration_rates(stree_t * stree)
   for (i = 0; i < opt_migration; ++i)
   {
     long s,t;
+    migspec_t * spec = opt_mig_specs+i;
 
+    s = t = -1;
     for (j = 0; j < nodes_count; ++j)
-      if (!strcmp(opt_mig_source[i], stree->nodes[j]->label))
-        break;
-
-    if (j == nodes_count)
-      fatal("Invalid population name %s specified as source in 'migration' tag",
-            opt_mig_source[i]);
-    s = j;
-
-    for (j = 0; j < nodes_count; ++j)
-      if (!strcmp(opt_mig_target[i], stree->nodes[j]->label))
-        break;
-
-    if (j == nodes_count)
-      fatal("Invalid population name %s specified as target in 'migration' tag",
-            opt_mig_target[i]);
-    t = j;
-    
-    opt_migration_matrix[s][t] = opt_mig_simrate[i];
-  }
-  
-  for (i = 0; i < opt_migration; ++i)
-  {
-    free(opt_mig_source[i]);
-    free(opt_mig_target[i]);
-  }
-  free(opt_mig_source);
-  free(opt_mig_target);
-  free(opt_mig_simrate);
-
-  /* reset invalid entries in the migration matrix */
-  long reset_count = 0;
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-  {
-    snode_t * x = stree->nodes[i];
-    for (j = i; j < stree->tip_count + stree->inner_count; ++j)
     {
-      snode_t * y = stree->nodes[j];
+      if (s == -1 && !strcmp(spec->source, stree->nodes[j]->label))
+        s = j;
 
-      if (x == y)
+      if (t == -1 && !strcmp(spec->target, stree->nodes[j]->label))
+        t = j;
+    }
+
+    if (s == -1)
+      fatal("Invalid population name %s specified as source in 'migration' tag",
+            spec->source);
+    if (t == -1)
+      fatal("Invalid population name %s specified as target in 'migration' tag",
+            spec->target);
+    if (s == t)
+      fatal("Cannot create migration from one species to itself (species: %s)",
+            stree->nodes[s]->label);
+    if (!stree->nodes[s]->parent)
+      fatal("Migration not possible for root node %s", stree->nodes[s]->label);
+    if (!stree->nodes[t]->parent)
+      fatal("Migration not possible for root node %s", stree->nodes[t]->label);
+
+    snode_t * x = stree->nodes[s];
+    snode_t * y = stree->nodes[t];
+    if (stree->pptable[x->node_index][y->node_index] ||
+        stree->pptable[y->node_index][x->node_index] ||
+        x->tau > y->parent->tau ||
+        y->tau > x->parent->tau)
+    {
+      fatal("Migration between %s and %s is not possible",
+            stree->nodes[s]->label, stree->nodes[t]->label);
+    }
+    
+    opt_migration_matrix[s][t] = i;
+    opt_mig_bitmatrix[s][t] = 1;
+
+    if (spec->am)
+    {
+      spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+
+      double a = spec->am;
+      double b = spec->am / spec->M;
+
+      for (j = 0; j < opt_locus_count; ++j)
+        spec->Mi[j] = legacy_rndgamma(thread_index_zero,a) / b;
+
+      if (spec->outfile)
       {
-        if (opt_migration_matrix[i][j] > 0) reset_count++;
-        opt_migration_matrix[i][j] = 0;
-      }
-      else if (stree->pptable[x->node_index][y->node_index] ||
-               stree->pptable[y->node_index][x->node_index] ||
-               x->tau > y->parent->tau ||
-               y->tau > x->parent->tau)
-      {
-        if (opt_migration_matrix[i][j] > 0) reset_count++;
-        if (opt_migration_matrix[j][i] > 0) reset_count++;
-        if (opt_migration_matrix[i][j] > 0 || opt_migration_matrix[j][i] > 0)
-          fprintf(stderr,
-                  "\nMigration between %s and %s is impossible...\n",
-                  x->label, y->label);
-        opt_migration_matrix[i][j] = opt_migration_matrix[j][i] = -1;
+        FILE * fp = xopen(spec->outfile,"w");
+        for (j = 0; j < opt_locus_count; ++j)
+          fprintf(fp, "%f\n", spec->Mi[j]);
+        fclose(fp);
       }
     }
   }
-
-  if (reset_count)
-    fprintf(stderr,"\nResetting %ld migration rates in the migration matrix\n",
-            reset_count);
 
   /* print migration matrix on screen */
   fprintf(stdout, "\nMigration matrix:\n");
   for (i = 0; i < nodes_count; ++i)
   {
     for (j = 0; j < nodes_count; ++j)
-      printf(" %f", opt_migration_matrix[i][j]);
-    printf("\n");
+      printf(" %f", opt_mig_bitmatrix[i][j] ? 
+                      opt_mig_specs[opt_migration_matrix[i][j]].M : 0);
   }
 
-  for (i = 0; i < nodes_count; ++i)
-    for (j = 0; j < nodes_count; ++j)
-      if (opt_migration_matrix[i][j] < 0)
-        opt_migration_matrix[i][j] = 0;
-
   long needtheta;
-  long die = 0;
   for (i = 0; i < stree->tip_count; ++i)
   {
     for (j = 0, needtheta=0; j < nodes_count; ++j)
-      if (opt_migration_matrix[j][i]) needtheta = 1;
+      if (opt_mig_bitmatrix[j][i])
+        needtheta = 1;
     if (needtheta && stree->nodes[i]->theta <= 0)
-    {
-      fprintf(stderr, " [Error]: theta for %s should be > 0\n", stree->nodes[i]->label);
-      die = 1;
-    }
+      fatal("Theta for %s must be > 0 due to migration",stree->nodes[i]->label);
   }
-  
-  if (die)
-    fatal("Please fix the migration matrix in the control file");
 }
 
 static int cmp_tipDates(const void * a, const void * b){
@@ -1897,8 +1889,8 @@ static void simulate(stree_t * stree)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
         opt_migration_events[i][j] /= opt_locus_count;
 
-    printf("\nCounts of migration events averaged over replicates: %8.4f\n",
-           tmrca / opt_locus_count);
+    printf("\nMean tMRCA = %8.4f\n", tmrca / opt_locus_count);
+    printf("\nCounts of migration events averaged over replicates\n");
     /* print migration matrix on screen */
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
@@ -2284,11 +2276,26 @@ void cmd_simulate()
   {
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
+      free(opt_mig_bitmatrix[i]);
       free(opt_migration_matrix[i]);
       free(opt_migration_events[i]);
     }
+    free(opt_mig_bitmatrix);
     free(opt_migration_matrix);
     free(opt_migration_events);
+
+    for (i = 0; i < opt_migration; ++i)
+    {
+      free(opt_mig_specs[i].source);
+      free(opt_mig_specs[i].target);
+      if (opt_mig_specs[i].Mi)
+        free(opt_mig_specs[i].Mi);
+      if (opt_mig_specs[i].outfile)
+        free(opt_mig_specs[i].outfile);
+
+    }
+    free(opt_mig_specs);
+
   }
 
   stree_destroy(stree,free);

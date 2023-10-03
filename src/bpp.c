@@ -61,6 +61,7 @@ long opt_debug_abort;
 long opt_debug_sim;
 long opt_debug_gage;
 long opt_debug_gspr;
+long opt_debug_migration;
 long opt_debug_mui;
 long opt_debug_hs;
 long opt_debug_mix;
@@ -96,6 +97,7 @@ long opt_locus_simlen;
 long opt_max_species_count;
 long opt_method;
 long opt_migration;
+long opt_mig_vrates_exist;
 long opt_model;
 long opt_mrate_move;
 long opt_msci;
@@ -108,6 +110,7 @@ long opt_print_locusrate;
 long opt_print_qmatrix;
 long opt_print_rates;
 long opt_print_samples;
+long opt_pseudop_exist;
 long opt_qrates_fixed;
 long opt_quiet;
 long opt_rate_prior;
@@ -140,6 +143,7 @@ double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
 double opt_finetune_migrates;
+double opt_finetune_mig_Mi;
 double opt_finetune_mix;
 double opt_finetune_mubar;
 double opt_finetune_mui;
@@ -205,12 +209,12 @@ char * opt_streenewick;
 char * opt_treefile;
 double * opt_basefreqs_params;
 double * opt_qrates_params;
-double * opt_mig_simrate;
+migspec_t * opt_mig_specs;
 char ** opt_mig_source;
 char ** opt_mig_target;
+long ** opt_migration_matrix;
 long ** opt_mig_bitmatrix;
 double ** opt_migration_events;
-double ** opt_migration_matrix;
 partition_t ** opt_partition_list;
 int opt_seqAncestral;
 
@@ -410,6 +414,7 @@ void args_init(int argc, char ** argv)
   opt_debug_hs = 0;
   opt_debug_gage = 0;
   opt_debug_gspr = 0;
+  opt_debug_migration = 0;
   opt_debug_mix = 0;
   opt_debug_mui = 0;
   opt_debug_parser = 0;
@@ -450,6 +455,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
   opt_finetune_migrates = 0.1;
+  opt_finetune_mig_Mi = 0.1;
   opt_finetune_mui = 0.1;
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
@@ -482,9 +488,8 @@ void args_init(int argc, char ** argv)
   opt_mig_bitmatrix = NULL;
   opt_mig_alpha = 0;
   opt_mig_beta = 0;
-  opt_mig_simrate = NULL;
-  opt_mig_source = NULL;
-  opt_mig_target = NULL;
+  opt_mig_specs = NULL;
+  opt_mig_vrates_exist = 0;
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_mrate_move = BPP_MRATE_SLIDE;
@@ -509,6 +514,7 @@ void args_init(int argc, char ** argv)
   opt_prob_snl_shrink = 0.333;
   opt_pseudo_alpha = 0;
   opt_pseudo_beta = 0;
+  opt_pseudop_exist = 0;
   opt_qrates_fixed = -1;
   opt_qrates_params = NULL;
   opt_quiet = 0;
@@ -540,7 +546,7 @@ void args_init(int argc, char ** argv)
   opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
-  opt_theta_move = BPP_THETA_GIBBS;
+  opt_theta_move = BPP_THETA_SLIDE;
   opt_theta_p = 0;
   opt_theta_q = 0;
   opt_threads = 1;
@@ -756,8 +762,16 @@ void args_init(int argc, char ** argv)
           opt_theta_move = BPP_THETA_SLIDE;
         else if (!strcasecmp(optarg,"gibbs"))
           opt_theta_move = BPP_THETA_GIBBS;
+        else if (!strcasecmp(optarg,"mg_invg"))
+          opt_theta_move = BPP_THETA_MG_INVG;
+        else if (!strcasecmp(optarg,"mg_gamma"))
+          opt_theta_move = BPP_THETA_MG_GAMMA;
+        else if (!strcasecmp(optarg,"mg_cauchy"))
+          opt_theta_move = BPP_THETA_MG_CAUCHY;
+        else if (!strcasecmp(optarg,"mg_t4"))
+          opt_theta_move = BPP_THETA_MG_T4;
         else
-          fatal("Invalid instruction set (%s)", optarg);
+          fatal("Invalid theta move (%s)", optarg);
         break;
 
       case 41:
@@ -766,7 +780,7 @@ void args_init(int argc, char ** argv)
         else if (!strcasecmp(optarg,"gibbs"))
           opt_mrate_move = BPP_MRATE_GIBBS;
         else
-          fatal("Invalid instruction set (%s)", optarg);
+          fatal("Invalid mrate move (%s)", optarg);
         break;
 
       default:
