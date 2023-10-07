@@ -18,7 +18,7 @@
          phase =    1  1  1  1
 
        usedata = 1  * 0: no data (prior); 1:seq like
-         nloci = 5  * number of data sets in seqfile
+         nloci = 1  * number of data sets in seqfile
 
      cleandata = 0  * remove sites with ambiguity data (1:yes, 0:no)?
 
