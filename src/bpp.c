@@ -433,7 +433,7 @@ void args_init(int argc, char ** argv)
   opt_est_mubar = 0;
   opt_est_stree = 0;
   opt_est_theta = 1;
-  opt_exp_imrb = 0;
+  opt_exp_imrb = 1;
   opt_exp_randomize = 0;
   opt_exp_theta = 0;
   opt_exp_sim = 0;
