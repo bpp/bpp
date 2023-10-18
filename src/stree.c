@@ -3300,7 +3300,18 @@ double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree)
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (opt_theta_move == BPP_THETA_SLIDE)
+      long move = opt_theta_move;
+
+      /* if mixed move, then decide between slide and gibbs */
+      if (move == BPP_THETA_MIXED)
+      {
+        move = legacy_rndu(thread_index) < opt_theta_prop ?
+               BPP_THETA_SLIDE : BPP_THETA_GIBBS;
+        if (move == BPP_THETA_GIBBS && opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+          move = BPP_THETA_MG_GAMMA;
+      }
+
+      if (move == BPP_THETA_SLIDE)
         accepted += propose_theta_slide(stree,
                                         gtree,
                                         locus,

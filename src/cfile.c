@@ -3123,6 +3123,11 @@ void load_cfile()
   /* update theta method depending on prior */
   if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
   {
+    if (opt_theta_move != BPP_THETA_SLIDE)
+    {
+      fprintf(stderr,"WARNING: Beta prior for thetas requires theta move to be "
+              "set to 'slide'.\n");
+    }
     opt_theta_move = BPP_THETA_SLIDE;
   }
   else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)

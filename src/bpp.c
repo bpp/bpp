@@ -183,6 +183,7 @@ double opt_theta_beta;
 double opt_theta_max;
 double opt_theta_min;
 double opt_theta_p;
+double opt_theta_prop;
 double opt_theta_q;
 double opt_vbar_alpha;
 double opt_vbar_beta;
@@ -273,6 +274,7 @@ static struct option long_options[] =
   {"points",       required_argument, 0, 0 },  /* 39 */
   {"theta-move",   required_argument, 0, 0 },  /* 40 */
   {"mrate-move",   required_argument, 0, 0 },  /* 41 */
+  {"theta_prop",   required_argument, 0, 0 },  /* 42 */
   { 0, 0, 0, 0 }
 };
 
@@ -545,7 +547,8 @@ void args_init(int argc, char ** argv)
   opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
-  opt_theta_move = BPP_THETA_SLIDE;
+  opt_theta_move = BPP_THETA_MIXED;
+  opt_theta_prop = 0.8; /* proportion of sliding window proposals */
   opt_theta_p = 0;
   opt_theta_q = 0;
   opt_threads = 1;
@@ -768,6 +771,8 @@ void args_init(int argc, char ** argv)
           opt_theta_move = BPP_THETA_MG_CAUCHY;
         else if (!strcasecmp(optarg,"mg_t4"))
           opt_theta_move = BPP_THETA_MG_T4;
+        else if (!strcasecmp(optarg,"mixed"))
+          opt_theta_move = BPP_THETA_MIXED;
         else
           fatal("Invalid theta move (%s)", optarg);
         break;
@@ -779,6 +784,12 @@ void args_init(int argc, char ** argv)
           opt_mrate_move = BPP_MRATE_GIBBS;
         else
           fatal("Invalid mrate move (%s)", optarg);
+        break;
+
+      case 42:
+        if (opt_theta_prop < 0 || opt_theta_prop > 1)
+          fatal("Invalid proportion of sliding window proposals (%s)", optarg);
+        opt_theta_prop = atof(optarg);
         break;
 
       default:

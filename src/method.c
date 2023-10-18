@@ -3675,7 +3675,7 @@ void cmd_run()
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New extended IM rubberband algorithm\n");
 
-  assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MG_T4);
+  assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MIXED);
   fprintf(stdout, "Theta proposal: ");
   if (opt_theta_move == BPP_THETA_SLIDE)
     fprintf(stdout, "Sliding window\n");
@@ -3689,6 +3689,10 @@ void cmd_run()
     fprintf(stdout, "Metropolised Gibbs sampler (Cauchy conditional)\n");
   else if (opt_theta_move == BPP_THETA_MG_T4)
     fprintf(stdout, "Metropolised Gibbs sampler (t-4 conditional)\n");
+  else if (opt_theta_move == BPP_THETA_MIXED)
+    fprintf(stdout,
+            "Mixed proposal (Sliding window (%.2f) + Gibbs sampler (%.2f))\n",
+            opt_theta_prop, 1-opt_theta_prop);
 
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");

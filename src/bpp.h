@@ -248,6 +248,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_MG_GAMMA              3
 #define BPP_THETA_MG_CAUCHY             4
 #define BPP_THETA_MG_T4                 5
+#define BPP_THETA_MIXED                 6 /* mixed gibbs and slide */
 
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
@@ -1124,6 +1125,7 @@ extern double opt_theta_beta;
 extern double opt_theta_max;
 extern double opt_theta_min;
 extern double opt_theta_p;
+extern double opt_theta_prop;
 extern double opt_theta_q;
 extern double opt_vbar_alpha;
 extern double opt_vbar_beta;
