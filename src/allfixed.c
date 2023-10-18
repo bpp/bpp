@@ -652,7 +652,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     if (stree->nodes[stree->tip_count+i]->tau)
       col_count++;
 
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)

@@ -1134,7 +1134,7 @@ static void set_migration_rates(stree_t * stree)
   }
 
 
-  for (i = 0; i < opt_migration; ++i)
+  for (i = 0; i < opt_migration_count; ++i)
   {
     long s,t;
     migspec_t * spec = opt_mig_specs+i;
@@ -2077,7 +2077,7 @@ void cmd_simulate()
     free(opt_migration_matrix);
     free(opt_migration_events);
 
-    for (i = 0; i < opt_migration; ++i)
+    for (i = 0; i < opt_migration_count; ++i)
     {
       free(opt_mig_specs[i].source);
       free(opt_mig_specs[i].target);

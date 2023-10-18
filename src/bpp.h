@@ -969,7 +969,12 @@ typedef struct thread_info_s
 #define FLAG_POP_UPDATE                 2
 #define FLAG_BRANCH_UPDATE              4
 #define FLAG_MISC                       8
+#define FLAG_PRUNED                    16
+#define FLAG_MIGRATE                   32
 #define FLAG_PARTIAL_UPDATE           128
+#define FLAG_RED_LEFT                 256
+#define FLAG_RED_RIGHT                512
+#define FLAG_SIMULATE                1024
 
 
 /* options */
@@ -1017,6 +1022,7 @@ extern long opt_diploid_size;
 extern long opt_est_heredity;
 extern long opt_est_delimit;
 extern long opt_est_locusrate;
+extern long opt_est_geneflow;
 extern long opt_est_mubar;
 extern long opt_est_stree;
 extern long opt_est_theta;
@@ -1034,6 +1040,7 @@ extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
+extern long opt_migration_count;
 extern long opt_mig_vrates_exist;
 extern long opt_model;
 extern long opt_mrate_move;
@@ -1425,6 +1432,18 @@ void stree_update_mig_subpops_single_vrates(stree_t * stree,
                                             double oldMi);
 
 long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
+
+long stree_migration_rj(gtree_t *** gtreeptr,
+                            gtree_t *** gcloneptr,
+                            stree_t ** streeptr,
+                            stree_t ** scloneptr,
+                            locus_t ** locus);
+long stree_migration_flip_wrapper(gtree_t *** gtreeptr,
+                                  gtree_t *** gcloneptr,
+                                  stree_t ** streeptr,
+                                  stree_t ** scloneptr,
+                                  locus_t ** locus);
+                        
 
 /* functions in arch.c */
 
@@ -2553,6 +2572,7 @@ void cmd_comply();
 
 /* functions in debug.c */
 void debug_print_gtree(gtree_t * gtree);
+void debug_print_gtree_detailed(gtree_t * gtree);
 void debug_print_stree(stree_t * stree);
 void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index);
 void debug_check_leaves(gtree_t ** gtree);

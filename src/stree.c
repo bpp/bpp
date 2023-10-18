@@ -39,6 +39,12 @@
 #define SNL_PUREA       16
 #define SNL_MOVED       32
 
+static long dbg_counter = 0;
+static debug_print_migmatrix(stree_t * stree);
+static void debug_print_migrations(stree_t * stree);
+static void debug_print_migrations_flip(stree_t * stree);
+static debug_print_bitmatrix(stree_t * stree);
+
 /* the variables below are used in the propose_tau move. They are allocated only
    once in stree_alloc_internals() before MCMC starts, and deallocate after MCMC
    finishes at stree_fini().
@@ -79,6 +85,17 @@ static gnode_t * pruned_nodes[10000];
 static gnode_t * gsources_list[10000];
 
 static long * ts_indicator = NULL;
+
+#if 1
+double dbg_prop_a = -10;
+double dbg_prop_b = -20;
+long dbg_mig_idx = -1;
+long dbg_mig_idx_prop = -1;
+long mig_model_prop_count[256][256] = {0};
+double mig_model_prop_acc[256][256] = {0};
+#endif
+
+static long debug_rjmcmc = 0;
 
 #define SHRINK          1
 #define EXPAND          2
@@ -1244,8 +1261,14 @@ static void stree_init_tau(stree_t * stree, long thread_index)
        stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
                           (0.9 + 0.2*legacy_rndu(thread_index));
      else
+     {
+       #if 0
+       stree->root->tau = opt_tau_alpha / opt_tau_beta;
+       #else
        stree->root->tau = opt_tau_alpha / opt_tau_beta *
                           (0.9 + 0.2*legacy_rndu(thread_index));
+       #endif
+     }
    }
 
    /* recursively set the speciation time for the remaining inner nodes. For
@@ -1851,18 +1874,26 @@ static void stree_init_theta(stree_t * stree,
        if (seqcount[i][j] >= 2)
          break;
 
-     long mig = 0;
-     if (opt_migration)
+     /*** Ziheng $$$ ***/
+     /* If(opt_est_geneflow), all tip species have theta.
+     *  If(opt_migration), under a fixed IM model, tips involved in migration have theta.
+     *  Donor population must have theta so that coalescent rate is defined.
+     *  Recipient population must have theta so that w = 4M/theta is defined.
+     *  It is possible that either donor or recipient population has only 0 or 1 sequence.
+     */
+     long mig_i_donor_or_recipient = 0;
+     if (!opt_est_geneflow && opt_migration)
      {
        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
        {
-         mig += opt_mig_bitmatrix[j][node->node_index];
-         mig += opt_mig_bitmatrix[node->node_index][j];
+         /*** Ziheng $$$ ***/
+         mig_i_donor_or_recipient += opt_mig_bitmatrix[j][node->node_index];
+         mig_i_donor_or_recipient += opt_mig_bitmatrix[node->node_index][j];
        }
      }
      /* if no loci exists with two or more sequences of such species then move
         to the next tip node */
-     if (!opt_migration || !mig)
+     if (!opt_est_geneflow && (!opt_migration || !mig_i_donor_or_recipient))
      {
        if (opt_sp_seqcount[i] < 2)
        {
@@ -1877,8 +1908,14 @@ static void stree_init_theta(stree_t * stree,
        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                      (0.9 + 0.2 * legacy_rndu(thread_index));
      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+     {
+       #if 0
+       node->theta = opt_theta_alpha / opt_theta_beta;
+       #else
        node->theta = opt_theta_alpha / opt_theta_beta *
                      (0.6+0.8*legacy_rndu(thread_index));
+       #endif
+     }
      else
      {
        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
@@ -1984,8 +2021,14 @@ static void stree_init_theta(stree_t * stree,
         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                       (0.9 + 0.2 * legacy_rndu(thread_index));
       else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      {
+        #if 0
+        node->theta = opt_theta_alpha / opt_theta_beta;
+        #else
         node->theta = opt_theta_alpha / opt_theta_beta *
                       (0.6+0.8*legacy_rndu(thread_index));
+        #endif
+      }
       else
       {
         assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
@@ -3464,7 +3507,7 @@ void stree_update_mig_subpops_single_vrates(stree_t * stree,
                                             long msa_index,
                                             double oldMi)
 {
-  long k,m;
+  long k;
   migbuffer_t * xm = x->migbuffer;
   unsigned int xi = x->node_index;
   unsigned int yi = y->node_index;
@@ -9424,7 +9467,7 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
   const static long thread_index_zero = 0;
 
   /* TODO: Change the nested for loops with one loop over opt_mig_spec */
-  for (i = 0; i < opt_migration; ++i)
+  for (i = 0; i < opt_migration_count; ++i)
   {
     spec = opt_mig_specs+i;
 
@@ -9582,3 +9625,3685 @@ double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
   return accepted / (double)total;
 }
 #endif
+
+#define log_pdfgamma(x, a, b)  ( (a)*log(b) - lgamma(a) + ((a)-1)*log(x) - (b)*(x) )
+
+#if 0
+static long migspec_flip(stree_t * stree, snode_t * x, snode_t * y)
+{
+  /* flips M_{x->y} to M_{y->x} 
+     
+     XXX: Assumes that rate M_{y->x} does not exist */
+
+  const long thread_index_zero = 0;
+  migspec_t * spec;
+
+  /* find index for rate M_{x->y} */
+  assert(opt_migration_count);
+  for (i = 0; i < opt_migration_count; ++i)
+  {
+    spec = opt_mig_specs+i;
+
+    if (spec->si == x->node_index && spec->ti == y->node_index)
+      break;
+  }
+  if (i == opt_migration_count)
+    fatal("Cannot find migration");
+
+  /* flip */
+  SWAP(opt_migration_matrix[x->node_index][y->node_index],
+       opt_migration_matrix[y->node_index][x->node_index]);
+  SWAP(opt_mig_bitmatrix[x->node_index][y->node_index],
+       opt_mig_bitmatrix[y->node_index][x->node_index]);
+
+  stree_update_mig_subpops(stree,thread_index_zero);
+
+  return i;
+}
+#endif
+
+static void migspec_append(stree_t * stree, snode_t * x, snode_t * y)
+{
+  /* add M_{x->y} to the list */
+  long thread_index = 0;
+  const long thread_index_zero = 0;
+
+  migspec_t * spec = opt_mig_specs+opt_migration_count;
+
+  spec->Mi = NULL;
+  spec->si = x->node_index;
+  spec->ti = y->node_index;
+
+  /* reset the rest */
+  spec->alpha    = opt_mig_alpha;
+  spec->beta     = opt_mig_beta;
+  spec->pseudo_a = opt_pseudo_alpha;
+  spec->pseudo_b = opt_pseudo_beta;
+
+  /*** Ziheng $$$ ***/
+#if 1
+  spec->M        = legacy_rndgamma(thread_index,dbg_prop_a) / dbg_prop_b;
+  #else
+  spec->M        = spec->alpha / spec->beta;
+  #endif
+
+  assert(opt_mig_bitmatrix[spec->si][spec->ti] == 0);
+  if (opt_migration_matrix[spec->si][spec->ti] != -1)
+  {
+    printf("[ERROR] adding migration M_%s->%s\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label);
+  }
+  assert(opt_migration_matrix[spec->si][spec->ti] == -1);
+
+  opt_mig_bitmatrix[spec->si][spec->ti] = 1;
+  opt_migration_matrix[spec->si][spec->ti] = opt_migration_count++;
+
+  //stree_update_mig_subpops_single(stree,y,x,0);
+  stree_update_mig_subpops(stree,thread_index_zero);
+}
+
+static long migspec_remove(stree_t * stree, snode_t * x, snode_t * y)
+{
+  /* remove M_{x->y} from the list of migration events by:
+     1. move it to the end of the list
+     2. decrease opt_migration_count
+     3. return it's original position in the list */
+  long i;
+  long pos = 0;
+  const long thread_index_zero = 0;
+
+  migspec_t * spec = NULL;
+
+  assert(opt_migration_count);
+  for (i = 0; i < opt_migration_count; ++i)
+  {
+    spec = opt_mig_specs+i;
+
+    if (spec->si == x->node_index && spec->ti == y->node_index)
+      break;
+  }
+  if (i == opt_migration_count)
+    fatal("Cannot find migration");
+
+  assert(i == opt_migration_matrix[spec->si][spec->ti]);
+  /* update migbuffers  -- this is a bit of a hack */
+  //double oldM = spec->M;
+  //spec->M = 0;
+  //stree_update_mig_subpops_single(stree,y,x,oldM);
+  //spec->M = oldM;
+  #if(DBG_TF)
+  printf("     Setting M_%s->%s (%ld->%ld) (%ld) to -1\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, spec->si, spec->ti, opt_migration_matrix[spec->si][spec->ti]);
+  #endif
+
+  pos = i;
+  if (i != opt_migration_count-1)
+  {
+    #if 0
+    printf("spec->si: %d\n", spec->si);
+    printf("spec->ti: %d\n", spec->ti);
+    #endif
+    /* swap */
+    /* TODO: Save old record */
+    SWAP(opt_mig_specs[i],opt_mig_specs[opt_migration_count-1]);
+
+    /* reset pointer */
+    spec = opt_mig_specs+opt_migration_count-1;
+
+    SWAP(opt_migration_matrix[x->node_index][y->node_index],
+         opt_migration_matrix[opt_mig_specs[i].si][opt_mig_specs[i].ti]);
+    SWAP(opt_mig_bitmatrix[x->node_index][y->node_index],
+         opt_mig_bitmatrix[opt_mig_specs[i].si][opt_mig_specs[i].ti]);
+  }
+  opt_migration_matrix[spec->si][spec->ti] = -1;
+
+  --opt_migration_count;
+
+  opt_mig_bitmatrix[spec->si][spec->ti] = 0;
+
+  stree_update_mig_subpops(stree,thread_index_zero);
+
+  #if 0
+  printf("[DEBUG] Removed migration rate %s -> %s\n", x->label, y->label);
+  #endif
+
+  return pos;
+}
+
+#if 0
+/* old version that i decided to abandon */
+long dissolve_incoming_lineages(stree_t * stree,
+                                gtree_t * gtree,
+                                snode_t * x,
+                                gnode_t ** output,
+                                gnode_t ** deleted)
+{
+  long i,j,k;
+  long simcount = 0;
+  long delcount = 0;
+  gnode_t * gnode;
+  snode_t * curpop;
+
+
+  #if 0
+  /* TODO: check about pptable, is it computed and updated according to migration events? I assume here that yes */
+  /* Note: no, the above does not hold. I check the pptable later and adjust it to account for migrations */
+  if (!stree->pptable[gnode->pop->node_index][x->node_index])
+    continue;
+  #endif
+
+  /* we have two cases when tracing the lineage backwards in time:
+     1. Lineage enters population x from a descendant population y (in the path curpop<->x)
+     2. Lineage migrates to other populations before migrating back to x
+
+     For case (1) migrations may occur on the path curpop<->y before the
+     lineage enters x.
+
+  */
+
+  /* deleted */
+  deleted = (gnode_t **)xmalloc((size_t)gtree->inner_count * sizeof(gnode_t *));
+
+  /* 1. mark lineages to dissolve */
+  for (i = 0, k = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode = gtree->nodes[i];
+
+    if (gnode->time > x->parent->tau) continue;
+
+    curpop = gnode->pop;
+    for (j = 0; j < gnode->mi->count && curpop != x; ++j)
+    {
+      if (gnode->mi->me[j].time > x->tau &&
+          stree->pptable[curpop->node_index][x->node_index]) break;
+      curpop = gnode->mi->me[j].target;
+    }
+    if (!stree->pptable[curpop->node_index][x->node_index]) continue;
+
+    /* mark with red */
+    gnode->parent->mark++;
+
+    output[k++] = gnode;
+  }
+
+  /* 2. remove nodes with mark==2, update and repeat until no node is removed */
+  while (1)
+  {
+    for (simcount = 0, i = 0; i < k; ++i)
+    {
+      if (output[i]->mark != 2)
+      {
+        /* keep */
+
+        assert(output[i]->mark < 2);
+        if (i != simcount)
+          output[simcount] = output[i];
+        simcount++;
+      }
+      else
+      {
+        /* delete */
+
+        deleted[delcount++] = output[i]
+
+        /* mark lineage to parent */
+        output[i]->parent->mark++;
+        assert(output[i]->parent->mark <= 2);
+      }
+    }
+    if (simcount == k) break;
+    k = simcount;
+  }
+  simcount = k;
+
+  /* We have a list of nodes for deletion. To avoid corrupting the data
+     structures, we must sort the nodes in such a way that any parent nodes to
+     be deleted are processed before their respective child nodes. In other
+     words, if a node x has a parent node y that is also scheduled for deletion,
+     y must be deleted before x */
+  for (i = 0; i < delcount; ++i)
+    assert(output[i]->mark == 2);
+  for (i = 0; i < delcount; ++i)
+  {
+    for (j = i; j < delcount; ++j)
+    {
+      gnode_t * p = deleted[j];
+
+      if (!p->parent || p->parent->mark < 2)
+      {
+        /* swap positions */
+        gnode_t * tmp = deleted[i];
+        deleted[i] = p;
+        deleted[j] = tmp;
+
+        /* reset mark */
+        p->mark = 0;
+
+        break;
+      }
+    }
+    /* if no swapping occured, break */
+    if (j == delcount) break;
+  }
+
+  /* 3. clean marks */
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+    gtree->nodes[i]->mark = 0;
+
+
+  /* disconnect nodes */
+  for (j = 0; j < delcount; ++j)
+  {
+    gnode_t * p = deleted[j];
+    gnode_t * father = p->parent;
+
+    unlink_event(p, gtree->msa_index);
+    p->pop->event_count[gtree->msa_index]--;
+    if (!opt_est_theta)
+      p->pop->event_count_sum--;
+
+    /* decrease the number of incoming lineages to all populations in the path from
+    p population (excluding) to the father population (including) */
+    curpop = p->pop;
+    if (p->mi && p->mi->count)
+    {
+      for (i = 0; i < p->mi->count; ++i)
+      {
+        p->mi->me[i].source->migevent_count[msa_index]--;
+        p->mi->me[i].target->migevent_count[msa_index]--;
+
+        /* decrease # of migration from s to t (forward in time) */
+        long s = p->mi->me[i].target->node_index;
+        long t = p->mi->me[i].source->node_index;
+        gtree->migcount[s][t]--;
+
+        if (p->mi->me[i].source != curpop)
+        {
+          for (pop = curpop->parent; pop != p->mi->me[i].source->parent; pop = pop->parent)
+            pop->seqin_count[msa_index]--;
+        }
+        curpop = p->mi->me[i].target;
+        migevent_unlink(p->mi->me+i,msa_index);
+      }
+      p->mi->count = 0;
+    }
+    for (pop = curpop->parent; pop != father->pop->parent; pop = pop->parent)
+      pop->seqin_count[msa_index]--;
+  }
+  return simcount;
+}
+#endif
+
+static gnode_t * subtree_prune_from_pop(stree_t * stree,
+                                        gtree_t * gtree,
+                                        snode_t * frompop,
+                                        gnode_t * curnode,
+                                        double tL)
+{
+  long i;
+  long msa_index = gtree->msa_index;
+
+  gnode_t * father;
+  gnode_t * sibling = NULL;
+  gnode_t * tmp;
+  snode_t * pop;
+  snode_t * curpop;
+                      
+  father  = curnode->parent;
+
+  if (father)
+    sibling = (father->left == curnode) ? father->right : father->left;
+
+  /* this function assumes the lineages from curnode passes through frompop */
+
+  /* correctness check */
+  #if 1
+  if (father)
+  {
+    if (opt_migration && !father->parent)
+      assert(gtree->root == father);
+  }
+  #endif
+
+  /* remove father from coalescent events of its population */
+  if (father)
+  {
+    unlink_event(father,msa_index);
+    father->pop->event_count[msa_index]--;
+    if (!opt_est_theta)
+      father->pop->event_count_sum--;
+  }
+
+  /* decrease the number of incoming lineages to all populations in the path from
+  frompop population (excluding) to the father population (including) */
+  curpop = frompop;
+  snode_t * fatherpop_parent = father ? father->pop->parent : NULL;
+  if (opt_migration && curnode->mi && curnode->mi->count)
+  {
+    /* skip migrations until we get into frompop */
+    pop = curnode->pop;
+    for (i = 0; i < curnode->mi->count; ++i)
+    {
+      /* TODO: This loop is identical to the loop in mig_dissolve_and_sim,
+         with the exception of the checks for tU. I deemed them unnecessary
+         here, since we know the lines from curnode definitely passes through
+         the migration band as determined in mig_dissolve_and_sim. Perhaps
+         check this again */
+      if (curnode->mi->me[i].time > tL &&
+          stree->pptable[pop->node_index][frompop->node_index]) break;
+      pop = curnode->mi->me[i].target;
+    }
+    long remain_count = i;
+
+    for (; i < curnode->mi->count; ++i)
+    {
+      curnode->mi->me[i].source->migevent_count[msa_index]--;
+      curnode->mi->me[i].target->migevent_count[msa_index]--;
+
+      /* decrease # of migration from s to t (forward in time) */
+      long s = curnode->mi->me[i].target->node_index;
+      long t = curnode->mi->me[i].source->node_index;
+      gtree->migcount[s][t]--;
+
+      if (curnode->mi->me[i].source != curpop)
+      {
+        for (pop = curpop->parent; pop != curnode->mi->me[i].source->parent; pop = pop->parent)
+          pop->seqin_count[msa_index]--;
+      }
+      curpop = curnode->mi->me[i].target;
+      migevent_unlink(curnode->mi->me+i,msa_index);
+    }
+    curnode->mi->count = remain_count;
+  }
+  for (pop = curpop->parent; pop != fatherpop_parent; pop = pop->parent)
+    pop->seqin_count[msa_index]--;
+
+  if (father)
+  {
+    if (!father->parent)
+    {
+      /* if father is the root, sibling becomes the new root */
+      SWAP(gtree->root->pmatrix_index, sibling->pmatrix_index);
+      gtree->root = sibling;
+      sibling->parent = NULL;
+    }
+    else
+    {
+      if (father->parent->left == father)
+        father->parent->left = sibling;
+      else
+        father->parent->right = sibling;
+
+      sibling->parent = father->parent;
+
+      /* update number of leaves all nodes from father's parent and up */
+      for (tmp = father->parent; tmp; tmp = tmp->parent)
+        tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+    }
+
+    curnode->parent = NULL;
+    father->left = father->right = NULL;
+    father->parent = NULL;
+
+    /* move migration events from father to sibling */
+    if (opt_migration && father->mi && father->mi->count)
+    {
+      miginfo_check_and_extend(&(sibling->mi), father->mi->count);
+      for (i = 0; i < father->mi->count; ++i)
+      {
+        /* TODO: miginfo_move is dangerous (see notes in function), and assumes
+           caller maintains count */
+        miginfo_move(father->mi->me+i,&(sibling->mi));
+      }
+      father->mi->count = 0;
+    }
+  }
+
+  /* return deleted node (or NULL when pruning the root lineage) */
+  return father;
+}
+
+void pruneoff(stree_t * stree,
+              gtree_t * gtree,
+              snode_t * frompop,
+              gnode_t * curnode,
+              double tL,
+              gnode_t ** deleted,
+              unsigned int * dcountptr)
+{
+  long i;
+  long msa_index = gtree->msa_index;
+  gnode_t * father;
+  gnode_t * pruned = NULL;
+  gnode_t * sibling = NULL;
+  gnode_t * tmp;
+  snode_t * pop;
+  snode_t * curpop;
+
+  unsigned int p = *dcountptr;
+  unsigned int pinit = p;
+
+  father = curnode->parent;
+  if (father)
+    sibling = (father->left == curnode) ? father->right : father->left;
+
+  /* this function assumes the lineages from curnode passes through frompop */
+
+  /* correctness check */
+  #if 1
+  if (father)
+  {
+    if (opt_migration && !father->parent)
+      assert(gtree->root == father);
+  }
+  #endif
+
+  /* remove ancestors from coalescent events of its population */
+  pruned = curnode;
+  while (pruned->parent)
+  {
+    if ((pruned->parent->left == curnode && pruned->parent->mark & FLAG_RED_LEFT) ||
+        (pruned->parent->right == curnode && pruned->parent->mark & FLAG_RED_RIGHT))
+      break;
+    
+    deleted[p++] = pruned->parent;
+
+    /* remove ancestor from coalescent events of its population */
+    unlink_event(pruned->parent,msa_index);
+    pruned->parent->pop->event_count[msa_index]--;
+    if (!opt_est_theta)
+      pruned->parent->pop->event_count_sum--;
+
+    pruned = pruned->parent;
+  }
+  if (pruned->parent)
+  {
+    unlink_event(pruned->parent,msa_index);
+    pruned->parent->pop->event_count[msa_index]--;
+    if (!opt_est_theta)
+      pruned->parent->pop->event_count_sum--;
+
+    sibling = (pruned->parent->left == pruned) ? pruned->parent->right : pruned->parent->left;
+    deleted[p++] = pruned->parent;
+    if (pruned->parent->parent)
+    {
+      if (sibling == pruned->parent->left && pruned->parent->mark & FLAG_RED_LEFT)
+      {
+        if (pruned->parent->parent->left == pruned->parent)
+          pruned->parent->parent->mark |= FLAG_RED_LEFT;
+        else
+          pruned->parent->parent->mark |= FLAG_RED_RIGHT;
+      }
+      if (sibling == pruned->parent->right && pruned->parent->mark & FLAG_RED_RIGHT)
+      {
+        if (pruned->parent->parent->left == pruned->parent)
+          pruned->parent->parent->mark |= FLAG_RED_LEFT;
+        else
+          pruned->parent->parent->mark |= FLAG_RED_RIGHT;
+      }
+    }
+  }
+
+  /* pruned is the last node on the string curnode---pruned---X where X is the
+     father of pruned or NULL, and pruned can be curnode */
+
+  /* decrease the number of incoming lineages to all populations in the path from
+  frompop population (excluding) to the pruned node population (including) */
+  curpop = frompop;
+  snode_t * fatherpop_parent = pruned->parent ? pruned->parent->pop->parent : NULL;
+  if (opt_migration && pruned->mi && pruned->mi->count)
+  {
+    /* skip migrations until we get into frompop */
+    pop = pruned->pop;
+    for (i = 0; i < pruned->mi->count; ++i)
+    {
+      /* TODO: This loop is identical to the loop in mig_dissolve_and_sim,
+         with the exception of the checks for tU. I deemed them unnecessary
+         here, since we know the lines from pruned definitely passes through
+         the migration band as determined in mig_dissolve_and_sim. Perhaps
+         check this again */
+      if (pruned->mi->me[i].time > tL &&
+          stree->pptable[pop->node_index][frompop->node_index]) break;
+      pop = pruned->mi->me[i].target;
+    }
+    long remain_count = i;
+
+    for (; i < pruned->mi->count; ++i)
+    {
+      pruned->mi->me[i].source->migevent_count[msa_index]--;
+      pruned->mi->me[i].target->migevent_count[msa_index]--;
+
+      /* decrease # of migration from s to t (forward in time) */
+      long s = pruned->mi->me[i].target->node_index;
+      long t = pruned->mi->me[i].source->node_index;
+      gtree->migcount[s][t]--;
+
+      if (pruned->mi->me[i].source != curpop)
+      {
+        for (pop = curpop->parent; pop != pruned->mi->me[i].source->parent; pop = pop->parent)
+          pop->seqin_count[msa_index]--;
+      }
+      curpop = pruned->mi->me[i].target;
+      migevent_unlink(pruned->mi->me+i,msa_index);
+    }
+    pruned->mi->count = remain_count;
+  }
+  for (pop = curpop->parent; pop != fatherpop_parent; pop = pop->parent)
+    pop->seqin_count[msa_index]--;
+
+  father = pruned->parent;
+
+  /* concatenate string of nodes */
+  if (curnode != pruned)
+  {
+    /* delete array of nodes */
+    gnode_t * gnode = curnode->parent;
+    while (gnode != father)
+    {
+      #if 0
+      sibling = (gnode->parent->left == gnode) ?
+                  gnode->parent->right : gnode->parent->left;
+      #endif
+
+      if (!gnode->parent)
+      {
+        #if 0
+        /* TODO: This shouldn't happen */
+        assert(0);
+        /* if gnode is the root, sibling becomes the new root */
+        SWAP(gtree->root->pmatrix_index, sibling->pmatrix_index);
+        gtree->root = sibling;
+        sibling->parent = NULL;
+        #endif
+      }
+      else
+      {
+        #if 0
+        if (gnode->parent->left == gnode)
+          gnode->parent->left = sibling;
+        else
+          gnode->parent->right = sibling;
+
+        sibling->parent = gnode->parent;
+
+        /* update number of leaves all nodes from gnode's parent and up */
+        for (tmp = gnode->parent; tmp; tmp = tmp->parent)
+          tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+        #endif
+      }
+
+      curnode->parent = gnode->parent;
+      assert(!(gnode->parent->mark & FLAG_RED_LEFT && gnode->parent->mark & FLAG_RED_RIGHT));
+      if (gnode->parent->left == gnode)
+      {
+        assert(gnode->parent->mark & FLAG_RED_RIGHT);
+        gnode->parent->left = curnode;
+      }
+      else
+      {
+        assert(gnode->parent->mark & FLAG_RED_LEFT);
+        gnode->parent->right = curnode;
+      }
+
+      gnode_t * f = gnode->parent;
+
+      gnode->parent = NULL;
+      assert(gnode->mark & FLAG_RED_LEFT || gnode->mark & FLAG_RED_RIGHT);
+      gnode->left  = NULL;
+      gnode->right = NULL;
+
+      gnode = f;
+    }
+  }
+  
+  if (father)
+  {
+    sibling = (father->left == pruned) ? father->right : father->left;
+    /* TODO: Assert that the sibling of sibling is curnode */
+    assert(sibling->parent->left == curnode || sibling->parent->right == curnode);
+  }
+
+  if (father)
+  {
+    if (!father->parent)
+    {
+      /* if father is the root, sibling becomes the new root */
+      if (father == gtree->root)
+      {
+        SWAP(gtree->root->pmatrix_index, sibling->pmatrix_index);
+        gtree->root = sibling;
+      }
+      sibling->parent = NULL;
+    }
+    else
+    {
+      if (father->parent->left == father)
+        father->parent->left = sibling;
+      else
+        father->parent->right = sibling;
+
+      sibling->parent = father->parent;
+
+      /* update number of leaves all nodes from father's parent and up */
+      for (tmp = father->parent; tmp; tmp = tmp->parent)
+        tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+    }
+
+    pruned->parent = NULL;
+    father->left = father->right = NULL;
+    father->parent = NULL;
+
+    /* move migration events from father to sibling */
+    if (opt_migration && father->mi && father->mi->count)
+    {
+      miginfo_check_and_extend(&(sibling->mi), father->mi->count);
+      for (i = 0; i < father->mi->count; ++i)
+      {
+        /* TODO: miginfo_move is dangerous (see notes in function), and assumes
+           caller maintains count */
+        miginfo_move(father->mi->me+i,&(sibling->mi));
+      }
+      father->mi->count = 0;
+    }
+  }
+
+  *dcountptr = p;
+
+  for (i = pinit; i < p; ++i)
+  {
+    deleted[i]->old_pop = deleted[i]->pop;
+    deleted[i]->pop = NULL;
+  }
+
+
+}
+
+gnode_t * pruneoff2(stree_t * stree,
+                    gtree_t * gtree,
+                    snode_t * frompop,
+                    gnode_t * curnode,
+                    double tL)
+{
+  long i;
+  long msa_index = gtree->msa_index;
+
+  gnode_t * father;
+  gnode_t * sibling = NULL;
+  gnode_t * tmp;
+  snode_t * pop;
+  snode_t * curpop;
+                      
+  gnode_t * prevnode = curnode;                    
+  father  = curnode->parent;
+
+  while (father)
+  {
+    if ((father->left == prevnode  && father->mark & FLAG_RED_LEFT) ||
+        (father->right == prevnode && father->mark & FLAG_RED_RIGHT))
+      break;
+    prevnode = father;
+    father = father->parent;
+  }
+  if (father)
+    sibling = (father->left == prevnode) ? father->right : father->left;
+
+  /* this function assumes the lineages from curnode passes through frompop */
+
+  /* correctness check */
+  #if 1
+  /* 12.6.2023 We do not swap the root pmatrix index, we fix it at the end */
+  //if (father)
+  //{
+  //  if (opt_migration && !father->parent)
+  //    assert(gtree->root == father);
+  //}
+  #endif
+
+  /* remove father from coalescent events of its population */
+  if (father)
+  {
+    unlink_event(father,msa_index);
+    father->pop->event_count[msa_index]--;
+    if (!opt_est_theta)
+      father->pop->event_count_sum--;
+  }
+
+  /* decrease the number of incoming lineages to all populations in the path from
+  frompop population (excluding) to the father population (including) */
+  curpop = frompop;
+  snode_t * fatherpop_parent = father ? father->pop->parent : NULL;
+  if (opt_migration && prevnode->mi && prevnode->mi->count)
+  {
+    /* skip migrations until we get into frompop */
+    pop = prevnode->pop;
+    for (i = 0; i < prevnode->mi->count; ++i)
+    {
+      /* TODO: This loop is identical to the loop in mig_dissolve_and_sim,
+         with the exception of the checks for tU. I deemed them unnecessary
+         here, since we know the lines from prevnode definitely passes through
+         the migration band as determined in mig_dissolve_and_sim. Perhaps
+         check this again */
+      if (prevnode->mi->me[i].time > tL &&
+          stree->pptable[pop->node_index][frompop->node_index]) break;
+      pop = prevnode->mi->me[i].target;
+    }
+    long remain_count = i;
+
+    for (; i < prevnode->mi->count; ++i)
+    {
+      prevnode->mi->me[i].source->migevent_count[msa_index]--;
+      prevnode->mi->me[i].target->migevent_count[msa_index]--;
+
+      /* decrease # of migration from s to t (forward in time) */
+      long s = prevnode->mi->me[i].target->node_index;
+      long t = prevnode->mi->me[i].source->node_index;
+      gtree->migcount[s][t]--;
+
+      if (prevnode->mi->me[i].source != curpop)
+      {
+        for (pop = curpop->parent; pop != prevnode->mi->me[i].source->parent; pop = pop->parent)
+          pop->seqin_count[msa_index]--;
+      }
+      curpop = prevnode->mi->me[i].target;
+      migevent_unlink(prevnode->mi->me+i,msa_index);
+    }
+    prevnode->mi->count = remain_count;
+  }
+  for (pop = curpop->parent; pop != fatherpop_parent; pop = pop->parent)
+    pop->seqin_count[msa_index]--;
+
+  if (father)
+  {
+    if (!father->parent)
+    {
+      /* if father is the root, sibling becomes the new root */
+      /* 12.6.2023 We do not swap the root pmatrix index, we fix it at the end */
+      //SWAP(gtree->root->pmatrix_index, sibling->pmatrix_index);
+      //gtree->root = sibling;
+      sibling->parent = NULL;
+    }
+    else
+    {
+      if (father->parent->left == father)
+        father->parent->left = sibling;
+      else
+        father->parent->right = sibling;
+
+      sibling->parent = father->parent;
+
+      /* update number of leaves all nodes from father's parent and up */
+      for (tmp = father->parent; tmp; tmp = tmp->parent)
+        tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+    }
+
+    prevnode->parent = NULL;
+    father->left = father->right = NULL;
+    father->parent = NULL;
+
+    /* move migration events from father to sibling */
+    if (opt_migration && father->mi && father->mi->count)
+    {
+      miginfo_check_and_extend(&(sibling->mi), father->mi->count);
+      for (i = 0; i < father->mi->count; ++i)
+      {
+        /* TODO: miginfo_move is dangerous (see notes in function), and assumes
+           caller maintains count */
+        miginfo_move(father->mi->me+i,&(sibling->mi));
+      }
+      father->mi->count = 0;
+    }
+  }
+
+  /* return deleted node (or NULL when pruning the root lineage) */
+  if (father)
+  {
+    sibling->mark |= FLAG_BRANCH_UPDATE;
+  }
+  return father;
+}
+
+#if 0
+/* TODO: Probably delete */
+void mig_simulate()
+{
+  snode_t * curpop = gnode->pop;
+  for (j = 0; j < gnode->mi->count && curpop != x; ++j)
+  {
+    if (gnode->mi->me[j].time > x->tau &&
+        stree->pptable[curpop->node_index][x->node_index]) break;
+    curpop = gnode->mi->me[j].target;
+  }
+  assert(stree->pptable[curpop->node_index][x->node_index]);
+
+  t = x->tau;
+  if (gnode->mi && gnode->mi->count)
+  {
+    /* check whether we are entering population x via migration */
+    long last_mig_index = gnode->mi->count-1;
+    if (gnode->mi->me[last_mig_index].target == x)
+      t = gnode->mi->me[last_mig_index].time;
+  }
+
+  
+  
+}
+#endif
+
+#if 1
+/* determine whether the parental lineage associated with gnode passes (backwards in time) through the origin (youngest point) of snode.
+   Note: a node (coalescent event) within snode means that the lineage does not originate in snode.
+
+   This needs to be very fast as it is called many times for many nodes */
+static long originates(gnode_t * gnode, snode_t * snode, gtree_t * gtree, stree_t * stree)
+{
+  long i;
+  /* if it's a tip in snode return true, if tip in other node return false */
+  if (gnode->node_index < gtree->tip_count)
+    return gnode->pop == snode;
+
+  if (gnode->time > snode->tau) return 0;
+
+  if (gnode->pop == snode) { assert(0); } /* XXX: This should never happend because of the previous condition */
+
+  /* if parent exists and is younger than snode origin return false */
+  if (gnode->parent && gnode->parent->time < snode->tau)
+    return 0;
+
+  /* if our node has no migrations */
+  if (!gnode->mi || !gnode->mi->count)
+    return stree->pptable[gnode->pop->node_index][snode->node_index];
+
+  /* if there are migrations */
+  assert(gnode->mi && gnode->mi->count);
+
+  snode_t * lopop = gnode->pop;
+  for (i = 0; i < gnode->mi->count; ++i)
+  {
+    if (gnode->mi->me[i].time > snode->tau)
+      break;
+
+    lopop = gnode->mi->me[i].target;
+  }
+
+  return stree->pptable[lopop->node_index][snode->node_index];
+}
+#endif
+
+#if 1
+/* No change from the routine in gtree.c */
+static migbuffer_t * wtimes_and_lineages(stree_t * stree,
+                                         gtree_t * gtree,
+                                         snode_t * snode,
+                                         gnode_t * gnode,
+                                         snode_t * affected1,
+                                         snode_t * affected2,
+                                         snode_t ** affected_nodemap,
+                                         double t,
+                                         long existing_mig_count,
+                                         long * lineages_count,
+                                         long * wtimes_count,
+                                         long msa_index,
+                                         long thread_index)
+{
+  long i,j,k;
+  long lineages;
+  long mig_count = 0;
+  migbuffer_t * wtimes;
+
+  /* make sure migbuffer is large enough */
+  size_t alloc_required = snode->migevent_count[msa_index] +
+                          snode->event_count[msa_index] +
+                          stree->inner_count+1;
+  migbuffer_check_and_realloc(thread_index,alloc_required);
+  wtimes = global_migbuffer_r[thread_index];
+
+  /* TODO: Note this was wrong. The seqin_count is not the number of lineages
+  entering the population as we pruned those lineages */
+  /* start with the lineages entering the current population */
+  lineages = snode->seqin_count[msa_index];
+
+  /* make a list of waiting times older than t and at the same time reduces
+     number of lineages by the amount of coalescent events younger than t
+     (including t) */
+  k = 0;
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    
+    #if 1
+    //if (x == gnode && x->pop == snode && snode == affected && x->mark & FLAG_PRUNED && !(x->mark & FLAG_MIGRATE))
+    //if (x->pop == affected && snode == affected && x->mark & FLAG_PRUNED && !(x->mark & FLAG_MIGRATE))
+    #if 0
+    if (snode == affected && x->mark & FLAG_PRUNED && !(x->mark & FLAG_MIGRATE))
+    #else
+    /* this is additional term for the flipping move */
+    if (affected2)
+    {
+      assert(affected_nodemap);
+      /* flipping move */
+      if ((snode == affected1 || snode == affected2) && x->mark & FLAG_PRUNED && !(x->mark & FLAG_MIGRATE))
+      {
+        #if 0
+        snode_t * lastpop = (x->mi && x->mi->count) ? x->mi->me[x->mi->count-1].target: x->pop;
+        if (stree->pptable[lastpop->node_index][snode->node_index])
+          --lineages;
+        #endif
+
+        #if 0
+        snode_t * lastpop = (x->mi && x->mi->count) ? x->mi->me[x->mi->count-1].target: x->pop;
+        if (!(x->mi && x->mi->count && x->mi->me[x->mi->count-1].time > MAX(affected1->tau,affected2->tau)) || lastpop == snode)
+        {
+          if (stree->pptable[lastpop->node_index][snode->node_index])
+            --lineages;
+        }
+        #else
+        assert(affected_nodemap[x->node_index]);
+        if (affected_nodemap[x->node_index] == snode)
+          --lineages;
+        #endif
+      }
+    }
+    else
+    {
+      assert(!affected_nodemap);
+      /* add or remove case */
+      if (snode == affected1 && x->mark & FLAG_PRUNED && !(x->mark & FLAG_MIGRATE))
+        --lineages;
+    }
+    #endif
+    {
+      #if 0
+      if (i >= gtree->tip_count && x->pop == snode)
+       --lineages;
+      continue;
+      #endif
+    }
+    #else
+    #if 1
+    if ((x->mark & FLAG_PRUNED) &&
+        x->pop == affected &&
+        affected == snode)
+          --lineages;
+    #else
+    if (x->mark & FLAG_PRUNED)
+    {
+      //if (x->pop == affected && affected == snode)
+      if (!(x->mark & FLAG_MIGRATE))
+      {
+        if (affected == snode)
+          --lineages;
+      }
+      else
+      {
+        /* it migrates, which means */
+        if (snode != affected && enters(x,snode) && x==gnode)
+          lineages--;
+      }
+    }
+    #endif
+    #endif
+
+
+    /* skip pruned node */
+    /* TODO: Note the last x != gtree->root is very important. This is because we may have
+       x may be a tip and the sibling of the pruned subtree as well as a child of the root
+       in which case it becomes the new root. However, it has x->left == NULL, x->right == NULL
+       and x->parent == NULL */
+    // if (!x->left && !x->right && !x->parent && x != gtree->root) continue;
+
+    /* coalescent events */
+    if (i >= gtree->tip_count)
+    {
+      if (x->pop == snode)
+      {
+        if (x->time > t)
+        {
+          wtimes[k].time   = x->time;
+          wtimes[k].mrsum  = 0;
+          wtimes[k++].type = EVENT_COAL;
+        }
+        else
+          --lineages;
+      }
+    }
+
+    #if 0
+    /* if it's the node on which we are simulating the lineage, skip any migration events
+       as they are those that were simulated so far */
+    if (x == gnode)
+    {
+      assert(x->mark & FLAG_PRUNED);
+      if (!(x->mark & FLAG_MIGRATE))
+        continue;
+    }
+    #endif
+
+    /* migrations */
+    miginfo_t * mi = x->mi;
+    if (!mi || !mi->count) continue;
+
+    /* Note, if the node is flagged as pruned but there are migration events assigned on it,
+       the last migration event is one entering population X (in the sense we have created
+       or deleted a migration rate M_Y->X. In that case, we must skip the last migration event
+       entering population X as it would otherwise increase the number of lineages in X */
+    mig_count = mi->count;
+    if (x == gnode)
+    {
+      /* account only for the migrations that existed prior to the start of simulation */
+      #if 0
+      assert((x->mark & FLAG_PRUNED) && (x->mark & FLAG_MIGRATE));
+      #else
+      assert(x->mark & FLAG_PRUNED);
+      #endif
+      mig_count = existing_mig_count;
+    }
+
+    for (j = 0; j < mig_count; ++j)
+    {
+      if (mi->me[j].source != snode && mi->me[j].target != snode) continue;
+
+      /* skip migration entering to affected population */
+      /* TODO: Check for flipping node if affected2 should be used */
+      if (affected2)
+      {
+        if (x->mark & FLAG_MIGRATE && (snode == affected1 || snode == affected2) && j == mig_count-1) continue;
+      }
+      else
+      {
+        if (x->mark & FLAG_MIGRATE && snode == affected1 && j == mig_count-1) continue;
+      }
+      
+      if (mi->me[j].time > t)
+      {
+        wtimes[k].time   = mi->me[j].time;
+        wtimes[k].mrsum  = 0;
+        wtimes[k++].type = (mi->me[j].source == snode) ?
+                             EVENT_MIG_SOURCE : EVENT_MIG_TARGET;
+      }
+      else
+      {
+        if (mi->me[j].source == snode)
+          --lineages;
+        else
+          ++lineages;
+      }
+    }
+  }
+  
+  /* add taus dividing the population */
+  for (i = 0; i < snode->mb_count; ++i)
+  {
+    if (snode->migbuffer[i].time > t)
+    {
+      wtimes[k++] = snode->migbuffer[i];
+    }
+  }
+
+  qsort(wtimes,k,sizeof(migbuffer_t),cb_migbuf_asctime);
+
+  *lineages_count = lineages;
+  *wtimes_count = k;
+  return wtimes;
+}
+#else
+/* No change from the routine in gtree.c */
+static migbuffer_t * wtimes_and_lineages(stree_t * stree,
+                                         gtree_t * gtree,
+                                         snode_t * snode,
+                                         gnode_t * gnode,
+                                         snode_t * affected,
+                                         double t,
+                                         long existing_mig_count,
+                                         long * lineages_count,
+                                         long * wtimes_count,
+                                         long msa_index,
+                                         long thread_index)
+{
+  long i,j,k;
+  long lineages;
+  long mig_count = 0;
+  migbuffer_t * wtimes;
+
+  /* make sure migbuffer is large enough */
+  size_t alloc_required = snode->migevent_count[msa_index] +
+                          snode->event_count[msa_index] +
+                          stree->inner_count+1;
+  migbuffer_check_and_realloc(thread_index,alloc_required);
+  wtimes = global_migbuffer_r[thread_index];
+
+  /* TODO: Note this was wrong. The seqin_count is not the number of lineages
+  entering the population as we pruned those lineages */
+  /* start with the lineages entering the current population */
+  lineages = snode->seqin_count[msa_index];
+
+  /* make a list of waiting times older than t and at the same time reduces
+     number of lineages by the amount of coalescent events younger than t
+     (including t) */
+  k = 0;
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * x = gtree->nodes[i];
+
+    #if 0
+    if (x == gnode && x->pop == snode) --lineages;
+    #else
+    #if 1
+    if ((x->mark & FLAG_PRUNED) &&
+        x->pop == affected &&
+        affected == snode)
+          --lineages;
+    #else
+    if (x->mark & FLAG_PRUNED)
+    {
+      //if (x->pop == affected && affected == snode)
+      if (!(x->mark & FLAG_MIGRATE))
+      {
+        if (affected == snode)
+          --lineages;
+      }
+      else
+      {
+        /* it migrates, which means */
+        if (snode != affected && enters(x,snode) && x==gnode)
+          lineages--;
+      }
+    }
+    #endif
+    #endif
+    /* skip pruned node */
+    /* TODO: Note the last x != gtree->root is very important. This is because we may have
+       x may be a tip and the sibling of the pruned subtree as well as a child of the root
+       in which case it becomes the new root. However, it has x->left == NULL, x->right == NULL
+       and x->parent == NULL */
+    //if (!x->left && !x->right && !x->parent && x != gtree->root) continue;
+
+    /* coalescent events */
+    if (i >= gtree->tip_count)
+    {
+      if (x->pop == snode)
+      {
+        if (x->time > t)
+        {
+          wtimes[k].time   = x->time;
+          wtimes[k].mrsum  = 0;
+          wtimes[k++].type = EVENT_COAL;
+        }
+        else
+          --lineages;
+      }
+    }
+
+    /* if it's the node on which we are simulating the lineage, skip any migration events
+       as they are those that were simulated so far */
+    if (x == gnode)
+    {
+      continue;
+    }
+
+    /* migrations */
+    miginfo_t * mi = x->mi;
+    if (!mi || !mi->count) continue;
+
+    /* Note, if the node is flagged as pruned but there are migration events assigned on it,
+       the last migration event is one entering population X (in the sense we have created
+       or deleted a migration rate M_Y->X. In that case, we must skip the last migration event
+       entering population X as it would otherwise increase the number of lineages in X */
+    mig_count = mi->count;
+    if (snode == affected && x->mark & FLAG_PRUNED && x->mark & FLAG_MIGRATE)
+    {
+      assert(mi->count);
+      assert(x->mi->me[mi->count-1].target  == affected);
+      --mig_count;
+    }
+       
+
+    for (j = 0; j < mig_count; ++j)
+    {
+      if (mi->me[j].source != snode && mi->me[j].target != snode) continue;
+      
+      if (mi->me[j].time > t)
+      {
+        wtimes[k].time   = mi->me[j].time;
+        wtimes[k].mrsum  = 0;
+        wtimes[k++].type = (mi->me[j].source == snode) ?
+                             EVENT_MIG_SOURCE : EVENT_MIG_TARGET;
+      }
+      else
+      {
+        if (mi->me[j].source == snode)
+          --lineages;
+        else
+          ++lineages;
+      }
+    }
+  }
+  
+  /* add taus dividing the population */
+  for (i = 0; i < snode->mb_count; ++i)
+  {
+    if (snode->migbuffer[i].time > t)
+    {
+      wtimes[k++] = snode->migbuffer[i];
+    }
+  }
+
+  qsort(wtimes,k,sizeof(migbuffer_t),cb_migbuf_asctime);
+
+  *lineages_count = lineages;
+  *wtimes_count = k;
+  return wtimes;
+}
+#endif
+
+/* passing variable t and starting from population x */
+static double simulate_coalescent_mig_from_point(stree_t * stree,
+                                                 gtree_t * gtree,
+                                                 gnode_t * gnode,
+                                                 snode_t * affected1,
+                                                 snode_t * affected2,
+                                                 snode_t ** affected_nodemap,
+                                                 double t,
+                                                 long msa_index,
+                                                 long thread_index)
+{
+  long i,j,k;
+  long lineages;
+  long epoch;
+  long mpop_count;
+  double crate,mrate,rate;
+  double tnew;
+  migbuffer_t * wtimes;
+  snode_t * snode = affected1;
+
+  snode_t ** migsource = gtree->migpops;
+
+  assert(opt_migration);
+
+  assert(gnode->mark & FLAG_PRUNED);
+  #if 0
+  long existing_mig_count = (gnode->mark & FLAG_MIGRATE) ? gnode->mi->count : 0;
+  #else
+  long existing_mig_count = gnode->mi ? gnode->mi->count : 0;
+  #endif
+
+  /* determine time to coalesce */
+  while (1)
+  {
+    wtimes = wtimes_and_lineages(stree,gtree,snode,gnode,affected1,affected2,affected_nodemap,t,existing_mig_count,&lineages,&k,msa_index,thread_index);
+    assert(lineages >= 0 && k >= 0);
+
+    mrate = crate = rate = 0; epoch = 0;
+    /* simulate until all waiting times are exhausted */
+    for (i = 0; i < k; ++i)
+    {
+      /* TODO: The below 'if' line is wrong. Delete it.
+         I think a simple if should do the trick, i.e.
+           if (snode->migbuffer[j].time <= t) epoch++; */
+      //if (i == 0 || wtimes[i].type == EVENT_TAU)
+      {
+        /* find current epoch and get total rate */
+        assert(!snode->parent || snode->mb_count);
+        for (j = 0; j < snode->mb_count; ++j)
+          if (snode->migbuffer[j].time > t)
+          {
+            epoch = j;
+            break;
+          }
+        /* find migrating populations */
+        mpop_count = 0;
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          if (x->parent && x != snode &&
+              opt_mig_bitmatrix[x->node_index][snode->node_index] &&
+              x->tau <= t && x->parent->tau > t)        /* Note: parent->tau > t is importnat */
+            migsource[mpop_count++] = x;
+        }
+      }
+      /* rate */
+      long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+      mrate = snode->parent ? 4*snode->migbuffer[epoch].mrsum[idx]/snode->theta : 0;
+
+      crate = 2*lineages / snode->theta;
+      rate = mrate + crate;
+
+      if (!lineages && !mpop_count)
+      {
+        /* no lineages to coalesce and no pops to migrate */
+        //assert(k==1 && rate == 0);
+        t = wtimes[i].time;
+        if (wtimes[i].type == EVENT_MIG_SOURCE)
+          --lineages;
+        else if (wtimes[i].type == EVENT_MIG_TARGET)
+          ++lineages;
+        else if (wtimes[i].type == EVENT_COAL)
+          --lineages;
+
+        continue;
+      }
+
+      /* generate time */
+      tnew = legacy_rndexp(thread_index,1/rate);
+
+      if (t+tnew <= wtimes[i].time)
+      {
+        t += tnew;
+        break;
+      }
+
+      t = wtimes[i].time;
+
+      if (wtimes[i].type == EVENT_MIG_SOURCE)
+        --lineages;
+      else if (wtimes[i].type == EVENT_MIG_TARGET)
+        ++lineages;
+      else if (wtimes[i].type == EVENT_COAL)
+        --lineages;
+    }
+    
+    if (i != k)
+    {
+      /* choose between coalescence and migration */
+      double r = legacy_rndu(thread_index) * rate;
+
+      /* if coalescence, stop the process */
+      if (r >= mrate) break;
+
+      /* choose migrating source (forward-time) population*/
+      assert(mpop_count);
+      double sum = 0;
+      for (j = 0; j < mpop_count - 1; ++j)
+      {
+        assert(opt_mig_bitmatrix[migsource[j]->node_index][snode->node_index]);
+        long mindex = opt_migration_matrix[migsource[j]->node_index][snode->node_index];
+        if (opt_mig_specs[mindex].am)
+          sum += 4*opt_mig_specs[mindex].Mi[msa_index] / snode->theta;
+        else
+          sum += 4*opt_mig_specs[mindex].M / snode->theta;
+        if (r < sum) break;
+      }
+
+      /* store miginfo in current branch: snode is source in backward time */
+      assert(migsource[j] != snode);
+      miginfo_append(&(gnode->mi), snode, migsource[j], t, msa_index);
+
+      snode = migsource[j];
+
+      continue;
+    }
+
+    /* no migration, no coalescence */
+
+    /* stop if we were in the root population */
+    if (!snode->parent)
+    {
+      if (lineages == 0)
+      {
+      /* if this is the lineage going back to infinitity, i.e. first lineage
+         we simulate that does not coalesce anywhere, return -1*/
+        return -1;
+      }
+      assert(lineages == 1);
+
+      /* generate time */
+      rate = 2 / snode->theta;
+      t += legacy_rndexp(thread_index, 1/rate);
+      break;
+    }
+    snode = snode->parent;
+  }
+
+  return t;
+}
+
+static long target_branches(stree_t * stree,
+                            gtree_t * gtree,
+                            snode_t * snode,
+                            gnode_t * curnode,
+                            double t,
+                            gnode_t ** outbuf)
+{
+  long i,j;
+  long count = 0;
+  snode_t * curpop = NULL;
+
+  assert(!opt_msci);
+
+  for (i = 0; i < gtree->tip_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    /* skip lineages without migrations that do not pass through snode */
+    if (!opt_migration)
+      if (!stree->pptable[gnode->pop->node_index][snode->node_index])
+        continue;
+
+
+    while (!(gnode->mark & FLAG_MISC) && gnode->parent && gnode->parent->time < t)
+    {
+      gnode->mark |= FLAG_MISC;
+      gnode = gnode->parent;
+    }
+    #if 0
+    /* TODO: The following line is wrong, we need to check the flag instead */
+    if ((gnode->mark & FLAG_MISC) || gnode == curnode) continue;
+    #else
+    //if ((gnode->mark & FLAG_MISC) || gnode->mark & FLAG_PRUNED) continue;
+    if (gnode->mark & FLAG_MISC) continue;
+    if (gnode->mark & FLAG_PRUNED && gnode->mark & FLAG_MIGRATE)
+    {
+      //if (!gnode->mi || !gnode->mi->count) continue;
+      assert(gnode->mi && gnode->mi->count);
+
+      long lastidx = gnode->mi->count-1;
+      //assert(gnode->mi->me[idx].target == AFFECTED);
+      double mt = gnode->mi->me[lastidx].time;
+
+      if (mt < t) continue;
+    }
+    else if (gnode->mark & FLAG_PRUNED) continue;
+    #endif
+
+    
+    curpop = gnode->pop;
+    if (opt_migration && gnode->mi && gnode->mi->count)
+    {
+      assert(snode->tau < t && (!snode->parent || snode->parent->tau > t));
+      assert(t > gnode->time && (!gnode->parent || gnode->parent->time > t));
+      /* check if part of the lineage passes through snode at time t */
+      for (j = 0; j < gnode->mi->count; ++j)
+      {
+        if (t < gnode->mi->me[j].time) break;
+        curpop = gnode->mi->me[j].target;
+      }
+    }
+    if (!stree->pptable[curpop->node_index][snode->node_index])
+      continue;
+    outbuf[count++] = gnode;
+    gnode->mark |= FLAG_MISC;
+  }
+
+  /* clean marks */
+  for (i = 0; i < gtree->tip_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    while (gnode && (gnode->mark & FLAG_MISC))
+    {
+      gnode->mark &= ~FLAG_MISC;
+      gnode = gnode->parent;
+    }
+  }
+
+  return count;
+}
+
+static void subtree_regraft(stree_t * stree,
+                            gtree_t * gtree,
+                            gnode_t * curnode,
+                            gnode_t * father,
+                            gnode_t * target,
+                            snode_t * newpop,
+                            snode_t * affected,
+                            long existing_migs_count,
+                            double tnew)
+{
+  long i,k;
+  long msa_index = gtree->msa_index;
+  gnode_t * tmp;
+  snode_t * pop;
+  snode_t * curpop;
+
+  father->parent = target->parent;
+  target->parent = father;
+  if (father->parent)
+  {
+    if (father->parent->left == target)
+      father->parent->left = father;
+    else
+      father->parent->right = father;
+  }
+
+  father->left = target;
+  father->right = curnode;
+
+  father->leaves = father->left->leaves + father->right->leaves;
+  curnode->parent = father;
+  /* 12.6.2023 We do not swap the root pmatrix index, we fix it at the end */
+  #if 0
+  if (target == gtree->root)
+  {
+    /* father becomes new root */
+    SWAP(gtree->root->pmatrix_index, father->pmatrix_index);
+    gtree->root = father;
+  }
+  else
+  #endif
+  {
+    for (tmp = father->parent; tmp; tmp = tmp->parent)
+      tmp->leaves = tmp->left->leaves + tmp->right->leaves;
+  }
+
+  /* change the population for the current gene tree node */
+  father->pop = newpop;
+  father->time = tnew;
+
+  /* move target migration events older than tnew onto the father branch */
+  /* Assumes migration are sorted from younger one (which is the case)
+     otherwise miginfo_move will have trouble  */
+  if (opt_migration && target->mi && target->mi->count)
+  {
+    k = 0;
+    for (i = 0; i < target->mi->count; ++i)
+    {
+      if (target->mi->me[i].time > tnew)
+      {
+        miginfo_move(target->mi->me+i, &(father->mi));
+
+        /* keep track of how many migrations we copied */
+        ++k;
+      }
+    }
+    target->mi->count -= k;
+  }
+
+  /* now add the coalescent event to the new population, at the end */
+  dlist_item_append(father->pop->event[msa_index],father->event);
+
+  father->pop->event_count[msa_index]++;
+  if (!opt_est_theta)
+    father->pop->event_count_sum++;
+
+  /* increase number of incoming lineages to all populations in the path from
+   * affected population (excluding) to the father population (including) */
+  curpop = affected;
+  if (opt_migration && curnode->mi && curnode->mi->count)
+  {
+    for (i = existing_migs_count; i < curnode->mi->count; ++i)
+    {
+      curnode->mi->me[i].source->migevent_count[msa_index]++;
+      curnode->mi->me[i].target->migevent_count[msa_index]++;
+
+      /* increase # of migration from s to t (forward in time) */
+      long s = curnode->mi->me[i].target->node_index;
+      long t = curnode->mi->me[i].source->node_index;
+      gtree->migcount[s][t]++;
+
+      if (curnode->mi->me[i].source != curpop)
+      {
+        for (pop = curpop->parent; pop != curnode->mi->me[i].source->parent; pop = pop->parent)
+          pop->seqin_count[msa_index]++;
+      }
+      curpop = curnode->mi->me[i].target;
+    }
+  }
+  for (pop = curpop->parent; pop != father->pop->parent; pop = pop->parent)
+    pop->seqin_count[msa_index]++;
+}
+
+static int cb_preorder_inner_only(gnode_t * gnode)
+{
+  if (!gnode->left)
+    return 0;
+
+  return 1; 
+}
+
+static int cb_postorder_inner_only(gnode_t * gnode)
+{
+  if (!gnode->left)
+    return 0; 
+
+  return 1;
+}
+
+void mig_dissolve_and_sim(stree_t * stree,
+                          gtree_t * gtree,
+                          locus_t * locus,
+                          double tL,
+                          double tU,
+                          snode_t * x,
+                          int msa_index,
+                          long thread_index,
+                          double * ret_logl_diff,
+                          double * ret_logpr_diff)
+{
+  unsigned int i,j,k,count,p;
+  unsigned int root_pmat_index;
+  unsigned int total_nodes = gtree->tip_count+gtree->inner_count;
+  double prevt;
+  double tnew;
+  double logl, logpr;
+  gnode_t ** simnodes = NULL;
+  gnode_t ** parents = NULL;
+  long * migration = NULL;
+  snode_t * prevpop = NULL;
+
+  simnodes = (gnode_t **)xcalloc((size_t)total_nodes, sizeof(gnode_t *));
+  migration = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+
+  /* store pmatrix index for root */
+  root_pmat_index = gtree->root->pmatrix_index;
+
+  /* we have two cases when tracing the lineage backwards in time:
+     1. Lineage enters population x from a descendant population y (in the path curpop<->x)
+     2. Lineage migrates to other populations before migrating back to x
+
+     For case (1) migrations may occur on the path curpop<->y before the
+     lineage enters x.
+  */
+
+  /* 1. find lineages to dissolve */
+/*** Ziheng $$$ ***/
+  #if(DEBUG_zy)
+  printf("[DEBUG] -- mig_dissolve_and_sim -- START\n");
+  debug_print_stree(stree);
+  debug_print_gtree(gtree);
+  printf("[DEBUG] -- mig_dissolve_and_sim -- END\n");
+  #endif
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (gnode->time > tU) continue;
+    if (gnode->pop == x && gnode->time > tL) continue;
+    if (gnode->parent && gnode->parent->time < tL) continue;
+
+    prevt = gnode->time;
+    prevpop = gnode->pop;
+    if (opt_migration && gnode->mi && gnode->mi->count)
+    {
+      for (j = 0; j < gnode->mi->count; ++j)
+      {
+        if (gnode->mi->me[j].time > tL && prevt < tU &&
+            stree->pptable[prevpop->node_index][x->node_index])
+          break;
+
+        prevt = gnode->mi->me[j].time;
+        prevpop = gnode->mi->me[j].target;
+      }
+    }
+    if (!stree->pptable[prevpop->node_index][x->node_index] ||
+        prevt > tU) continue;
+
+    if (gnode->parent)
+    {
+      gnode->parent->mark |= (gnode->parent->left == gnode) ? 
+                               FLAG_RED_LEFT : FLAG_RED_RIGHT;
+      
+      /* unset FLAG_SIMULATE on parent if both its daughter lineages are red */
+      if ((gnode->parent->mark & FLAG_SIMULATE) &&
+          (gnode->parent->mark & FLAG_RED_LEFT) &&
+          (gnode->parent->mark & FLAG_RED_RIGHT))
+      {
+        gnode->parent->mark &= ~FLAG_SIMULATE;
+        if (gnode->parent->mark & FLAG_MIGRATE)
+          gnode->parent->mark &= ~FLAG_MIGRATE;
+      }
+    }
+
+    /* set SIMULATE flag only if at most one RED daughter lineage */
+    if (!((gnode->mark & FLAG_RED_LEFT) && (gnode->mark & FLAG_RED_RIGHT)))
+    {
+      gnode->mark |= FLAG_SIMULATE;
+
+      if (prevt > tL)
+        gnode->mark |= FLAG_MIGRATE;
+    }
+  }
+
+  /* color the lineages with both daughter lineages red */ 
+  gtree_traverse(gtree->root,
+                 TREE_TRAVERSE_POSTORDER,
+                 cb_postorder_inner_only,
+                 gtree->travbuffer,
+                 &total_nodes);
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->travbuffer[i];
+
+    if (gnode->left->mark & FLAG_RED_LEFT && gnode->left->mark & FLAG_RED_RIGHT)
+      gnode->mark |= FLAG_RED_LEFT;
+
+    if (gnode->right->mark & FLAG_RED_LEFT && gnode->right->mark & FLAG_RED_RIGHT)
+      gnode->mark |= FLAG_RED_RIGHT;
+  }
+
+  /* 1b. Go through nodes with SIMULATE flag in preorder */
+  gtree_traverse(gtree->root,
+                 TREE_TRAVERSE_PREORDER,
+                 cb_preorder_inner_only,
+                 gtree->travbuffer,
+                 &total_nodes);
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->travbuffer[i];
+
+    //assert(gnode->mark & FLAG_SIMULATE);
+
+    if ((gnode->mark & FLAG_RED_LEFT) &&
+        (gnode->mark & FLAG_RED_RIGHT))
+    {
+      /* unset FLAG_SIMULATE if both daughter lineages are red */
+      if (gnode->mark & FLAG_SIMULATE)
+        gnode->mark &= ~FLAG_SIMULATE;
+      if (gnode->mark & FLAG_MIGRATE)
+        gnode->mark &= ~FLAG_MIGRATE;
+    }
+    else if (gnode->mark & FLAG_RED_LEFT)
+    {
+      /* move FLAG_SIMULATE from gnode to right daughter lineages */
+      if (gnode->mark & FLAG_SIMULATE)
+      {
+        gnode->mark &= ~FLAG_SIMULATE;
+        gnode->right->mark |= FLAG_SIMULATE;
+      }
+      if (gnode->mark & FLAG_MIGRATE)
+      {
+        gnode->mark &= ~FLAG_MIGRATE;
+        gnode->right->mark |= FLAG_MIGRATE;
+      }
+    }
+    else if (gnode->mark & FLAG_RED_RIGHT)
+    {
+      /* move FLAG_SIMULATE from gnode to left daughter lineages */
+      if (gnode->mark & FLAG_SIMULATE)
+      {
+        gnode->mark &= ~FLAG_SIMULATE;
+        gnode->left->mark |= FLAG_SIMULATE;
+      }
+      if (gnode->mark & FLAG_MIGRATE)
+      {
+        gnode->mark &= ~FLAG_MIGRATE;
+        gnode->left->mark |= FLAG_MIGRATE;
+      }
+    }
+  }
+
+  /* 1c. create the simnodes/migration arrays */
+  total_nodes = gtree->tip_count + gtree->inner_count;
+  for (i = 0, count = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (gnode->mark & FLAG_SIMULATE)
+    {
+      if (gnode->mark & FLAG_MIGRATE)
+        migration[count] = 1;
+      simnodes[count++] = gnode;
+    }
+
+    /* keep red marks */
+    gnode->mark &= (FLAG_RED_LEFT | FLAG_RED_RIGHT);
+  }
+
+  parents  = (gnode_t **)xcalloc((size_t)count, sizeof(gnode_t *));
+
+  /* 2. Prune the lineages, and store the deleted nodes */
+  for (i = 0, p = 0; i < count; ++i)
+  {
+    gnode_t * deleted = pruneoff2(stree,gtree,x,simnodes[i],tL);
+    if (deleted)
+    {
+      parents[p++] = deleted;
+      deleted->old_pop = deleted->pop;
+      deleted->pop = NULL;
+    }
+
+    simnodes[i]->mark |= FLAG_PRUNED;
+    if  (migration[i])
+      simnodes[i]->mark |= FLAG_MIGRATE;
+
+    /* mark the current node for branch length update */
+    simnodes[i]->mark |= FLAG_BRANCH_UPDATE;
+    
+  }
+
+  /* unset color flags from nodes */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    gtree->nodes[i]->mark &= ~(FLAG_RED_LEFT | FLAG_RED_RIGHT);
+
+  /* 3. re-simulate */
+  for (p = 0, i = 0; i < count; ++i)
+  {
+    long existing_migs_count = simnodes[i]->mi ? simnodes[i]->mi->count : 0;
+    tnew = simulate_coalescent_mig_from_point(stree,
+                                              gtree,
+                                              simnodes[i],
+                                              x,
+                                              NULL,
+                                              NULL,
+                                              simnodes[i]->mark & FLAG_MIGRATE ? simnodes[i]->mi->me[existing_migs_count-1].time : tL,               /* TODO: Check what we are passing here is correct */
+                                              msa_index,
+                                              thread_index);
+
+    if (tnew < 0)
+    {
+      /* if this is the lineage going back to infinitity, i.e. first lineage
+         we simulate that does not coalesce anywhere */
+
+      /* delete flag */
+      if (simnodes[i]->mark & FLAG_PRUNED)
+        simnodes[i]->mark &= ~FLAG_PRUNED;
+      if (simnodes[i]->mark & FLAG_MIGRATE)
+        simnodes[i]->mark &= ~FLAG_MIGRATE;
+
+      /* TODO: Update seqin counts */
+      snode_t * pop;
+      snode_t * curpop = x;
+      if (opt_migration && simnodes[i]->mi && simnodes[i]->mi->count)
+      {
+        for (j = existing_migs_count; j < simnodes[i]->mi->count; ++j)
+        {
+          simnodes[i]->mi->me[j].source->migevent_count[msa_index]++;
+          simnodes[i]->mi->me[j].target->migevent_count[msa_index]++;
+
+          /* increase # of migration from s to t (forward in time) */
+          long s = simnodes[i]->mi->me[j].target->node_index;
+          long t = simnodes[i]->mi->me[j].source->node_index;
+          gtree->migcount[s][t]++;
+
+          if (simnodes[i]->mi->me[j].source != curpop)
+          {
+            for (pop = curpop->parent; pop != simnodes[i]->mi->me[j].source->parent; pop = pop->parent)
+              pop->seqin_count[msa_index]++;
+          }
+          curpop = simnodes[i]->mi->me[j].target;
+        }
+      }
+      for (pop = curpop->parent; pop != NULL; pop = pop->parent)
+        pop->seqin_count[msa_index]++;
+          continue;
+    }
+    
+    snode_t * newpop = simnodes[i]->pop;
+    if (opt_migration && simnodes[i]->mi && simnodes[i]->mi->count)
+      newpop = simnodes[i]->mi->me[simnodes[i]->mi->count-1].target;
+
+    /* find ancestral population at time tnew */
+    while (newpop->parent && newpop->parent->tau < tnew)
+      newpop = newpop->parent;
+    
+    /* get lineages entering that population */
+    long lineages = target_branches(stree,gtree,newpop,simnodes[i],tnew,gtree->travbuffer);
+
+    /* randomly pick one lineage */
+    j = (long)(lineages*legacy_rndu(thread_index));
+    assert(j < lineages);
+    gnode_t * gtarget = gtree->travbuffer[j];
+
+    /* regraft */
+    subtree_regraft(stree, gtree, simnodes[i], parents[p], gtarget, newpop, x,existing_migs_count,tnew);
+
+    /* check whether we regrafted on the parental edge of a node that is to be simulated.
+       this can only happen for lineages that enter X via migration, i.e. lineages that
+       were pruned only partially. If that's the case, replace the simulated node with its parent */
+    if (gtarget->mark & FLAG_PRUNED && gtarget->mark & FLAG_MIGRATE)
+    {
+      gtarget->mark &= ~FLAG_PRUNED;
+      gtarget->mark &= ~FLAG_MIGRATE;
+      gtarget->parent->mark |= FLAG_PRUNED;
+      gtarget->parent->mark |= FLAG_MIGRATE;
+
+      for (j = i+1; j < count; ++j)
+        if (simnodes[j] == gtarget)
+        {
+          simnodes[j] = gtarget->parent;
+          break;
+        }
+    }
+
+    /* mark the nodes where we need to update the parental branch lengths */
+    parents[p]->left->mark |= FLAG_BRANCH_UPDATE;
+    parents[p]->right->mark |= FLAG_BRANCH_UPDATE;
+    if (parents[p]->parent)
+      parents[p]->mark |= FLAG_BRANCH_UPDATE;
+    ++p;
+
+    /* delete flag */
+    if (simnodes[i]->mark & FLAG_PRUNED)
+      simnodes[i]->mark &= ~FLAG_PRUNED;
+    if (simnodes[i]->mark & FLAG_MIGRATE)
+      simnodes[i]->mark &= ~FLAG_MIGRATE;
+  }
+
+  /* replace correct root pmatrix */
+  assert(gtree->root->pmatrix_index == root_pmat_index);
+  if (gtree->root->parent)
+  {
+    /* find root */
+    gnode_t * newroot = gtree->root;
+    while (newroot->parent)
+      newroot = newroot->parent;
+    
+    gtree->root->pmatrix_index = newroot->pmatrix_index;
+    newroot->pmatrix_index = root_pmat_index;
+    gtree->root = newroot;
+  }
+
+  /* unset potential branch length update flag for root */
+  if (gtree->root->mark & FLAG_BRANCH_UPDATE)
+  {
+    assert(!gtree->root->parent);
+    gtree->root->mark &= ~FLAG_BRANCH_UPDATE;
+  }
+
+  /* 1) place nodes with branches needing update to an array, and 2) mark all
+     nodes that require CLV updates */
+  for (k=0, i=0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * p = gtree->nodes[i];
+
+    /* 1. place nodes for which we will update branch lengths into travbuffer */
+    if (p->mark & FLAG_BRANCH_UPDATE)
+    {
+      assert(p->parent);
+      gtree->travbuffer[k++] = p;
+    }
+
+    /* 2. mark nodes on the path p->parent <-> root for CLV update */
+    /* TODO: I think it's sufficient to only set FLAG_PARTIAL_UPDATE only for
+       q->parent as p->parent <-> root is visited in gtree_partials_return */
+    gnode_t * q;
+    for (q = p->parent; q && !(q->mark & FLAG_PARTIAL_UPDATE); q = q->parent)
+      q->mark |= FLAG_PARTIAL_UPDATE;
+  }
+      
+  #if 1
+  /* swap pmatrix buffers */
+  for (j = 0; j < k; ++j)
+    gtree->travbuffer[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree->edge_count,
+                                                          gtree->travbuffer[j]->pmatrix_index);
+  locus_update_matrices(locus,gtree,gtree->travbuffer,stree,msa_index,k);
+
+  /* find CLVs that must be updated */
+  gnode_t ** partials = gtree->travbuffer;
+  gtree_return_partials(gtree->root, partials, &k);
+  for (i = 0; i < k; ++i)
+  {
+    partials[i]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                            partials[i]->clv_index);
+    if (opt_scaling)
+      partials[i]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                    partials[i]->scaler_index);
+  }
+
+  /* update partials */
+  locus_update_partials(locus,gtree->travbuffer,k);
+
+  /* compute log-l and log-pr */
+  logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
+  #else
+  k=0;
+  for (j = 0; j < gtree->tip_count+gtree->inner_count; ++j)
+  {
+    gnode_t * tmp = gtree->nodes[j];
+    if (tmp->parent)
+    {
+      tmp->pmatrix_index = SWAP_PMAT_INDEX(gtree->edge_count,tmp->pmatrix_index);
+      gtree->travbuffer[k++] = tmp;
+    }
+  }
+
+  locus_update_matrices(locus,gtree,gtree->travbuffer,stree,msa_index,k);
+
+  gtree_all_partials(gtree->root,gtree->travbuffer,&k);
+  for (j = 0; j < k; ++j)
+  {
+    gtree->travbuffer[j]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,gtree->travbuffer[j]->clv_index);
+    if (opt_scaling)
+      gtree->travbuffer[j]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,gtree->travbuffer[j]->scaler_index);
+  }
+  locus_update_partials(locus,gtree->travbuffer,k);
+
+  logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
+  #endif
+
+  /* update logpr */
+  logpr = (opt_est_theta) ? gtree->logpr : stree->notheta_logpr;
+
+  if (opt_migration && !opt_est_theta)
+    fatal("Integrating out thetas not yet implemented for IM model");
+
+  assert(opt_migration);
+  if (opt_migration)
+  {
+    /* TODO: Improve the following by updating only the necessary popultions */
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      snode_t * pop = stree->nodes[j];
+      if (opt_est_theta)
+        logpr -= pop->logpr_contrib[msa_index];
+      else
+        logpr -= pop->notheta_logpr_contrib;
+
+      logpr += gtree_update_logprob_contrib_mig(pop,
+                                                stree,
+                                                gtree,
+                                                locus->heredity[0],
+                                                msa_index,
+                                                thread_index);
+    }
+  }
+  #if 0
+  else
+  {
+    for (pop = start; pop != end; pop = pop->parent)
+    {
+      if (opt_est_theta)
+        logpr -= pop->logpr_contrib[msa_index];
+      else
+        logpr -= pop->notheta_logpr_contrib;
+
+      logpr += gtree_update_logprob_contrib(pop,
+                                            locus->heredity[0],
+                                            msa_index,
+                                            thread_index);
+    }
+  }
+  #endif
+
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    gtree->nodes[i]->mark = 0;
+
+  *ret_logl_diff  = logl - gtree->logl;
+  *ret_logpr_diff = logpr - gtree->logpr;
+
+  gtree->logpr = logpr;
+  gtree->logl  = logl;
+  
+  free(migration);
+  free(simnodes);
+  free(parents);
+}
+
+static long stree_migration_append(gtree_t *** gtreeptr,
+                                   gtree_t *** gcloneptr,
+                                   stree_t ** streeptr,
+                                   stree_t ** scloneptr,
+                                   locus_t ** locus,
+                                   long si,
+                                   long ti)
+{
+  long i;
+  long rc = 0;
+  double logl_diff = 0;
+  double logpr_diff = 0;
+  double lli_diff = 0;
+  double lpi_diff = 0;
+  double lnacceptance;
+  snode_t * x;
+  snode_t * y;
+
+  gtree_t ** gtree = *gcloneptr;
+  stree_t * stree = *scloneptr;
+
+  stree_t * original_stree = *streeptr;
+  gtree_t ** original_gtree = *gtreeptr;
+
+  const long thread_index_zero = 0;
+
+  x = original_stree->nodes[si];
+  y = original_stree->nodes[ti];
+  assert(x->parent && y->parent);
+
+  /* identify lower and upper bounds tau_L and tau_U for the time interval
+     during which migration is possible */
+  double tau_L = MAX(x->tau, y->tau);
+  double tau_U = MIN(x->parent->tau, y->parent->tau);
+
+  /*** Ziheng $$$ ***/
+  dbg_counter++;
+
+  #if 0
+  printf("x: %s    y: %s\n", x->label, y->label);
+  printf("%s->parent: %s\n", x->label, x->parent->label);
+  printf("%s->parent: %s\n", y->label, y->parent->label);
+  printf("%s->tau: %f  %s->parent->tau: %f   %s->tau: %f  %s->parent->tau: %f\n", x->label, x->tau, x->label, x->parent->tau, y->label, y->tau, y->label, y->parent->tau);
+  printf("tauL : %f  tauU: %f\n", tau_L, tau_U);
+  #endif
+  assert(tau_L < tau_U);
+
+  stree_clone(original_stree,stree);
+  for (i = 0; i < stree->locus_count; ++i)
+    gtree_clone(original_gtree[i], gtree[i], stree);
+  events_clone(original_stree, stree, gtree);
+
+  x = stree->nodes[si];
+  y = stree->nodes[ti];
+  #if 0
+  printf("\nAppend M_%s->%s \n",x->label, y->label);
+  #endif
+  /* create a record of the migration and increase opt_migration */
+  migspec_append(stree,x,y);
+
+  /* TODO: The variable y->mb_mrsum_isarray is unnecessary and wrong. We have an
+    ->active_count in migbuffer which should be updated according to the relevant migration.
+    As we may have multiple migrations from/to one node, the mb_mrsum_isarray is insufficient */
+  /* no rate variation */
+  y->mb_mrsum_isarray = 0;
+
+  dbg_mig_idx_prop = dbg_get_mig_idx(stree);
+
+  /* find all lineages entering population */
+  #if 1
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    mig_dissolve_and_sim(stree,
+                         gtree[i],
+                         locus[i],
+                         tau_L,
+                         tau_U,
+                         y,
+                         i,
+                         thread_index_zero,
+                         &lli_diff,
+                         &lpi_diff);
+    
+
+
+    logl_diff  += lli_diff;
+    logpr_diff += lpi_diff;
+    assert(!gtree[i]->root->parent);
+  }
+  #else
+  logl_diff = 0; logpr_diff = 0;
+  #endif
+
+  lnacceptance = logl_diff;
+  /* lnacceptance = logl_diff + logpr_diff; */
+  /*** Ziheng $$$ ***/
+
+  #if 0
+  lnacceptance += logprobM; /* log prior ratio */
+  lnacceptance -= logprobM; /* log proposal ratio */
+  #else
+  migspec_t * spec = opt_mig_specs + opt_migration_count-1;
+  lnacceptance += log_pdfgamma(spec->M, spec->alpha, spec->beta);   /* log prior ration */
+  lnacceptance -= log_pdfgamma(spec->M, dbg_prop_a,  dbg_prop_b);   /* log proposal ratio */
+  #endif
+
+  /* TODO: This is constant for fixed phylogenies */
+  long mrcount = stree->tip_count*(stree->tip_count+1)*(stree->tip_count-1)/3;
+
+  /* proposal ratio: coin toss, possible migration rates */
+  double term = (.5/.5) * (mrcount - opt_migration_count+1) / opt_migration_count;
+  //printf("*APPEND* term: %f  %ld  %ld\n", term, mrcount, opt_migration_count);
+  assert(term > 0);
+
+  lnacceptance += log(term);
+
+  /*** Ziheng $$$ ***/
+  /*
+  if (dbg_mig_idx == 0 && dbg_mig_idx_prop == 1)
+     printf("log A10: %9.4f\n", lnacceptance);
+     */
+  if (debug_rjmcmc)
+    printf("lnacceptance(append): %f %f %f\n", logl_diff, logpr_diff, lnacceptance);
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+  {
+    if (debug_rjmcmc)
+      printf( ANSI_COLOR_RED " accept" ANSI_COLOR_RESET);
+    /* accept */
+
+    SWAP(original_stree,stree);
+    SWAP(original_gtree,gtree);
+    rc = 1;
+    #if 0
+    printf("\nAppend M_%s->%s " ANSI_COLOR_GREEN "SUCCESS\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+  }
+  else
+  {
+    /* reject */
+    #if 0
+    printf("\nAppend M_%s->%s " ANSI_COLOR_RED "FAIL\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+    --opt_migration_count;
+
+    migspec_t * spec = opt_mig_specs+opt_migration_count;
+    opt_mig_bitmatrix[spec->si][spec->ti] = 0;
+    opt_migration_matrix[spec->si][spec->ti] = -1;
+  }
+
+  *streeptr = original_stree;
+  *gtreeptr = original_gtree;
+
+  *scloneptr = stree;
+  *gcloneptr = gtree;
+
+  return rc;
+}
+
+static long stree_migration_remove(gtree_t *** gtreeptr,
+                                   gtree_t *** gcloneptr,
+                                   stree_t ** streeptr,
+                                   stree_t ** scloneptr,
+                                   locus_t ** locus,
+                                   long si,
+                                   long ti)
+{
+  long i;
+  long pos = 0;
+  long rc = 0;
+  double logl_diff = 0;
+  double logpr_diff = 0;
+  double lli_diff = 0;
+  double lpi_diff = 0;
+  double lnacceptance;
+  snode_t * x;
+  snode_t * y;
+
+  gtree_t ** gtree = *gcloneptr;
+  stree_t * stree = *scloneptr;
+
+  stree_t * original_stree = *streeptr;
+  gtree_t ** original_gtree = *gtreeptr;
+
+  const long thread_index_zero = 0;
+
+  x = original_stree->nodes[si];
+  y = original_stree->nodes[ti];
+  assert(x->parent && y->parent);
+
+  /* see comment below */
+  assert(y->mb_mrsum_isarray == 0);
+
+  /* identify lower and upper bounds tau_L and tau_U for the time interval
+     during which migration is possible */
+  double tau_L = MAX(x->tau, y->tau);
+  double tau_U = MIN(x->parent->tau, y->parent->tau);
+
+  dbg_counter++;
+  assert(tau_L < tau_U);
+
+  stree_clone(original_stree,stree);
+  for (i = 0; i < stree->locus_count; ++i)
+    gtree_clone(original_gtree[i], gtree[i], stree);
+  events_clone(original_stree, stree, gtree);
+
+  x = stree->nodes[si];
+  y = stree->nodes[ti];
+
+  /* create a record of the migration and decrease opt_migration */
+  pos = migspec_remove(stree,x,y);
+
+  #if (DBG_TF)
+  debug_print_migmatrix(stree);
+  #endif
+
+  /* TODO: The variable y->mb_mrsum_isarray is unnecessary and wrong. We have an
+    ->active_count in migbuffer which should be updated according to the relevant migration.
+    As we may have multiple migrations from/to one node, the mb_mrsum_isarray is insufficient */
+  /* no rate variation */
+  y->mb_mrsum_isarray = 0;
+
+  dbg_mig_idx_prop = dbg_get_mig_idx(stree);
+  #if 1
+  /* find all lineages entering population */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    mig_dissolve_and_sim(stree,
+                         gtree[i],
+                         locus[i],
+                         tau_L,
+                         tau_U,
+                         y,
+                         i,
+                         thread_index_zero,
+                         &lli_diff,
+                         &lpi_diff);
+    
+    logl_diff  += lli_diff;
+    logpr_diff += lpi_diff;
+  }
+  #else
+  logl_diff = 0; logpr_diff = 0;
+  #endif
+
+  /* gene tree is simulated and thus proposal density and gene tree density are cancelled */
+  lnacceptance = logl_diff;
+
+
+  /* TODO: Prior ratio and proposal ratio
+  lnacceptance += logprobM
+  lnacceptance -= logprobM
+  */
+  #if 1
+  migspec_t * spec = opt_mig_specs+opt_migration_count;
+
+  lnacceptance += log_pdfgamma(spec->M, dbg_prop_a,  dbg_prop_b);  /* proposal ratio */
+  lnacceptance -= log_pdfgamma(spec->M, spec->alpha, spec->beta);  /* prior ratio */
+  #endif
+
+
+  /* TODO: This is constant for fixed phylogenies */
+  long mrcount = stree->tip_count*(stree->tip_count+1)*(stree->tip_count-1)/3;
+
+  /* proposal ratio: coin toss, possible migration rates */
+  double term = (.5/.5) * (opt_migration_count+1) / (mrcount-opt_migration_count);
+  assert(term>0);
+  //printf("term: %f\n", term);
+  lnacceptance += log(term);
+
+  /* TODO: We need to add the prior and proposal ratio as in _append() function */
+
+
+  /*** Ziheng $$$ ***/
+  /*
+  if (dbg_mig_idx == 1 && dbg_mig_idx_prop == 0)
+     printf("log A10: %9.4f\n", lnacceptance);
+  */
+  if (debug_rjmcmc)
+    printf("lnacceptance(remove): %f %f %f\n", logl_diff, logpr_diff, lnacceptance);
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+  {
+    if (debug_rjmcmc)
+      printf( ANSI_COLOR_RED " accept" ANSI_COLOR_RESET);
+    /* accept */
+    #if 0
+    printf("\nRemove M_%s->%s " ANSI_COLOR_GREEN "SUCCESS\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+
+    SWAP(original_stree,stree);
+    SWAP(original_gtree,gtree);
+    rc = 1;
+
+    #if (DEBUG_zy)
+    printf("[DEBUG] stree_migration_remove() -- accepted\n");
+    printf("[DEBUG] -- stree_migration_remove -- Listing species tree and gene trees\n");
+    debug_print_stree(stree);
+    debug_print_gtree(original_gtree[0]);
+    //debug_print_gtree(original_gtree[1]);
+    printf("[DEBUG] -- stree_migration_remove -- END\n");
+    #endif
+  }
+  else
+  {
+    /* reject */
+
+    #if 0
+    printf("\nRemove M_%s->%s " ANSI_COLOR_RED "FAIL\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+    ++opt_migration_count;
+    opt_migration_matrix[opt_mig_specs[opt_migration_count-1].si][opt_mig_specs[opt_migration_count-1].ti] = opt_migration_count-1;
+    if (pos != opt_migration_count-1)
+    {
+      SWAP(opt_mig_specs[pos],opt_mig_specs[opt_migration_count-1]);
+
+      unsigned int si1=opt_mig_specs[pos].si;
+      unsigned int ti1=opt_mig_specs[pos].ti;
+      unsigned int si2=opt_mig_specs[opt_migration_count-1].si;
+      unsigned int ti2=opt_mig_specs[opt_migration_count-1].ti;
+      SWAP(opt_migration_matrix[si1][ti1],opt_migration_matrix[si2][ti2]);
+      #if 0
+      SWAP(opt_mig_bitmatrix[si1][ti1],opt_mig_bitmatrix[si2][ti2]);
+      #endif
+    }
+    migspec_t * spec = opt_mig_specs+pos;
+    
+    opt_mig_bitmatrix[spec->si][spec->ti] = 1;
+
+    #if (DEBUG_zy)
+    printf("[DEBUG] stree_migration_remove() -- rejected\n");
+    printf("[DEBUG] -- stree_migration_remove -- Listing species tree and gene trees\n");
+    debug_print_stree(stree);
+    debug_print_gtree(original_gtree[0]);
+    if(opt_msa_count>1) debug_print_gtree(original_gtree[1]);
+    printf("[DEBUG] -- stree_migration_remove -- END\n");
+    #endif
+  }
+  #if 0
+  printf("---------------------------------------------\n");
+  #endif
+
+  *streeptr = original_stree;
+  *gtreeptr = original_gtree;
+
+  *scloneptr = stree;
+  *gcloneptr = gtree;
+
+  return rc;
+}
+
+void migdissolveandism2(stree_t * stree,
+                        gtree_t * gtree,
+                        locus_t * locus,
+                        double tL,
+                        double tU,
+                        snode_t * x,
+                        snode_t * y,
+                        int msa_index,
+                        long thread_index,
+                        double * ret_logl_diff,
+                        double * ret_logpr_diff)
+{
+  unsigned int i,j,k,count,p;
+  unsigned int root_pmat_index;
+  unsigned int total_nodes = gtree->tip_count+gtree->inner_count;
+  double prevt;
+  double tnew;
+  double logl, logpr;
+  gnode_t ** simnodes = NULL;
+  gnode_t ** parents = NULL;
+  long * migration = NULL;
+  long * population = NULL;
+  snode_t * prevpop = NULL;
+  snode_t ** affected_nodemap = NULL;
+  static long debug_prune_counter = 0;
+
+  simnodes   = (gnode_t **)xcalloc((size_t)total_nodes, sizeof(gnode_t *));
+  migration  = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+  population = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+  affected_nodemap = (snode_t **)xcalloc((size_t)total_nodes, sizeof(snode_t *));
+
+  long pop_x = 1;
+  long pop_y = 2;
+  long pop_sim;
+
+  /* store pmatrix index for root */
+  root_pmat_index = gtree->root->pmatrix_index;
+
+  /* 1. find lineages to dissolve */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    /* if any of the below conditions hold, the lineage is  not to be deleted */
+    if (gnode->time > tU) continue;
+    if ((gnode->pop == x || gnode->pop == y) && gnode->time > tL) continue;
+    if (gnode->parent && gnode->parent->time < tL) continue;
+
+    /* check if the lineage passes by x or y */
+    prevt = gnode->time;
+    prevpop = gnode->pop;
+    if (opt_migration && gnode->mi && gnode->mi->count)
+    {
+      for (j = 0; j < gnode->mi->count; ++j)
+      {
+        if (gnode->mi->me[j].time > tL && prevt < tU &&
+            (stree->pptable[prevpop->node_index][x->node_index] || stree->pptable[prevpop->node_index][y->node_index]))
+          break;
+
+        prevt = gnode->mi->me[j].time;
+        prevpop = gnode->mi->me[j].target;
+      }
+    }
+    if (!(stree->pptable[prevpop->node_index][x->node_index] || stree->pptable[prevpop->node_index][y->node_index]) ||
+        prevt > tU) continue;
+
+    #if 1
+    /* assertion that lineage does not pass both x and y (that's impossible) */
+    assert(!(stree->pptable[prevpop->node_index][x->node_index] &&
+             stree->pptable[prevpop->node_index][y->node_index]));
+
+    if (prevpop == x)
+      pop_sim = pop_x;
+    else if (prevpop == y)
+      pop_sim = pop_y;
+    else if (stree->pptable[prevpop->node_index][x->node_index])
+      pop_sim = pop_x;
+    else
+      pop_sim = pop_y;
+    #endif
+
+    if (gnode->parent)
+    {
+      gnode->parent->mark |= (gnode->parent->left == gnode) ? 
+                               FLAG_RED_LEFT : FLAG_RED_RIGHT;
+      
+      /* unset FLAG_SIMULATE on parent if both its daughter lineages are red */
+      if ((gnode->parent->mark & FLAG_SIMULATE) &&
+          (gnode->parent->mark & FLAG_RED_LEFT) &&
+          (gnode->parent->mark & FLAG_RED_RIGHT))
+      {
+        gnode->parent->mark &= ~FLAG_SIMULATE;
+        if (gnode->parent->mark & FLAG_MIGRATE)
+          gnode->parent->mark &= ~FLAG_MIGRATE;
+
+        population[gnode->parent->node_index] = 0;
+      }
+    }
+
+    /* set SIMULATE flag only if at most one RED daughter lineage */
+    if (!((gnode->mark & FLAG_RED_LEFT) && (gnode->mark & FLAG_RED_RIGHT)))
+    {
+      gnode->mark |= FLAG_SIMULATE;
+
+      if (prevt > tL)
+        gnode->mark |= FLAG_MIGRATE;
+
+      population[gnode->node_index] = pop_sim;
+    }
+  }
+
+  /* color the lineages with both daughter lineages red */ 
+  gtree_traverse(gtree->root,
+                 TREE_TRAVERSE_POSTORDER,
+                 cb_postorder_inner_only,
+                 gtree->travbuffer,
+                 &total_nodes);
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->travbuffer[i];
+
+    if (gnode->left->mark & FLAG_RED_LEFT && gnode->left->mark & FLAG_RED_RIGHT)
+      gnode->mark |= FLAG_RED_LEFT;
+
+    if (gnode->right->mark & FLAG_RED_LEFT && gnode->right->mark & FLAG_RED_RIGHT)
+      gnode->mark |= FLAG_RED_RIGHT;
+  }
+
+  /* 1b. Go through nodes with SIMULATE flag in preorder */
+  gtree_traverse(gtree->root,
+                 TREE_TRAVERSE_PREORDER,
+                 cb_preorder_inner_only,
+                 gtree->travbuffer,
+                 &total_nodes);
+  for (i = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->travbuffer[i];
+
+    //assert(gnode->mark & FLAG_SIMULATE);
+
+    if ((gnode->mark & FLAG_RED_LEFT) &&
+        (gnode->mark & FLAG_RED_RIGHT))
+    {
+      /* unset FLAG_SIMULATE if both daughter lineages are red */
+      if (gnode->mark & FLAG_SIMULATE)
+      {
+        gnode->mark &= ~FLAG_SIMULATE;
+        #if 1
+        assert(population[gnode->node_index]);
+        population[gnode->node_index] = 0;
+        #endif
+      }
+      else
+        assert(!population[gnode->node_index]);
+      if (gnode->mark & FLAG_MIGRATE)
+        gnode->mark &= ~FLAG_MIGRATE;
+
+    }
+    else if (gnode->mark & FLAG_RED_LEFT)
+    {
+      /* move FLAG_SIMULATE from gnode to right daughter lineages */
+      if (gnode->mark & FLAG_SIMULATE)
+      {
+        #if 1
+        assert(population[gnode->node_index]);
+        if (gnode->right->mark & FLAG_SIMULATE)
+          assert(population[gnode->node_index] == population[gnode->right->node_index]);
+        population[gnode->right->node_index] = population[gnode->node_index];
+        population[gnode->node_index] = 0;
+        #endif
+        gnode->mark &= ~FLAG_SIMULATE;
+        gnode->right->mark |= FLAG_SIMULATE;
+      }
+      if (gnode->mark & FLAG_MIGRATE)
+      {
+        gnode->mark &= ~FLAG_MIGRATE;
+        gnode->right->mark |= FLAG_MIGRATE;
+      }
+    }
+    else if (gnode->mark & FLAG_RED_RIGHT)
+    {
+      /* move FLAG_SIMULATE from gnode to left daughter lineages */
+      if (gnode->mark & FLAG_SIMULATE)
+      {
+        #if 1
+        assert(population[gnode->node_index]);
+        if (gnode->left->mark & FLAG_SIMULATE)
+          assert(population[gnode->node_index] == population[gnode->left->node_index]);
+        population[gnode->left->node_index] = population[gnode->node_index];
+        population[gnode->node_index] = 0;
+        #endif
+        gnode->mark &= ~FLAG_SIMULATE;
+        gnode->left->mark |= FLAG_SIMULATE;
+      }
+      if (gnode->mark & FLAG_MIGRATE)
+      {
+        gnode->mark &= ~FLAG_MIGRATE;
+        gnode->left->mark |= FLAG_MIGRATE;
+      }
+    }
+  }
+
+  /* 1c. create the simnodes/migration arrays */
+  total_nodes = gtree->tip_count + gtree->inner_count;
+  for (i = 0, count = 0; i < total_nodes; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (gnode->mark & FLAG_SIMULATE)
+    {
+      if (gnode->mark & FLAG_MIGRATE)
+        migration[count] = 1;
+      simnodes[count++] = gnode;
+      #if 1
+      assert(population[gnode->node_index]);
+      #endif
+    }
+
+    /* keep red marks */
+    gnode->mark &= (FLAG_RED_LEFT | FLAG_RED_RIGHT);
+  }
+
+  parents  = (gnode_t **)xcalloc((size_t)count, sizeof(gnode_t *));
+
+  /* 2. Prune the lineages, and store the deleted nodes */
+  for (i = 0, p = 0; i < count; ++i)
+  {
+    #if 0
+    printf("\n\nBefore pruning:\n\n");
+    debug_print_stree(stree);
+    debug_print_gtree_detailed(gtree);
+    #endif
+
+    debug_prune_counter++;
+    #if 0
+    printf("[" ANSI_COLOR_MAGENTA "debug_prune_counter=%ld" ANSI_COLOR_RESET "] Pruning %d/%d (node: %d)\n", debug_prune_counter, i,count,simnodes[i]->node_index);
+    if (population[simnodes[i]->node_index] != pop_x && population[simnodes[i]->node_index] != pop_y)
+      printf("Assertion failing.. population[%d] = %ld\n", simnodes[i]->node_index, population[simnodes[i]->node_index]);
+    #endif
+    assert(population[simnodes[i]->node_index] == pop_x || population[simnodes[i]->node_index] == pop_y);
+    gnode_t * deleted = pruneoff2(stree,gtree,population[simnodes[i]->node_index]==pop_x ? x : y,simnodes[i],tL);
+    if (deleted)
+    {
+      parents[p++] = deleted;
+      deleted->old_pop = deleted->pop;
+      deleted->pop = NULL;
+    }
+
+    simnodes[i]->mark |= FLAG_PRUNED;
+    if  (migration[i])
+      simnodes[i]->mark |= FLAG_MIGRATE;
+
+    /* mark the current node for branch length update */
+    simnodes[i]->mark |= FLAG_BRANCH_UPDATE;
+    
+  }
+  #if 0
+  printf("\n\nPruned off tree:\n\n");
+  debug_print_stree(stree);
+  debug_print_gtree_detailed(gtree);
+  #endif
+
+  /* unset color flags from nodes */
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    gtree->nodes[i]->mark &= ~(FLAG_RED_LEFT | FLAG_RED_RIGHT);
+
+  /* create affected nodemap */
+  for (i = 0; i < count; ++i)
+  {
+    assert(population[simnodes[i]->node_index] == pop_x || population[simnodes[i]->node_index] == pop_y);
+    if (population[simnodes[i]->node_index] == pop_x)
+      affected_nodemap[simnodes[i]->node_index] = x; 
+    else
+      affected_nodemap[simnodes[i]->node_index] = y; 
+  }
+
+  /* 3. re-simulate */
+  for (p = 0, i = 0; i < count; ++i)
+  {
+    long existing_migs_count = simnodes[i]->mi ? simnodes[i]->mi->count : 0;
+    #if 1
+    assert(population[simnodes[i]->node_index] == pop_x || population[simnodes[i]->node_index] == pop_y);
+    #endif
+    tnew = simulate_coalescent_mig_from_point(stree,
+                                              gtree,
+                                              simnodes[i],
+                                              population[simnodes[i]->node_index] == pop_x ? x : y,
+                                              population[simnodes[i]->node_index] == pop_x ? y : x,
+                                              affected_nodemap,
+                                              simnodes[i]->mark & FLAG_MIGRATE ? simnodes[i]->mi->me[existing_migs_count-1].time : tL,               /* TODO: Check what we are passing here is correct */
+                                              msa_index,
+                                              thread_index);
+
+    if (tnew < 0)
+    {
+      /* if this is the lineage going back to infinitity, i.e. first lineage
+         we simulate that does not coalesce anywhere */
+
+      /* delete flag */
+      if (simnodes[i]->mark & FLAG_PRUNED)
+        simnodes[i]->mark &= ~FLAG_PRUNED;
+      if (simnodes[i]->mark & FLAG_MIGRATE)
+        simnodes[i]->mark &= ~FLAG_MIGRATE;
+
+      /* TODO: Update seqin counts */
+      snode_t * pop;
+      snode_t * curpop = population[simnodes[i]->node_index] == pop_x ? x : y;
+      if (opt_migration && simnodes[i]->mi && simnodes[i]->mi->count)
+      {
+        for (j = existing_migs_count; j < simnodes[i]->mi->count; ++j)
+        {
+          simnodes[i]->mi->me[j].source->migevent_count[msa_index]++;
+          simnodes[i]->mi->me[j].target->migevent_count[msa_index]++;
+
+          /* increase # of migration from s to t (forward in time) */
+          long s = simnodes[i]->mi->me[j].target->node_index;
+          long t = simnodes[i]->mi->me[j].source->node_index;
+          gtree->migcount[s][t]++;
+
+          if (simnodes[i]->mi->me[j].source != curpop)
+          {
+            for (pop = curpop->parent; pop != simnodes[i]->mi->me[j].source->parent; pop = pop->parent)
+              pop->seqin_count[msa_index]++;
+          }
+          curpop = simnodes[i]->mi->me[j].target;
+        }
+      }
+      for (pop = curpop->parent; pop != NULL; pop = pop->parent)
+        pop->seqin_count[msa_index]++;
+          continue;
+    }
+    
+    snode_t * newpop = simnodes[i]->pop;
+    if (opt_migration && simnodes[i]->mi && simnodes[i]->mi->count)
+      newpop = simnodes[i]->mi->me[simnodes[i]->mi->count-1].target;
+
+    /* find ancestral population at time tnew */
+    while (newpop->parent && newpop->parent->tau < tnew)
+      newpop = newpop->parent;
+    
+    /* get lineages entering that population */
+    long lineages = target_branches(stree,gtree,newpop,simnodes[i],tnew,gtree->travbuffer);
+
+    /* randomly pick one lineage */
+    j = (long)(lineages * legacy_rndu(thread_index));
+    assert(j < lineages);
+    gnode_t * gtarget = gtree->travbuffer[j];
+
+    /* regraft */
+    subtree_regraft(stree,
+                    gtree,
+                    simnodes[i],
+                    parents[p],
+                    gtarget,
+                    newpop,
+                    population[simnodes[i]->node_index] == pop_x ? x : y,
+                    existing_migs_count,
+                    tnew);
+
+    /* check whether we regrafted on the parental edge of a node that is to be simulated.
+       this can only happen for lineages that enter X via migration, i.e. lineages that
+       were pruned only partially. If that's the case, replace the simulated node with its parent */
+    if (gtarget->mark & FLAG_PRUNED && gtarget->mark & FLAG_MIGRATE)
+    {
+      gtarget->mark &= ~FLAG_PRUNED;
+      gtarget->mark &= ~FLAG_MIGRATE;
+      gtarget->parent->mark |= FLAG_PRUNED;
+      gtarget->parent->mark |= FLAG_MIGRATE;
+
+      for (j = i+1; j < count; ++j)
+        if (simnodes[j] == gtarget)
+        {
+          population[gtarget->parent->node_index] = population[simnodes[j]->node_index];
+
+          assert(population[simnodes[j]->node_index] == pop_x || population[simnodes[j]->node_index] == pop_y);
+          assert(affected_nodemap[simnodes[j]->node_index] == x || affected_nodemap[simnodes[j]->node_index] == y);
+
+          affected_nodemap[gtarget->parent->node_index] = affected_nodemap[simnodes[j]->node_index];
+          simnodes[j] = gtarget->parent;
+
+          break;
+        }
+    }
+
+    /* mark the nodes where we need to update the parental branch lengths */
+    parents[p]->left->mark |= FLAG_BRANCH_UPDATE;
+    parents[p]->right->mark |= FLAG_BRANCH_UPDATE;
+    if (parents[p]->parent)
+      parents[p]->mark |= FLAG_BRANCH_UPDATE;
+    ++p;
+
+    /* delete flag */
+    if (simnodes[i]->mark & FLAG_PRUNED)
+      simnodes[i]->mark &= ~FLAG_PRUNED;
+    if (simnodes[i]->mark & FLAG_MIGRATE)
+      simnodes[i]->mark &= ~FLAG_MIGRATE;
+  }
+
+  /* replace correct root pmatrix */
+  assert(gtree->root->pmatrix_index == root_pmat_index);
+  if (gtree->root->parent)
+  {
+    /* find root */
+    gnode_t * newroot = gtree->root;
+    while (newroot->parent)
+      newroot = newroot->parent;
+    
+    gtree->root->pmatrix_index = newroot->pmatrix_index;
+    newroot->pmatrix_index = root_pmat_index;
+    gtree->root = newroot;
+  }
+
+  /* unset potential branch length update flag for root */
+  if (gtree->root->mark & FLAG_BRANCH_UPDATE)
+  {
+    assert(!gtree->root->parent);
+    gtree->root->mark &= ~FLAG_BRANCH_UPDATE;
+  }
+
+  /* 1) place nodes with branches needing update to an array, and 2) mark all
+     nodes that require CLV updates */
+  for (k=0, i=0; i < gtree->tip_count+gtree->inner_count; ++i)
+  {
+    gnode_t * p = gtree->nodes[i];
+
+    /* 1. place nodes for which we will update branch lengths into travbuffer */
+    if (p->mark & FLAG_BRANCH_UPDATE)
+    {
+      assert(p->parent);
+      gtree->travbuffer[k++] = p;
+    }
+
+    /* 2. mark nodes on the path p->parent <-> root for CLV update */
+    /* TODO: I think it's sufficient to only set FLAG_PARTIAL_UPDATE only for
+       q->parent as p->parent <-> root is visited in gtree_partials_return */
+    gnode_t * q;
+    for (q = p->parent; q && !(q->mark & FLAG_PARTIAL_UPDATE); q = q->parent)
+      q->mark |= FLAG_PARTIAL_UPDATE;
+  }
+      
+  #if 1
+  /* swap pmatrix buffers */
+  for (j = 0; j < k; ++j)
+    gtree->travbuffer[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree->edge_count,
+                                                          gtree->travbuffer[j]->pmatrix_index);
+  locus_update_matrices(locus,gtree,gtree->travbuffer,stree,msa_index,k);
+
+  /* find CLVs that must be updated */
+  gnode_t ** partials = gtree->travbuffer;
+  gtree_return_partials(gtree->root, partials, &k);
+  for (i = 0; i < k; ++i)
+  {
+    partials[i]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,
+                                            partials[i]->clv_index);
+    if (opt_scaling)
+      partials[i]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,
+                                                    partials[i]->scaler_index);
+  }
+
+  /* update partials */
+  locus_update_partials(locus,gtree->travbuffer,k);
+
+  /* compute log-l and log-pr */
+  logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
+  #else
+  k=0;
+  for (j = 0; j < gtree->tip_count+gtree->inner_count; ++j)
+  {
+    gnode_t * tmp = gtree->nodes[j];
+    if (tmp->parent)
+    {
+      tmp->pmatrix_index = SWAP_PMAT_INDEX(gtree->edge_count,tmp->pmatrix_index);
+      gtree->travbuffer[k++] = tmp;
+    }
+  }
+
+  locus_update_matrices(locus,gtree,gtree->travbuffer,stree,msa_index,k);
+
+  gtree_all_partials(gtree->root,gtree->travbuffer,&k);
+  for (j = 0; j < k; ++j)
+  {
+    gtree->travbuffer[j]->clv_index = SWAP_CLV_INDEX(gtree->tip_count,gtree->travbuffer[j]->clv_index);
+    if (opt_scaling)
+      gtree->travbuffer[j]->scaler_index = SWAP_SCALER_INDEX(gtree->tip_count,gtree->travbuffer[j]->scaler_index);
+  }
+  locus_update_partials(locus,gtree->travbuffer,k);
+
+  logl = locus_root_loglikelihood(locus,gtree->root,locus->param_indices,NULL);
+  #endif
+
+  /* update logpr */
+  logpr = (opt_est_theta) ? gtree->logpr : stree->notheta_logpr;
+
+  if (opt_migration && !opt_est_theta)
+    fatal("Integrating out thetas not yet implemented for IM model");
+
+  assert(opt_migration);
+  if (opt_migration)
+  {
+    /* TODO: Improve the following by updating only the necessary popultions */
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    {
+      snode_t * pop = stree->nodes[j];
+      if (opt_est_theta)
+        logpr -= pop->logpr_contrib[msa_index];
+      else
+        logpr -= pop->notheta_logpr_contrib;
+
+      logpr += gtree_update_logprob_contrib_mig(pop,
+                                                stree,
+                                                gtree,
+                                                locus->heredity[0],
+                                                msa_index,
+                                                thread_index);
+    }
+  }
+  #if 0
+  else
+  {
+    for (pop = start; pop != end; pop = pop->parent)
+    {
+      if (opt_est_theta)
+        logpr -= pop->logpr_contrib[msa_index];
+      else
+        logpr -= pop->notheta_logpr_contrib;
+
+      logpr += gtree_update_logprob_contrib(pop,
+                                            locus->heredity[0],
+                                            msa_index,
+                                            thread_index);
+    }
+  }
+  #endif
+
+  for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    gtree->nodes[i]->mark = 0;
+
+  *ret_logl_diff  = logl - gtree->logl;
+  *ret_logpr_diff = logpr - gtree->logpr;
+
+  gtree->logpr = logpr;
+  gtree->logl  = logl;
+  
+  free(migration);
+  free(simnodes);
+  free(parents);
+  free(population);
+  free(affected_nodemap);
+
+
+}
+
+static long stree_migration_flip(gtree_t *** gtreeptr,
+                                 gtree_t *** gcloneptr,
+                                 stree_t ** streeptr,
+                                 stree_t ** scloneptr,
+                                 locus_t ** locus,
+                                 long si,
+                                 long ti)
+{
+  long i;
+  long pos = 0;
+  long rc = 0;
+  double logl_diff = 0;
+  double logpr_diff = 0;
+  double lli_diff = 0;
+  double lpi_diff = 0;
+  double lnacceptance;
+  snode_t * x;
+  snode_t * y;
+
+  gtree_t ** gtree = *gcloneptr;
+  stree_t * stree = *scloneptr;
+
+  stree_t * original_stree = *streeptr;
+  gtree_t ** original_gtree = *gtreeptr;
+
+  const long thread_index_zero = 0;
+
+  x = original_stree->nodes[si];
+  y = original_stree->nodes[ti];
+  assert(x->parent && y->parent);
+
+  /* see comment below */
+  assert(y->mb_mrsum_isarray == 0);
+
+  /* identify lower and upper bounds tau_L and tau_U for the time interval
+     during which migration is possible */
+  double tau_L = MAX(x->tau, y->tau);
+  double tau_U = MIN(x->parent->tau, y->parent->tau);
+
+  assert(tau_L < tau_U);
+
+  stree_clone(original_stree,stree);
+  for (i = 0; i < stree->locus_count; ++i)
+    gtree_clone(original_gtree[i], gtree[i], stree);
+  events_clone(original_stree, stree, gtree);
+
+  x = stree->nodes[si];
+  y = stree->nodes[ti];
+
+  #if 0
+  /* create a record of the migration and increase opt_migration */
+  pos = migspec_flip(stree,x,y);
+
+  /* TODO: The variable y->mb_mrsum_isarray is unnecessary and wrong. We have an
+    ->active_count in migbuffer which should be updated according to the relevant migration.
+    As we may have multiple migrations from/to one node, the mb_mrsum_isarray is insufficient */
+  /* no rate variation */
+  y->mb_mrsum_isarray = 0;
+
+  dbg_mig_idx_prop = dbg_get_mig_idx(stree);
+  #if 1
+  /* find all lineages entering population */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    mig_dissolve_and_sim(stree,
+                         gtree[i],
+                         locus[i],
+                         tau_L,
+                         tau_U,
+                         y,
+                         i,
+                         thread_index_zero,
+                         &lli_diff,
+                         &lpi_diff);
+    
+    logl_diff  += lli_diff;
+    logpr_diff += lpi_diff;
+  }
+  #else
+  logl_diff = 0; logpr_diff = 0;
+  #endif
+
+  lnacceptance = logl_diff;
+  /* lnacceptance = logl_diff + logpr_diff; */
+
+
+  /* TODO: Prior ratio and proposal ratio
+  lnacceptance += logprobM
+  lnacceptance -= logprobM
+  */
+  #endif
+
+  /* start of new code */
+  pos = migspec_remove(stree,x,y);
+  double old_mrate = opt_mig_specs[opt_migration_count].M;
+  migspec_append(stree,y,x);
+  opt_mig_specs[opt_migration_count-1].M = old_mrate;
+  stree_update_mig_subpops(stree, thread_index_zero);
+
+  /* TODO: The variable y->mb_mrsum_isarray is unnecessary and wrong. We have an
+    ->active_count in migbuffer which should be updated according to the relevant migration.
+    As we may have multiple migrations from/to one node, the mb_mrsum_isarray is insufficient */
+  /* no rate variation */
+  y->mb_mrsum_isarray = 0;
+
+  dbg_mig_idx_prop = dbg_get_mig_idx(stree);
+  /* find all lineages entering population */
+  #if 0
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    mig_dissolve_and_sim(stree,
+                         gtree[i],
+                         locus[i],
+                         tau_L,
+                         tau_U,
+                         y,
+                         i,
+                         thread_index_zero,
+                         &lli_diff,
+                         &lpi_diff);
+    
+    logl_diff  += lli_diff;
+    logpr_diff += lpi_diff;
+  }
+
+  migspec_append(stree,y,x);
+  /* TODO: add an extra option in migspec_append to avoid the following two lines */
+  opt_mig_specs[opt_migration_count-1].M = old_mrate;
+  stree_update_mig_subpops(stree, thread_index_zero);
+  x->mb_mrsum_isarray = 0;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    mig_dissolve_and_sim(stree,
+                         gtree[i],
+                         locus[i],
+                         tau_L,
+                         tau_U,
+                         x,
+                         i,
+                         thread_index_zero,
+                         &lli_diff,
+                         &lpi_diff);
+    
+
+
+    logl_diff  += lli_diff;
+    logpr_diff += lpi_diff;
+    assert(!gtree[i]->root->parent);
+  }
+  #else
+  x->mb_mrsum_isarray = 0;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    migdissolveandism2(stree,
+                       gtree[i],
+                       locus[i],
+                       tau_L,
+                       tau_U,
+                       y,
+                       x,
+                       i,
+                       thread_index_zero,
+                       &lli_diff,
+                       &lpi_diff);
+    logl_diff += lli_diff;
+    logpr_diff += lpi_diff;
+    assert(!gtree[i]->root->parent);
+  }
+  #endif
+
+  lnacceptance = logl_diff;
+  /* lnacceptance = logl_diff + logpr_diff; */
+
+
+  /* TODO: Prior ratio and proposal ratio
+  lnacceptance += logprobM
+  lnacceptance -= logprobM
+  */
+
+  /* end of new code */
+
+
+  #if 1
+  migspec_t * spec = opt_mig_specs+opt_migration_count-1;
+
+  lnacceptance += log_pdfgamma(spec->M, dbg_prop_a,  dbg_prop_b);  /* proposal ratio */
+  lnacceptance -= log_pdfgamma(spec->M, spec->alpha, spec->beta);  /* prior ratio */
+  #endif
+
+  /*** Ziheng $$$ ***/
+  /*
+  if (dbg_mig_idx == 1 && dbg_mig_idx_prop == 0)
+     printf("log A10: %9.4f\n", lnacceptance);
+  */
+  if (debug_rjmcmc)
+  {
+    printf("lnacceptance(flip__): %f %f %f\n", logl_diff, logpr_diff, lnacceptance);
+    if (dbg_counter > 10) assert(0);
+  }
+  //lnacceptance = -100;
+  //if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+  if (lnacceptance >= -1e-10 || .5 < exp(lnacceptance))
+  {
+    if (debug_rjmcmc)
+      printf( ANSI_COLOR_RED " accept" ANSI_COLOR_RESET);
+    /* accept */
+    #if 0
+    printf("\nRemove M_%s->%s " ANSI_COLOR_GREEN "SUCCESS\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+
+    SWAP(original_stree,stree);
+    SWAP(original_gtree,gtree);
+    rc = 1;
+
+    #if (DEBUG_zy)
+    printf("[DEBUG] stree_migration_remove() -- accepted\n");
+    printf("[DEBUG] -- stree_migration_remove -- Listing species tree and gene trees\n");
+    debug_print_stree(stree);
+    debug_print_gtree(original_gtree[0]);
+    //debug_print_gtree(original_gtree[1]);
+    printf("[DEBUG] -- stree_migration_remove -- END\n");
+    #endif
+  }
+  else
+  {
+    /* reject */
+
+    #if 0
+    printf("\nRemove M_%s->%s " ANSI_COLOR_RED "FAIL\n" ANSI_COLOR_RESET, x->label, y->label);
+    #endif
+    migspec_t * spec = opt_mig_specs+opt_migration_count-1;
+    opt_mig_bitmatrix[spec->si][spec->ti] = 0;
+    //assert(opt_migration_matrix[spec->si][spec->ti] >= 0);
+    //assert(opt_migration_matrix[spec->ti][spec->si] == -1);
+    opt_migration_matrix[spec->ti][spec->si] = opt_migration_matrix[spec->si][spec->ti];
+    opt_migration_matrix[spec->si][spec->ti] = -1;
+    assert(opt_mig_bitmatrix[spec->ti][spec->si] == 0);
+    SWAP(spec->si,spec->ti);
+
+    if (pos != opt_migration_count-1)
+    {
+      SWAP(opt_mig_specs[pos],opt_mig_specs[opt_migration_count-1]);
+
+      unsigned int si1=opt_mig_specs[pos].si;
+      unsigned int ti1=opt_mig_specs[pos].ti;
+      unsigned int si2=opt_mig_specs[opt_migration_count-1].si;
+      unsigned int ti2=opt_mig_specs[opt_migration_count-1].ti;
+      SWAP(opt_migration_matrix[si1][ti1],opt_migration_matrix[si2][ti2]);
+      #if 0
+      SWAP(opt_mig_bitmatrix[si1][ti1],opt_mig_bitmatrix[si2][ti2]);
+      #endif
+    }
+    spec = opt_mig_specs+pos;
+    
+    opt_mig_bitmatrix[spec->si][spec->ti] = 1;
+
+    #if (DEBUG_zy)
+    printf("[DEBUG] stree_migration_remove() -- rejected\n");
+    printf("[DEBUG] -- stree_migration_remove -- Listing species tree and gene trees\n");
+    debug_print_stree(stree);
+    debug_print_gtree(original_gtree[0]);
+    if(opt_msa_count>1) debug_print_gtree(original_gtree[1]);
+    printf("[DEBUG] -- stree_migration_remove -- END\n");
+    #endif
+  }
+  #if 0
+  printf("---------------------------------------------\n");
+  #endif
+
+  *streeptr = original_stree;
+  *gtreeptr = original_gtree;
+
+  *scloneptr = stree;
+  *gcloneptr = gtree;
+
+  return rc;
+}
+
+long stree_migration_flip_wrapper(gtree_t *** gtreeptr,
+                                  gtree_t *** gcloneptr,
+                                  stree_t ** streeptr,
+                                  stree_t ** scloneptr,
+                                  locus_t ** locus)
+{
+  long * indices;
+  long i,j,k,r;
+  const long thread_index_zero = 0;
+  long rc = 0;
+  migspec_t * spec;
+  stree_t * stree = *streeptr;
+
+  /* TODO: Duplicate code from _update(), delete */
+  dbg_prop_a = 1.0 * opt_mig_alpha;
+  dbg_prop_b = opt_mig_beta;
+
+  long total = stree->tip_count+stree->inner_count;
+
+  indices = (long *)xcalloc((size_t)(total*total), sizeof(long));
+
+  /* go through the lower triangle of the matrix */
+  k = 0;
+  for (i = 0; i < total; ++i)
+    for (j = 0; j < i; ++j)
+    {
+      if (opt_mig_bitmatrix[i][j] ^ opt_mig_bitmatrix[j][i])
+        indices[k++] = opt_mig_bitmatrix[i][j] ?
+          opt_migration_matrix[i][j] : opt_migration_matrix[j][i];
+    }
+  if (!k) goto l_unwind;
+
+  r = (long)(k*legacy_rndu(thread_index_zero));
+  spec = opt_mig_specs+indices[r];
+
+  #if 0
+  if (debug_rjmcmc)
+  {
+    printf("Flip__  ");
+    debug_print_migrations_flip(stree);
+    debug_print_migmatrix(stree);
+    //debug_print_bitmatrix(stree);
+  }
+  printf(ANSI_COLOR_BLUE "Flipping M_%s -> %s\n" ANSI_COLOR_RESET, stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label);
+  debug_print_stree(stree);
+  debug_print_gtree(*gtreeptr[0]);
+  debug_print_migmatrix(stree);
+  #endif
+  rc = stree_migration_flip(gtreeptr,
+                            gcloneptr,
+                            streeptr,
+                            scloneptr,
+                            locus,
+                            spec->si,
+                            spec->ti);
+l_unwind:
+  free(indices);
+  
+  #if 0
+  if (debug_rjmcmc)
+  {
+    debug_print_migrations_flip(stree);
+    debug_print_migmatrix(stree);
+    //debug_print_bitmatrix(stree);
+  }
+  #endif
+  return rc;
+}
+
+
+static long select_migpair(stree_t * stree, long * si, long * ti)
+{
+  long total_nodes = stree->tip_count + stree->inner_count;
+  long total_pairs = 0;
+  long i,j,k;
+  long overlap;
+  long rc = 0;
+  long ** targets;
+  long * tgt_count;
+
+  const long thread_index_zero = 0;
+
+  targets = (long **)xmalloc((size_t)total_nodes * sizeof(long *));
+  for (i = 0; i < total_nodes; ++i)
+    targets[i] = (long *)xmalloc((size_t)total_nodes * sizeof(long));
+
+  tgt_count = (long *)xcalloc((size_t)total_nodes,sizeof(long));
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode_t * s = stree->nodes[i];
+    if (!s->parent) continue;
+
+    double a = s->tau;
+    double p = s->parent->tau;
+
+    for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+    {
+      snode_t * t = stree->nodes[j];
+      if (!t->parent || t == s) continue;
+
+      /* check for time overlap */
+
+      /* find populations with time overlap (as in propose_tau_mig) and no
+         existing migration rate parameter */
+
+      double b = t->tau;
+      double q = t->parent->tau;
+
+      overlap = !(p <= b || a >= q);
+
+      if (overlap && !opt_mig_bitmatrix[s->node_index][t->node_index])
+      {
+        targets[s->node_index][tgt_count[s->node_index]++] = t->node_index;
+        ++total_pairs;
+      }
+    }
+  }
+
+  /* if no pair found return with 0 */
+  if (!total_pairs) goto l_unwind;
+
+  /* randomly select a pair acrosss all possible pairs */
+  long pair = (long)(total_pairs*legacy_rndu(thread_index_zero));
+
+  for (i = 0, k = 0; i < total_nodes-1; ++i)
+  {
+    if (pair < k+tgt_count[i])
+      break;
+    k += tgt_count[i];
+  }
+  *si = i;
+  *ti = targets[i][pair-k];
+  rc = 1;
+
+l_unwind:
+  /* TODO: pre-allocate structure and deallocate them at the end of run */
+  free(tgt_count);
+  for (i = 0; i < total_nodes; ++i)
+    free(targets[i]);
+  free(targets);
+
+  return rc;
+}
+
+static long lh_tree_counter(stree_t * stree)
+{
+  long i,j;
+  long n,k;
+  double prod = 1;
+  long lv,rv;
+
+  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+
+    lv = snode->left->leaves == 1 ? 0 : snode->left->leaves-1;
+    rv = snode->right->leaves == 1 ? 0 : snode->right->leaves-1;
+
+    n = lv+rv;
+    k = lv;
+
+    if (n==k || k==0) continue;
+    assert(n>k);
+
+    
+    double r = 1;
+    for (j = n-k+1; j <= n; ++j)
+      r *= j;
+    for (j = 2; j <= k; ++j)
+      r /= j;
+
+    prod *= r;
+  }
+
+  return (long)prod;
+}
+
+static double lh_counter(long tip_count)
+{
+  long i;
+  double lh = 1;
+
+  for (i = 3; i <= tip_count; ++i)
+    lh *= i*(i-1) / 2;
+
+  return lh;
+}
+
+static long mig_models_count(long n)
+{
+  return n*(n+1)*(n-1)/3;
+}
+
+
+/*** Ziheng $$$ ***/
+#define DEBUG_zy
+int times = 0;
+
+static void debug_print_migrations_flip(stree_t * stree)
+{
+  long i;
+  printf("%ld: ", opt_migration_count);
+  for (i = 0; i < opt_migration_count; ++i)
+  {
+    migspec_t * spec = opt_mig_specs+i;
+    unsigned int si = spec->si;
+    unsigned int ti = spec->ti;
+    printf("  M_%s->%s=%f (%d,%d,%f,%f)", stree->nodes[si]->label, stree->nodes[ti]->label, spec->M, spec->si,spec->ti,spec->alpha,spec->beta);
+  }
+  printf("\n");
+  //printf("  ");
+}
+static void debug_print_migrations(stree_t * stree)
+{
+  long i;
+  printf("%ld: ", opt_migration_count);
+  for (i = 0; i < opt_migration_count; ++i)
+  {
+    migspec_t * spec = opt_mig_specs+i;
+
+    printf("  M_%s->%s=%f", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, spec->M);
+  }
+  printf("\n");
+  //printf("  ");
+}
+static debug_print_bitmatrix(stree_t * stree)
+{
+  long i,j;
+  long total_nodes = stree->tip_count + stree->inner_count;
+  long count = 0;
+
+  printf("      ");
+  for (i = 0; i < total_nodes; ++i)
+    printf(" %2s", stree->nodes[i]->label);
+  printf("\n");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    printf("   ");
+    printf(" %2s", stree->nodes[i]->label);
+    for (j = 0; j < total_nodes; ++j)
+    {
+      if (opt_mig_bitmatrix[i][j] != 0)
+        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_mig_bitmatrix[i][j]);
+      else
+        printf(" %2ld", opt_mig_bitmatrix[i][j]);
+    }
+    printf("\n");
+  }
+}
+static debug_print_migmatrix(stree_t * stree)
+{
+  long i,j;
+  long total_nodes = stree->tip_count + stree->inner_count;
+  long count = 0;
+
+  printf("      ");
+  for (i = 0; i < total_nodes; ++i)
+    printf(" %2s", stree->nodes[i]->label);
+  printf("\n");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    printf("   ");
+    printf(" %2s", stree->nodes[i]->label);
+    for (j = 0; j < total_nodes; ++j)
+    {
+      if (opt_migration_matrix[i][j] != -1)
+        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_migration_matrix[i][j]);
+      else
+        printf(" %2ld", opt_migration_matrix[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+static debug_check_matrix(stree_t * stree)
+{
+  long i,j;
+  long total_nodes = stree->tip_count + stree->inner_count;
+  long count = 0;
+
+  for (i = 0; i < total_nodes; ++i)
+    for (j = 0; j < total_nodes; ++j)
+      if (opt_migration_matrix[i][j] != -1)
+        count++;
+
+  assert(count == opt_migration_count);
+}
+
+long stree_migration_rj(gtree_t *** gtreeptr,
+                            gtree_t *** gcloneptr,
+                            stree_t ** streeptr,
+                            stree_t ** scloneptr,
+                            locus_t ** locus)
+{
+  long append = 0;
+  long rc = 0;
+  long si,ti;
+  const long thread_index_zero = 0;
+  migspec_t * spec;
+  stree_t * stree = *streeptr;
+  static long debug_counter = 0;
+
+  dbg_prop_a = 1.0 * opt_mig_alpha;
+  dbg_prop_b = opt_mig_beta;
+  
+  #if(DBG_TF)
+  printf("HERE!\n");
+  debug_print_migrations(stree);
+  debug_print_migmatrix(stree);
+  #endif
+  debug_check_matrix(stree);
+#if 1
+  dbg_mig_idx = dbg_get_mig_idx(stree);
+#endif
+
+  append = legacy_rndu(thread_index_zero) < .5;
+  if (!append && opt_migration_count == 0) return 0;
+
+  ++debug_counter;
+  if (append)
+  {
+    /* check if there is an available pair, and if yes, select it */
+    rc = select_migpair(stree,&si,&ti);
+    assert(rc || opt_migration_count);
+    if (!rc)
+      return 0;
+  }
+
+  if (debug_rjmcmc)
+  {
+    if (append)
+      printf("Append  ");
+    else
+      printf("Remove  ");
+    debug_print_migrations(stree);
+    debug_print_migmatrix(stree);
+  }
+  #if 0
+  /* TODO: Delete this, just for debugging */
+  long i;
+  for (i = 3; i < 10; ++i)
+  {
+    printf("LH for %ld species = %f\n", i, lh_counter(i));
+  }
+  for (i = 2; i < 10; ++i)
+    printf("migmodels for %ld species = %ld\n", i, mig_models_count(i));
+  printf("LH for tree: %ld\n", lh_tree_counter(stree));
+  fatal("Finishing\n");
+  #endif
+  if (append)
+  {
+    #if 0
+    printf("[DEBUG %ld] Append -- migration count: %ld\n", debug_counter, opt_migration_count);
+    #endif
+    rc = stree_migration_append(gtreeptr,
+                                gcloneptr,
+                                streeptr,
+                                scloneptr,
+                                locus,
+                                si,
+                                ti);
+  }
+  else
+  {
+    #if 0
+    printf("[DEBUG %ld] Remove -- migration count: %ld\n", debug_counter, opt_migration_count);
+    #endif
+    /* randomly select a migration to delete */
+    assert(opt_migration_count);
+    long index = (long)(opt_migration_count*legacy_rndu(thread_index_zero));
+    spec = opt_mig_specs+index;
+    /* TODO: Pass migspec_index instead of si and ti */
+
+    #if (DBG_TF)
+    printf("     Preparing to remove M_%s->%s\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label);
+    #endif
+    rc = stree_migration_remove(gtreeptr,
+                                gcloneptr,
+                                streeptr,
+                                scloneptr,
+                                locus,
+                                spec->si,
+                                spec->ti);
+  }
+
+  #if 1
+  mig_model_prop_count[dbg_mig_idx][dbg_mig_idx_prop]++;
+  if (rc)
+    mig_model_prop_acc[dbg_mig_idx][dbg_mig_idx_prop]++;
+  #endif
+  #if (DBG_TF)
+  if (append)
+  {
+    if (rc)
+      printf("APPEND M_%s->%s - ACCEPT %ld\n", stree->nodes[si]->label, stree->nodes[ti]->label, dbg_counter);
+    else
+      printf("APPEND M_%s->%s - REJECT %ld\n", stree->nodes[si]->label, stree->nodes[ti]->label, dbg_counter);
+  }
+  else
+  {
+    if (dbg_counter == 10)
+      debug_print_migmatrix(stree);
+    if (rc)
+      printf("REMOVE M_%s->%s - ACCEPT %ld\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, dbg_counter);
+    else
+      printf("REMOVE M_%s->%s - REJECT %ld\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, dbg_counter);
+  }
+  #endif
+  return rc;
+}

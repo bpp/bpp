@@ -66,6 +66,25 @@ static void timer_start()
   time_start = time(NULL);
 }
 
+#if 1
+/* TF: Debug 2023-06-19 */
+
+/*** Ziheng $$$ ***/
+/* gene tree root age for the four migration models (2 species) */
+static double mig_gtree_root_mean[256];
+static double mig_model_count[256] = {0};
+extern long mig_model_prop_count[256][256];
+extern double mig_model_prop_acc[256][256];
+extern long dbg_mig_idx;
+extern long dbg_mig_idx_prop;
+long mig_rate_counts[9] = {0};
+double mig_events_count = 0;
+double mig_events_counts[1000];
+double mig_mean_M[256][8];
+
+
+#endif
+
 static void timer_print(const char * prefix, const char * suffix, FILE * fp)
 {
   time_t t;
@@ -88,6 +107,62 @@ static void timer_print(const char * prefix, const char * suffix, FILE * fp)
   }
 
 }
+
+long dbg_get_mig_idx(stree_t * stree)
+{
+  long mig_idx;
+  
+  if (stree->tip_count == 2)
+    mig_idx = opt_mig_bitmatrix[0][1] + 2 * opt_mig_bitmatrix[1][0];
+  else
+  {
+    assert(stree->tip_count == 3);
+    assert(stree->root->node_index == 3);
+
+    mig_idx = (opt_mig_bitmatrix[0][1] << 0) +
+              (opt_mig_bitmatrix[1][0] << 1) +
+              (opt_mig_bitmatrix[0][2] << 2) +
+              (opt_mig_bitmatrix[2][0] << 3) +
+              (opt_mig_bitmatrix[1][2] << 4) +
+              (opt_mig_bitmatrix[2][1] << 5) +
+              (opt_mig_bitmatrix[2][4] << 6) +
+              (opt_mig_bitmatrix[4][2] << 7);
+  }
+  return mig_idx;
+}
+
+static void dbg_fill_mig_mean_M(stree_t * stree)
+{
+  long mrate_count,i;
+  double M[8] = {0};
+
+  if (opt_mig_bitmatrix[0][1])
+    M[0] = opt_mig_specs[opt_migration_matrix[0][1]].M;  /* MAB */
+  if (opt_mig_bitmatrix[1][0])
+    M[1] = opt_mig_specs[opt_migration_matrix[1][0]].M;  /* MBA */
+  if (stree->tip_count == 3)
+  {
+  if (opt_mig_bitmatrix[0][2])
+    M[2] = opt_mig_specs[opt_migration_matrix[0][2]].M;  /* MAB */
+  if (opt_mig_bitmatrix[2][0])
+    M[3] = opt_mig_specs[opt_migration_matrix[2][0]].M;  /* MBA */
+  if (opt_mig_bitmatrix[1][2])
+    M[4] = opt_mig_specs[opt_migration_matrix[1][2]].M;  /* MAB */
+  if (opt_mig_bitmatrix[2][1])
+    M[5] = opt_mig_specs[opt_migration_matrix[2][1]].M;  /* MBA */
+  if (opt_mig_bitmatrix[2][4])
+    M[6] = opt_mig_specs[opt_migration_matrix[2][4]].M;  /* MAB */
+  if (opt_mig_bitmatrix[4][2])
+    M[7] = opt_mig_specs[opt_migration_matrix[4][2]].M;  /* MBA */
+  }
+
+  mrate_count = stree->tip_count == 2 ? 2 : 8; 
+
+  for (i = 0; i < mrate_count; ++i)
+    mig_mean_M[dbg_mig_idx][i] = (mig_mean_M[dbg_mig_idx][i] * (mig_model_count[dbg_mig_idx] - 1) + M[i]) / mig_model_count[dbg_mig_idx];
+
+}
+
 
 static void init_outfile(FILE * fp)
 {
@@ -218,7 +293,7 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "  thet: species tree theta proposal\n");
   fprintf(fp, "   tau: species tree tau proposal\n");
   fprintf(fp, "   mix: mixing proposal\n");
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     fprintf(fp, "  mrte: migration rates proposal\n");
     if (opt_mig_vrates_exist)
@@ -283,7 +358,7 @@ static void print_mcmc_headerline(FILE * fp,
     for (i = 0; i < mean_tau_count; ++i)
       fprintf(fp," mtau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
   }
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     for (i = 0; i < mean_mrate_count; ++i)
     {
@@ -350,7 +425,7 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += opt_method == METHOD_01 ? 7*(1+!!opt_prob_snl) : 0;
   ap_width += opt_method == METHOD_10 ? 7 : 0;
   ap_width += opt_method == METHOD_11 ? 7*(2+!!opt_prob_snl) : 0;
-  ap_width += opt_migration ? 5 : 0;
+  ap_width += (opt_migration && !opt_est_geneflow) ? 5 : 0;
   ap_width += opt_mig_vrates_exist ? 5 : 0;
   ap_width += 1;
   
@@ -397,7 +472,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp," nu_i");    linewidth += 5;
     fprintf(fp," brte");    linewidth += 5;
   }
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     fprintf(fp," mrte");    linewidth += 5;
     if (opt_mig_vrates_exist)
@@ -487,7 +562,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp,"  mtau%ld", i+1);           linewidth += 7;
   }
 
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     fprintf(fp, " ");                       linewidth += 1;
     for (i = 0; i < mean_mrate_count; ++i)
@@ -634,7 +709,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "nu_i");
       fprintf(fp[j], " %*s", empty, "brte");
     }
-    if (opt_migration)
+    if (opt_migration && !opt_est_geneflow)
     {
       fprintf(fp[j], " %*s", prec_ft+spacing, "mrte");    /* 15 */
       if (opt_mig_vrates_exist)
@@ -714,7 +789,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "- ");
     }
 
-    if (opt_migration)
+    if (opt_migration && !opt_est_geneflow)
     {
       fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MRATE_INDEX]);
       if (opt_mig_vrates_exist)
@@ -800,7 +875,7 @@ static void reset_finetune(FILE * fp_out, double * pjump)
       fprintf(fp[j], " %*s", empty, "- ");
     }
 
-    if (opt_migration)
+    if (opt_migration && !opt_est_geneflow)
     {
       fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_migrates);
       if (opt_mig_vrates_exist)
@@ -1152,13 +1227,20 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
 
   if (opt_migration)
   {
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
-        if (opt_mig_bitmatrix[i][j])
-          fprintf(fp,
-                  "\tM_%s->%s",
-                  stree->nodes[i]->label,
-                  stree->nodes[j]->label);
+    if (!opt_est_geneflow)
+    {
+      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            fprintf(fp,
+                    "\tM_%s->%s",
+                    stree->nodes[i]->label,
+                    stree->nodes[j]->label);
+    }
+    else
+    {
+      /* TODO: Probably nothing, as we don't have a fixed number of rates */
+    }
   }
 
   /* 5. Print log likelihood */
@@ -1191,9 +1273,9 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
     tab_required = 0;
 
     /* print migration rates */
-    if (opt_migration && opt_mig_vrates_exist)
+    if (opt_migration && !opt_est_geneflow && opt_mig_vrates_exist)
     {
-      for (j = 0; j < opt_migration; ++j)
+      for (j = 0; j < opt_migration_count; ++j)
       {
         if (!opt_mig_specs[j].Mi) continue;
 
@@ -1348,7 +1430,7 @@ static void print_rates(FILE ** fp_locus,
   {
     tab_required = 0;
 
-    if (opt_migration && opt_mig_vrates_exist)
+    if (opt_migration && !opt_est_geneflow && opt_mig_vrates_exist)
     {
       for (j = 0; j < opt_migration; ++j)
       {
@@ -1613,10 +1695,25 @@ static void mcmc_logsample(FILE * fp,
 
   if (opt_migration)
   {
-    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
-        if (opt_mig_bitmatrix[i][j])
-          fprintf(fp, "\t%.6f", opt_mig_specs[opt_migration_matrix[i][j]].M);
+    if (!opt_est_geneflow)
+    {
+      /* TODO: Restructure to a linear loop over elements of opt_mig_specs */
+      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            fprintf(fp, "\t%.6f", opt_mig_specs[opt_migration_matrix[i][j]].M);
+    }
+    else
+    {
+      for (i = 0; i < opt_migration_count; ++i)
+      {
+        fprintf(fp,
+                "\tM_%s->%s=%.6f",
+                stree->nodes[opt_mig_specs[i].si]->label,
+                stree->nodes[opt_mig_specs[i].ti]->label,
+                opt_mig_specs[i].M);
+      }
+    }
   }
 
   /* 5. print log-likelihood if usedata=1 */
@@ -1641,7 +1738,7 @@ static void print_header_migcount(FILE ** fp, stree_t * stree)
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
-    for (j = 0; j < opt_migration; ++j)
+    for (j = 0; j < opt_migration_count; ++j)
     {
       migspec_t * spec = opt_mig_specs+j;
       snode_t * s = stree->nodes[spec->si];
@@ -1664,7 +1761,7 @@ static void print_migcount(FILE ** fp, gtree_t ** gtree)
   for (i = 0; i < opt_locus_count; ++i)
   {
     tab_required = 0;
-    for (j = 0; j < opt_migration; ++j)
+    for (j = 0; j < opt_migration_count; ++j)
     {
       migspec_t * spec = opt_mig_specs+j;
       long mc = gtree[i]->migcount[spec->si][spec->ti];
@@ -1859,7 +1956,7 @@ static void create_mig_bitmatrix(stree_t * stree)
   }
 
   /* go through source-target pairs */
-  for (i = 0; i < opt_migration; ++i)
+  for (i = 0; i < opt_migration_count; ++i)
   {
     s = t = -1;
     for (j = 0; j < total_nodes; ++j)
@@ -1902,7 +1999,15 @@ static void create_mig_bitmatrix(stree_t * stree)
         break;
     }
 
+    #if 0
+    /* TF: Debug 2023-06-19 */
+
+    /* set migration rate to prior mean */
     spec->M = spec->alpha / spec->beta;
+    #else
+    spec->M = spec->alpha / spec->beta *
+                          (0.9 + 0.2*legacy_rndu(thread_index_zero));
+    #endif
 
     /* if rate variation across loci then allocate array */
     if (spec->params == 1 || spec->params == 3 || spec->params == 5)
@@ -3167,7 +3272,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* initialize pjump and finetune rounds */
 
-  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
+  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   pjump = (double *)xcalloc(pjump_size,sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
@@ -3399,6 +3504,8 @@ void cmd_run()
   long * migcount_offset = NULL;
   double ratio;
   long ndspecies;
+  double gf_acc = 0;
+  double gf_acc_flip = 0;
 
   /* method 10 specific variables */
   long dparam_count = 0;
@@ -3412,7 +3519,6 @@ void cmd_run()
   long pjump_spr, pjump_snl;
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
-  double dbg_mean_rate = 0;
   #ifdef DEBUG_GTR
   double mean_freqa = 0;
   double mean_freqc = 0;
@@ -3514,9 +3620,9 @@ void cmd_run()
                    &fp_out);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
-    if (opt_migration)
+    if (opt_migration && !opt_est_geneflow)
     {
-      long mig_size    = MIN(MAX_MRATE_OUTPUT,opt_migration);
+      long mig_size    = MIN(MAX_MRATE_OUTPUT,opt_migration_count);
       mean_mrate_row   = (long *)xcalloc((size_t)mig_size,sizeof(long));
       mean_mrate_col   = (long *)xcalloc((size_t)mig_size,sizeof(long));
       mean_mrate_round = (long *)xcalloc((size_t)mig_size,sizeof(long));
@@ -3567,7 +3673,7 @@ void cmd_run()
   if (opt_exp_theta)
     fprintf(stdout, "[EXPERIMENTAL] - Theta proposal using a sliding window log(theta)\n");
   if (opt_exp_imrb)
-    fprintf(stdout, "[EXPERIMENTAL] - New improved IM rubberband algorithm\n");
+    fprintf(stdout, "[EXPERIMENTAL] - New extended IM rubberband algorithm\n");
 
   assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MG_T4);
   fprintf(stdout, "Theta proposal: ");
@@ -3739,6 +3845,9 @@ void cmd_run()
 
   FILE * fp_debug = stdout;
 
+  /*** ziheng 2023.9.15 ***/
+  double model_count[4] = { 0 }, flipping_success[4] = {0};
+
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3755,7 +3864,7 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
+      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
 
       if (opt_finetune_reset && opt_burnin >= 200)
       {
@@ -3777,7 +3886,7 @@ void cmd_run()
       if (opt_method == METHOD_10)      /* species delimitation */
         memset(posterior,0,delimitation_getparam_count()*sizeof(double));
 
-      if (opt_migration)
+      if (opt_migration && !opt_est_geneflow)
         for (j = 0; j < mean_mrate_count; ++j)
           mean_mrate_round[j] = 0;
 
@@ -3788,6 +3897,12 @@ void cmd_run()
       }
       if (opt_method == METHOD_11)      /* species tree inference + delimitation */
         memset(pspecies,0,stree->tip_count*sizeof(double));
+      
+      #if 1
+      /* TF: 19.6.2023 */
+      for (j = 0; j < 256; ++j)
+        mig_model_count[j] = 0;
+      #endif
     }
 
     ++ft_round;
@@ -3855,6 +3970,8 @@ void cmd_run()
       debug_validate_logpg(stree, gtree, locus, "GAGE-1");
       #endif
 
+      /*** Ziheng $$$ ***/
+#if(1)
     /* propose gene tree ages */
     /* Note: call serial version when thetas are integrated out */
     if (!opt_est_theta || opt_threads == 1)
@@ -3878,6 +3995,7 @@ void cmd_run()
       #endif
       if (opt_debug_bruce)
         debug_bruce(stree,gtree,"GAGE", i, fp_debug);
+#endif
 
     /* propose migration ages */
     if (opt_migration)
@@ -3887,6 +4005,9 @@ void cmd_run()
 
     /* propose gene tree topologies using SPR */
     /* Note: call serial version when thetas are integrated out */
+
+/*** Ziheng $$$ ***/
+#if(1)
     if (!opt_est_theta || opt_threads == 1)
       ratio = gtree_propose_spr_serial(locus,gtree,stree);
     else
@@ -3897,6 +4018,7 @@ void cmd_run()
     }
     pjump[BPP_MOVE_GTSPR_INDEX] = (pjump[BPP_MOVE_GTSPR_INDEX]*(ft_round-1)+ratio) /
                                   (double)ft_round;
+#endif
 
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "GSPR");
@@ -4007,6 +4129,51 @@ void cmd_run()
       check_lnprior(stree, gtree, i, "PHI");
       #endif
     }
+
+    /* estimate geneflow */
+    #if 1
+    if (opt_est_geneflow)
+    {
+      assert(opt_migration);
+    //  if (opt_migration_count)
+    //  {
+         /*** ziheng 2023.9.15 ***/
+         int m = dbg_get_mig_idx(stree);
+         //if (m == 0) printf("m=0...\n");
+         model_count[m]++;
+
+         ratio = stree_migration_flip_wrapper(&gtree,&gclones,&stree,&sclone,locus);
+         gf_acc_flip = (gf_acc_flip*(ft_round-1)+ratio) / (double)ft_round;
+
+         /*** ziheng 2023.9.15 ***/
+         flipping_success[m] += ratio;
+         if (ft_round % 100000 == 0) {
+            printf("\nmodels counts:    %8.1f %8.1f %8.1f %8.1f",
+               model_count[0], model_count[1], model_count[2], model_count[3]);
+            printf("\nflipping success: %8.4f %8.4f %8.4f %8.4f\n",
+               flipping_success[0] / model_count[0],
+               flipping_success[1] / model_count[1],
+               flipping_success[2] / model_count[2],
+               flipping_success[3] / model_count[3]);
+         }
+//      }
+    }
+    #endif
+#if 1
+    if (opt_est_geneflow)
+    {
+       assert(opt_migration);
+       ratio = stree_migration_rj(&gtree, &gclones, &stree, &sclone, locus);
+       gf_acc = (gf_acc * (ft_round - 1) + ratio) / (double)ft_round;
+
+    }
+#endif
+
+
+    #if 0
+    assert(!gtree[0]->root->parent);
+    assert(!gtree[1]->root->parent);
+    #endif
 
     if (enabled_prop_freqs)
     {
@@ -4178,7 +4345,8 @@ void cmd_run()
                             stree->nodes[mean_mrate_col[j]]))
         {
           ++mean_mrate_round[j];
-          mean_mrate[j] = (mean_mrate[j]*(mean_mrate_round[j]-1) + mv) / mean_mrate_round[j];
+          if (!opt_est_geneflow)
+            mean_mrate[j] = (mean_mrate[j]*(mean_mrate_round[j]-1) + mv) / mean_mrate_round[j];
         }
       }
     }
@@ -4272,7 +4440,6 @@ void cmd_run()
       mean_alpha0 = (mean_alpha0*(ft_round-1) + locus[0]->rates_alpha)/ft_round;
       #endif
     }
-    dbg_mean_rate = (dbg_mean_rate*(ft_round-1) + gtree[0]->rate_mui)/ft_round;
 
     /* compute mean log-L */
     if (opt_usedata)
@@ -4280,6 +4447,19 @@ void cmd_run()
       for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
         logl_sum += gtree[j]->logl;
       mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
+    }
+
+    if (opt_est_geneflow)
+    {
+      dbg_mig_idx = dbg_get_mig_idx(stree);
+      double t = gtree[0]->root->time;
+
+      mig_model_count[dbg_mig_idx]++;
+      mig_gtree_root_mean[dbg_mig_idx] = (mig_gtree_root_mean[dbg_mig_idx] * (mig_model_count[dbg_mig_idx] - 1) + t) / mig_model_count[dbg_mig_idx];
+      dbg_fill_mig_mean_M(stree);
+
+      if (i >= 0)
+        mig_rate_counts[opt_migration_count]++;
     }
 
     /* print MCMC status on screen */
@@ -4301,6 +4481,14 @@ void cmd_run()
         fprintf(fp_out, "%4.0f%% ", (i + 1.499) / printk * 100.);
         status_print_pjump(fp_out,pjump, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
       }
+
+      #if 1
+      /* TF: Debug 2023-06-19 */
+      /* print MRate estimation pjump */
+      //printf("%5.3f ", gf_acc); 
+      if (opt_est_geneflow)
+        printf("%6.4f F:%6.4f ", gf_acc,gf_acc_flip); 
+      #endif
 
       /* species delimitation specific output */
       if (opt_method == METHOD_10)
@@ -4324,7 +4512,6 @@ void cmd_run()
            fprintf(fp_out, " %*s", 4+6+delim_digit_count, stmp);
          }
          free(stmp);
-
       }
 
       if (opt_method == METHOD_11)
@@ -4368,7 +4555,7 @@ void cmd_run()
         fprintf(fp_out, " ");
       }
 
-      if (opt_migration)
+      if (opt_migration && !opt_est_geneflow)
       {
         for (j = 0; j < mean_mrate_count; ++j)
           printf(" %6.4f", mean_mrate[j]);
@@ -4394,11 +4581,6 @@ void cmd_run()
         }
       }
 
-      #if 0
-      if (opt_est_locusrate == MUTRATE_ESTIMATE)
-        printf(" MU_0=%6.4f ", dbg_mean_rate);
-      #endif
-
       #ifdef DEBUG_GTR
         printf(" ( %6.4f %6.4f %6.4f %6.4f ) ", mean_freqa,mean_freqc,mean_freqg,mean_freqt);
         printf(" ( %6.4f %6.4f %6.4f %6.4f %6.4f %6.4f ) ", mean_ratea,mean_rateb,mean_ratec,mean_rated,mean_ratee,mean_ratef);
@@ -4421,11 +4603,25 @@ void cmd_run()
         if (print_newline)
           fprintf(fp_out, " %*.5f", prec_logl, mean_logl);
       }
+      /*** Ziheng $$$ START ***/
+      if (opt_est_geneflow)
+      {
+        int i1, i2, i3;
+        mig_events_count = 0;
+        for (i1 = 0; i1 < stree->tip_count + stree->inner_count; i1++)
+           for (i2 = 0; i2 < stree->tip_count + stree->inner_count; i2++)
+              for (i3 = 0; i3 < opt_locus_count; i3++)
+                 mig_events_count += gtree[i3]->migcount[i1][i2];
+        
+        mig_events_counts[(int)mig_events_count] ++;
+      }
+      //printf(" %2ld %5.2f %6.4f %6.4f %6.4f %6.4f", opt_migration_count, mig_events_count / opt_locus_count, mig_gtree_root_mean[0], mig_gtree_root_mean[1],mig_gtree_root_mean[2],mig_gtree_root_mean[3]);
+      printf(" %2ld %5.2f %6.4f %6.4f %6.4f %6.4f %6.4f", opt_migration_count, mig_events_count / opt_locus_count, mig_gtree_root_mean[0], mig_gtree_root_mean[1],mig_gtree_root_mean[2],mig_gtree_root_mean[3],mig_gtree_root_mean[4]);
+      /*** Ziheng $$$ END ***/
 
       if (print_newline)
       {
-        timer_print("  ","\n", fp_out);
-
+        timer_print("  ", "\n", fp_out);
         if (isinf(mean_logl))
           fatal("\n[ERROR] The mean log-L over loci is -inf.\n"
                 "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
@@ -4555,6 +4751,91 @@ void cmd_run()
     }
   }
 
+  if (opt_est_geneflow)
+  {
+    fflush(NULL);
+    for (int i = 0; i < 20; i++)
+      printf(" %2.0f", mig_events_counts[i]);
+    printf("\n");
+
+    /* TF: Debug 2023-06-19 */
+    long dbg_max_mig_model_count = stree->tip_count == 2 ? 4 : 256;
+    long dbg_mrate_count = stree->tip_count == 2 ? 2 : 8;
+    printf("RJ acceptance proportions\n");
+    for (i = 0; i < 4; ++i)
+    {
+      printf("%ld: ",i);
+      for (j = 0; j < 256; ++j)
+      {
+        double r = mig_model_prop_acc[i][j] / mig_model_prop_count[i][j];
+        //if (mig_model_prop_count[i][j])
+        if (!isnan(r))
+          printf(" %3ld:%9.6f", j,r);
+      }
+      printf("\n");
+    }
+    for (i = 0; i < 256; ++i)
+    {
+      for (j = 0; j < dbg_max_mig_model_count; ++j)
+      {
+        //double r = 100 * mig_model_prop_acc[i][j] / mig_model_prop_count[i][j];
+        double r = mig_model_prop_acc[i][j] / mig_model_prop_count[i][j];
+        #if 0
+        if (isnan(r))
+          printf("  x"); 
+        else
+          printf("%9.6f", r);
+        #else
+        if (!isnan(r))
+        {
+          printf("%3ld: %9.6f\n", i,r);
+        }
+        #endif
+          //printf("%3ld", (long)r);
+      }
+    }
+    printf("\nmig model probabilities and mean M rates\n");
+    for (i = 0; i < dbg_max_mig_model_count; i++)
+    {
+      if (stree->tip_count == 2)
+       printf("model %ld %1ld%1ld P =%9.6f MAB MBA: %9.5f%9.5f\n",i,
+          i/2, i%2, mig_model_count[i] / (opt_samples * opt_samplefreq), mig_mean_M[i][0], mig_mean_M[i][1]);
+      else
+      {
+        long bits[8];
+        long tmpi = i;
+        char * migstr[8] = {"AB","BA","AC","CA","BC","CB","CS","SC"};
+        for (j = 0; j < 8; ++j)
+        {
+          bits[7-j] = tmpi & 0x1;
+          tmpi >>= 1;
+        }
+        printf("%3ld ", i);
+        for (j = 0; j < 8; ++j)
+          printf("%1ld", bits[j]);
+        printf("  P =%9.6f  ", mig_model_count[i] / (opt_samples * opt_samplefreq));
+        for (j = 0; j < 8; ++j)
+          if (bits[7-j])
+            printf(ANSI_COLOR_RED " %s" ANSI_COLOR_RESET, migstr[j]);
+          else
+            printf(" %s", migstr[j]);
+
+        for (j = 0; j < 8; ++j)
+          if (bits[7-j])
+            printf(" %9.5f", mig_mean_M[i][j]);
+          else
+            printf("          ");
+        printf("\n");
+      }
+    }
+
+    printf("Number of migration models with set number of parameters\n");
+    for (i = 0; i < dbg_mrate_count+1; ++i)
+      printf(" %9.6f", (double)mig_rate_counts[i] / printk);
+    printf("\n");
+  }
+
+
   if (opt_onlysummary)
   {
     /* read file and correctly set opt_samples */
@@ -4654,7 +4935,7 @@ void cmd_run()
     free(opt_migration_matrix);
 
     /* free migration specifications */
-    for (i = 0; i < opt_migration; ++i)
+    for (i = 0; i < opt_migration_count; ++i)
     {
       free(opt_mig_specs[i].source);
       free(opt_mig_specs[i].target);
@@ -4704,7 +4985,7 @@ void cmd_run()
   if (opt_msci)
     free(mean_phi);
 
-  if (opt_migration)
+  if (opt_migration && !opt_est_geneflow)
   {
     free(mean_mrate);
     free(mean_mrate_row);

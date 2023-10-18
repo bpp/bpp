@@ -337,6 +337,8 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(&opt_migration,1,fp))
     fatal("Cannot read migration flag");
+  if (!LOAD(&opt_migration_count,1,fp))
+    fatal("Cannot read migration count");
 
   /* read method info */
   if (!LOAD(&opt_method,1,fp))
@@ -685,7 +687,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ndspecies,1,fp))
     fatal("Cannot read number of delimited species");
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
   if (!LOAD(*pjump,pjump_size,fp))
@@ -881,8 +883,9 @@ static void load_chk_section_1(FILE * fp,
         fatal("Cannot load migration bitmatrix");
     }
 
-    opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
-    for (i = 0; i < opt_migration; ++i)
+    size_t maxcount = 2*stree_tip_count*(stree_tip_count-1);
+    opt_mig_specs = (migspec_t *)xcalloc((size_t)maxcount,sizeof(migspec_t));
+    for (i = 0; i < opt_migration_count; ++i)
     {
       migspec_t * spec = opt_mig_specs+i;
       if (!load_string(fp,&(spec->source)))

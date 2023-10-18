@@ -438,6 +438,27 @@ l_unwind:
   return ret;
 }
 
+static int parse_geneflow(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  count = get_long(p, &opt_est_geneflow);
+  if (opt_est_geneflow != 0 && opt_est_geneflow != 1) goto l_unwind;
+  p += count;
+
+  if (is_emptyline(p))
+    ret = 1;
+  
+l_unwind:
+  free(s);
+  return ret;
+
+}
+
 static long parse_diploid(const char * line)
 {
   long ret = 0;
@@ -2114,21 +2135,23 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
 
   long params;
 
-  count = get_long(p, &opt_migration);
+  count = get_long(p, &opt_migration_count);
   if (!count) goto l_unwind;
 
   p += count;
 
+  opt_migration = !!opt_migration_count;
   if (!opt_migration && is_emptyline(p)) goto l_unwind;
 
   ret = 0;
 
   if (!is_emptyline(p)) goto l_unwind;
 
-  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
+  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration_count,
+                                       sizeof(migspec_t));
 
   /* start reading potential migration between populations */
-  for (i = 0; i < opt_migration; ++i)
+  for (i = 0; i < opt_migration_count; ++i)
   {
     if (!getnextline(fp))
       fatal("Incomplete 'migration' record (line %ld)", line_count+1);
@@ -2604,6 +2627,25 @@ static void set_debug_flags()
   }
 }
 
+static void realloc_migspecs()
+{
+  /* this is for the rjMCMC move which enables/disables migrations. We need to
+     ensure migspec array can handle the case of a saturated model
+  */
+  long i;
+  migspec_t * newspec;
+  size_t maxcount;
+
+  maxcount = 2*species_count*(species_count-1);
+
+  newspec = (migspec_t *)xcalloc(maxcount, sizeof(migspec_t));
+
+  memcpy(newspec, opt_mig_specs, opt_migration_count*sizeof(migspec_t));
+
+  free(opt_mig_specs);
+  opt_mig_specs = newspec;
+}
+
 void load_cfile()
 {
   long line_count = 0;
@@ -2833,6 +2875,12 @@ void load_cfile()
           fatal("Option 'migprior' expects two doubles (line %ld)", line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"geneflow",8))
+      {
+        if (!parse_geneflow(value))
+          fatal("Erroneous format of option %s (line %ld)", token, line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 9)
     {
@@ -3057,6 +3105,10 @@ void load_cfile()
 
   update_locusrate_information();
   check_validity();
+  if (opt_migration)
+  {
+    realloc_migspecs();
+  }
 
   /* decide whether per-locus files for sampling are required */
   set_print_locusfile();

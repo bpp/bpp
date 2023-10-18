@@ -56,7 +56,7 @@ void debug_print_stree(stree_t * stree)
 
   printf("Total nodes: %ld\n", total_nodes);
 
-  printf("Label        Node  Child1  Child2  Parent  Linked     Theta       Tau  Leaves  "
+  printf("Label        Node  Child1  Child2  Parent  Linked     Theta       Tau  Leaves  nin[0]  "
          "prop_tau      hphi  htau  has_phi\n");
   for (i = 0; i <total_nodes; ++i)
   {
@@ -111,6 +111,7 @@ void debug_print_stree(stree_t * stree)
       printf("  %8s", "-");
 
     printf("  %6d", stree->nodes[i]->leaves);
+    printf("  %6d", stree->nodes[i]->seqin_count[0]);
     printf("  %8d", stree->nodes[i]->prop_tau);
     
     if (opt_msci && stree->nodes[i]->hybrid)
@@ -122,6 +123,8 @@ void debug_print_stree(stree_t * stree)
 
     if (opt_msci)
       printf("  %7ld\n", stree->nodes[i]->has_phi);
+    else
+      printf("\n");
   }
 }
 
@@ -174,6 +177,202 @@ void debug_print_gtree(gtree_t * gtree)
 
     printf(" %5s", gtree->nodes[i]->pop->label);
     printf(" %.12f", gtree->nodes[i]->time);
+
+    if (gtree->root == gtree->nodes[i])
+      printf(" (root)");
+    printf("\n");
+  }
+  if (opt_migration)
+  {
+    long migfound = 0;
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    {
+      if (!(gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)) continue;
+      migfound++;
+    }
+
+    if (migfound)
+    {
+      printf("\nMigration events:\n");
+      printf("Label  Node  #Migs  Migrations (backwards in time)\n");
+    }
+
+    for (i = 0; i < gtree->tip_count+gtree->inner_count; ++i)
+    {
+      if (!(gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)) continue;
+
+      gnode_t * x = gtree->nodes[i];
+
+      char * label;
+      if (x->label)
+        label = xstrdup(x->label);
+      else
+        label = xstrdup("N/A");
+
+      /* shorten label if over 12 characters */
+      if (strlen(label) > 6)
+      {
+        label[4] = '.'; label[5] = '.'; label[6] = 0;
+      }
+
+      printf("%-6s", label);
+      free(label);
+      printf(" %4d", gtree->nodes[i]->node_index);
+      printf("  %5ld", x->mi->count);
+
+      printf("  %s -> %s   %f\n",
+             x->mi->me[0].source->label,
+             x->mi->me[0].target->label,
+             x->mi->me[0].time);
+      for (j = 1; j < x->mi->count; ++j)
+        printf("                    %s -> %s   %f\n",
+               x->mi->me[j].source->label,
+               x->mi->me[j].target->label,
+               x->mi->me[j].time);
+
+
+
+    }
+  }
+}
+
+void debug_print_gtree_detailed(gtree_t * gtree)
+{
+  long i,j;
+
+  printf("Label        Node-index  Child1-index  Child2-index  Parent-index    Mi  "
+         "Pmat-index    Pop            time   Flags\n");
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    char * label;
+    if (gtree->nodes[i]->label)
+      label = xstrdup(gtree->nodes[i]->label);
+    else
+      label = xstrdup("  -");
+
+    /* shorten label if over 12 characters */
+    if (strlen(label) > 12)
+    {
+      label[9] = '.'; label[10] = '.'; label[11] = '.'; label[12] = 0;
+    }
+
+    if (gtree->nodes[i]->mark & FLAG_PRUNED)
+      printf(ANSI_COLOR_RED);
+    printf("%-12s", label);
+    free(label);
+    char * str_nodeindex = NULL;
+    xasprintf(&str_nodeindex,
+              gtree->nodes[i] == gtree->root ? "* %d" : "%d",
+              gtree->nodes[i]->node_index);
+    printf("  %9s", str_nodeindex);
+    free(str_nodeindex);
+
+    if (gtree->nodes[i]->left)
+      printf("  %12d", gtree->nodes[i]->left->node_index);
+    else
+      printf("  %12s", "  -");
+
+    if (gtree->nodes[i]->right)
+      printf("  %12d", gtree->nodes[i]->right->node_index);
+    else
+      printf("  %12s", "  -");
+
+
+    if (gtree->nodes[i]->parent)
+      printf("  %12d", gtree->nodes[i]->parent->node_index);
+    else
+      printf("  %12s", "  -");
+
+    if (gtree->nodes[i]->mi && gtree->nodes[i]->mi->count)
+      printf("  %4ld", gtree->nodes[i]->mi->count);
+    else
+      printf("  %4s", "-");
+
+    printf("  %10d", gtree->nodes[i]->pmatrix_index);
+
+    if (gtree->nodes[i]->pop)
+      printf("  %5s", gtree->nodes[i]->pop->label);
+    else
+      printf("  %5s", "-");
+
+    printf("  %.12f", gtree->nodes[i]->time);
+    if (gtree->nodes[i]->mark)
+      printf("   ");
+
+    int comma = 0;
+    if (gtree->nodes[i]->mark & FLAG_AGE_UPDATE)
+    {
+      if (comma)
+        printf(",");
+      printf("AGE_UPDATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_POP_UPDATE)
+    {
+      if (comma)
+        printf(",");
+      printf("POP_UPDATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_BRANCH_UPDATE)
+    {
+      if (comma)
+        printf(",");
+      printf("BRANCH_UPDATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_MISC)
+    {
+      if (comma)
+        printf(",");
+      printf("MISC");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_PRUNED)
+    {
+      if (comma)
+        printf(",");
+      printf("PRUNED");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_MIGRATE)
+    {
+      if (comma)
+        printf(",");
+      printf("MIGRATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_PARTIAL_UPDATE)
+    {
+      if (comma)
+        printf(",");
+      printf("PARTIAL_UPDATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_RED_LEFT)
+    {
+      if (comma)
+        printf(",");
+      printf("RED_LEFT");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_RED_RIGHT)
+    {
+      if (comma)
+        printf(",");
+      printf("RED_RIGHT");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_SIMULATE)
+    {
+      if (comma)
+        printf(",");
+      printf("SIMULATE");
+      comma = 1;
+    }
+    if (gtree->nodes[i]->mark & FLAG_PRUNED)
+      printf(ANSI_COLOR_RESET);
+
     printf("\n");
   }
   if (opt_migration)

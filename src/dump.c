@@ -136,7 +136,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
      size_section += opt_locus_count*sizeof(long);
     
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
 
   size_section += pjump_size*sizeof(double);          /* pjump */
   size_section += sizeof(long);                       /* dparam_count */
@@ -243,6 +243,7 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write migration info */
   DUMP(&opt_migration,1,fp);
+  DUMP(&opt_migration_count,1,fp);
 
   /* write method info */
   DUMP(&opt_method,1,fp);
@@ -403,7 +404,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + !!opt_migration + opt_mig_vrates_exist;
+  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
 
@@ -496,7 +497,7 @@ static void dump_chk_section_1(FILE * fp,
     for (i = 0; i < total_nodes; ++i)
       DUMP(opt_mig_bitmatrix[i],total_nodes,fp);
 
-    for (i = 0; i < opt_migration; ++i)
+    for (i = 0; i < opt_migration_count; ++i)
     {
       migspec_t * spec = opt_mig_specs+i;
       DUMP(spec->source, strlen(spec->source)+1, fp);

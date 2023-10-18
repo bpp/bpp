@@ -689,21 +689,22 @@ static long parse_migration(FILE * fp, const char * firstline, long line_count)
   char * s = xstrdup(firstline);
   char * p = s;
 
-  count = get_long(p, &opt_migration);
+  count = get_long(p, &opt_migration_count);
   if (!count) goto l_unwind;
 
   p += count;
 
+  opt_migration = !!opt_migration_count;
   if (!opt_migration && is_emptyline(p)) goto l_unwind;
 
   ret = 0;
 
   if (!is_emptyline(p)) goto l_unwind;
 
-  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration,sizeof(migspec_t));
+  opt_mig_specs = (migspec_t *)xcalloc((size_t)opt_migration_count,sizeof(migspec_t));
   
   /* start reading potential migration between populations */
-  for (i = 0; i < opt_migration; ++i)
+  for (i = 0; i < opt_migration_count; ++i)
   {
     if (!getnextline(fp))
       fatal("Incomplete 'migration' record (line %ld)", line_count+1);
