@@ -306,7 +306,6 @@ static void print_mcmc_headerline(FILE * fp,
       fprintf(fp, "  the%ld: species tree theta proposal (node %ld)\n", k+1,k+1);
 
   }
-  fprintf(fp, "  thet: species tree theta proposal\n");
   fprintf(fp, "   tau: species tree tau proposal\n");
   fprintf(fp, "   mix: mixing proposal\n");
   if (opt_migration && !opt_est_geneflow)
