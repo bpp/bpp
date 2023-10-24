@@ -1201,6 +1201,12 @@ void load_chk_section_2(FILE * fp)
       stree->nodes[i]->linked_theta = stree->nodes[ltheta_index];
   }
 
+  for (i = 0; i < total_nodes; ++i)
+  {
+    if (!LOAD(&(stree->nodes[i]->theta_step_index),1,fp))
+      fatal("Cannot read theta step index for node %ld", i);
+  }
+
   stree_label(stree);
 
   #if 0

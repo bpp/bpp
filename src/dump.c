@@ -582,6 +582,9 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&ltheta_index,1,fp);
   }
 
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->theta_step_index),1,fp);
+
 
   /* TODO: We do not need to write theta when !opt_est_theta */
   /* write theta */
