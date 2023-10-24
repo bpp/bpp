@@ -1766,7 +1766,7 @@ static long parse_finetune(const char * line)
 
 
   /* 3. theta finetune param */
-  count = get_doubleordash(p, &opt_finetune_theta);
+  count = get_doubleordash(p, opt_finetune_theta+0);
   if (!count) goto l_unwind;
 
   p += count;
@@ -2632,7 +2632,6 @@ static void realloc_migspecs()
   /* this is for the rjMCMC move which enables/disables migrations. We need to
      ensure migspec array can handle the case of a saturated model
   */
-  long i;
   migspec_t * newspec;
   size_t maxcount;
 

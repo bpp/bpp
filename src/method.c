@@ -290,6 +290,22 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "  Prgs: progress of MCMC run (negative progress means burnin)\n");
   fprintf(fp, "  Gage: gene-tree age proposal\n");
   fprintf(fp, "  Gspr: gene-tree SPR proposal\n");
+  if (opt_finetune_theta_mode == 1)
+  {
+    fprintf(fp, "  the1: species tree theta proposal\n");
+  }
+  else if (opt_finetune_theta_mode == 2)
+  {
+    fprintf(fp, "  the1: species tree theta proposal (tips)\n");
+    fprintf(fp, "  the2: species tree theta proposal (inner)\n");
+  }
+  else
+  {
+    assert(opt_finetune_theta_mode == 3);
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp, "  the%ld: species tree theta proposal (node %ld)\n", k+1,k+1);
+
+  }
   fprintf(fp, "  thet: species tree theta proposal\n");
   fprintf(fp, "   tau: species tree tau proposal\n");
   fprintf(fp, "   mix: mixing proposal\n");
@@ -411,7 +427,7 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, " log-L: mean log-L of observing data\n");
   fprintf(fp,"\n");
 
-  ap_width += 5*5;
+  ap_width += 4*5+opt_finetune_theta_count*5;
   ap_width += enabled_hrdt ? 5 : 0;
   ap_width += enabled_lrht ? 5 : 0;
   ap_width += enabled_mui ? 5 : 0;
@@ -452,7 +468,11 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp,"Prgs |");     linewidth += 6;
   fprintf(fp," Gage");      linewidth += 5;
   fprintf(fp," Gspr");      linewidth += 5;
-  fprintf(fp," thet");      linewidth += 5;
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+  {
+    fprintf(fp," the%ld",i+1);      linewidth += 5;
+  }
+  //fprintf(fp," thet");      linewidth += 5;
   fprintf(fp,"  tau");      linewidth += 5;
   fprintf(fp,"  mix");      linewidth += 5;
   if (enabled_hrdt)
@@ -639,9 +659,9 @@ static void reset_finetune_onestep(double pjump, double * param)
   
 }
 
-static void reset_finetune(FILE * fp_out, double * pjump)
+static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
 {
-  int i,j;
+  int i,j,k;
   int extra;
   int spacing = 1;
   int empty = 4;  /* for entries not available */
@@ -659,7 +679,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     fprintf(fp[j], "\n                   ");
     fprintf(fp[j],  "%*s", prec_ft+spacing, "Gage");      /*  0 */
     fprintf(fp[j], " %*s", prec_ft+spacing, "Gspr");      /*  1 */
-    fprintf(fp[j], " %*s", prec_ft+spacing, "thet");      /*  2 */
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp[j], " %*s%d", prec_ft-1+spacing, "thet",k+1);      /*  2 */
     fprintf(fp[j], " %*s", prec_ft+spacing, "tau");       /*  3 */
     fprintf(fp[j], " %*s", prec_ft+spacing, "mix");       /*  4 */
     if (extra)
@@ -726,7 +747,17 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     fprintf(fp[j], "\nCurrent Pjump:    ");
 
     for (i = 0; i < PROP_COUNT; ++i)
+    {
+      /* theta */
+      if (i == 2)
+      {
+        for (k = 0; k < opt_finetune_theta_count; ++k)
+          fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump_theta[k]);
+        continue;
+      }
+
       fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[i]);
+    }
 
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
@@ -809,7 +840,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 //    fprintf(fp[j], " %8.5f", opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
-    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta);
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
@@ -892,7 +924,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
 
   reset_finetune_onestep(pjump[BPP_MOVE_GTAGE_INDEX],&opt_finetune_gtage);
   reset_finetune_onestep(pjump[BPP_MOVE_GTSPR_INDEX],&opt_finetune_gtspr);
-  reset_finetune_onestep(pjump[BPP_MOVE_THETA_INDEX],&opt_finetune_theta);
+  for (j = 0; j < opt_finetune_theta_count; ++j)
+    reset_finetune_onestep(pjump_theta[j],&opt_finetune_theta[j]);
   reset_finetune_onestep(pjump[BPP_MOVE_TAU_INDEX],&opt_finetune_tau);
   reset_finetune_onestep(pjump[BPP_MOVE_MIX_INDEX],&opt_finetune_mix);
 
@@ -935,7 +968,8 @@ static void reset_finetune(FILE * fp_out, double * pjump)
     fprintf(fp[j], "New finetune:    ");
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
-    fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta);
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
@@ -1056,19 +1090,29 @@ static char * cb_serialize_branch(const snode_t * node)
 
 static void status_print_pjump(FILE * fp,
                                double * pjump,
+                               double * pjump_theta,
                                long ft_round_spr,
                                long ft_round_snl,
                                long pjump_spr,
                                long pjump_snl,
                                double mean_pjump_rj)
 {
-  long j;
+  long j,k;
   int extra = (opt_est_heredity == HEREDITY_ESTIMATE ||
                (opt_est_locusrate == MUTRATE_ESTIMATE &&
                 opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
 
   for (j = 0; j < PROP_COUNT; ++j)
+  {
+    /* theta */
+    if (j == 2)
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp, " %4.2f", pjump_theta[k]);
+      continue;
+    }
     fprintf(fp, " %4.2f", pjump[j]);
+  }
   if (extra)
     fprintf(fp, " %4.2f", pjump[BPP_MOVE_LRHT_INDEX]);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
@@ -2033,6 +2077,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gtree,
                      locus_t *** ptr_locus,
                      double ** ptr_pjump,
+                     double ** ptr_pjump_theta,
                      unsigned long * ptr_curstep,
                      long * ptr_ft_round,
                      long * ptr_ndspecies,
@@ -2086,6 +2131,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_locus,
                   ptr_stree,
                   ptr_pjump,
+                  ptr_pjump_theta,
                   ptr_curstep,
                   ptr_ft_round,
                   ptr_ndspecies,
@@ -2337,6 +2383,7 @@ static FILE * init(stree_t ** ptr_stree,
                    gtree_t *** ptr_gtree,
                    locus_t *** ptr_locus,
                    double ** ptr_pjump,
+                   double ** ptr_pjump_theta,
                    unsigned long * ptr_curstep,
                    long * ptr_ft_round,
                    long * ptr_dparam_count,
@@ -2362,6 +2409,7 @@ static FILE * init(stree_t ** ptr_stree,
   double logl_sum = 0;
   double logpr_sum = 0;
   double * pjump;
+  double * pjump_theta;
   list_t * map_list = NULL;
   stree_t * stree;
   const unsigned int * pll_map;
@@ -3275,6 +3323,9 @@ static FILE * init(stree_t ** ptr_stree,
   int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   pjump = (double *)xcalloc(pjump_size,sizeof(double));
 
+  pjump_theta = (double *)xcalloc((size_t)opt_finetune_theta_count,
+                                  sizeof(double));
+
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
 
@@ -3318,6 +3369,7 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_gtree = gtree;
   *ptr_locus = locus;
   *ptr_pjump = pjump;
+  *ptr_pjump_theta = pjump_theta;
 
   *ptr_curstep = 0;
   *ptr_ft_round = 0;
@@ -3491,6 +3543,8 @@ void cmd_run()
   long ft_round;
   double logl_sum = 0;
   double * pjump;
+  double * pjump_theta;
+  double * theta_av = NULL;
   FILE * fp_mcmc;
   FILE * fp_out;
   stree_t * stree;
@@ -3565,6 +3619,7 @@ void cmd_run()
                      &gtree,
                      &locus,
                      &pjump,
+                     &pjump_theta,
                      &curstep,
                      &ft_round,
                      &ndspecies,
@@ -3601,6 +3656,7 @@ void cmd_run()
                    &gtree,
                    &locus,
                    &pjump,
+                   &pjump_theta,
                    &curstep,
                    &ft_round,
                    &dparam_count,
@@ -3852,6 +3908,8 @@ void cmd_run()
   /*** ziheng 2023.9.15 ***/
   double model_count[4] = { 0 }, flipping_success[4] = {0};
 
+  theta_av = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
+
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3875,12 +3933,13 @@ void cmd_run()
         /* If last MCMC status line did not end with a newline, print one */
         if (!print_newline)
           fprintf(stdout, "\n");
-        reset_finetune(fp_out, pjump);
+        reset_finetune(fp_out, pjump, pjump_theta);
       }
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
       memset(pjump, 0, pjump_size * sizeof(double));
+      memset(pjump_theta, 0, opt_finetune_theta_count * sizeof(double));
 
       if (opt_est_delimit)
       {
@@ -4039,9 +4098,9 @@ void cmd_run()
     /* propose population sizes on species tree */
     if (opt_est_theta)
     {
-      ratio = stree_propose_theta(gtree,locus,stree);
-      pjump[BPP_MOVE_THETA_INDEX] = (pjump[BPP_MOVE_THETA_INDEX]*(ft_round-1)+ratio) /
-                                    (double)ft_round;
+      stree_propose_theta(gtree,locus,stree, theta_av);
+      for (j = 0; j < opt_finetune_theta_count; ++j)
+        pjump_theta[j] = (pjump_theta[j]*(ft_round-1)+theta_av[j]) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
       #endif
@@ -4479,11 +4538,11 @@ void cmd_run()
         mean_pjump_rj = ft_round_rj ? pjump_rj / ft_round_rj : 0;
 
       /* print pjumps */
-      status_print_pjump(stdout, pjump, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
+      status_print_pjump(stdout, pjump, pjump_theta, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
       if (print_newline)
       {
         fprintf(fp_out, "%4.0f%% ", (i + 1.499) / printk * 100.);
-        status_print_pjump(fp_out,pjump, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
+        status_print_pjump(fp_out,pjump, pjump_theta, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
       }
 
       #if 1
@@ -4619,9 +4678,11 @@ void cmd_run()
         
         mig_events_counts[(int)mig_events_count] ++;
       }
+      #if 0
       //printf(" %2ld %5.2f %6.4f %6.4f %6.4f %6.4f", opt_migration_count, mig_events_count / opt_locus_count, mig_gtree_root_mean[0], mig_gtree_root_mean[1],mig_gtree_root_mean[2],mig_gtree_root_mean[3]);
       printf(" %2ld %5.2f %6.4f %6.4f %6.4f %6.4f %6.4f", opt_migration_count, mig_events_count / opt_locus_count, mig_gtree_root_mean[0], mig_gtree_root_mean[1],mig_gtree_root_mean[2],mig_gtree_root_mean[3],mig_gtree_root_mean[4]);
       /*** Ziheng $$$ END ***/
+      #endif
 
       if (print_newline)
       {
@@ -4701,6 +4762,9 @@ void cmd_run()
   }
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
+
+  free(theta_av);
+  free(pjump_theta);
 
   #if 0
   progress_done();

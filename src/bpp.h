@@ -522,6 +522,9 @@ typedef struct snode_s
 
   /* linked theta model */
   struct snode_s * linked_theta;
+
+  /* independent theta step lengths */
+  long theta_step_index;
 } snode_t;
 
 typedef struct migevent_s
@@ -1032,6 +1035,8 @@ extern long opt_exp_randomize;
 extern long opt_exp_theta;
 extern long opt_exp_sim;
 extern long opt_finetune_reset;
+extern long opt_finetune_theta_count;
+extern long opt_finetune_theta_mode;
 extern long opt_help;
 extern long opt_linkedtheta;
 extern long opt_load_balance;
@@ -1096,7 +1101,6 @@ extern double opt_finetune_qrates;
 extern double opt_finetune_nubar;
 extern double opt_finetune_nui;
 extern double opt_finetune_tau;
-extern double opt_finetune_theta;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_snl_lambda_expand;
@@ -1153,6 +1157,7 @@ extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
+extern double * opt_finetune_theta;
 extern double * opt_qrates_params;
 extern migspec_t * opt_mig_specs;
 extern long ** opt_migration_matrix;
@@ -1313,7 +1318,10 @@ hashtable_t * species_hash(stree_t * tree);
 
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 
-double stree_propose_theta(gtree_t ** gtree, locus_t ** locus, stree_t * stree);
+void stree_propose_theta(gtree_t ** gtree,
+                         locus_t ** locus,
+                         stree_t * stree,
+                         double * acceptvec);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 double stree_propose_tau_mig(stree_t ** streeptr,
@@ -1912,6 +1920,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
+                    double ** pjump_theta,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,

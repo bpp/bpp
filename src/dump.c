@@ -352,6 +352,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_rate_prior,1,fp);
   DUMP(&opt_locusrate_prior,1,fp);
 
+  DUMP(&opt_finetune_theta_mode,1,fp);
+  DUMP(&opt_finetune_theta_count,1,fp);
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   DUMP(&opt_finetune_migrates,1,fp);
@@ -359,7 +361,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
-  DUMP(&opt_finetune_theta,1,fp);
+  DUMP(opt_finetune_theta,opt_finetune_theta_count,fp);
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
   DUMP(&opt_finetune_locusrate,1,fp);
@@ -407,6 +409,9 @@ static void dump_chk_section_1(FILE * fp,
   size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   /* write pjump */
   DUMP(pjump,pjump_size,fp);
+
+  /* write pjump_theta */
+  DUMP(pjump_theta,opt_finetune_theta_count,fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);

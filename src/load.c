@@ -238,6 +238,7 @@ static void print_filepaths()
 
 static void load_chk_section_1(FILE * fp,
                                double ** pjump,
+                               double ** pjump_theta,
                                unsigned long * curstep,
                                long * ft_round,
                                long * ndspecies,
@@ -569,6 +570,15 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(&opt_locusrate_prior,1,fp))
     fatal("Cannot read locus rate prior");
 
+  if (!LOAD(&opt_finetune_theta_mode,1,fp))
+    fatal("Cannot read theta finetune mode");
+  if (!LOAD(&opt_finetune_theta_count,1,fp))
+    fatal("Cannot read theta finetune count");
+  if (opt_finetune_theta)
+    free(opt_finetune_theta);
+  opt_finetune_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
+                                         sizeof(double));
+
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
@@ -582,8 +592,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read gene tree age finetune parameter");
   if (!LOAD(&opt_finetune_gtspr,1,fp))
     fatal("Cannot read gene tree SPR finetune parameter");
-  if (!LOAD(&opt_finetune_theta,1,fp))
-    fatal("Cannot read species tree theta finetune parameter");
+  if (!LOAD(opt_finetune_theta,opt_finetune_theta_count,fp))
+    fatal("Cannot read species tree theta finetune parameters");
   if (!LOAD(&opt_finetune_tau,1,fp))
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
@@ -690,8 +700,14 @@ static void load_chk_section_1(FILE * fp,
   size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
   *pjump = (double *)xmalloc(pjump_size*sizeof(double));
 
+  *pjump_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
+                                   sizeof(double));
+
   if (!LOAD(*pjump,pjump_size,fp))
     fatal("Cannot read pjump");
+
+  if (!LOAD(*pjump_theta,opt_finetune_theta_count,fp))
+    fatal("Cannot read pjump_theta");
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC file offset");
@@ -1836,6 +1852,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
                     double ** pjump,
+                    double ** pjump_theta,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
@@ -1891,6 +1908,7 @@ int checkpoint_load(gtree_t *** gtreep,
 
   load_chk_section_1(fp,
                      pjump,
+                     pjump_theta,
                      curstep,
                      ft_round,
                      ndspecies,

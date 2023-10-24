@@ -89,6 +89,8 @@ long opt_exp_randomize;
 long opt_exp_theta;
 long opt_exp_sim;
 long opt_finetune_reset;
+long opt_finetune_theta_count;
+long opt_finetune_theta_mode;
 long opt_help;
 long opt_linkedtheta;
 long opt_load_balance;
@@ -154,7 +156,6 @@ double opt_finetune_qrates;
 double opt_finetune_nubar;
 double opt_finetune_nui;
 double opt_finetune_tau;
-double opt_finetune_theta;
 double opt_heredity_alpha;
 double opt_heredity_beta;
 double opt_locusrate_mubar;
@@ -209,6 +210,7 @@ char * opt_simulate;
 char * opt_streenewick;
 char * opt_treefile;
 double * opt_basefreqs_params;
+double * opt_finetune_theta;
 double * opt_qrates_params;
 migspec_t * opt_mig_specs;
 char ** opt_mig_source;
@@ -275,6 +277,7 @@ static struct option long_options[] =
   {"theta-move",   required_argument, 0, 0 },  /* 40 */
   {"mrate-move",   required_argument, 0, 0 },  /* 41 */
   {"theta_prop",   required_argument, 0, 0 },  /* 42 */
+  {"theta_mode",   required_argument, 0, 0 },  /* 43 */
   { 0, 0, 0, 0 }
 };
 
@@ -466,7 +469,10 @@ void args_init(int argc, char ** argv)
   opt_finetune_nubar = 0.1;
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
-  opt_finetune_theta = 0.001;
+  opt_finetune_theta = (double *)xmalloc(sizeof(double));
+  opt_finetune_theta[0] = 0.001;
+  opt_finetune_theta_count = 1;
+  opt_finetune_theta_mode = 1;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -792,6 +798,12 @@ void args_init(int argc, char ** argv)
         opt_theta_prop = atof(optarg);
         break;
 
+      case 43:
+        opt_finetune_theta_mode = atol(optarg);
+        if (opt_finetune_theta_mode < 1 || opt_finetune_theta_mode > 3)
+          fatal("Invalid theta mode (%s)", optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -987,6 +999,7 @@ int main (int argc, char * argv[])
     cmd_bfdriver();
   }
 
+  free(opt_finetune_theta);
   legacy_fini();
   dealloc_switches();
   free(cmdline);
