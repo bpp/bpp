@@ -4722,6 +4722,7 @@ void cmd_run()
                         gtree,
                         locus,
                         pjump,
+                        pjump_theta,
                         curstep,
                         ft_round,
                         ndspecies,
