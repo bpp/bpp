@@ -360,18 +360,18 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, "  mldp: most likely delimitation and probability\n");
   }
   if (mean_theta_count == 1)
-    fprintf(fp, "mthet1: root node mean theta\n");
+    fprintf(fp, "theta1: root node mean theta\n");
   else
   {
     for (i = 0; i < mean_theta_count; ++i)
-      fprintf(fp, "mthet%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]);
+      fprintf(fp, "theta%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]);
   }
   if (mean_tau_count == 1)
-    fprintf(fp, " mtau1: root node mean tau\n");
+    fprintf(fp, "  tau1: root node mean tau\n");
   else
   {
     for (i = 0; i < mean_tau_count; ++i)
-      fprintf(fp," mtau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
+      fprintf(fp,"  tau%ld: mean tau of node %ld\n", i+1,stree->tip_count+i);
   }
   if (opt_migration && !opt_est_geneflow)
   {
@@ -381,7 +381,7 @@ static void print_mcmc_headerline(FILE * fp,
       long k = mean_mrate_col[i];
 
       fprintf(fp,
-              " mmrt%ld: mean migration rate %s -> %s\n",
+              "    M%ld: mean migration rate %s -> %s\n",
               i+1,
               stree->nodes[j]->label,
               stree->nodes[k]->label);
@@ -412,7 +412,7 @@ static void print_mcmc_headerline(FILE * fp,
       #endif
 
       fprintf(fp,
-              " mphi%ld: mean of phi_%s : %s -> %s\n",
+              "  phi%ld: mean of phi_%s : %s -> %s\n",
               i+1,
               tmpnode->label,
               tmpnode->parent->label,
@@ -572,13 +572,13 @@ static void print_mcmc_headerline(FILE * fp,
   {
     for (i = 0; i < mean_theta_count; ++i)
     {
-      fprintf(fp," mthet%ld", i+1);         linewidth += 7;
+      fprintf(fp," theta%ld", i+1);         linewidth += 7;
     }
     fprintf(fp," ");          linewidth += 1;
   }
   for (i = 0; i < mean_tau_count; ++i)
   {
-    fprintf(fp,"  mtau%ld", i+1);           linewidth += 7;
+    fprintf(fp,"   tau%ld", i+1);           linewidth += 7;
   }
 
   if (opt_migration && !opt_est_geneflow)
@@ -586,7 +586,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, " ");                       linewidth += 1;
     for (i = 0; i < mean_mrate_count; ++i)
     {
-      fprintf(fp," mmrte%ld", i+1);         linewidth += 7;
+      fprintf(fp,"     M%ld", i+1);         linewidth += 7;
     }
   }
 
@@ -595,7 +595,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, " ");                       linewidth += 1;
     for (i = 0; i < mean_phi_count; ++i)
     {
-      fprintf(fp,"  mphi%ld",i+1);          linewidth += 7;
+      fprintf(fp,"   phi%ld",i+1);          linewidth += 7;
     }
   }
 
