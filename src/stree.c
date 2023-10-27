@@ -438,6 +438,7 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->has_theta = snode->has_theta;
   clone->constraint = snode->constraint;
   clone->constraint_lineno = snode->constraint_lineno;
+  clone->theta_step_index = snode->theta_step_index;
 
   if (!clone->mark)
     clone->mark = (int *)xmalloc((size_t)opt_threads*sizeof(int));
