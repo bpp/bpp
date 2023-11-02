@@ -237,8 +237,6 @@ static void print_filepaths()
 }
 
 static void load_chk_section_1(FILE * fp,
-                               double ** pjump,
-                               double ** pjump_theta,
                                unsigned long * curstep,
                                long * ft_round,
                                long * ndspecies,
@@ -251,11 +249,8 @@ static void load_chk_section_1(FILE * fp,
                                double ** posterior,
                                double ** pspecies,
                                long * ft_round_rj,
-                               double * pjump_rj,
                                long * ft_round_spr,
                                long * ft_round_snl,
-                               long * pjump_spr,
-                               long * pjump_snl,
                                double * mean_logl,
                                long ** mean_mrate_row,
                                long ** mean_mrate_col,
@@ -697,17 +692,42 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ndspecies,1,fp))
     fatal("Cannot read number of delimited species");
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
-  *pjump = (double *)xmalloc(pjump_size*sizeof(double));
-
-  *pjump_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
-                                   sizeof(double));
-
-  if (!LOAD(*pjump,pjump_size,fp))
-    fatal("Cannot read pjump");
-
-  if (!LOAD(*pjump_theta,opt_finetune_theta_count,fp))
-    fatal("Cannot read pjump_theta");
+  g_pj_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
+                                 sizeof(double));
+  if (!(LOAD(&g_pj_gage, 1, fp)))
+    fatal("Cannot read g_pj_gage");
+  if (!(LOAD(&g_pj_gspr, 1, fp)))
+    fatal("Cannot read g_pj_gspr");
+  if (!(LOAD(g_pj_theta, opt_finetune_theta_count, fp)))
+    fatal("Cannot read g_pj_theta");
+  if (!(LOAD(&g_pj_tau, 1, fp)))
+    fatal("Cannot read g_pj_tau");
+  if (!(LOAD(&g_pj_mix, 1, fp)))
+    fatal("Cannot read g_pj_mix");
+  if (!(LOAD(&g_pj_lrht, 1, fp)))
+    fatal("Cannot read g_pj_lrht");
+  if (!(LOAD(&g_pj_phi, 1, fp)))
+    fatal("Cannot read g_pj_phi");
+  if (!(LOAD(&g_pj_freqs, 1, fp)))
+    fatal("Cannot read g_pj_freqs");
+  if (!(LOAD(&g_pj_qmat, 1, fp)))
+    fatal("Cannot read g_pj_qmat");
+  if (!(LOAD(&g_pj_alpha, 1, fp)))
+    fatal("Cannot read g_pj_alpha");
+  if (!(LOAD(&g_pj_mubar, 1, fp)))
+    fatal("Cannot read g_pj_mubar");
+  if (!(LOAD(&g_pj_nubar, 1, fp)))
+    fatal("Cannot read g_pj_nubar");
+  if (!(LOAD(&g_pj_mui, 1, fp)))
+    fatal("Cannot read g_pj_mui");
+  if (!(LOAD(&g_pj_nui, 1, fp)))
+    fatal("Cannot read g_pj_nui");
+  if (!(LOAD(&g_pj_brate, 1, fp)))
+    fatal("Cannot read g_pj_brate");
+  if (!(LOAD(&g_pj_mrate, 1, fp)))
+    fatal("Cannot read g_pj_mrate");
+  if (!(LOAD(&g_pj_migvr, 1, fp)))
+    fatal("Cannot read g_pj_migvr");
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC file offset");
@@ -770,7 +790,7 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round_rj,1,fp))
     fatal("Cannot read RJ finetune round"); 
 
-  if (!LOAD(pjump_rj,1,fp))
+  if (!LOAD(&g_pj_rj,1,fp))
     fatal("Cannot read RJ pjump"); 
 
   if (!LOAD(ft_round_spr,1,fp))
@@ -779,10 +799,10 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round_snl, 1, fp))
     fatal("Cannot read finetune round for species tree SNL");
 
-  if (!LOAD(pjump_spr, 1, fp))
+  if (!LOAD(&g_pj_sspr, 1, fp))
     fatal("Cannot read species tree SPR pjump");
 
-  if (!LOAD(pjump_snl,1,fp))
+  if (!LOAD(&g_pj_ssnl,1,fp))
     fatal("Cannot read species tree SNL pjump"); 
 
   if (!LOAD(mean_logl,1,fp))
@@ -1857,8 +1877,6 @@ void load_chk_section_4(FILE * fp)
 int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
-                    double ** pjump,
-                    double ** pjump_theta,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
@@ -1871,11 +1889,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** posterior,
                     double ** pspecies,
                     long * ft_round_rj,
-                    double * pjump_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
-                    long * pjump_spr,
-                    long * pjump_snl,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,
@@ -1913,8 +1928,6 @@ int checkpoint_load(gtree_t *** gtreep,
   #endif
 
   load_chk_section_1(fp,
-                     pjump,
-                     pjump_theta,
                      curstep,
                      ft_round,
                      ndspecies,
@@ -1927,11 +1940,8 @@ int checkpoint_load(gtree_t *** gtreep,
                      posterior,
                      pspecies,
                      ft_round_rj,
-                     pjump_rj,
                      ft_round_spr,
                      ft_round_snl,
-                     pjump_spr,
-                     pjump_snl,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

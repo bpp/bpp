@@ -658,9 +658,9 @@ static void reset_finetune_onestep(double pjump, double * param)
   
 }
 
-static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
+static void reset_finetune(FILE * fp_out)
 {
-  int i,j,k;
+  int j,k;
   int extra;
   int spacing = 1;
   int empty = 4;  /* for entries not available */
@@ -745,41 +745,35 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
   {
     fprintf(fp[j], "\nCurrent Pjump:    ");
 
-    for (i = 0; i < PROP_COUNT; ++i)
-    {
-      /* theta */
-      if (i == 2)
-      {
-        for (k = 0; k < opt_finetune_theta_count; ++k)
-          fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump_theta[k]);
-        continue;
-      }
-
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[i]);
-    }
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gage);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gspr);
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_theta[k]);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_tau);
+    fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_mix);
 
     /* mu_i with GammaDir or Heredity scalars */
     if (extra)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_LRHT_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_lrht);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
     /* phi pjump */
     if (opt_msci)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_PHI_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_phi);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
     if (enabled_prop_freqs)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_FREQS_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_freqs);
     else
       fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_qrates)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_QRATES_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_qmat);
     else
       fprintf(fp[j], " %*s", empty, "- ");
     if (enabled_prop_alpha)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_ALPHA_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_alpha);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -787,14 +781,14 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
         opt_est_mubar)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUBAR_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_mubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
     
     /* nubar pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL &&
         opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_NUBAR_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_nubar);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
@@ -803,15 +797,15 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
     if (opt_est_locusrate == MUTRATE_ESTIMATE &&
         (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, pjump[BPP_MOVE_MUI_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_mui);
     else
       fprintf(fp[j], " %*s", empty, "- ");
 
     /* nu_i and branch rates pjump */
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_NUI_INDEX]);
-      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_BRANCHRATE_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_nui);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_brate);
     }
     else
     {
@@ -821,10 +815,9 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
 
     if (opt_migration && !opt_est_geneflow)
     {
-      fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MRATE_INDEX]);
+      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_mrate);
       if (opt_mig_vrates_exist)
-        fprintf(fp[j], " %*.5f",prec_ft+spacing,pjump[BPP_MOVE_MIGVR_INDEX]);
-
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_migvr);
     }
     else
     {
@@ -834,9 +827,7 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
 
     fprintf(fp[j], "\n");
 
-    //printf("finetune_mui: %.15f", opt_finetune_mui);
     fprintf(fp[j], "Current finetune:");
-//    fprintf(fp[j], " %8.5f", opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
     for (k = 0; k < opt_finetune_theta_count; ++k)
@@ -921,45 +912,44 @@ static void reset_finetune(FILE * fp_out, double * pjump, double * pjump_theta)
   }
 
 
-  reset_finetune_onestep(pjump[BPP_MOVE_GTAGE_INDEX],&opt_finetune_gtage);
-  reset_finetune_onestep(pjump[BPP_MOVE_GTSPR_INDEX],&opt_finetune_gtspr);
+  reset_finetune_onestep(g_pj_gage, &opt_finetune_gtage);
+  reset_finetune_onestep(g_pj_gspr, &opt_finetune_gtspr);
   for (j = 0; j < opt_finetune_theta_count; ++j)
-    reset_finetune_onestep(pjump_theta[j],&opt_finetune_theta[j]);
-  reset_finetune_onestep(pjump[BPP_MOVE_TAU_INDEX],&opt_finetune_tau);
-  reset_finetune_onestep(pjump[BPP_MOVE_MIX_INDEX],&opt_finetune_mix);
+    reset_finetune_onestep(g_pj_theta[j],&opt_finetune_theta[j]);
+  reset_finetune_onestep(g_pj_tau,&opt_finetune_tau);
+  reset_finetune_onestep(g_pj_mix,&opt_finetune_mix);
 
   if (extra)
-    reset_finetune_onestep(pjump[BPP_MOVE_LRHT_INDEX],&opt_finetune_locusrate);
+    reset_finetune_onestep(g_pj_lrht, &opt_finetune_locusrate);
   if (opt_msci)
-    reset_finetune_onestep(pjump[BPP_MOVE_PHI_INDEX], &opt_finetune_phi);
+    reset_finetune_onestep(g_pj_phi, &opt_finetune_phi);
   if (enabled_prop_freqs)
-    reset_finetune_onestep(pjump[BPP_MOVE_FREQS_INDEX], &opt_finetune_freqs);
+    reset_finetune_onestep(g_pj_freqs, &opt_finetune_freqs);
   if (enabled_prop_qrates)
-    reset_finetune_onestep(pjump[BPP_MOVE_QRATES_INDEX], &opt_finetune_qrates);
+    reset_finetune_onestep(g_pj_qmat, &opt_finetune_qrates);
   if (enabled_prop_alpha)
-    reset_finetune_onestep(pjump[BPP_MOVE_ALPHA_INDEX], &opt_finetune_alpha);
+    reset_finetune_onestep(g_pj_alpha, &opt_finetune_alpha);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
       opt_est_mubar)
-    reset_finetune_onestep(pjump[BPP_MOVE_MUBAR_INDEX], &opt_finetune_mubar);
+    reset_finetune_onestep(g_pj_mubar, &opt_finetune_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    reset_finetune_onestep(pjump[BPP_MOVE_NUBAR_INDEX], &opt_finetune_nubar);
+    reset_finetune_onestep(g_pj_nubar, &opt_finetune_nubar);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-    reset_finetune_onestep(pjump[BPP_MOVE_MUI_INDEX], &opt_finetune_mui);
+    reset_finetune_onestep(g_pj_mui, &opt_finetune_mui);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    reset_finetune_onestep(pjump[BPP_MOVE_NUI_INDEX], &opt_finetune_nui);
-    reset_finetune_onestep(pjump[BPP_MOVE_BRANCHRATE_INDEX], &opt_finetune_branchrate);
+    reset_finetune_onestep(g_pj_nui, &opt_finetune_nui);
+    reset_finetune_onestep(g_pj_brate, &opt_finetune_branchrate);
   }
   if (opt_migration)
   {
-    reset_finetune_onestep(pjump[BPP_MOVE_MRATE_INDEX], &opt_finetune_migrates);
+    reset_finetune_onestep(g_pj_mrate, &opt_finetune_migrates);
     if (opt_mig_vrates_exist)
-      reset_finetune_onestep(pjump[BPP_MOVE_MIGVR_INDEX], &opt_finetune_mig_Mi);
-
+      reset_finetune_onestep(g_pj_migvr, &opt_finetune_mig_Mi);
   }
 
   for (j = 0; j < 2; ++j)
@@ -1088,78 +1078,70 @@ static char * cb_serialize_branch(const snode_t * node)
 }
 
 static void status_print_pjump(FILE * fp,
-                               double * pjump,
-                               double * pjump_theta,
                                long ft_round_spr,
                                long ft_round_snl,
-                               long pjump_spr,
-                               long pjump_snl,
                                double mean_pjump_rj)
 {
-  long j,k;
+  long k;
   int extra = (opt_est_heredity == HEREDITY_ESTIMATE ||
                (opt_est_locusrate == MUTRATE_ESTIMATE &&
                 opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
 
-  for (j = 0; j < PROP_COUNT; ++j)
-  {
-    /* theta */
-    if (j == 2)
-    {
-      for (k = 0; k < opt_finetune_theta_count; ++k)
-        fprintf(fp, " %4.2f", pjump_theta[k]);
-      continue;
-    }
-    fprintf(fp, " %4.2f", pjump[j]);
-  }
+  fprintf(fp, " %4.2f", g_pj_gage);
+  fprintf(fp, " %4.2f", g_pj_gspr);
+  for (k = 0; k < opt_finetune_theta_count; ++k)
+    fprintf(fp, " %4.2f", g_pj_theta[k]);
+  fprintf(fp, " %4.2f", g_pj_tau);
+  fprintf(fp, " %4.2f", g_pj_mix);
+
   if (extra)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_LRHT_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_lrht);
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
        opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_MUI_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_mui);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_NUI_INDEX]);
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_BRANCHRATE_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_nui);
+    fprintf(fp, " %4.2f", g_pj_brate);
   }
   if (opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
       opt_est_mubar)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_MUBAR_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_mubar);
   if (opt_clock != BPP_CLOCK_GLOBAL &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_NUBAR_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_nubar);
 
   if (opt_msci)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_PHI_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_phi);
   if (enabled_prop_freqs)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_FREQS_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_freqs);
   if (enabled_prop_qrates)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_QRATES_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_qmat);
   if (enabled_prop_alpha)
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_ALPHA_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_alpha);
   if (opt_migration)
   {
-    fprintf(fp, " %4.2f", pjump[BPP_MOVE_MRATE_INDEX]);
+    fprintf(fp, " %4.2f", g_pj_mrate);
     if (opt_mig_vrates_exist)
-      fprintf(fp, " %4.2f", pjump[BPP_MOVE_MIGVR_INDEX]);
+      fprintf(fp, " %4.2f", g_pj_migvr);
   }
 
   /* print pjump for species tree SPR */
   if (opt_method == METHOD_01)
   {
-    fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
+    fprintf(fp, " %5.4f", ft_round_spr ? (double)g_pj_sspr / ft_round_spr : 0.);
     if (opt_prob_snl)
-      fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
+      fprintf(fp, " %5.4f", ft_round_snl ? (double)g_pj_ssnl / ft_round_snl : 0.);
   }
   else if (opt_method == METHOD_10)
     fprintf(fp," %5.4f", mean_pjump_rj);
   else if (opt_method == METHOD_11)
   {
-    fprintf(fp, " %5.4f", ft_round_spr ? (double)pjump_spr / ft_round_spr : 0.);
+    fprintf(fp, " %5.4f", ft_round_spr ? (double)g_pj_sspr / ft_round_spr : 0.);
     if (opt_prob_snl)
-      fprintf(fp, " %5.4f", ft_round_snl ? (double)pjump_snl / ft_round_snl : 0.);
+      fprintf(fp, " %5.4f", ft_round_snl ? (double)g_pj_ssnl / ft_round_snl : 0.);
     fprintf(fp," %5.4f", mean_pjump_rj);
   }
   fprintf(fp, "  ");
@@ -2075,8 +2057,6 @@ static void create_mig_bitmatrix(stree_t * stree)
 static FILE * resume(stree_t ** ptr_stree,
                      gtree_t *** ptr_gtree,
                      locus_t *** ptr_locus,
-                     double ** ptr_pjump,
-                     double ** ptr_pjump_theta,
                      unsigned long * ptr_curstep,
                      long * ptr_ft_round,
                      long * ptr_ndspecies,
@@ -2085,12 +2065,9 @@ static FILE * resume(stree_t ** ptr_stree,
                      double ** ptr_posterior,
                      double ** ptr_pspecies,
                      long * ptr_ft_round_rj,
-                     double * ptr_pjump_rj,
 
                      long * ptr_ft_round_spr,
                      long * ptr_ft_round_snl,
-                     long * ptr_pjump_spr,
-                     long * ptr_pjump_snl,
 
                      double * ptr_mean_logl,
                      long ** ptr_mrate_row,
@@ -2129,8 +2106,6 @@ static FILE * resume(stree_t ** ptr_stree,
   checkpoint_load(ptr_gtree,
                   ptr_locus,
                   ptr_stree,
-                  ptr_pjump,
-                  ptr_pjump_theta,
                   ptr_curstep,
                   ptr_ft_round,
                   ptr_ndspecies,
@@ -2143,11 +2118,8 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_posterior,
                   ptr_pspecies,
                   ptr_ft_round_rj,
-                  ptr_pjump_rj,
                   ptr_ft_round_spr,
                   ptr_ft_round_snl,
-                  ptr_pjump_spr,
-                  ptr_pjump_snl,
                   ptr_mean_logl,
                   ptr_mrate_row,
                   ptr_mrate_col,
@@ -2381,18 +2353,13 @@ static FILE * resume(stree_t ** ptr_stree,
 static FILE * init(stree_t ** ptr_stree,
                    gtree_t *** ptr_gtree,
                    locus_t *** ptr_locus,
-                   double ** ptr_pjump,
-                   double ** ptr_pjump_theta,
                    unsigned long * ptr_curstep,
                    long * ptr_ft_round,
                    long * ptr_dparam_count,
                    double ** ptr_posterior,
                    long * ptr_ft_round_rj,
-                   double * ptr_pjump_rj,
                    long* ptr_ft_round_spr,
                    long* ptr_ft_round_snl,
-                   long* ptr_pjump_spr,
-                   long* ptr_pjump_snl,
                    double * ptr_mean_logl,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones,
@@ -2407,8 +2374,6 @@ static FILE * init(stree_t ** ptr_stree,
   double logl,logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
-  double * pjump;
-  double * pjump_theta;
   list_t * map_list = NULL;
   stree_t * stree;
   const unsigned int * pll_map;
@@ -3317,13 +3282,8 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_est_delimit)          /* species delimitation */
     rj_init(gtree,stree,msa_count);
 
-  /* initialize pjump and finetune rounds */
-
-  int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
-  pjump = (double *)xcalloc(pjump_size,sizeof(double));
-
-  pjump_theta = (double *)xcalloc((size_t)opt_finetune_theta_count,
-                                  sizeof(double));
+  /* initialize pjump array for thetas */
+  g_pj_theta = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
@@ -3367,8 +3327,6 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_stree = stree;
   *ptr_gtree = gtree;
   *ptr_locus = locus;
-  *ptr_pjump = pjump;
-  *ptr_pjump_theta = pjump_theta;
 
   *ptr_curstep = 0;
   *ptr_ft_round = 0;
@@ -3376,13 +3334,10 @@ static FILE * init(stree_t ** ptr_stree,
   /* species delimitation relevant */
   *ptr_ft_round_rj = 0;
   *ptr_dparam_count = dparam_count;
-  *ptr_pjump_rj = 0;
 
   /* species tree inference relevant */
   *ptr_ft_round_spr = 0;
   *ptr_ft_round_snl = 0;
-  *ptr_pjump_spr = 0;
-  *ptr_pjump_snl = 0;
   *ptr_mean_logl = 0;
 
   *ptr_sclone = sclone;
@@ -3535,14 +3490,40 @@ static void fill_mean_mrate_indices(stree_t * stree, long * row, long * col, lon
       }
 }
 
+static void pjump_reset()
+{
+  long i;
+
+  g_pj_gage = 0;
+  g_pj_gspr = 0;
+  g_pj_tau = 0;
+  g_pj_mix = 0;
+  g_pj_lrht = 0;
+  g_pj_phi = 0;
+  g_pj_freqs = 0;
+  g_pj_qmat = 0;
+  g_pj_alpha = 0;
+  g_pj_mubar = 0;
+  g_pj_nubar = 0;
+  g_pj_mui = 0;
+  g_pj_nui = 0;
+  g_pj_brate = 0;
+  g_pj_mrate = 0;
+  g_pj_migvr = 0;
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+    g_pj_theta[i] = 0;
+
+  g_pj_sspr = 0;
+  g_pj_ssnl = 0;
+  g_pj_rj = 0;
+}
+
 void cmd_run()
 {
   /* common variables for all methods */
   long i,j,k;
   long ft_round;
   double logl_sum = 0;
-  double * pjump;
-  double * pjump_theta;
   double * theta_av = NULL;
   FILE * fp_mcmc;
   FILE * fp_out;
@@ -3563,13 +3544,11 @@ void cmd_run()
   /* method 10 specific variables */
   long dparam_count = 0;
   long ft_round_rj;
-  double pjump_rj = 0;
   double * posterior = NULL;
   double * pspecies = NULL;
 
   /* method 01 specific variables */
   long ft_round_spr = 0, ft_round_snl = 0;
-  long pjump_spr, pjump_snl;
   long printk;// = opt_samplefreq * opt_samples;
   double mean_logl = 0;
   #ifdef DEBUG_GTR
@@ -3617,8 +3596,6 @@ void cmd_run()
     fp_mcmc = resume(&stree,
                      &gtree,
                      &locus,
-                     &pjump,
-                     &pjump_theta,
                      &curstep,
                      &ft_round,
                      &ndspecies,
@@ -3626,11 +3603,8 @@ void cmd_run()
                      &posterior,
                      &pspecies,
                      &ft_round_rj,
-                     &pjump_rj,
                      &ft_round_spr,
                      &ft_round_snl,
-                     &pjump_spr,
-                     &pjump_snl,
                      &mean_logl,
                      &mean_mrate_row,
                      &mean_mrate_col,
@@ -3654,18 +3628,13 @@ void cmd_run()
     fp_mcmc = init(&stree,
                    &gtree,
                    &locus,
-                   &pjump,
-                   &pjump_theta,
                    &curstep,
                    &ft_round,
                    &dparam_count,
                    &posterior,
                    &ft_round_rj,
-                   &pjump_rj,
                    &ft_round_spr,
                    &ft_round_snl,
-                   &pjump_spr,
-                   &pjump_snl,
                    &mean_logl,
                    &sclone, 
                    &gclones,
@@ -3925,26 +3894,18 @@ void cmd_run()
     if (i == 0 || (opt_finetune_reset && opt_burnin >= 200 && i < 0 &&
                    ft_round >= 100 && i%(opt_burnin/4)==0))
     {
-      int pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
-
       if (opt_finetune_reset && opt_burnin >= 200)
       {
         /* If last MCMC status line did not end with a newline, print one */
         if (!print_newline)
           fprintf(stdout, "\n");
-        reset_finetune(fp_out, pjump, pjump_theta);
+        reset_finetune(fp_out);
       }
 
       /* reset pjump and number of steps since last finetune reset to zero */
       ft_round = 0;
-      memset(pjump, 0, pjump_size * sizeof(double));
-      memset(pjump_theta, 0, opt_finetune_theta_count * sizeof(double));
+      pjump_reset();
 
-      if (opt_est_delimit)
-      {
-        pjump_rj = 0;
-        ft_round_rj = 0;
-      }
       if (opt_method == METHOD_10)      /* species delimitation */
         memset(posterior,0,delimitation_getparam_count()*sizeof(double));
 
@@ -3955,7 +3916,6 @@ void cmd_run()
       if (opt_est_stree)
       {
         ft_round_spr = ft_round_snl = 0;
-        pjump_spr = pjump_snl = 0;
       }
       if (opt_method == METHOD_11)      /* species tree inference + delimitation */
         memset(pspecies,0,stree->tip_count*sizeof(double));
@@ -3980,7 +3940,7 @@ void cmd_run()
       if (j != 2)
       {
         ft_round_rj++;
-        pjump_rj += j;
+        g_pj_rj += j;
       }
     }
 
@@ -3997,12 +3957,12 @@ void cmd_run()
         if (stree_snl==0) {
           ret = stree_propose_spr(&stree, &gtree, &sclone, &gclones, locus);
           ft_round_spr++;
-          if (ret == 1) pjump_spr++;
+          if (ret == 1) g_pj_sspr++;
         }
         else {
           ret = stree_propose_stree_snl(&stree, &gtree, &sclone, &gclones, locus);
           ft_round_snl++;
-          if (ret==1) pjump_snl++;
+          if (ret==1) g_pj_ssnl++;
         }
         if (ret == 1)
         {
@@ -4044,8 +4004,7 @@ void cmd_run()
       threads_wakeup(THREAD_WORK_GTAGE,&td);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
-    pjump[BPP_MOVE_GTAGE_INDEX] = (pjump[BPP_MOVE_GTAGE_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+    g_pj_gage = (g_pj_gage*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "GAGE");
       #endif
@@ -4078,8 +4037,7 @@ void cmd_run()
       threads_wakeup(THREAD_WORK_GTSPR,&td);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
-    pjump[BPP_MOVE_GTSPR_INDEX] = (pjump[BPP_MOVE_GTSPR_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+    g_pj_gspr = (g_pj_gspr*(ft_round-1)+ratio) / (double)ft_round;
 #endif
 
       #ifdef CHECK_LOGL
@@ -4099,7 +4057,7 @@ void cmd_run()
     {
       stree_propose_theta(gtree,locus,stree, theta_av);
       for (j = 0; j < opt_finetune_theta_count; ++j)
-        pjump_theta[j] = (pjump_theta[j]*(ft_round-1)+theta_av[j]) / (double)ft_round;
+        g_pj_theta[j] = (g_pj_theta[j]*(ft_round-1)+theta_av[j]) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
       #endif
@@ -4118,8 +4076,7 @@ void cmd_run()
         ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
       else
         ratio = stree_propose_tau(gtree,stree,locus);
-      pjump[BPP_MOVE_TAU_INDEX] = (pjump[BPP_MOVE_TAU_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+      g_pj_tau = (g_pj_tau*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "TAU");
       #endif
@@ -4135,21 +4092,18 @@ void cmd_run()
     if (opt_migration)
     {
       ratio = prop_migrates(stree,gtree,locus);
-      pjump[BPP_MOVE_MRATE_INDEX] = (pjump[BPP_MOVE_MRATE_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+      g_pj_mrate = (g_pj_mrate*(ft_round-1)+ratio) / (double)ft_round;
 
       if (opt_mig_vrates_exist)
       {
         ratio = prop_mig_vrates(stree,gtree,locus);
-        pjump[BPP_MOVE_MIGVR_INDEX] = (pjump[BPP_MOVE_MIGVR_INDEX]*(ft_round-1)+ratio) /
-                                    (double)ft_round;
+        g_pj_migvr = (g_pj_migvr*(ft_round-1)+ratio) / (double)ft_round;
       }
     }
 
     /* mixing step */
     ratio = proposal_mixing(gtree, stree, locus);
-    pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX] * (ft_round - 1) + ratio) /
-                                (double)ft_round;
+    g_pj_mix = (g_pj_mix * (ft_round - 1) + ratio) / (double)ft_round;
     #ifdef CHECK_LOGL
     check_logl(stree, gtree, locus, i, "MIXING");
     #endif
@@ -4165,8 +4119,7 @@ void cmd_run()
          opt_est_heredity == HEREDITY_ESTIMATE)
     {
       ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
-      pjump[BPP_MOVE_LRHT_INDEX] = (pjump[BPP_MOVE_LRHT_INDEX]*(ft_round-1)+ratio) /
-                                   (double)ft_round;
+      g_pj_lrht = (g_pj_lrht*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "LRHT");
       #endif
@@ -4182,8 +4135,7 @@ void cmd_run()
     if (opt_msci)
     {
       ratio = stree_propose_phi(stree,gtree);
-      pjump[BPP_MOVE_PHI_INDEX] = (pjump[BPP_MOVE_PHI_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+      g_pj_phi = (g_pj_phi*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "PHI");
       #endif
@@ -4232,10 +4184,6 @@ void cmd_run()
 #endif
 
 
-    #if 0
-    assert(!gtree[0]->root->parent);
-    assert(!gtree[1]->root->parent);
-    #endif
 
     if (enabled_prop_freqs)
     {
@@ -4247,8 +4195,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_FREQS,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      pjump[BPP_MOVE_FREQS_INDEX] = (pjump[BPP_MOVE_FREQS_INDEX]*(ft_round-1)+ratio) /
-                                    (double)ft_round;
+      g_pj_freqs = (g_pj_freqs*(ft_round-1)+ratio) / (double)ft_round;
     }
 
     if (enabled_prop_qrates)
@@ -4261,8 +4208,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_RATES,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      pjump[BPP_MOVE_QRATES_INDEX] = (pjump[BPP_MOVE_QRATES_INDEX]*(ft_round-1)+ratio) /
-                                    (double)ft_round;
+      g_pj_qmat = (g_pj_qmat*(ft_round-1)+ratio) / (double)ft_round;
     }
 
     if (enabled_prop_alpha)
@@ -4275,8 +4221,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_ALPHA,&td);
         ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      pjump[BPP_MOVE_ALPHA_INDEX] = (pjump[BPP_MOVE_ALPHA_INDEX]*(ft_round-1)+ratio) /
-                                    (double)ft_round;
+      g_pj_alpha = (g_pj_alpha*(ft_round-1)+ratio) / (double)ft_round;
     }
 
     /* TODO: Delete after debugging */
@@ -4291,8 +4236,7 @@ void cmd_run()
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
     {
       ratio = prop_locusrate_mui(gtree,stree,locus,thread_index_zero);
-      pjump[BPP_MOVE_MUI_INDEX] = (pjump[BPP_MOVE_MUI_INDEX]*(ft_round-1)+ratio) /
-                                  (double)ft_round;
+      g_pj_mui = (g_pj_mui*(ft_round-1)+ratio) / (double)ft_round;
 
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "MUI");
@@ -4307,8 +4251,7 @@ void cmd_run()
       if (opt_est_mubar)
       {
         ratio = prop_locusrate_mubar(stree,gtree);
-        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
-                                       (double)ft_round;
+       g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) / (double)ft_round;
         #ifdef CHECK_LOGL
         check_logl(stree, gtree, locus, i, "MUBAR");
         #endif
@@ -4322,8 +4265,7 @@ void cmd_run()
     {
 
       ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
-      pjump[BPP_MOVE_NUI_INDEX] = (pjump[BPP_MOVE_NUI_INDEX]*(ft_round-1)+ratio) /
-                                        (double)ft_round;
+      g_pj_nui = (g_pj_nui*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "NUI");
       #endif
@@ -4334,8 +4276,7 @@ void cmd_run()
       if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
       {
         ratio = prop_locusrate_nubar(stree,gtree);
-        pjump[BPP_MOVE_NUBAR_INDEX] = (pjump[BPP_MOVE_NUBAR_INDEX]*(ft_round-1)+ratio) /
-                                          (double)ft_round;
+        g_pj_nubar = (g_pj_nubar*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "NUBAR");
       #endif
@@ -4352,8 +4293,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_BRATE,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      pjump[BPP_MOVE_BRANCHRATE_INDEX] = (pjump[BPP_MOVE_BRANCHRATE_INDEX]*(ft_round-1)+ratio) /
-                                         (double)ft_round;
+      g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "BRATE");
       #endif
@@ -4534,14 +4474,14 @@ void cmd_run()
 
       double mean_pjump_rj = 0;
       if (opt_method == METHOD_10)
-        mean_pjump_rj = ft_round_rj ? pjump_rj / ft_round_rj : 0;
+        mean_pjump_rj = ft_round_rj ? g_pj_rj / ft_round_rj : 0;
 
       /* print pjumps */
-      status_print_pjump(stdout, pjump, pjump_theta, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
+      status_print_pjump(stdout, ft_round_spr, ft_round_snl, mean_pjump_rj);
       if (print_newline)
       {
         fprintf(fp_out, "%4.0f%% ", (i + 1.499) / printk * 100.);
-        status_print_pjump(fp_out,pjump, pjump_theta, ft_round_spr, ft_round_snl, pjump_spr, pjump_snl, mean_pjump_rj);
+        status_print_pjump(fp_out, ft_round_spr, ft_round_snl, mean_pjump_rj);
       }
 
       #if 1
@@ -4720,8 +4660,6 @@ void cmd_run()
         checkpoint_dump(stree,
                         gtree,
                         locus,
-                        pjump,
-                        pjump_theta,
                         curstep,
                         ft_round,
                         ndspecies,
@@ -4736,11 +4674,8 @@ void cmd_run()
                         opt_est_delimit ?
                           delimitation_getparam_count() : 0,
                         ft_round_rj,
-                        pjump_rj,
                         ft_round_spr,
                         ft_round_snl,
-                        pjump_spr,
-                        pjump_snl,
                         mean_logl,
                         mean_mrate_row,
                         mean_mrate_col,
@@ -4764,13 +4699,11 @@ void cmd_run()
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
   free(theta_av);
-  free(pjump_theta);
+  free(g_pj_theta);
 
   #if 0
   progress_done();
   #endif
-
-  free(pjump);
 
   if (opt_threads > 1)
     threads_exit();

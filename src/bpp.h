@@ -1235,6 +1235,29 @@ extern long altivec_present;
 extern double ** global_sortbuffer_r;
 extern migbuffer_t ** global_migbuffer_r;
 
+/* pjumps */
+extern double g_pj_gage;
+extern double g_pj_gspr;
+extern double g_pj_tau;
+extern double g_pj_mix;
+extern double g_pj_lrht;
+extern double g_pj_phi;
+extern double g_pj_freqs;
+extern double g_pj_qmat;
+extern double g_pj_alpha;
+extern double g_pj_mubar;
+extern double g_pj_nubar;
+extern double g_pj_mui;
+extern double g_pj_nui;
+extern double g_pj_brate;
+extern double g_pj_mrate;
+extern double g_pj_migvr;
+extern double * g_pj_theta;
+
+extern long g_pj_sspr;
+extern long g_pj_ssnl;
+extern double g_pj_rj;
+
 /* functions in util.c */
 
 #ifdef _MSC_VER
@@ -1880,8 +1903,6 @@ unsigned long ** diploid_resolve(stree_t * stree,
 int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
-                    double * pjump,
-                    double * pjump_theta,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -1895,11 +1916,8 @@ int checkpoint_dump(stree_t * stree,
                     double * pspecies,
                     long dmodels_count,
                     long ft_round_rj,
-                    double pjump_rj,
                     long ft_round_spr,
                     long ft_round_snl,
-                    long pjump_spr,
-                    long pjump_snl,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -1920,8 +1938,6 @@ int checkpoint_dump(stree_t * stree,
 int checkpoint_load(gtree_t *** gtreep,
                     locus_t *** locusp,
                     stree_t ** streep,
-                    double ** pjump,
-                    double ** pjump_theta,
                     unsigned long * curstep,
                     long * ft_round,
                     long * ndspecies,
@@ -1934,11 +1950,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     double ** posterior,
                     double ** pspecies,
                     long * ft_round_rj,
-                    double * pjump_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
-                    long * pjump_spr,
-                    long * pjump_snl,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,

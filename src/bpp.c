@@ -232,6 +232,29 @@ long avx_present;
 long avx2_present;
 long altivec_present;
 
+/* pjumps */
+double g_pj_gage;
+double g_pj_gspr;
+double g_pj_tau;
+double g_pj_mix;
+double g_pj_lrht;
+double g_pj_phi;
+double g_pj_freqs;
+double g_pj_qmat;
+double g_pj_alpha;
+double g_pj_mubar;
+double g_pj_nubar;
+double g_pj_mui;
+double g_pj_nui;
+double g_pj_brate;
+double g_pj_mrate;
+double g_pj_migvr;
+double * g_pj_theta;
+
+long g_pj_sspr;
+long g_pj_ssnl;
+double g_pj_rj;
+
 static struct option long_options[] =
 {
   {"help",         no_argument,       0, 0 },  /*  0 */
@@ -563,6 +586,27 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+
+  g_pj_gage = 0;
+  g_pj_gspr = 0;
+  g_pj_tau = 0;
+  g_pj_mix = 0;
+  g_pj_lrht = 0;
+  g_pj_phi = 0;
+  g_pj_freqs = 0;
+  g_pj_qmat = 0;
+  g_pj_alpha = 0;
+  g_pj_mubar = 0;
+  g_pj_nubar = 0;
+  g_pj_mui = 0;
+  g_pj_nui = 0;
+  g_pj_brate = 0;
+  g_pj_mrate = 0;
+  g_pj_migvr = 0;
+  g_pj_theta = NULL;
+  g_pj_sspr = 0;
+  g_pj_ssnl = 0;
+  g_pj_rj = 0;
 
   while ((c = getopt_long_only(argc, argv, "", long_options, &option_index)) == 0)
   {

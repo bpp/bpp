@@ -166,8 +166,6 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
 
 static void dump_chk_section_1(FILE * fp,
                                stree_t * stree,
-                               double * pjump,
-                               double * pjump_theta,
                                long curstep,
                                long ft_round,
                                long ndspecies,
@@ -181,11 +179,8 @@ static void dump_chk_section_1(FILE * fp,
                                double * pspecies,
                                long dmodels_count,
                                long ft_round_rj,
-                               double pjump_rj,
                                long ft_round_spr,
                                long ft_round_snl,
-                               long pjump_spr,
-                               long pjump_snl,
                                double mean_logl,
                                long * mean_mrate_row,
                                long * mean_mrate_col,
@@ -407,12 +402,25 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round,1,fp);
   DUMP(&ndspecies,1,fp);
 
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
-  /* write pjump */
-  DUMP(pjump,pjump_size,fp);
 
-  /* write pjump_theta */
-  DUMP(pjump_theta,opt_finetune_theta_count,fp);
+  /* pjumps */
+  DUMP(&g_pj_gage, 1, fp);
+  DUMP(&g_pj_gspr, 1, fp);
+  DUMP(&g_pj_theta, opt_finetune_theta_count, fp);
+  DUMP(&g_pj_tau, 1, fp);
+  DUMP(&g_pj_mix, 1, fp);
+  DUMP(&g_pj_lrht, 1, fp);
+  DUMP(&g_pj_phi, 1, fp);
+  DUMP(&g_pj_freqs, 1, fp);
+  DUMP(&g_pj_qmat, 1, fp);
+  DUMP(&g_pj_alpha, 1, fp);
+  DUMP(&g_pj_mubar, 1, fp);
+  DUMP(&g_pj_nubar, 1, fp);
+  DUMP(&g_pj_mui, 1, fp);
+  DUMP(&g_pj_nui, 1, fp);
+  DUMP(&g_pj_brate, 1, fp);
+  DUMP(&g_pj_mrate, 1, fp);
+  DUMP(&g_pj_migvr, 1, fp);
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -449,11 +457,11 @@ static void dump_chk_section_1(FILE * fp,
     DUMP(pspecies,opt_max_species_count,fp);
 
   DUMP(&ft_round_rj,1,fp);
-  DUMP(&pjump_rj,1,fp);
+  DUMP(&g_pj_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
   DUMP(&ft_round_snl, 1, fp);
-  DUMP(&pjump_spr, 1, fp);
-  DUMP(&pjump_snl,1,fp);
+  DUMP(&g_pj_sspr, 1, fp);
+  DUMP(&g_pj_ssnl,1,fp);
   DUMP(&mean_logl,1,fp);
   if (opt_migration)
   {
@@ -929,8 +937,6 @@ static void dump_chk_section_4(FILE * fp,
 int checkpoint_dump(stree_t * stree,
                     gtree_t ** gtree_list,
                     locus_t ** locus_list,
-                    double * pjump,
-                    double * pjump_theta,
                     unsigned long curstep,
                     long ft_round,
                     long ndspecies,
@@ -944,11 +950,8 @@ int checkpoint_dump(stree_t * stree,
                     double * pspecies,
                     long dmodels_count,
                     long ft_round_rj,
-                    double pjump_rj,
                     long ft_round_spr,
                     long ft_round_snl,
-                    long pjump_spr,
-                    long pjump_snl,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -986,8 +989,6 @@ int checkpoint_dump(stree_t * stree,
   /* write section 1 */
   dump_chk_section_1(fp,
                      stree,
-                     pjump,
-                     pjump_theta,
                      curstep,
                      ft_round,
                      ndspecies,
@@ -1001,11 +1002,8 @@ int checkpoint_dump(stree_t * stree,
                      pspecies,
                      dmodels_count,
                      ft_round_rj,
-                     pjump_rj,
                      ft_round_spr,
                      ft_round_snl,
-                     pjump_spr,
-                     pjump_snl,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,
