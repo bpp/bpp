@@ -692,14 +692,18 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ndspecies,1,fp))
     fatal("Cannot read number of delimited species");
 
-  g_pj_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
-                                 sizeof(double));
+  g_pj_theta_gibbs = (double *)xmalloc((size_t)opt_finetune_theta_count *
+                                       sizeof(double));
+  g_pj_theta_slide = (double *)xmalloc((size_t)opt_finetune_theta_count *
+                                       sizeof(double));
   if (!(LOAD(&g_pj_gage, 1, fp)))
     fatal("Cannot read g_pj_gage");
   if (!(LOAD(&g_pj_gspr, 1, fp)))
     fatal("Cannot read g_pj_gspr");
-  if (!(LOAD(g_pj_theta, opt_finetune_theta_count, fp)))
-    fatal("Cannot read g_pj_theta");
+  if (!(LOAD(g_pj_theta_gibbs, opt_finetune_theta_count, fp)))
+    fatal("Cannot read g_pj_theta_gibbs");
+  if (!(LOAD(g_pj_theta_slide, opt_finetune_theta_count, fp)))
+    fatal("Cannot read g_pj_theta_slide");
   if (!(LOAD(&g_pj_tau, 1, fp)))
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))

@@ -249,7 +249,8 @@ double g_pj_nui;
 double g_pj_brate;
 double g_pj_mrate;
 double g_pj_migvr;
-double * g_pj_theta;
+double * g_pj_theta_gibbs;
+double * g_pj_theta_slide;
 
 long g_pj_sspr;
 long g_pj_ssnl;
@@ -603,7 +604,8 @@ void args_init(int argc, char ** argv)
   g_pj_brate = 0;
   g_pj_mrate = 0;
   g_pj_migvr = 0;
-  g_pj_theta = NULL;
+  g_pj_theta_gibbs = NULL;
+  g_pj_theta_slide = NULL;
   g_pj_sspr = 0;
   g_pj_ssnl = 0;
   g_pj_rj = 0;
@@ -865,6 +867,11 @@ void args_init(int argc, char ** argv)
   }
   if (opt_simulate)
     load_cfile_sim();
+
+  if (opt_theta_prop == 1)
+    opt_theta_move = BPP_THETA_SLIDE;
+  else if (opt_theta_prop == 0)
+    opt_theta_move = BPP_THETA_GIBBS;
 
   /* check for number of independent commands selected */
   if (opt_version)

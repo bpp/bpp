@@ -3364,18 +3364,27 @@ static int propose_theta_slide(stree_t * stree,
 void stree_propose_theta(gtree_t ** gtree,
                          locus_t ** locus,
                          stree_t * stree,
-                         double * acceptvec)
+                         double * acceptvec_gibbs,
+                         double * acceptvec_slide,
+                         long * acceptvec_movetype)
 {
   unsigned int i;
+  long slide_tip_count = 0;
+  long gibbs_tip_count = 0;
+  long slide_inner_count = 0;
+  long gibbs_inner_count = 0;
+  double * av = NULL;
   snode_t * snode;
-  long tip_theta_count = 0;
-  long inner_theta_count = 0;
 
   long thread_index = 0;
 
   /* reset acceptance vector */
   for (i = 0; i < opt_finetune_theta_count; ++i)
-    acceptvec[i] = 0;
+  {
+    acceptvec_gibbs[i] = 0;
+    acceptvec_slide[i] = 0;
+    acceptvec_movetype[i] = -1;
+  }
 
   /* propose theta for each node */
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
@@ -3396,31 +3405,41 @@ void stree_propose_theta(gtree_t ** gtree,
 
       if (move == BPP_THETA_SLIDE)
       {
-        acceptvec[snode->theta_step_index] += propose_theta_slide(stree,
-                                                                  gtree,
-                                                                  locus,
-                                                                  snode,
-                                                                  thread_index);
+        av = acceptvec_slide;
+
+        av[snode->theta_step_index] += propose_theta_slide(stree,
+                                                           gtree,
+                                                           locus,
+                                                           snode,
+                                                           thread_index);
+        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_SLIDE;
+        if (i < stree->tip_count)
+          slide_tip_count++;
+        else
+          slide_inner_count++;
       }   
       else
       {
+        av = acceptvec_gibbs;
+
         if (opt_migration)
-          acceptvec[snode->theta_step_index] += propose_theta_gibbs_im(stree,
-                                                                       gtree,
-                                                                       locus,
-                                                                       snode,
-                                                                       thread_index);
+          av[snode->theta_step_index] += propose_theta_gibbs_im(stree,
+                                                                gtree,
+                                                                locus,
+                                                                snode,
+                                                                thread_index);
         else
-          acceptvec[snode->theta_step_index] += propose_theta_gibbs(stree,
-                                                                    gtree,
-                                                                    locus,
-                                                                    snode,
-                                                                    thread_index);
+          av[snode->theta_step_index] += propose_theta_gibbs(stree,
+                                                             gtree,
+                                                             locus,
+                                                             snode,
+                                                             thread_index);
+        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_GIBBS;
+        if (i < stree->tip_count)
+          gibbs_tip_count++;
+        else
+          gibbs_inner_count++;
       }
-      if (i < stree->tip_count)
-        tip_theta_count++;
-      else
-        inner_theta_count++;
     }
   }
 
@@ -3429,13 +3448,38 @@ void stree_propose_theta(gtree_t ** gtree,
   {
     case 1:
       /* one step size for all theta */
-      acceptvec[0] /= tip_theta_count+inner_theta_count;
+      if (opt_theta_move == BPP_THETA_SLIDE)
+        acceptvec_slide[0] /= slide_tip_count+slide_inner_count;
+      else if (opt_theta_move == BPP_THETA_GIBBS)
+        acceptvec_gibbs[0] /= gibbs_tip_count+gibbs_inner_count;
+      else
+      {
+        assert(opt_theta_move == BPP_THETA_MIXED);
+        acceptvec_gibbs[0] /= gibbs_tip_count+gibbs_inner_count;
+        acceptvec_slide[0] /= slide_tip_count+slide_inner_count;
+      }
       break;
 
     case 2:
       /* one step size for tip theta and one for inner theta */
-      acceptvec[0] /= tip_theta_count;
-      acceptvec[1] /= inner_theta_count;
+      if (opt_theta_move == BPP_THETA_SLIDE)
+      {
+        acceptvec_slide[0] /= slide_tip_count;
+        acceptvec_slide[1] /= slide_inner_count;
+      }
+      else if (opt_theta_move == BPP_THETA_GIBBS)
+      {
+        acceptvec_gibbs[0] /= gibbs_tip_count;
+        acceptvec_gibbs[1] /= gibbs_inner_count;
+      }
+      else
+      {
+        assert(opt_theta_move == BPP_THETA_MIXED);
+        acceptvec_gibbs[0] /= gibbs_tip_count;
+        acceptvec_gibbs[1] /= gibbs_inner_count;
+        acceptvec_slide[0] /= slide_tip_count;
+        acceptvec_slide[1] /= slide_inner_count;
+      }
       break;
 
     case 3:

@@ -406,7 +406,8 @@ static void dump_chk_section_1(FILE * fp,
   /* pjumps */
   DUMP(&g_pj_gage, 1, fp);
   DUMP(&g_pj_gspr, 1, fp);
-  DUMP(&g_pj_theta, opt_finetune_theta_count, fp);
+  DUMP(&g_pj_theta_gibbs, opt_finetune_theta_count, fp);
+  DUMP(&g_pj_theta_slide, opt_finetune_theta_count, fp);
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);

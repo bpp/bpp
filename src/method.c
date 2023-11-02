@@ -292,18 +292,38 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "  Gspr: gene-tree SPR proposal\n");
   if (opt_finetune_theta_mode == 1)
   {
-    fprintf(fp, "  the1: species tree theta proposal\n");
+    if (opt_theta_move == BPP_THETA_MIXED)
+      fprintf(fp, "   th1: species tree theta proposal  (format: slide:gibbs)\n");
+    else
+      fprintf(fp, "   th1: species tree theta proposal\n");
   }
   else if (opt_finetune_theta_mode == 2)
   {
-    fprintf(fp, "  the1: species tree theta proposal (tips)\n");
-    fprintf(fp, "  the2: species tree theta proposal (inner)\n");
+    if (opt_theta_move == BPP_THETA_MIXED)
+    {
+      fprintf(fp, "   th1: species tree theta proposal (tips)   (format: slide:gibbs)\n");
+      fprintf(fp, "   th2: species tree theta proposal (inner)  (format: slide:gibbs)\n");
+    }
+    else
+    {
+      fprintf(fp, "   th1: species tree theta proposal (tips)\n");
+      fprintf(fp, "   th2: species tree theta proposal (inner)\n");
+    }
   }
   else
   {
     assert(opt_finetune_theta_mode == 3);
     for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp, "  the%ld: species tree theta proposal (node %ld)\n", k+1,k+1);
+    {
+      char * sth = NULL;
+      xasprintf(&sth, "th%ld", k+1);
+        
+      if (opt_theta_move == BPP_THETA_MIXED)
+        fprintf(fp, "%*s: species tree theta proposal (node %ld)  (format: slide:gibbs)\n", 6, sth,k+1);
+      else
+        fprintf(fp, "%*s: species tree theta proposal (node %ld)\n", 6, sth,k+1);
+      free(sth);
+    }
 
   }
   fprintf(fp, "   tau: species tree tau proposal\n");
@@ -426,7 +446,12 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, " log-L: mean log-L of observing data\n");
   fprintf(fp,"\n");
 
-  ap_width += 4*5+opt_finetune_theta_count*5;
+  ap_width += 4*5;
+  if (opt_theta_move == BPP_THETA_MIXED)
+    ap_width += opt_finetune_theta_count*10;
+  else
+    ap_width += opt_finetune_theta_count*5;
+    
   ap_width += enabled_hrdt ? 5 : 0;
   ap_width += enabled_lrht ? 5 : 0;
   ap_width += enabled_mui ? 5 : 0;
@@ -469,7 +494,14 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp," Gspr");      linewidth += 5;
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
-    fprintf(fp," the%ld",i+1);      linewidth += 5;
+    int spacing = 5;
+    if (opt_theta_move == BPP_THETA_MIXED)
+      spacing = 10;
+    char * sth = NULL;
+    xasprintf(&sth, "th%ld", i+1);
+    fprintf(fp, "%*s", spacing, sth);
+    linewidth += spacing;
+    free(sth);
   }
   //fprintf(fp," thet");      linewidth += 5;
   fprintf(fp,"  tau");      linewidth += 5;
@@ -679,7 +711,12 @@ static void reset_finetune(FILE * fp_out)
     fprintf(fp[j],  "%*s", prec_ft+spacing, "Gage");      /*  0 */
     fprintf(fp[j], " %*s", prec_ft+spacing, "Gspr");      /*  1 */
     for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp[j], " %*s%d", prec_ft-1+spacing, "thet",k+1);      /*  2 */
+    {
+      char * sth = NULL;
+      xasprintf(&sth, "th%d", k+1);
+      fprintf(fp[j], " %*s", prec_ft+spacing, sth);      /*  2 */
+      free(sth);
+    }
     fprintf(fp[j], " %*s", prec_ft+spacing, "tau");       /*  3 */
     fprintf(fp[j], " %*s", prec_ft+spacing, "mix");       /*  4 */
     if (extra)
@@ -747,8 +784,16 @@ static void reset_finetune(FILE * fp_out)
 
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gspr);
-    for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_theta[k]);
+    if (opt_theta_move == BPP_THETA_MIXED || opt_theta_move == BPP_THETA_SLIDE)
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_theta_slide[k]);
+    }
+    else
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_theta_gibbs[k]);
+    }
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_tau);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_mix);
 
@@ -830,8 +875,16 @@ static void reset_finetune(FILE * fp_out)
     fprintf(fp[j], "Current finetune:");
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
-    for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
+    if (opt_theta_move == BPP_THETA_GIBBS)
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*s", 7, "-");
+    }
+    else
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
+    }
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
@@ -914,8 +967,11 @@ static void reset_finetune(FILE * fp_out)
 
   reset_finetune_onestep(g_pj_gage, &opt_finetune_gtage);
   reset_finetune_onestep(g_pj_gspr, &opt_finetune_gtspr);
-  for (j = 0; j < opt_finetune_theta_count; ++j)
-    reset_finetune_onestep(g_pj_theta[j],&opt_finetune_theta[j]);
+  if (opt_theta_move == BPP_THETA_MIXED || opt_theta_move == BPP_THETA_SLIDE)
+  {
+    for (j = 0; j < opt_finetune_theta_count; ++j)
+      reset_finetune_onestep(g_pj_theta_slide[j],&opt_finetune_theta[j]);
+  }
   reset_finetune_onestep(g_pj_tau,&opt_finetune_tau);
   reset_finetune_onestep(g_pj_mix,&opt_finetune_mix);
 
@@ -957,8 +1013,18 @@ static void reset_finetune(FILE * fp_out)
     fprintf(fp[j], "New finetune:    ");
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
-    for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
+    //for (k = 0; k < opt_finetune_theta_count; ++k)
+    //  fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
+    if (opt_theta_move == BPP_THETA_GIBBS)
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*s", 7, "-");
+    }
+    else
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
+    }
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_tau);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_mix);
 
@@ -1089,8 +1155,23 @@ static void status_print_pjump(FILE * fp,
 
   fprintf(fp, " %4.2f", g_pj_gage);
   fprintf(fp, " %4.2f", g_pj_gspr);
-  for (k = 0; k < opt_finetune_theta_count; ++k)
-    fprintf(fp, " %4.2f", g_pj_theta[k]);
+  if (opt_theta_move == BPP_THETA_SLIDE)
+  {
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
+  }
+  else if (opt_theta_move == BPP_THETA_GIBBS)
+  {
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp, " %4.2f", g_pj_theta_gibbs[k]);
+  }
+  else
+  {
+    assert(opt_theta_move == BPP_THETA_MIXED);
+    for (k = 0; k < opt_finetune_theta_count; ++k)
+      fprintf(fp, " %.2f:%.2f", g_pj_theta_slide[k], g_pj_theta_gibbs[k]);
+
+  }
   fprintf(fp, " %4.2f", g_pj_tau);
   fprintf(fp, " %4.2f", g_pj_mix);
 
@@ -3283,7 +3364,8 @@ static FILE * init(stree_t ** ptr_stree,
     rj_init(gtree,stree,msa_count);
 
   /* initialize pjump array for thetas */
-  g_pj_theta = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
+  g_pj_theta_slide = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
+  g_pj_theta_gibbs = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
@@ -3511,7 +3593,10 @@ static void pjump_reset()
   g_pj_mrate = 0;
   g_pj_migvr = 0;
   for (i = 0; i < opt_finetune_theta_count; ++i)
-    g_pj_theta[i] = 0;
+  {
+    g_pj_theta_slide[i] = 0;
+    g_pj_theta_gibbs[i] = 0;
+  }
 
   g_pj_sspr = 0;
   g_pj_ssnl = 0;
@@ -3524,7 +3609,9 @@ void cmd_run()
   long i,j,k;
   long ft_round;
   double logl_sum = 0;
-  double * theta_av = NULL;
+  double * theta_av_gibbs = NULL;
+  double * theta_av_slide = NULL;
+  long * theta_av_movetype = NULL;
   FILE * fp_mcmc;
   FILE * fp_out;
   stree_t * stree;
@@ -3876,7 +3963,9 @@ void cmd_run()
   /*** ziheng 2023.9.15 ***/
   double model_count[4] = { 0 }, flipping_success[4] = {0};
 
-  theta_av = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
+  theta_av_gibbs = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
+  theta_av_slide = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
+  theta_av_movetype = (long *)xmalloc((size_t)opt_finetune_theta_count*sizeof(long));
 
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
@@ -4055,9 +4144,28 @@ void cmd_run()
     /* propose population sizes on species tree */
     if (opt_est_theta)
     {
-      stree_propose_theta(gtree,locus,stree, theta_av);
-      for (j = 0; j < opt_finetune_theta_count; ++j)
-        g_pj_theta[j] = (g_pj_theta[j]*(ft_round-1)+theta_av[j]) / (double)ft_round;
+      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype);
+      if (opt_theta_move == BPP_THETA_SLIDE)
+      {
+        for (j = 0; j < opt_finetune_theta_count; ++j)
+          g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
+      }
+      else if (opt_theta_move == BPP_THETA_GIBBS)
+      {
+        for (j = 0; j < opt_finetune_theta_count; ++j)
+          g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+      }
+      else
+      {
+        for (j = 0; j < opt_finetune_theta_count; ++j)
+          if (theta_av_movetype[j] == BPP_THETA_SLIDE)
+            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
+          else
+          {
+            assert(theta_av_movetype[j] == BPP_THETA_GIBBS);
+            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+          }
+      }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
       #endif
@@ -4698,8 +4806,11 @@ void cmd_run()
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
-  free(theta_av);
-  free(g_pj_theta);
+  free(theta_av_gibbs);
+  free(theta_av_slide);
+  free(theta_av_movetype);
+  free(g_pj_theta_slide);
+  free(g_pj_theta_gibbs);
 
   #if 0
   progress_done();

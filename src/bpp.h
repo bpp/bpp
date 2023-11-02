@@ -1252,7 +1252,8 @@ extern double g_pj_nui;
 extern double g_pj_brate;
 extern double g_pj_mrate;
 extern double g_pj_migvr;
-extern double * g_pj_theta;
+extern double * g_pj_theta_slide;
+extern double * g_pj_theta_gibbs;
 
 extern long g_pj_sspr;
 extern long g_pj_ssnl;
@@ -1344,7 +1345,9 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 void stree_propose_theta(gtree_t ** gtree,
                          locus_t ** locus,
                          stree_t * stree,
-                         double * acceptvec);
+                         double * acceptvec_gibbs,
+                         double * acceptvec_slide,
+                         long * acceptvec_movetype);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 double stree_propose_tau_mig(stree_t ** streeptr,
