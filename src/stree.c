@@ -2808,9 +2808,13 @@ static int propose_theta_gibbs_im(stree_t * stree,
       printf("\nError when processing node %s\n", snode->label);
     }
     long epoch = 0;
+    double mrsum = 0;
     assert(!snode->parent || snode->mb_count);
-    long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
-    double mrsum = snode->migbuffer[epoch].mrsum[idx];
+    if (snode->mb_count)
+    {
+      long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+      mrsum = snode->migbuffer[epoch].mrsum[idx];
+    }
 
     /* TODO: Probably split the following qsort case into two:
        in case snode->parent then sort j-2 elements, otherwise
@@ -2835,7 +2839,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
       else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
       {
         ++epoch;
-        idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+        long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
         mrsum = snode->migbuffer[epoch].mrsum[idx];
       }
     }
