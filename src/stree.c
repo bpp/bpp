@@ -13265,7 +13265,7 @@ long stree_migration_rj(gtree_t *** gtreeptr,
   debug_print_migmatrix(stree);
   #endif
   debug_check_matrix(stree);
-#if 1
+#if 0
   dbg_mig_idx = dbg_get_mig_idx(stree);
 #endif
 
@@ -13339,7 +13339,7 @@ long stree_migration_rj(gtree_t *** gtreeptr,
                                 spec->ti);
   }
 
-  #if 1
+  #if 0
   mig_model_prop_count[dbg_mig_idx][dbg_mig_idx_prop]++;
   if (rc)
     mig_model_prop_acc[dbg_mig_idx][dbg_mig_idx_prop]++;
