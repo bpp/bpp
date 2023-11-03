@@ -293,7 +293,15 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_finetune_theta_mode == 1)
   {
     if (opt_theta_move == BPP_THETA_MIXED)
-      fprintf(fp, "   th1: species tree theta proposal  (format: slide:gibbs)\n");
+    {
+      if (opt_theta_gibbs_showall_eps)
+        fprintf(fp, "   th1: species tree theta proposal  (format: slide:gibbs)\n");
+      else
+      {
+        fprintf(fp, "   th1: species tree theta proposal  (sliding window)\n");
+        fprintf(fp, "   thg: species tree theta proposal  (gibbs sampler)\n");
+      }
+    }
     else
       fprintf(fp, "   th1: species tree theta proposal\n");
   }
@@ -301,8 +309,17 @@ static void print_mcmc_headerline(FILE * fp,
   {
     if (opt_theta_move == BPP_THETA_MIXED)
     {
-      fprintf(fp, "   th1: species tree theta proposal (tips)   (format: slide:gibbs)\n");
-      fprintf(fp, "   th2: species tree theta proposal (inner)  (format: slide:gibbs)\n");
+      if (opt_theta_gibbs_showall_eps)
+      {
+        fprintf(fp, "   th1: species tree theta proposal (tips)   (format: slide:gibbs)\n");
+        fprintf(fp, "   th2: species tree theta proposal (inner)  (format: slide:gibbs)\n");
+      }
+      else
+      {
+        fprintf(fp, "   th1: species tree theta proposal (tips)   (sliding window)\n");
+        fprintf(fp, "   th2: species tree theta proposal (inner)  (sliding window)\n");
+        fprintf(fp, "   thg: species tree theta proposal (inner)  (mean from gibbs sampler)\n");
+      }
     }
     else
     {
@@ -319,11 +336,18 @@ static void print_mcmc_headerline(FILE * fp,
       xasprintf(&sth, "th%ld", k+1);
         
       if (opt_theta_move == BPP_THETA_MIXED)
-        fprintf(fp, "%*s: species tree theta proposal (node %ld)  (format: slide:gibbs)\n", 6, sth,k+1);
+      {
+        if (opt_theta_gibbs_showall_eps)
+          fprintf(fp, "%*s: species tree theta proposal (node %ld)  (format: slide:gibbs)\n", 6, sth,k+1);
+        else
+          fprintf(fp, "%*s: species tree theta proposal (node %ld)  (sliding window)\n", 6, sth,k+1);
+      }
       else
         fprintf(fp, "%*s: species tree theta proposal (node %ld)\n", 6, sth,k+1);
       free(sth);
     }
+    if (opt_theta_move == BPP_THETA_MIXED && !opt_theta_gibbs_showall_eps)
+      fprintf(fp, "%*s: species tree theta proposal (mean from gibbs sampler)\n", 6, "thg");
 
   }
   fprintf(fp, "   tau: species tree tau proposal\n");
@@ -448,7 +472,12 @@ static void print_mcmc_headerline(FILE * fp,
 
   ap_width += 4*5;
   if (opt_theta_move == BPP_THETA_MIXED)
-    ap_width += opt_finetune_theta_count*10;
+  {
+    if (opt_theta_gibbs_showall_eps)
+      ap_width += opt_finetune_theta_count*10;
+    else
+      ap_width += (opt_finetune_theta_count+1)*5;
+  }
   else
     ap_width += opt_finetune_theta_count*5;
     
@@ -495,13 +524,18 @@ static void print_mcmc_headerline(FILE * fp,
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
     int spacing = 5;
-    if (opt_theta_move == BPP_THETA_MIXED)
+    if (opt_theta_move == BPP_THETA_MIXED && opt_theta_gibbs_showall_eps)
       spacing = 10;
     char * sth = NULL;
     xasprintf(&sth, "th%ld", i+1);
     fprintf(fp, "%*s", spacing, sth);
     linewidth += spacing;
     free(sth);
+  }
+  if (opt_theta_move == BPP_THETA_MIXED && !opt_theta_gibbs_showall_eps)
+  {
+    fprintf(fp, "%*s", 5, "thg");
+    linewidth += 5;
   }
   //fprintf(fp," thet");      linewidth += 5;
   fprintf(fp,"  tau");      linewidth += 5;
@@ -1168,8 +1202,22 @@ static void status_print_pjump(FILE * fp,
   else
   {
     assert(opt_theta_move == BPP_THETA_MIXED);
-    for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp, " %.2f:%.2f", g_pj_theta_slide[k], g_pj_theta_gibbs[k]);
+    if (opt_theta_gibbs_showall_eps)
+    {
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+        fprintf(fp, " %.2f:%.2f", g_pj_theta_slide[k], g_pj_theta_gibbs[k]);
+    }
+    else
+    {
+      double gavg = 0;
+      for (k = 0; k < opt_finetune_theta_count; ++k)
+      {
+        fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
+        gavg += g_pj_theta_gibbs[k];
+      }
+      gavg /= opt_finetune_theta_count;
+      fprintf(fp, " %4.2f", gavg);
+    }
 
   }
   fprintf(fp, " %4.2f", g_pj_tau);

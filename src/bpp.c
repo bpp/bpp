@@ -131,6 +131,7 @@ long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
 long opt_theta_dist;
+long opt_theta_gibbs_showall_eps;
 long opt_theta_move;
 long opt_threads;
 long opt_threads_start;
@@ -305,6 +306,7 @@ static struct option long_options[] =
   {"theta_slide",  required_argument, 0, 0 },  /* 42 */
   {"theta_mode",   required_argument, 0, 0 },  /* 43 */
   {"no-pin",       no_argument,       0, 0 },  /* 44 */
+  {"theta_showeps",no_argument,       0, 0 },  /* 45 */
   { 0, 0, 0, 0 }
 };
 
@@ -582,6 +584,7 @@ void args_init(int argc, char ** argv)
   opt_theta_max = 0;
   opt_theta_min = 0;
   opt_theta_move = BPP_THETA_MIXED;
+  opt_theta_gibbs_showall_eps = 0;
   opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
   opt_theta_p = 0;
   opt_theta_q = 0;
@@ -856,6 +859,10 @@ void args_init(int argc, char ** argv)
 
       case 44:
         opt_corepin = 0;
+        break;
+
+      case 45:
+        opt_theta_gibbs_showall_eps = 1;
         break;
 
       default:

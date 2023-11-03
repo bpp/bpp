@@ -1102,6 +1102,7 @@ extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
 extern long opt_theta_dist;
+extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_move;
 extern long opt_threads;
 extern long opt_threads_start;
