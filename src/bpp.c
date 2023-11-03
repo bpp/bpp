@@ -47,6 +47,7 @@ long opt_cleandata;
 long opt_clock;
 long opt_comply;
 long opt_constraint_count;
+long opt_corepin;
 long opt_debug;
 long opt_debug_full;
 long opt_debug_gspr;
@@ -303,6 +304,7 @@ static struct option long_options[] =
   {"mrate-move",   required_argument, 0, 0 },  /* 41 */
   {"theta_prop",   required_argument, 0, 0 },  /* 42 */
   {"theta_mode",   required_argument, 0, 0 },  /* 43 */
+  {"no-pin",       no_argument,       0, 0 },  /* 44 */
   { 0, 0, 0, 0 }
 };
 
@@ -431,6 +433,7 @@ void args_init(int argc, char ** argv)
   opt_concatfile = NULL;
   opt_constraintfile = NULL;
   opt_constraint_count = 0;
+  opt_corepin = 1;
   opt_debug = 0;
   opt_debug_abort = 0;
   opt_debug_br = 0;
@@ -849,6 +852,10 @@ void args_init(int argc, char ** argv)
         opt_finetune_theta_mode = atol(optarg);
         if (opt_finetune_theta_mode < 1 || opt_finetune_theta_mode > 3)
           fatal("Invalid theta mode (%s)", optarg);
+        break;
+
+      case 44:
+        opt_corepin = 0;
         break;
 
       default:

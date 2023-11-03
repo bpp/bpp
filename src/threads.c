@@ -66,7 +66,8 @@ static void * threads_worker(void * vp)
   thread_info_t * tip = ti + t;
 
 #if (defined(__linux__) && !defined(DISABLE_COREPIN))
-  pin_to_core((opt_threads_start-1)+(t*opt_threads_step));
+  if (opt_corepin)
+    pin_to_core((opt_threads_start-1)+(t*opt_threads_step));
 #endif
 
   pthread_mutex_lock(&tip->mutex);
@@ -212,6 +213,7 @@ static void * threads_worker(void * vp)
 void threads_pin_master()
 {
   #if (defined(__linux__) && !defined(DISABLE_COREPIN))
+  if (opt_corepin)
     pin_to_core(opt_threads_start-1);
   #endif
 }
@@ -457,7 +459,8 @@ void threads_init()
   assert(opt_threads <= opt_locus_count);
 
 #if (defined(__linux__) && !defined(DISABLE_COREPIN))
-  pin_to_core(opt_threads_start-1);
+  if (opt_corepin)
+    pin_to_core(opt_threads_start-1);
 #endif
 
   pthread_attr_init(&attr);

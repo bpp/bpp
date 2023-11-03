@@ -1021,6 +1021,7 @@ extern long opt_cleandata;
 extern long opt_clock;
 extern long opt_comply;
 extern long opt_constraint_count;
+extern long opt_corepin;
 extern long opt_debug;
 extern long opt_debug_abort;
 extern long opt_debug_br;
