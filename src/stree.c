@@ -3397,8 +3397,8 @@ void stree_propose_theta(gtree_t ** gtree,
       /* if mixed move, then decide between slide and gibbs */
       if (move == BPP_THETA_MIXED)
       {
-        move = legacy_rndu(thread_index) < opt_theta_prop ?
-               BPP_THETA_SLIDE : BPP_THETA_GIBBS;
+        move = legacy_rndu(thread_index) < opt_theta_slide_prob ?
+                 BPP_THETA_SLIDE : BPP_THETA_GIBBS;
         if (move == BPP_THETA_GIBBS && opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
           move = BPP_THETA_MG_GAMMA;
       }

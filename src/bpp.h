@@ -1155,7 +1155,7 @@ extern double opt_theta_beta;
 extern double opt_theta_max;
 extern double opt_theta_min;
 extern double opt_theta_p;
-extern double opt_theta_prop;
+extern double opt_theta_slide_prob;
 extern double opt_theta_q;
 extern double opt_vbar_alpha;
 extern double opt_vbar_beta;

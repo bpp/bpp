@@ -3803,7 +3803,7 @@ void cmd_run()
   else if (opt_theta_move == BPP_THETA_MIXED)
     fprintf(stdout,
             "Mixed proposal (Sliding window (%.2f) + Gibbs sampler (%.2f))\n",
-            opt_theta_prop, 1-opt_theta_prop);
+            opt_theta_slide_prob, 1-opt_theta_slide_prob);
 
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");

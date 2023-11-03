@@ -185,7 +185,7 @@ double opt_theta_beta;
 double opt_theta_max;
 double opt_theta_min;
 double opt_theta_p;
-double opt_theta_prop;
+double opt_theta_slide_prob;
 double opt_theta_q;
 double opt_vbar_alpha;
 double opt_vbar_beta;
@@ -582,7 +582,7 @@ void args_init(int argc, char ** argv)
   opt_theta_max = 0;
   opt_theta_min = 0;
   opt_theta_move = BPP_THETA_MIXED;
-  opt_theta_prop = 0.8; /* proportion of sliding window proposals */
+  opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
   opt_theta_p = 0;
   opt_theta_q = 0;
   opt_threads = 1;
@@ -843,9 +843,9 @@ void args_init(int argc, char ** argv)
         break;
 
       case 42:
-        if (opt_theta_prop < 0 || opt_theta_prop > 1)
+        if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
           fatal("Invalid proportion of sliding window proposals (%s)", optarg);
-        opt_theta_prop = atof(optarg);
+        opt_theta_slide_prob = atof(optarg);
         break;
 
       case 43:
@@ -876,9 +876,9 @@ void args_init(int argc, char ** argv)
   if (opt_simulate)
     load_cfile_sim();
 
-  if (opt_theta_prop == 1)
+  if (opt_theta_slide_prob == 1)
     opt_theta_move = BPP_THETA_SLIDE;
-  else if (opt_theta_prop == 0)
+  else if (opt_theta_slide_prob == 0)
     opt_theta_move = BPP_THETA_GIBBS;
 
   /* check for number of independent commands selected */
