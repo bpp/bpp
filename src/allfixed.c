@@ -132,8 +132,9 @@ static long get_long(const char * line, long * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_double(const char * line, double * value)
@@ -168,8 +169,9 @@ static long get_double(const char * line, double * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static int cb_cmp_double(const void * a, const void * b)

@@ -260,8 +260,9 @@ static long get_double(const char * line, double * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static void dealloc_data(snode_t * node,

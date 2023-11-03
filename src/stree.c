@@ -10650,7 +10650,7 @@ void mig_simulate()
 }
 #endif
 
-#if 1
+#if 0
 /* determine whether the parental lineage associated with gnode passes (backwards in time) through the origin (youngest point) of snode.
    Note: a node (coalescent event) within snode means that the lineage does not originate in snode.
 

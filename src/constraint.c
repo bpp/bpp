@@ -127,6 +127,7 @@ static long is_emptyline(const char * line)
    read */
 static long get_delstring(const char * line, const char * del, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -157,13 +158,15 @@ static long get_delstring(const char * line, const char * del, char ** value)
 
   *value = xstrdup(start);
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 
 static long get_string(const char * line, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -192,9 +195,10 @@ static long get_string(const char * line, char ** value)
   *end = 0;
 
   *value = xstrdup(start);
+  ret = ws + end - start;
   free(s);
 
-  return ws + end - start;
+  return ret;
 }
 
 void constdefs_dealloc(void * data)

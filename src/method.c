@@ -384,7 +384,7 @@ static void print_mcmc_headerline(FILE * fp,
   else
   {
     for (i = 0; i < mean_theta_count; ++i)
-      fprintf(fp, "theta%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]);
+      fprintf(fp, "theta%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]+1);
   }
   if (mean_tau_count == 1)
     fprintf(fp, "  tau1: root node mean tau\n");

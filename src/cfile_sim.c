@@ -133,6 +133,7 @@ static long starts_with_opar(const char * line)
 
 static long get_tree_string_with_thetas(const char * line, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -182,13 +183,15 @@ static long get_tree_string_with_thetas(const char * line, char ** value)
   *end = 0;
 
   *value = xstrdup(start);
+  ret = ws + end - start;
   free(s);
 
-  return ws + end - start;
+  return ret;
 }
 
 static long get_string(const char * line, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -217,9 +220,10 @@ static long get_string(const char * line, char ** value)
   *end = 0;
 
   *value = xstrdup(start);
+  ret = ws + end - start;
   free(s);
 
-  return ws + end - start;
+  return ret;
 }
 
 static long get_long(const char * line, long * value)
@@ -254,8 +258,9 @@ static long get_long(const char * line, long * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_double(const char * line, double * value)
@@ -290,8 +295,9 @@ static long get_double(const char * line, double * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 #define DNA_QRATES_COUNT        6
@@ -647,6 +653,7 @@ static char ** split_strings(const char * x, long * token_count)
    read */
 static long get_delstring(const char * line, const char * del, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -677,8 +684,9 @@ static long get_delstring(const char * line, const char * del, char ** value)
 
   *value = xstrdup(start);
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long parse_migration(FILE * fp, const char * firstline, long line_count)
@@ -1119,6 +1127,7 @@ l_unwind:
   return ret;
 }
 
+#if 0
 static void update_sp_seqcount()
 {
   long i;
@@ -1129,8 +1138,8 @@ static void update_sp_seqcount()
   for (i = 0; i < species_count; ++i)
     if (opt_diploid[i])
       opt_sp_seqcount[i] *= 2;
- 
 }
+#endif
 
 static void check_validity()
 {

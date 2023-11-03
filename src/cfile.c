@@ -169,6 +169,7 @@ static long starts_with_opar(const char * line)
    read */
 static long get_delstring(const char * line, const char * del, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -199,12 +200,14 @@ static long get_delstring(const char * line, const char * del, char ** value)
 
   *value = xstrdup(start);
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_string(const char * line, char ** value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -233,9 +236,10 @@ static long get_string(const char * line, char ** value)
   *end = 0;
 
   *value = xstrdup(start);
+  ret = ws + end - start;
   free(s);
 
-  return ws + end - start;
+  return ret;
 }
 
 static long get_long(const char * line, long * value)
@@ -270,8 +274,9 @@ static long get_long(const char * line, long * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_doubleordash(const char * line, double * value)
@@ -302,8 +307,9 @@ static long get_doubleordash(const char * line, double * value)
 
   if (!strcmp(start,"-"))
   {
+    ret = ws+end-start;
     free(s);
-    return ws+end-start;
+    return ret;
   }
 
   ret = sscanf(start, "%lf%n", value, &len);
@@ -313,8 +319,9 @@ static long get_doubleordash(const char * line, double * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_double(const char * line, double * value)
@@ -349,12 +356,14 @@ static long get_double(const char * line, double * value)
     return 0;
   }
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static long get_e(const char * line, long * value)
 {
+  long ret;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
@@ -387,8 +396,9 @@ static long get_e(const char * line, long * value)
 
   *value = 1;
 
+  ret = ws + end - start;
   free(s);
-  return ws + end - start;
+  return ret;
 }
 
 static int parse_speciestree(const char * line)
@@ -397,10 +407,9 @@ static int parse_speciestree(const char * line)
   char * s = xstrdup(line);
   char * p = s;
 
-  long count;
-
   /*** Ziheng 2020-9-1 ***/
 #if (0)  
+  long count;
 
   count = get_long(p, &opt_est_stree);
   if (opt_est_stree == 0) goto l_unwind;
@@ -423,12 +432,13 @@ static int parse_speciestree(const char * line)
   if (!count) goto l_unwind;
   p += count;
 
+l_unwind:
+
 #else
-  count = sscanf(p, "%ld%lf%lf%lf%lf", 
+  sscanf(p, "%ld%lf%lf%lf%lf", 
     &opt_est_stree, &opt_prob_snl, &opt_prob_snl_shrink, &opt_snl_lambda_expand, &opt_snl_lambda_shrink);
 #endif
 
-l_unwind:
   if (opt_est_stree == 0 || opt_est_stree == 1) ret = 1;
   if (opt_snl_lambda_expand < 0 || opt_snl_lambda_expand>1)
     fatal("opt_snl_lambda_expand should be between 0 and 1.");
@@ -1801,9 +1811,6 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
-  /* TODO: The next is not implemented yet */
-  double opt_finetune_seqerr;
-
   /* 6. locusrate finetune param */
   count = get_doubleordash(p, &opt_finetune_locusrate);
   if (!count) goto l_unwind;
@@ -1817,6 +1824,9 @@ static long parse_finetune(const char * line)
   }
 
   #if 0
+  /* TODO: The next is not implemented yet */
+  double opt_finetune_seqerr;
+
   /* 7. sequence error finetune param */
   count = get_doubleordash(p, &opt_finetune_seqerr);
   if (!count) goto l_unwind;
