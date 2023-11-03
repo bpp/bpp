@@ -21,6 +21,8 @@
 
 #include "bpp.h"
 
+#if defined(__x86_64__) || defined(_M_AMD64)
+
 static void fill_parent_scaler(unsigned int scaler_size,
                                unsigned int * parent_scaler,
                                const unsigned int * left_scaler,
@@ -1563,3 +1565,5 @@ void pll_core_update_partial_ii_avx(unsigned int states,
     }
   }
 }
+
+#endif

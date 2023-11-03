@@ -21,6 +21,8 @@
 
 #include "bpp.h"
 
+#if defined(__x86_64__) || defined(_M_AMD64)
+
 double pll_core_root_loglikelihood_avx2(unsigned int states,
                                         unsigned int sites,
                                         unsigned int rate_cats,
@@ -159,3 +161,5 @@ void pll_core_root_likelihood_vec_avx2(unsigned int states,
     #endif
   }
 }
+
+#endif
