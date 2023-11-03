@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include <omp.h>
 #include <pthread.h>
 
 #ifdef _MSC_VER
@@ -263,16 +264,6 @@ extern const char * global_freqs_strings[28];
 #define BPP_LB_ZIGZAG                   1
 
 #define BPP_PI  3.1415926535897932384626433832795
-
-#define THREAD_WORK_GTAGE               1
-#define THREAD_WORK_GTSPR               2
-#define THREAD_WORK_TAU                 3
-#define THREAD_WORK_TAU_MIG             4
-#define THREAD_WORK_MIXING              5
-#define THREAD_WORK_ALPHA               6
-#define THREAD_WORK_RATES               7
-#define THREAD_WORK_FREQS               8
-#define THREAD_WORK_BRATE               9
 
 #define BPP_MOVE_INDEX_MIN              0
 #define BPP_MOVE_GTAGE_INDEX            0
@@ -1419,15 +1410,12 @@ void propose_tau_update_gtrees(locus_t ** loci,
                                double maxage,
                                double minfactor,
                                double maxfactor,
-                               long locus_start,
-                               long locus_count,
                                snode_t ** affected,
                                unsigned int paffected_count,
                                unsigned int * ret_count_above,
                                unsigned int * ret_count_below,
                                double * ret_logl_diff,
-                               double * ret_logpr_diff,
-                               long thread_index);
+                               double * ret_logpr_diff);
 void propose_tau_update_gtrees_mig(locus_t ** loci,
                                    gtree_t ** gtree,
                                    stree_t * stree,
@@ -1437,16 +1425,13 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
                                    double maxage,
                                    double minfactor,
                                    double maxfactor,
-                                   long locus_start,
-                                   long locus_count,
                                    snode_t ** affected,
                                    unsigned int paffected_count,
                                    long * ret_mig_reject,
                                    unsigned int * ret_count_above,
                                    unsigned int * ret_count_below,
                                    double * ret_logl_diff,
-                                   double * ret_logpr_diff,
-                                   long thread_index);
+                                   double * ret_logpr_diff);
 
 double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
@@ -1622,18 +1607,12 @@ double gtree_propose_ages_serial(locus_t ** locus,
 void gtree_propose_ages_parallel(locus_t ** locus,
                                  gtree_t ** gtree,
                                  stree_t * stree,
-                                 long locus_start,
-                                 long locus_count,
-                                 long thread_index,
                                  long * p_proposal_count,
                                  long * p_accepted);
 
 void gtree_propose_spr_parallel(locus_t ** locus,
                                 gtree_t ** gtree,
                                 stree_t * stree,
-                                long locus_start,
-                                long locus_count,
-                                long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted);
 
@@ -1688,9 +1667,6 @@ double prop_branch_rates_serial(gtree_t ** gtree,
 void prop_branch_rates_parallel(gtree_t ** gtree,
                                 stree_t * stree,
                                 locus_t ** locus,
-                                long locus_start,
-                                long locus_count,
-                                long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted);
 
@@ -1718,10 +1694,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus);
 void prop_mixing_update_gtrees(locus_t ** locus,
                                gtree_t ** gtree,
                                stree_t * stree,
-                               long locus_start,
-                               long locus_count,
                                double c,
-                               long thread_index,
                                double * ret_lnacceptance,
                                double * ret_logpr);
 
@@ -1753,9 +1726,6 @@ double locus_propose_alpha_serial(stree_t * stree,
 void locus_propose_alpha_parallel(stree_t * stree,
                                   locus_t ** locus,
                                   gtree_t ** gtree,
-                                  long locus_start,
-                                  long locus_count,
-                                  long thread_index,
                                   long * p_proposal_count,
                                   long * p_accepted);
 
@@ -1827,9 +1797,6 @@ double locus_propose_qrates_serial(stree_t * stree,
 void locus_propose_qrates_parallel(stree_t * stree,
                                    locus_t ** locus,
                                    gtree_t ** gtree,
-                                   long locus_start,
-                                   long locus_count,
-                                   long thread_index,
                                    long * p_proposal_count,
                                    long * p_accepted);
 
@@ -1839,9 +1806,6 @@ double locus_propose_freqs_serial(stree_t * stree,
 void locus_propose_freqs_parallel(stree_t * stree,
                                   locus_t ** locus,
                                   gtree_t ** gtree,
-                                  long locus_start,
-                                  long locus_count,
-                                  long thread_index,
                                   long * p_proposal_count,
                                   long * p_accepted);
 
@@ -2566,11 +2530,8 @@ double QuantileChi2(double prob, double v);
 /* functions in threads.c */
 
 long * threads_load_balance(msa_t ** msa_list);
-void threads_lb_stats(locus_t ** locus, FILE * fp_out);
 void threads_init(void);
-void threads_wakeup(int work_type, thread_data_t * tp);
 void threads_exit(void);
-void threads_pin_master(void);
 thread_info_t * threads_ti(void);
 void threads_set_ti(thread_info_t * tip);
 

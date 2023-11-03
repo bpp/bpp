@@ -581,8 +581,8 @@ void args_init(int argc, char ** argv)
   opt_theta_prop = 0.8; /* proportion of sliding window proposals */
   opt_theta_p = 0;
   opt_theta_q = 0;
-  opt_threads = 1;
-  opt_threads_start = 1;
+  opt_threads = omp_get_max_threads();
+  opt_threads_start = 0;
   opt_threads_step = 1;
   opt_treefile = NULL;
   opt_usedata = 1;

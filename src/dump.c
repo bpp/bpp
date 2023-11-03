@@ -492,17 +492,6 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&opt_load_balance,1,fp);
 
-  if (opt_threads > 1)
-  {
-    thread_info_t * ti = threads_ti();
-    for (i = 0; i < (size_t)opt_threads; ++i)
-    {
-      thread_info_t * tip = ti+i;
-      DUMP(&(tip->locus_first),1,fp);
-      DUMP(&(tip->locus_count),1,fp);
-    }
-  }
-
   if (opt_migration)
   {
     assert(stree->hybrid_count == 0);

@@ -3861,7 +3861,6 @@ void cmd_run()
 
   if (opt_threads > 1)
   {
-    threads_lb_stats(locus, fp_out);
     threads_init();
     memset(&td,0,sizeof(td));
   }
@@ -4090,7 +4089,7 @@ void cmd_run()
     else
     {
       td.locus = locus; td.gtree = gtree; td.stree = stree;
-      threads_wakeup(THREAD_WORK_GTAGE,&td);
+      gtree_propose_ages_parallel(td.locus, td.gtree, td.stree, &td.proposals, &td.accepted);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
     g_pj_gage = (g_pj_gage*(ft_round-1)+ratio) / (double)ft_round;
@@ -4123,7 +4122,7 @@ void cmd_run()
     else
     {
       td.locus = locus; td.gtree = gtree; td.stree = stree;
-      threads_wakeup(THREAD_WORK_GTSPR,&td);
+      gtree_propose_spr_parallel(td.locus, td.gtree, td.stree, &td.proposals, &td.accepted);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
     g_pj_gspr = (g_pj_gspr*(ft_round-1)+ratio) / (double)ft_round;
@@ -4300,7 +4299,7 @@ void cmd_run()
       else
       {
         td.locus = locus; td.gtree = gtree;
-        threads_wakeup(THREAD_WORK_FREQS,&td);
+        locus_propose_freqs_parallel(td.stree, td.locus, td.gtree, &td.proposals, &td.accepted);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
       g_pj_freqs = (g_pj_freqs*(ft_round-1)+ratio) / (double)ft_round;
@@ -4313,7 +4312,7 @@ void cmd_run()
       else
       {
         td.locus = locus; td.gtree = gtree;
-        threads_wakeup(THREAD_WORK_RATES,&td);
+        locus_propose_qrates_parallel(td.stree, td.locus, td.gtree, &td.proposals, &td.accepted);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
       g_pj_qmat = (g_pj_qmat*(ft_round-1)+ratio) / (double)ft_round;
@@ -4326,7 +4325,7 @@ void cmd_run()
       else
       {
         td.locus = locus; td.gtree = gtree;
-        threads_wakeup(THREAD_WORK_ALPHA,&td);
+        locus_propose_alpha_parallel(td.stree, td.locus, td.gtree, &td.proposals, &td.accepted);
         ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
       }
       g_pj_alpha = (g_pj_alpha*(ft_round-1)+ratio) / (double)ft_round;
@@ -4398,7 +4397,7 @@ void cmd_run()
       else
       {
         td.locus = locus; td.gtree = gtree; td.stree = stree;
-        threads_wakeup(THREAD_WORK_BRATE,&td);
+        prop_branch_rates_parallel(td.gtree, td.stree, td.locus, &td.proposals, &td.accepted);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
       g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;

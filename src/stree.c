@@ -3706,33 +3706,31 @@ void propose_tau_update_gtrees(locus_t ** loci,
                                double maxage,
                                double minfactor,
                                double maxfactor,
-                               long locus_start,
-                               long locus_count,
                                snode_t ** affected,
                                unsigned int paffected_count,
                                unsigned int * ret_count_above,
                                unsigned int * ret_count_below,
                                double * ret_logl_diff,
-                               double * ret_logpr_diff,
-                               long thread_index)
+                               double * ret_logpr_diff)
 {
-  long i,m;
-  unsigned int j,k;
-  unsigned int locus_count_above;
-  unsigned int locus_count_below;
   unsigned int count_above = 0;
   unsigned int count_below = 0;
   double logl_diff = 0;
   double logpr_diff = 0;
-  double logpr = 0;
 
   if (opt_migration && !opt_est_theta)
     fatal("Integrating out thetas not yet implemented for IM model");
 
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: count_above, count_below, logl_diff, logpr_diff)
+  for (long i = 0; i < opt_locus_count; ++i)
   {
-    k = 0;
-    locus_count_above = locus_count_below = 0;
+    long thread_index = omp_get_thread_num();
+    long m;
+    unsigned int j = 0;
+    unsigned int k = 0;
+    unsigned int locus_count_above = 0;
+    unsigned int locus_count_below = 0;
+    double logpr = 0;
 
     if (opt_est_theta)
       logpr = gtree[i]->logpr;
@@ -4208,26 +4206,14 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
                                    double maxage,
                                    double minfactor,
                                    double maxfactor,
-                                   long locus_start,
-                                   long locus_count,
                                    snode_t ** affected,
                                    unsigned int paffected_count,
                                    long * ret_mig_reject,
                                    unsigned int * ret_count_above,
                                    unsigned int * ret_count_below,
                                    double * ret_logl_diff,
-                                   double * ret_logpr_diff,
-                                   long thread_index)
+                                   double * ret_logpr_diff)
 {
-  long i;
-  unsigned int j,k;
-  unsigned int locus_count_above;
-  unsigned int locus_count_below;
-  unsigned int count_above = 0;
-  unsigned int count_below = 0;
-  double logl_diff = 0;
-  double logpr_diff = 0;
-  double logpr = 0;
   assert(opt_migration);
   assert(opt_clock == BPP_CLOCK_GLOBAL);
   if (!opt_est_theta)
@@ -4245,8 +4231,23 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     assert(paffected_count == 3);
 
   *ret_mig_reject = 0;
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+
+  unsigned int count_above = 0;
+  unsigned int count_below = 0;
+  double logl_diff = 0;
+  double logpr_diff = 0;
+
+  #pragma omp parallel for shared(ret_mig_reject) reduction(+: count_above, count_below, logl_diff, logpr_diff)
+  for (long i = 0; i < opt_locus_count; ++i)
   {
+    #pragma omp cancellation point for
+
+    long thread_index = omp_get_thread_num();
+    unsigned int j,k;
+    unsigned int locus_count_above;
+    unsigned int locus_count_below;
+    double logpr = 0;
+
     if (opt_exp_imrb)
     {
       /* new rubberband */
@@ -4327,8 +4328,13 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     {
       /* conflict was caused; reject! */
       assert(!opt_exp_imrb);
+      #pragma omp atomic write
       *ret_mig_reject = 1;
+      #pragma omp cancel for
+
+      #ifndef _OPENMP
       return;
+      #endif
     }
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
     {
@@ -4839,7 +4845,21 @@ static long propose_tau(locus_t ** loci,
     tp.paffected_count = paffected_count;
     tp.logl_diff = logl_diff;
     tp.logpr_diff = logpr_diff;
-    threads_wakeup(THREAD_WORK_TAU,&tp);
+    propose_tau_update_gtrees(tp.locus,
+                              tp.gtree,
+                              tp.stree,
+                              tp.snode,
+                              tp.oldage,
+                              tp.minage,
+                              tp.maxage,
+                              tp.minfactor,
+                              tp.maxfactor,
+                              tp.affected,
+                              tp.paffected_count,
+                              &tp.count_above,
+                              &tp.count_below,
+                              &tp.logl_diff,
+                              &tp.logpr_diff);
 
     count_above = tp.count_above;
     count_below = tp.count_below;
@@ -4856,15 +4876,12 @@ static long propose_tau(locus_t ** loci,
                               maxage,
                               minfactor,
                               maxfactor,
-                              0,
-                              stree->locus_count,
                               affected,
                               paffected_count,
                               &count_above,
                               &count_below,
                               &logl_diff,
-                              &logpr_diff,
-                              0);
+                              &logpr_diff);
 
   if (!opt_est_theta)
   {
@@ -5452,7 +5469,22 @@ static long propose_tau_mig(locus_t ** loci,
     tp.paffected_count = paffected_count;
     tp.logl_diff = logl_diff;
     tp.logpr_diff = logpr_diff;
-    threads_wakeup(THREAD_WORK_TAU_MIG,&tp);
+    propose_tau_update_gtrees_mig(tp.locus,
+                                  tp.gtree,
+                                  tp.stree,
+                                  tp.snode,
+                                  tp.oldage,
+                                  tp.minage,
+                                  tp.maxage,
+                                  tp.minfactor,
+                                  tp.maxfactor,
+                                  tp.affected,
+                                  tp.paffected_count,
+                                  &tp.mig_reject,
+                                  &tp.count_above,
+                                  &tp.count_below,
+                                  &tp.logl_diff,
+                                  &tp.logpr_diff);
 
     mig_reject  = tp.mig_reject;
     count_above = tp.count_above;
@@ -5470,16 +5502,13 @@ static long propose_tau_mig(locus_t ** loci,
                                   maxage,
                                   minfactor,
                                   maxfactor,
-                                  0,
-                                  stree->locus_count,
                                   affected,
                                   paffected_count,
                                   &mig_reject,
                                   &count_above,
                                   &count_below,
                                   &logl_diff,
-                                  &logpr_diff,
-                                  0);
+                                  &logpr_diff);
   
   if (mig_reject)
     return -1;
@@ -8155,23 +8184,17 @@ double prop_branch_rates_serial(gtree_t ** gtree,
 void prop_branch_rates_parallel(gtree_t ** gtree,
                                 stree_t * stree,
                                 locus_t ** locus,
-                                long locus_start,
-                                long locus_count,
-                                long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted)
 {
-  unsigned int i;
   long proposal_count = 0;
-  long prop_count;
   long accepted = 0;
-  
-  assert(locus_start >= 0);
-  assert(locus_count > 0);
 
-  for (i = locus_start; i < locus_start+locus_count; ++i)
+  #pragma omp parallel for reduction(+: accepted, proposal_count)
+  for (unsigned int i = 0; i < opt_locus_count; ++i)
   {
-    prop_count = 0;
+    long thread_index = omp_get_thread_num();
+    long prop_count = 0;
     accepted += prop_branch_rates(gtree[i],stree,locus[i],i,&prop_count,thread_index);
     proposal_count += prop_count;
   }
