@@ -302,7 +302,7 @@ static struct option long_options[] =
   {"points",       required_argument, 0, 0 },  /* 39 */
   {"theta-move",   required_argument, 0, 0 },  /* 40 */
   {"mrate-move",   required_argument, 0, 0 },  /* 41 */
-  {"theta_prop",   required_argument, 0, 0 },  /* 42 */
+  {"theta_slide",  required_argument, 0, 0 },  /* 42 */
   {"theta_mode",   required_argument, 0, 0 },  /* 43 */
   {"no-pin",       no_argument,       0, 0 },  /* 44 */
   { 0, 0, 0, 0 }
@@ -956,7 +956,7 @@ void cmd_help()
           "  --bfdriver FILENAME     create control files to calculate marginal likelihood\n"
           "  --points INTEGER        number of G-L quadrature points (used with --bfdriver)\n"
           "  --summary FILENAME      summarize results using specified control file\n"
-          "  --theta-move STRING     'slide' for sliding window or 'gibbs' (default: gibbs)\n"
+          "  --theta_slide FLOAT     frequency for theta sliding window move (default: 0.2)\n"
           "\n"
          );
 
