@@ -305,6 +305,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_max,1,fp);
   DUMP(&opt_est_theta,1,fp);
   DUMP(&opt_linkedtheta,1,fp);
+  DUMP(&opt_theta_move,1,fp);
+  DUMP(&opt_theta_gibbs_showall_eps,1,fp);
+  DUMP(&opt_theta_slide_prob,1,fp);
 
   /* write tau prior */
   DUMP(&opt_tau_dist,1,fp);
