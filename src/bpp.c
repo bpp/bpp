@@ -231,6 +231,7 @@ long popcnt_present;
 long avx_present;
 long avx2_present;
 long altivec_present;
+long neon_present;
 
 /* pjumps */
 double g_pj_gage;

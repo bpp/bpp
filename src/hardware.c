@@ -21,6 +21,7 @@
 
 #include "bpp.h"
 
+#if defined(__x86_64__) || defined(_M_AMD64)
 /*
     Apple machines should always default to assembly code due to
     inconsistent versioning in LLVM/clang, see issue #138
@@ -28,6 +29,7 @@
     https://github.com/xflouris/libpll/issues/138
 
 */
+
 #if (defined(__APPLE__) || defined(_MSC_VER)) || \
     (!defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 4 || \
       (__GNUC__ == 4 && __GNUC_MINOR__ < 8))) || \
@@ -88,6 +90,8 @@ void cpu_features_detect()
   popcnt_present = 0;
   avx_present = 0;
   avx2_present = 0;
+  altivec_present = 0;
+  neon_present = 0;
 
 #if defined(__PPC__)
   altivec_present = 1;
@@ -133,6 +137,8 @@ void cpu_features_detect()
   popcnt_present = 0;
   avx_present = 0;
   avx2_present = 0;
+  altivec_present = 0;
+  neon_present = 0;
 
 #if defined(__PPC__)
   altivec_present = __builtin_cpu_supports("altivec");
@@ -150,6 +156,38 @@ void cpu_features_detect()
 #endif
 }
 
+#endif
+
+#else
+/* non-x86_64 */
+void cpu_features_detect()
+{
+  mmx_present = 0;
+  sse_present = 0;
+  sse2_present = 0;
+  sse3_present = 0;
+  ssse3_present = 0;
+  sse41_present = 0;
+  sse42_present = 0;
+  popcnt_present = 0;
+  avx_present = 0;
+  avx2_present = 0;
+  altivec_present = 0;
+  neon_present = 0;
+
+#ifdef __aarch64__
+#ifdef __ARM_NEON
+  neon_present = 1;
+#else
+  /* no neon */
+#endif
+#elif __PPC__
+  altivec_present = 1;
+#else
+#error Unknown architecture
+#endif
+
+}
 #endif
 
 void cpu_features_show()

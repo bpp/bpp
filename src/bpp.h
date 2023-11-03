@@ -36,12 +36,72 @@
 #include <ctype.h>
 #include <pthread.h>
 
+
+#define PROG_NAME "bpp"
+
+#if defined(__x86_64__) || defined(_M_AMD64)
+
+#define PROG_CPU "x86_64"
 #ifdef _MSC_VER
 #include <pmmintrin.h>
 #include <immintrin.h>
 #else
 #include <x86intrin.h>
 #endif
+
+#elif __PPC__
+
+#ifdef __LITTLE_ENDIAN__
+#define PROG_CPU "ppc64le"
+#include <altivec.h>
+#else
+#error "Big endian ppc64 CPUs not supported"
+#endif
+
+#elif __aarch64__
+
+#define PROG_CPU "aarch64"
+#include <arm_neon.h>
+
+#else
+
+#error Unknown architecture (not ppc64le, aarch64 or x86_64)
+
+#endif
+
+#ifdef __APPLE__
+#define PROG_OS "macos"
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+
+#elif __linux__
+#define PROG_OS "linux"
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+
+#elif _WIN32
+#define PROG_OS "win"
+#include <windows.h>
+#include <psapi.h>
+
+#elif __FreeBSD__
+#define PROG_OS "freebsd"
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+
+#elif __NetBSD__
+#define PROG_OS "netbsd"
+#include <sys/resource.h>
+
+#else
+
+#define PROG_OS "unknown"
+#include <sys/sysinfo.h>
+#include <sys/resource.h>
+
+#endif
+
+#define PROG_ARCH PROG_OS "_" PROG_CPU
 
 #ifndef _MSC_VER
 #include <getopt.h>
@@ -86,15 +146,14 @@
 
 /* constants */
 
-#define PROG_NAME "bpp"
 
 #define PLL_STRING(x) #x
 #define PLL_C2S(x) PLL_STRING(x)
 
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 6
-#define VERSION_PATCH 3
+#define VERSION_MINOR 7
+#define VERSION_PATCH 0
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -107,40 +166,6 @@
 
 #define BPP_FALSE 0
 #define BPP_TRUE  1
-
-#ifdef __PPC__
-
-#ifdef __LITTLE_ENDIAN__
-#define PROG_CPU "ppc64le"
-#else
-#error "Big endian ppc64 CPUs not supported"
-#endif
-
-#else
-
-#define PROG_CPU "x86_64"
-
-#endif
-
-#ifdef __APPLE__
-#define PROG_OS "osx"
-#include <sys/resource.h>
-#include <sys/sysctl.h>
-#endif
-
-#ifdef __linux__
-#define PROG_OS "linux"
-#include <sys/resource.h>
-#include <sys/sysinfo.h>
-#endif
-
-#ifdef _WIN32
-#define PROG_OS "win"
-#include <windows.h>
-#include <psapi.h>
-#endif
-
-#define PROG_ARCH PROG_OS "_" PROG_CPU
 
 #define BPP_FAILURE  0
 #define BPP_SUCCESS  1
@@ -1231,6 +1256,7 @@ extern long popcnt_present;
 extern long avx_present;
 extern long avx2_present;
 extern long altivec_present;
+extern long neon_present;
 
 extern double ** global_sortbuffer_r;
 extern migbuffer_t ** global_migbuffer_r;
