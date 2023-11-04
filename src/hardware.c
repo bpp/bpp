@@ -217,8 +217,6 @@ void cpu_features_show()
     fprintf(stderr, " avx2");
   if (neon_present)
     fprintf(stderr, " neon");
-  if (altivec_present)
-    fprintf(stderr, " altivec");
   fprintf(stderr, "\n");
 }
 
