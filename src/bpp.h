@@ -62,6 +62,9 @@
 
 #define PROG_CPU "aarch64"
 #include <arm_neon.h>
+#undef HAVE_SSE3
+#undef HAVE_AVX
+#undef HAVE_AVX2
 
 #else
 
