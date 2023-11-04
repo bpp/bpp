@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
-[![Version](https://img.shields.io/badge/version-4.6.2-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.6.2)
+[![Version](https://img.shields.io/badge/version-4.7.0-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.7.0)
 
 ## Introduction
 
@@ -16,11 +16,20 @@ of the BPP software. It should have the following properties:
 * SIMD implementations of time-consuming parts.
 * Linux, Mac and Microsoft Windows compatibility.
 
+BPP is a Bayesian Markov chain Monte Carlo (MCMC) program for analyzing
+sequence alignments from multiple loci and multiple closely-related species
+under the multispecies coalescent (MSC) model. BPP takes into account episodic
+and continuous gene flow through its implementation of the multispecies
+coalescent with introgression (MSC-I) model for episodic events, and the
+multispecies coalescent with migration (MSC-M) model for continuous
+interactions.
+
 BPP currently implements four methods:
 
-* Estimation of the parameters of species divergence times and population sizes
-  under the multi-species coalescent (MSC) model when the species phylogeny is
-  given (Rannala and Yang, 2003)
+* Estimation of the parameters of species divergence times, population sizes,
+  and potentially introgression probabilities or migration rates under the 
+  MSC (Rannala and Yang, 2003), MSC-I (Flouri et al, 2020) or MSC-M
+  (Flouri et al, 2023) models when the species phylogeny is given.
 
 * Inference of the species tree when the assignments are given by the user
   (Rannala and Yang, 2017)
@@ -30,30 +39,30 @@ BPP currently implements four methods:
 
 * Joint species delimitation and species tree estimation (Yang and Rannala 2014)
 
-BPP can also accommodate variable mutation rates among loci (Burgess and Yang,
-2008) and heredity multipliers (Hey and Nielsen, 2004).  Finally, BPP supports
-diploid data. Phasing is done analytically as described by Gronau et al, 2011.
+Further functionalities:
+ 
+  * Accommodates variable mutation rates among loci (Burgess and Yang,2008) and
+    heredity multipliers (Hey and Nielsen, 2004).
 
+  * Handles diploid data, where phasing is done analytically as described by
+    Gronau et al, 2011.
 
-**Update 2019-01-02**
+  * Implements relaxed-clock models to estimate species divergence times and
+    ancestral population sizes using genomic data sampled from contemporary
+    species when the strict clock assumption is violated (Flouri et al, 2022).
 
-BPP now also implements the Multispecies-coalescent-with-introgression (MSci) model
-(see Flouri et al, 2020), an extension of the multispecies coalescent model to
-incorporate introgression/hybridization.
-For more information on usage please see the [BPP manual](https://github.com/bpp/bpp/raw/master/bppDOC.pdf) and/or the [wiki documentation](https://github.com/bpp/bpp/wiki).
+  * Nucleotide substitution models JC69, K80, F81, HKY, T92, TN93, F84 and GTR.
 
-**Update 2020-04-20**
+  * 19 amino acid substition models (Dayhoff, LG, DCMUT, JTT, etc).
 
-Since v4.3.8 BPP implements the following:
-* Parallelized computation using POSIX threads.
-* Nucleotide substitution models JC69, K80, F81, HKY, T92, TN93, F84 and GTR.
-* 19 amino acid substition models (Dayhoff, LG, DCMUT, JTT, etc)
-* Site rate variation (+Gamma)
-* Partitioned analyses
-* Relaxed clock (independent rates model and correlated clock) as described in (Zhu et al, 2015).
-* Easy to use tool for creating MSci networks that accepts a species tree and a list of definitions
-  specifying introgressions/hybridizations.
-For information on using those options check the [BPP manual](https://github.com/bpp/bpp/raw/master/bppDOC.pdf)
+  * Site rate variation (+Gamma).
+
+  * Partitioned analyses.
+
+  * Easy to use tool for generating MSC-I networks by specifying a list of
+    introgressions/hybridizations events on a species tree.
+
+For more information on usage please see the [BPP manual](https://github.com/bpp/bpp/raw/master/bpp4DOC.pdf) and/or the [wiki documentation](https://github.com/bpp/bpp/wiki).
 
 ## Download and install
 
@@ -70,26 +79,47 @@ Download the appropriate executable for your system using the following
 commands if you are using a Linux x86_64 system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.6.2/bpp-4.6.2-linux-x86_64.tar.gz
-tar zxvf bpp-4.6.2-linux-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-linux-x86_64.tar.gz
+tar zxvf bpp-4.7.0-linux-x86_64.tar.gz
 ```
 
-Or these commands if you using a Mac:
+Or these commands if you are using a Linux ppc64le system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.6.2/bpp-4.6.2-macos-x86_64.tar.gz
-tar zxvf bpp-4.6.2-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-linux-ppc64le.tar.gz
+tar zxvf bpp-4.7.0-linux-ppc64le.tar.gz
+```
+
+Or these commands if you are using a Linux aarch64 (arm64) system:
+
+```bash
+wget https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-linux-aarch64.tar.gz
+tar zxvf bpp-4.7.0-linux-aarch64.tar.gz
+```
+
+Or these commands if you are using a Mac with an Apple Silicon CPU (e.g. M1/M2/M3):
+
+```bash
+wget https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-macos-aarch64.tar.gz
+tar zxvf bpp-4.7.0-macos-aarch64.tar.gz
+```
+
+Or these commands if you are using a Mac with an Intel CPU:
+
+```bash
+wget https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-macos-x86_64.tar.gz
+tar zxvf bpp-4.7.0-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
 
 ```
-https://github.com/bpp/bpp/releases/download/v4.6.2/bpp-4.6.2-win-x86_64.zip
+https://github.com/bpp/bpp/releases/download/v4.7.0/bpp-4.7.0-win-x86_64.zip
 ```
 
-Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.6.2-linux-x86_64` or `bpp-4.6.2-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.7.0-linux-x86_64` or `bpp-4.7.0-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
-Windows: You will now have the binary distribution in a folder called `bpp-4.6.2-win-x86_64`. The bpp executable is called `bpp.exe`.
+Windows: You will now have the binary distribution in a folder called `bpp-4.7.0-win-x86_64`. The bpp executable is called `bpp.exe`.
 
 
 **Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository*.
@@ -97,9 +127,9 @@ Windows: You will now have the binary distribution in a folder called `bpp-4.6.2
 **Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
 ```
-wget https://github.com/bpp/bpp/archive/v4.6.2.tar.gz
-tar zxvf v4.6.2.tar.gz
-cd bpp-4.6.2/src
+wget https://github.com/bpp/bpp/archive/v4.7.0.tar.gz
+tar zxvf v4.7.0.tar.gz
+cd bpp-4.7.0/src
 make
 ```
 
@@ -180,13 +210,13 @@ bpp --summary [CONTROL-FILE]
 ```
 
 
-For an example of a DEFS-FILE see the [MSci generator notes](https://github.com/bpp/bpp/releases/download/v4.6.2/msci-create.pdf)
+For an example of a DEFS-FILE see the [MSci generator notes](https://github.com/bpp/bpp/releases/download/v4.7.0/msci-create.pdf)
 
 More documentation regarding control files, will be available soon on the [wiki](https://github.com/bpp/bpp/wiki).
 
 ## Documentation
 
-The most up-to-date documentation for BPP is now available through the [BPP Documentation Project](https://bpp.github.io/bpp-manual/). The original manual [bppDOC.pdf](https://github.com/bpp/bpp/releases/download/v4.6.2/bppDOC.pdf) is found in the current BPP distribution.
+The most up-to-date documentation for BPP is now available through the [BPP Documentation Project](https://bpp.github.io/bpp-manual/). The original manual [bpp4DOC.pdf](https://github.com/bpp/bpp/releases/download/v4.7.0/bpp4DOC.pdf) is found in the current BPP distribution.
 
 A tutorial on BPP was recently published as a book chapter:
 [A Tutorial on the Use of BPP for Species Tree Estimation and Species Delimitation](https://hal.inria.fr/PGE/hal-02536475)
@@ -206,11 +236,20 @@ doi:[10.1093/molbev/msy147](https://doi.org/10.1093/molbev/msy147)
 
 Please note, citing the corresponding of the four underlying methods, may also be appropriate.
 
-If you use the MSci model please also cite:
+When using the MSC-I model please cite:
 
 Flouri T., Jiao X., Rannala B., Yang Z. (2020) **A Bayesian Implementation of the Multispecies Coalescent Model with Introgression for Phylogenomic Analysis.** *Molecular Biology and Evolution*, 37(4):1211-1223.
 doi:[10.1093/molbev/msz296](https://doi.org/10.1093/molbev/msz296)
 
+When using the MSC-M model please cite:
+
+Flouri T., Jiao X., Huang J., Rannala B., Yang Z. (2023) **Efficient Bayesian inference under the multispecies coalescent with migration.** *Proceedings of the National Academy of Sciences*, 120(44):e2310708120, 2023.
+doi:[10.1073/pnas.2310708120](https://doi.org/10.1073/pnas.2310708120)
+
+When using relaxed clocks please cite:
+
+Flouri T., Huang J., Jiao X., Kapli P., Rannala B., Yang Z. (2022) **Bayesian phylogenetic inference using relaxed-clocks and the multispecies coalescent.** *Molecular Biology and Evolution*, 39(8), 2022.
+doi:[10.1093/molbev/msac161](https://doi.org/10.1093/molbev/msac161)
 
 ## License and third party licenses
 
@@ -227,8 +266,9 @@ The code is currently licensed under the [GNU Affero General Public License vers
 
 | File                       | Description                                                                       |
 | -------------------------- | --------------------------------------------------------------------------------- |
-| **arch.c**                 | Architecture specific code (Linux/Mac/Windows)                                    |
 | **allfixed.c**             | Summary statistics for method A00 (fixed species tree)                            |
+| **arch.c**                 | Architecture specific code (Linux/Mac/Windows)                                    |
+| **bfdriver.c**             | Code for creating control files for marginal likelihood calculations              |
 | **bpp.c**                  | Main file handling command-line parameters and executing selected methods         |
 | **bpp.h**                  | BPP header file including function prototypes and data structures                 |
 | **cfile.c**                | Functions for parsing the control file                                            |
@@ -261,6 +301,8 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **mapping.c**              | Functions for handling map files                                                  |
 | **maps.c**                 | Character mapping arrays for converting sequences to the internal representation  |
 | **method.c**               | Function containing the MCMC loop and calls to proposals                          |
+| **miginfo.c**              | Functions for working with the miginfo_t structure                                |
+| **ming2.c***               | Various numerical optimization functions                                          |
 | **msa.c**                  | Code for processing multiple sequence alignments                                  |
 | **msci_gen.c**             | Functions for the MSci generator                                                  |
 | **output.c**               | Auxiliary functions for printing pmatrices (to-be-renamed)                        |
@@ -274,8 +316,8 @@ The code is currently licensed under the [GNU Affero General Public License vers
 | **rtree.c**                | Species tree export functions (to-be-renamed).                                    |
 | **simulate.c**             | Functions for the simulation program (MCcoal)                                     |
 | **stree.c**                | Functions for setting and processing the species tree                             |
-| **summary.c**              | Species tree inference summary related functions                                  | 
 | **summary11.c**            | Functions for summarizing joint species tree inference and delimitation           |
+| **summary.c**              | Species tree inference summary related functions                                  | 
 | **threads.c**              | Functions for parallelizing computation using POSIX threads                       |
 | **treeparse.c**            | Functions for parsing trees                                                       |
 | **util.c**                 | Various common utility functions                                                  |
@@ -313,6 +355,16 @@ doi:[10.1093/molbev/msy147](http://dx.doi.org/10.1093/molbev/msy147)
 **A Bayesian Implementation of the Multispecies Coalescent Model with Introgression for Phylogenomic Analysis.**
 *Molecular Biology and Evolution*, 37(4):1211-1223.
 doi:[10.1093/molbev/msz296](https://doi.org/10.1093/molbev/msz296)
+
+* Flouri T., Huang J., Jiao X., Kapli P., Rannala B., Yang Z. (2022)
+**Bayesian phylogenetic inference using relaxed-clocks and the multispecies coalescent.**
+*Molecular Biology and Evolution*, 39(8), 2022.
+doi:[10.1093/molbev/msac161](https://doi.org/10.1093/molbev/msac161)
+
+* Flouri T., Jiao X., Huang J., Rannala B., Yang Z. (2023)
+**Efficient Bayesian inference under the multispecies coalescent with migration.**
+*Proceedings of the National Academy of Sciences*, 120(44):e2310708120, 2023.
+doi:[10.1073/pnas.2310708120](https://doi.org/10.1073/pnas.2310708120)
 
 * Gronau I., Hubisz MJ, Gulko B., Danko CG, Siepel A. (2011)
 **Bayesian inference of ancient human demography from individual genome sequences.**

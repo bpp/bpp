@@ -2,6 +2,26 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.7.0] - 2023-11-04
+### Changed
+ - Example data
+ - Extended rubberband move is now the default move for MSCM
+### Added
+ - Pseudopriors for migration rates
+ - Option to specify a separate prior for each migration rate
+ - Per-locus variable migration rates
+ - Reversible-jump MCMC move for adding and removing migration rates
+ - Move to flip the direction of a migration rate
+ - Option to change the probability of using a gibbs sampler vs sliding window
+   proposal for theta moves (default: 0.2 sliding window)
+ - Option for having one stepsize per theta parameter
+ - Option for having one stepsize for tip nodes and one for inner nodes
+ - Option for disabling core pinning
+### Fixed
+ - Memory leaks
+ - Invalid access of migbuffer structure in theta gibbs proposal
+ - Binary mode when opening checkpoint files
+
 ## [4.6.2] - 2022-11-03
 ### Changed
  - Default theta proposal to the original sliding window move
