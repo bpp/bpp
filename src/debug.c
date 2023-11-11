@@ -24,7 +24,76 @@
 #define SHRINK 1
 #define EXPAND 2
 
-void debug_im_check_sum(stree_t * stree, gtree_t ** gtree, const char * desc)
+void debug_print_migrations(stree_t * stree)
+{
+  long i;
+  for (i = 0; i < opt_migration_count; ++i)
+  {
+    migspec_t * spec = opt_mig_specs+i;
+    unsigned int si = spec->si;
+    unsigned int ti = spec->ti;
+    printf("  M_%s->%s=%f (%d,%d,%f,%f)",
+           stree->nodes[si]->label,
+           stree->nodes[ti]->label,
+           spec->M,
+           spec->si,
+           spec->ti,
+           spec->alpha,
+           spec->beta);
+  }
+  printf("\n");
+}
+
+void debug_print_migmatrix(stree_t * stree)
+{
+  long i,j;
+  long total_nodes = stree->tip_count + stree->inner_count;
+
+  printf("      ");
+  for (i = 0; i < total_nodes; ++i)
+    printf(" %2s", stree->nodes[i]->label);
+  printf("\n");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    printf("   ");
+    printf(" %2s", stree->nodes[i]->label);
+    for (j = 0; j < total_nodes; ++j)
+    {
+      if (opt_migration_matrix[i][j] != -1)
+        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_migration_matrix[i][j]);
+      else
+        printf(" %2ld", opt_migration_matrix[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+
+void debug_print_bitmatrix(stree_t * stree)
+{
+  long i,j;
+  long total_nodes = stree->tip_count + stree->inner_count;
+
+  printf("      ");
+  for (i = 0; i < total_nodes; ++i)
+    printf(" %2s", stree->nodes[i]->label);
+  printf("\n");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    printf("   ");
+    printf(" %2s", stree->nodes[i]->label);
+    for (j = 0; j < total_nodes; ++j)
+    {
+      if (opt_mig_bitmatrix[i][j] != 0)
+        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_mig_bitmatrix[i][j]);
+      else
+        printf(" %2ld", opt_mig_bitmatrix[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+void debug_im_check_sum(stree_t * stree, gtree_t ** gtree)
 {
   long i,j,k;
   long migsum;
@@ -610,7 +679,6 @@ static void debug_validate_logpg_theta(stree_t * stree,
 }
 
 static void debug_validate_logpg_notheta(stree_t * stree,
-                                         gtree_t ** gtree,
                                          locus_t ** locus,
                                          const char * move)
 {
@@ -804,7 +872,7 @@ void debug_validate_logpg(stree_t * stree,
                           const char * move)
 {
   if (!opt_est_theta)
-    debug_validate_logpg_notheta(stree,gtree,locus,move);
+    debug_validate_logpg_notheta(stree,locus,move);
   else
     debug_validate_logpg_theta(stree,gtree,locus,move);
 }
@@ -1259,7 +1327,7 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
   }
 }
 
-void debug_write_migs_header(FILE * fp_debug, stree_t * stree, gtree_t ** gtree)
+void debug_write_migs_header(FILE * fp_debug, stree_t * stree)
 {
   long j,k;
 

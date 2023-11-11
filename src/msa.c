@@ -335,7 +335,7 @@ void msa_destroy(msa_t * msa)
 
 static int longint_len(long x)
 {
-  return x ? (int)floor(log10(abs(x)))+1 : 1;
+  return x ? (int)floor(log10(labs(x)))+1 : 1;
 }
 
 void msa_summary(FILE * fp, msa_t ** msa_list, int msa_count)

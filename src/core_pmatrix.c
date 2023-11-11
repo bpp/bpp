@@ -732,7 +732,7 @@ void bpp_core_update_pmatrix(locus_t * locus,
           assert(!node_is_mirror(start));
 
           unsigned int hindex = GET_HINDEX(stree,start);
-          assert(hindex >= 0 && hindex < stree->hybrid_count);
+          assert(hindex < stree->hybrid_count);
 
           /* find correct parent node according to hpath flag */
           assert(node->hpath[hindex] != BPP_HPATH_NONE);

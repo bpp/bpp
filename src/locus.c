@@ -1121,7 +1121,7 @@ static double update_branchlength_relaxed_clock(stree_t * stree,
       assert(!node_is_mirror(start));
 
       unsigned int hindex = GET_HINDEX(stree,start);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       /* find correct parent node according to hpath flag */
       assert(node->hpath[hindex] != BPP_HPATH_NONE);
@@ -1167,7 +1167,6 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
   unsigned int states = locus->states;
   unsigned int states_padded = states;
   unsigned int rate_cats = locus->rate_cats;
-  unsigned int attrib = locus->attributes;
   double t;
   double * const * eigenvals = locus->eigenvals;
   double * const * eigenvecs = locus->eigenvecs;
@@ -2510,7 +2509,8 @@ double locus_root_loglikelihood(locus_t * locus,
                                     locus->likelihood_vector,
                                     locus->attributes);
     
-    long i,j,k=0;
+    long i,k=0;
+    unsigned long j;
     logl = 0;
 
     for (i = 0; i < locus->unphased_length; ++i)

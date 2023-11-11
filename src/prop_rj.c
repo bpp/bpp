@@ -117,8 +117,7 @@ static double pdf_gamma(double x, double alpha, double beta)
 static void locate_nodes(stree_t * stree,
                          snode_t * snode,
                          gtree_t * gtree,
-                         double tau_upper,
-                         int msa_index)
+                         double tau_upper)
 {
   unsigned int i;
   gnode_t * x;
@@ -223,7 +222,7 @@ static int rubber_proportional(stree_t * stree,
   gnode_t ** nv_locus = nodevec + nodevec_offset[msa_index];
 
   /* mark nodes */
-  locate_nodes(stree,snode,gtree,tau_upper,msa_index);
+  locate_nodes(stree,snode,gtree,tau_upper);
 
   /* Go through all nodes of the snode population that have lineages coming
      from both child populations and have time <= tau_upper */

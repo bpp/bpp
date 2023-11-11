@@ -1488,17 +1488,15 @@ double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 void stree_update_mig_subpops(stree_t * stree, long msa_index);
-void stree_update_mig_subpops_single(stree_t * stree,
-                                     snode_t * x,
+void stree_update_mig_subpops_single(snode_t * x,
                                      snode_t * y,
                                      double oldM);
-void stree_update_mig_subpops_single_vrates(stree_t * stree,
-                                            snode_t * x,
+void stree_update_mig_subpops_single_vrates(snode_t * x,
                                             snode_t * y,
                                             long msa_index,
                                             double oldMi);
 
-long migration_valid(stree_t * stree, snode_t * from, snode_t * to);
+long migration_valid(snode_t * from, snode_t * to);
 
 long stree_migration_rj(gtree_t *** gtreeptr,
                             gtree_t *** gcloneptr,
@@ -1670,7 +1668,7 @@ void gtree_propose_spr_parallel(locus_t ** locus,
 
 void gtree_reset_leaves(gnode_t * node);
 
-void gtree_fini(int msa_count);
+void gtree_fini();
 
 double gtree_logprob_mig(stree_t * stree,
                          gtree_t * gtree,
@@ -2630,6 +2628,9 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_print_migmatrix(stree_t * stree);
+void debug_print_migrations(stree_t * stree);
+void debug_print_bitmatrix(stree_t * stree);
 void debug_print_gtree(gtree_t * gtree);
 void debug_print_gtree_detailed(gtree_t * gtree);
 void debug_print_stree(stree_t * stree);

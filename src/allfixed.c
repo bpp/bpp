@@ -340,7 +340,6 @@ static char * cb_attributes(const snode_t * node)
 
 static char * cb_msci_thetasandtaus(const snode_t * node)
 {
-  int size_alloced;
   char * s = NULL;
   char * stheta = NULL;
 
@@ -361,37 +360,37 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
       {
         /* hybridization event */
         if (node->hphi >= 0)
-          size_alloced = xasprintf(&s,
-                                   "%s[&phi=%f,tau-parent=%s]:%f %s",
-                                   node->label,
-                                   node->hphi,
-                                   node->htau ? "yes" : "no",
-                                   node->tau,
-                                   stheta);
+          xasprintf(&s,
+                    "%s[&phi=%f,tau-parent=%s]:%f %s",
+                    node->label,
+                    node->hphi,
+                    node->htau ? "yes" : "no",
+                    node->tau,
+                    stheta);
         else
-          size_alloced = xasprintf(&s,
-                                   "%s[tau-parent=%s]:%f %s",
-                                   node->label,
-                                   node->htau ? "yes" : "no",
-                                   node->tau,
-                                   stheta);
+          xasprintf(&s,
+                    "%s[tau-parent=%s]:%f %s",
+                    node->label,
+                    node->htau ? "yes" : "no",
+                    node->tau,
+                    stheta);
       }
       else
       {
         /* bidirectional introgression */
         if (node->hphi >= 0)
-          size_alloced = xasprintf(&s,
-                                   "%s[&phi=%f]:%f %s",
-                                   node->label,
-                                   node->hphi,
-                                   node->tau,
-                                   stheta);
+          xasprintf(&s,
+                    "%s[&phi=%f]:%f %s",
+                    node->label,
+                    node->hphi,
+                    node->tau,
+                    stheta);
         else
-          size_alloced = xasprintf(&s, "%s", node->label);
+          xasprintf(&s, "%s", node->label);
       }
     }
     else
-      size_alloced = xasprintf(&s, "%s %s", node->label, stheta);
+      xasprintf(&s, "%s %s", node->label, stheta);
   }
   else
   {
@@ -407,20 +406,20 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
         assert(node->left && !node->right);
 
         if (node->hphi >= 0)
-            size_alloced = xasprintf(&s,
-                                     "%s[&phi=%f,tau-parent=%s]:%f %s",
-                                     node->label ? node->label : "",
-                                     node->hphi,
-                                     node->htau ? "yes" : "no",
-                                     node->tau,
-                                     stheta);
+            xasprintf(&s,
+                      "%s[&phi=%f,tau-parent=%s]:%f %s",
+                      node->label ? node->label : "",
+                      node->hphi,
+                      node->htau ? "yes" : "no",
+                      node->tau,
+                      stheta);
           else
-            size_alloced = xasprintf(&s,
-                                     "%s[tau-parent=%s]:%f %s",
-                                     node->label ? node->label : "",
-                                     node->htau ? "yes" : "no",
-                                     node->tau,
-                                     stheta);
+            xasprintf(&s,
+                      "%s[tau-parent=%s]:%f %s",
+                      node->label ? node->label : "",
+                      node->htau ? "yes" : "no",
+                      node->tau,
+                      stheta);
       }
       else
       {
@@ -429,30 +428,30 @@ static char * cb_msci_thetasandtaus(const snode_t * node)
         assert(node->right->hybrid && !node->right->left && !node->right->right);
         if (node->hphi >= 0)
         {
-          size_alloced = xasprintf(&s,
-                                   "%s[&phi=%f]:%f %s",
-                                   node->label,
-                                   node->hphi,
-                                   node->tau,
-                                   stheta);
+          xasprintf(&s,
+                    "%s[&phi=%f]:%f %s",
+                    node->label,
+                    node->hphi,
+                    node->tau,
+                    stheta);
         }
         else
         {
-            size_alloced = xasprintf(&s,
-                                     "%s:%f %s",
-                                     node->label,
-                                     node->tau,
-                                     stheta);
+            xasprintf(&s,
+                      "%s:%f %s",
+                      node->label,
+                      node->tau,
+                      stheta);
         }
       }
     }
     else
     {
-      size_alloced = xasprintf(&s,
-                               "%s:%f %s",
-                               node->label ? node->label : "",
-                               node->tau,
-                               stheta);
+      xasprintf(&s,
+                "%s:%f %s",
+                node->label ? node->label : "",
+                node->tau,
+                stheta);
     }
   }
   if (stheta)

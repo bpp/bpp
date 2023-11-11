@@ -140,7 +140,7 @@ static void token_clear(void * tokenptr)
   }
 }
 
-long parse_opar(char * s, list_t * token_list)
+long parse_opar(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup("(");
@@ -152,7 +152,7 @@ long parse_opar(char * s, list_t * token_list)
   return 1;
 }
 
-static long parse_cpar(char * s, list_t * token_list)
+static long parse_cpar(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(")");
@@ -164,7 +164,7 @@ static long parse_cpar(char * s, list_t * token_list)
   return 1;
 }
 
-static long parse_colon(char * s, list_t * token_list)
+static long parse_colon(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(":");
@@ -176,7 +176,7 @@ static long parse_colon(char * s, list_t * token_list)
   return 1;
 }
 
-static long parse_semicolon(char * s, list_t * token_list)
+static long parse_semicolon(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(";");
@@ -188,7 +188,7 @@ static long parse_semicolon(char * s, list_t * token_list)
   return 1;
 }
 
-static long parse_comma(char * s, list_t * token_list)
+static long parse_comma(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup(",");
@@ -200,7 +200,7 @@ static long parse_comma(char * s, list_t * token_list)
   return 1;
 }
 
-static long parse_theta(char * s, list_t * token_list)
+static long parse_theta(list_t * token_list)
 {
   ltoken_t * token = (ltoken_t *)xmalloc(sizeof(ltoken_t));
   token->data = xstrdup("#");
@@ -586,14 +586,14 @@ list_t * parse_tree(char * s)
     {
       if (opt_debug_parser)
         printf("Parsing OPAR...\n");
-      count = parse_opar(start,token_list);
+      count = parse_opar(token_list);
       start += count;
     }
     else if (*start == ')')
     {
       if (opt_debug_parser)
         printf("Parsing CPAR...\n");
-      count = parse_cpar(start,token_list);
+      count = parse_cpar(token_list);
       start += count;
     }
     else if (*start == '[')
@@ -607,28 +607,28 @@ list_t * parse_tree(char * s)
     {
       if (opt_debug_parser)
         printf("Parsing COLON...\n");
-      count = parse_colon(start,token_list);
+      count = parse_colon(token_list);
       start += count;
     }
     else if (*start == ';')
     {
       if (opt_debug_parser)
         printf("Parsing SEMICOLON...\n");
-      count = parse_semicolon(start,token_list);
+      count = parse_semicolon(token_list);
       start += count;
     }
     else if (*start == ',')
     {
       if (opt_debug_parser)
         printf("Parsing COMMA...\n");
-      count = parse_comma(start,token_list);
+      count = parse_comma(token_list);
       start += count;
     }
     else if (*start == '#')
     {
       if (opt_debug_parser)
         printf("Parsing HASH...\n");
-      count = parse_theta(start,token_list);
+      count = parse_theta(token_list);
       start += count;
     }
     else if (string_map[(int)(*start)])

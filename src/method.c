@@ -37,8 +37,8 @@
 #define MAX_TAU_OUTPUT          3
 #define MAX_PHI_OUTPUT          4
 
-const static int rate_matrices = 1;
-const static long thread_index_zero = 0;
+static const int rate_matrices = 1;
+static const long thread_index_zero = 0;
 
 static double pj_optimum = 0.3;
 static thread_data_t td;
@@ -622,13 +622,13 @@ static void print_mcmc_headerline(FILE * fp,
     linewidth += stree->inner_count > 4 ? stree->inner_count+1 : 4;
 
     /* TODO */
-    int digits = delim_count ? (int)floor(log10(abs(delim_count))) + 1 : 1;
+    int digits = delim_count ? (int)floor(log10(labs(delim_count))) + 1 : 1;
     fprintf(fp," %*s", 4+6+digits, "mldp");     linewidth += 1+10+digits;
 
   }
   else if (opt_method == METHOD_11)
   {
-    int digits = delim_count ? (int)floor(log10(abs(delim_count))) + 1 : 1;
+    int digits = delim_count ? (int)floor(log10(labs(delim_count))) + 1 : 1;
     fprintf(fp," sp np %*s",4+6+digits,"mldp"); linewidth += 6+1+10+digits;
 
     /* TODO */
@@ -1739,7 +1739,6 @@ static void mcmc_logsample(FILE * fp,
                            int step,
                            stree_t * stree,
                            gtree_t ** gtree,
-                           locus_t ** locus,
                            long dparam_count,
                            long ndspecies)
 {
@@ -3978,11 +3977,11 @@ void cmd_run()
   int delim_digit_count = 0;
   if (opt_method == METHOD_10)
     delim_digit_count = delimitation_getparam_count() ?
-                      (int)floor(log10(abs(delimitation_getparam_count())))+1 : 1;
+                      (int)floor(log10(labs(delimitation_getparam_count())))+1 : 1;
   else if (opt_method == METHOD_11)
   {
     long dels = delimitations_count(stree);
-    delim_digit_count = dels ? (int)floor(log10(abs(dels)))+1 : 1;
+    delim_digit_count = dels ? (int)floor(log10(labs(dels)))+1 : 1;
   }
 
   print_mcmc_headerline(stdout,
@@ -4463,7 +4462,7 @@ void cmd_run()
        fflush(NULL);
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      mcmc_logsample(fp_mcmc,i+1,stree,gtree,locus,dparam_count,ndspecies);
+      mcmc_logsample(fp_mcmc,i+1,stree,gtree,dparam_count,ndspecies);
 
       /* log migcount */
       if (opt_migration && opt_debug_migration)
@@ -4498,8 +4497,7 @@ void cmd_run()
       {
         long mindex = opt_migration_matrix[mean_mrate_row[j]][mean_mrate_col[j]];
         double mv = opt_mig_specs[mindex].M;
-        if (migration_valid(stree,
-                            stree->nodes[mean_mrate_row[j]],
+        if (migration_valid(stree->nodes[mean_mrate_row[j]],
                             stree->nodes[mean_mrate_col[j]]))
         {
           ++mean_mrate_round[j];
@@ -4764,7 +4762,7 @@ void cmd_run()
       /*** Ziheng $$$ START ***/
       if (opt_est_geneflow)
       {
-        int i1, i2, i3;
+        unsigned int i1, i2, i3;
         mig_events_count = 0;
         for (i1 = 0; i1 < stree->tip_count + stree->inner_count; i1++)
            for (i2 = 0; i2 < stree->tip_count + stree->inner_count; i2++)
@@ -5066,7 +5064,7 @@ void cmd_run()
     free(gclones);
   }
 
-  gtree_fini(opt_locus_count);
+  gtree_fini();
 
   if (opt_method == METHOD_00)
     allfixed_summary(fp_out,stree);

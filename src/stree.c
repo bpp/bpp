@@ -40,10 +40,6 @@
 #define SNL_MOVED       32
 
 static long dbg_counter = 0;
-static void debug_print_migmatrix(stree_t * stree);
-static void debug_print_migrations(stree_t * stree);
-static void debug_print_migrations_flip(stree_t * stree);
-static void debug_print_bitmatrix(stree_t * stree);
 
 /* the variables below are used in the propose_tau move. They are allocated only
    once in stree_alloc_internals() before MCMC starts, and deallocate after MCMC
@@ -65,8 +61,8 @@ static void debug_print_bitmatrix(stree_t * stree);
 */
 static gnode_t ** __gt_nodes = NULL;
 static double * __aux = NULL;
-static int * __mark_count = NULL;
-static int * __extra_count = NULL;
+static unsigned int * __mark_count = NULL;
+static unsigned int * __extra_count = NULL;
 static long * __gt_nodes_index = NULL;
 
 static double * target_weight = NULL;
@@ -129,7 +125,7 @@ hashtable_t * species_hash(stree_t * tree)
 
 static int longint_len(long x)
 {
-  return x ? (int)floor(log10(abs(x))) + 1 : 1;
+  return x ? (int)floor(log10(labs(x))) + 1 : 1;
 }
 
 static double logPDFGamma(double x, double a, double b)
@@ -2289,8 +2285,8 @@ void stree_alloc_internals(stree_t * stree, long * locus_seqcount, unsigned int 
       how many extra nodes where added in __gt_nodes whose branch lengths (and
       therefore) p-matrices need updating because their parent node's age was
       changed */
-   __mark_count = (int *)xmalloc(msa_count * sizeof(int));
-   __extra_count = (int *)xmalloc(msa_count * sizeof(int));
+   __mark_count = (unsigned int *)xmalloc(msa_count * sizeof(unsigned int));
+   __extra_count = (unsigned int *)xmalloc(msa_count * sizeof(unsigned int));
 
    __gt_nodes_index = (long *)xmalloc((size_t)msa_count * sizeof(long));
    __gt_nodes_index[0] = 0;
@@ -3620,8 +3616,7 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
 /* faster function that updates the sums of incoming migration rates for all
    time segments of a single population x when M_yx changes. It assumes taus
    haven't changed, and that only M_yx has changed */
-void stree_update_mig_subpops_single(stree_t * stree,
-                                     snode_t * x,
+void stree_update_mig_subpops_single(snode_t * x,
                                      snode_t * y,
                                      double oldM)
 {
@@ -3664,8 +3659,7 @@ void stree_update_mig_subpops_single(stree_t * stree,
 /* faster function that updates the sums of incoming migration rates for all
    time segments of a single population x when the migration rate for a
    particular locus i M_{yx_i} has changed. It assumes taus haven't changed. */
-void stree_update_mig_subpops_single_vrates(stree_t * stree,
-                                            snode_t * x,
+void stree_update_mig_subpops_single_vrates(snode_t * x,
                                             snode_t * y,
                                             long msa_index,
                                             double oldMi)
@@ -3822,7 +3816,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
     /* go through the list of marked nodes, and append at the end of the list
        their children (only if they are unmarked to avoid duplicates). The final
        list represents the nodes for which branch lengths must be updated */
-    int extra = 0;
+    unsigned int extra = 0;
     for (j = 0; j < k; ++j)
     {
       gnode_t * node = gt_nodesptr[j];
@@ -4116,8 +4110,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
 #endif
 
 /* update migration times during tau proposal */
-static long update_migs(locus_t * locus,
-                        gtree_t * gtree,
+static long update_migs(gtree_t * gtree,
                         stree_t * stree,
                         snode_t * snode,
                         snode_t ** affected,
@@ -4310,8 +4303,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
           }
         }
     }
-    if (!update_migs(loci[i],
-                     gtree[i],
+    if (!update_migs(gtree[i],
                      stree,
                      snode,
                      affected,
@@ -4372,7 +4364,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     /* go through the list of marked nodes, and append at the end of the list
        their children (only if they are unmarked to avoid duplicates). The final
        list represents the nodes for which branch lengths must be updated */
-    int extra = 0;
+    unsigned int extra = 0;
     for (j = 0; j < k; ++j)
     {
       gnode_t * node = gt_nodesptr[j];
@@ -5027,7 +5019,7 @@ static long propose_tau(locus_t ** loci,
         gtree[i]->nodes[j]->mark = 0;
 
       /* restore branch lengths and pmatrices */
-      int matrix_updates = __mark_count[i] + __extra_count[i];
+      unsigned int matrix_updates = __mark_count[i] + __extra_count[i];
       if (matrix_updates)
       {
         if (!gt_nodesptr[0]->parent)
@@ -5089,7 +5081,7 @@ static long getlinkedpops(stree_t * stree,
   migevent_t * me;
   dlist_item_t * dli;
   snode_t ** loc_linked;
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   snode_t * startx = x;
 
@@ -5204,7 +5196,7 @@ static long rb_bounds(stree_t * stree,
   long lcount = 0;
   double tl, tu;
 
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   unsigned int total_nodes = stree->tip_count+stree->inner_count;
 
@@ -6941,7 +6933,7 @@ long stree_propose_spr(stree_t ** streeptr,
     if (__mark_count[i])
     {
       /* update branch lengths and transition probability matrices */
-      for (j = 0; j < (unsigned int)__mark_count[i]; ++j)
+      for (j = 0; j < __mark_count[i]; ++j)
       {
         bl_list[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree_list[i]->edge_count,
                                                     bl_list[j]->pmatrix_index);
@@ -7928,7 +7920,7 @@ static long fill_travbuffer_and_mark(gtree_t * gtree,
         assert(!node_is_mirror(start));
 
         unsigned int hindex = GET_HINDEX(stree,start);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
+        assert(hindex < stree->hybrid_count);
 
         /* find correct parent node according to hpath flag */
         assert(x->hpath[hindex] != BPP_HPATH_NONE);
@@ -9275,7 +9267,7 @@ long stree_propose_stree_snl(stree_t ** streeptr,
 }
 
 /* checks whether migration exists/valid (forward in time) */
-long migration_valid(stree_t * stree, snode_t * from, snode_t * to)
+long migration_valid(snode_t * from, snode_t * to)
 {
   if (!opt_mig_bitmatrix[from->node_index][to->node_index])
     return 0;
@@ -9312,7 +9304,7 @@ double migrate_gibbs(stree_t * stree,
   snode_t * src = stree->nodes[si];
   snode_t * tgt = stree->nodes[ti];
 
-  const static long thread_index = 0;
+  static const long thread_index = 0;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
@@ -9445,7 +9437,7 @@ static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** 
   {
     for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
     {
-      if (!migration_valid(stree, stree->nodes[i], stree->nodes[j])) continue;
+      if (!migration_valid(stree->nodes[i], stree->nodes[j])) continue;
 
       ++total;
 
@@ -9468,7 +9460,7 @@ static long prop_migrates_mbar_slide(migspec_t * spec)
   
   assert(opt_est_theta);
 
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   mbar_old = spec->M;
 
@@ -9510,14 +9502,14 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
   
   assert(opt_est_theta);
 
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   /* TODO: Change the nested for loops with one loop over opt_mig_spec */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
     {
-      if (!migration_valid(stree, stree->nodes[i], stree->nodes[j])) continue;
+      if (!migration_valid(stree->nodes[i], stree->nodes[j])) continue;
 
       ++total;
 
@@ -9564,7 +9556,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
       #if 0
       stree_update_mig_subpops(stree,thread_index_zero);
       #else
-      stree_update_mig_subpops_single(stree, stree->nodes[j], stree->nodes[i], rate_old);
+      stree_update_mig_subpops_single(stree->nodes[j], stree->nodes[i], rate_old);
       #endif
 
       for (k = 0; k < opt_locus_count; ++k)
@@ -9597,7 +9589,7 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
         #if 0
         stree_update_mig_subpops(stree,thread_index_zero);
         #else
-        stree_update_mig_subpops_single(stree, stree->nodes[j], stree->nodes[i], rate_new);
+        stree_update_mig_subpops_single(stree->nodes[j], stree->nodes[i], rate_new);
         #endif
 
         for (k = 0; k < opt_locus_count; ++k)
@@ -9627,14 +9619,14 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
   
   assert(opt_est_theta);
 
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   /* TODO: Change the nested for loops with one loop over opt_mig_spec */
   for (i = 0; i < opt_migration_count; ++i)
   {
     spec = opt_mig_specs+i;
 
-    if (!spec->am || !migration_valid(stree, stree->nodes[spec->si], stree->nodes[spec->ti]))
+    if (!spec->am || !migration_valid(stree->nodes[spec->si], stree->nodes[spec->ti]))
       continue;
 
     total += opt_locus_count;;
@@ -9674,7 +9666,7 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
          update only those node migbuffer elements affected by Mi[j] */
       stree_update_mig_subpops(stree,thread_index_zero);
       #else
-      stree_update_mig_subpops_single_vrates(stree, stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_old);
+      stree_update_mig_subpops_single_vrates(stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_old);
       #endif
 
       /* TODO: We probably change only one locus */
@@ -9708,7 +9700,7 @@ static double prop_mig_vrates_slide(stree_t * stree, gtree_t ** gtree, locus_t *
         /* TODO: improve the following, see previous TODO */
         stree_update_mig_subpops(stree,thread_index_zero);
         #else
-        stree_update_mig_subpops_single_vrates(stree, stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_new);
+        stree_update_mig_subpops_single_vrates(stree->nodes[spec->ti], stree->nodes[spec->si], j, rate_new);
         #endif
 
         /* TODO: Same here, change only one locus */
@@ -9750,7 +9742,7 @@ double prop_migrates_mbar(stree_t * stree, gtree_t ** gtree)
   
   assert(opt_est_theta);
 
-  const static long thread_index_zero = 0;
+  static const long thread_index_zero = 0;
 
   for (i = 0; i < opt_migration; ++i)
   {
@@ -9860,7 +9852,7 @@ static void migspec_append(stree_t * stree, snode_t * x, snode_t * y)
   opt_mig_bitmatrix[spec->si][spec->ti] = 1;
   opt_migration_matrix[spec->si][spec->ti] = opt_migration_count++;
 
-  //stree_update_mig_subpops_single(stree,y,x,0);
+  //stree_update_mig_subpops_single(y,x,0);
   stree_update_mig_subpops(stree,thread_index_zero);
 }
 
@@ -9891,7 +9883,7 @@ static long migspec_remove(stree_t * stree, snode_t * x, snode_t * y)
   /* update migbuffers  -- this is a bit of a hack */
   //double oldM = spec->M;
   //spec->M = 0;
-  //stree_update_mig_subpops_single(stree,y,x,oldM);
+  //stree_update_mig_subpops_single(y,x,oldM);
   //spec->M = oldM;
   #if(DBG_TF)
   printf("     Setting M_%s->%s (%ld->%ld) (%ld) to -1\n", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, spec->si, spec->ti, opt_migration_matrix[spec->si][spec->ti]);
@@ -10095,6 +10087,7 @@ long dissolve_incoming_lineages(stree_t * stree,
 }
 #endif
 
+#if 0
 static gnode_t * subtree_prune_from_pop(stree_t * stree,
                                         gtree_t * gtree,
                                         snode_t * frompop,
@@ -10223,6 +10216,7 @@ static gnode_t * subtree_prune_from_pop(stree_t * stree,
   /* return deleted node (or NULL when pruning the root lineage) */
   return father;
 }
+#endif
 
 void pruneoff(stree_t * stree,
               gtree_t * gtree,
@@ -11221,7 +11215,6 @@ static double simulate_coalescent_mig_from_point(stree_t * stree,
 static long target_branches(stree_t * stree,
                             gtree_t * gtree,
                             snode_t * snode,
-                            gnode_t * curnode,
                             double t,
                             gnode_t ** outbuf)
 {
@@ -11300,8 +11293,7 @@ static long target_branches(stree_t * stree,
   return count;
 }
 
-static void subtree_regraft(stree_t * stree,
-                            gtree_t * gtree,
+static void subtree_regraft(gtree_t * gtree,
                             gnode_t * curnode,
                             gnode_t * father,
                             gnode_t * target,
@@ -11688,7 +11680,7 @@ void mig_dissolve_and_sim(stree_t * stree,
       newpop = newpop->parent;
     
     /* get lineages entering that population */
-    long lineages = target_branches(stree,gtree,newpop,simnodes[i],tnew,gtree->travbuffer);
+    long lineages = target_branches(stree,gtree,newpop,tnew,gtree->travbuffer);
 
     /* randomly pick one lineage */
     j = (long)(lineages*legacy_rndu(thread_index));
@@ -11696,7 +11688,7 @@ void mig_dissolve_and_sim(stree_t * stree,
     gnode_t * gtarget = gtree->travbuffer[j];
 
     /* regraft */
-    subtree_regraft(stree, gtree, simnodes[i], parents[p], gtarget, newpop, x,existing_migs_count,tnew);
+    subtree_regraft(gtree, simnodes[i], parents[p], gtarget, newpop, x,existing_migs_count,tnew);
 
     /* check whether we regrafted on the parental edge of a node that is to be simulated.
        this can only happen for lineages that enter X via migration, i.e. lineages that
@@ -12559,7 +12551,7 @@ void migdissolveandism2(stree_t * stree,
       newpop = newpop->parent;
     
     /* get lineages entering that population */
-    long lineages = target_branches(stree,gtree,newpop,simnodes[i],tnew,gtree->travbuffer);
+    long lineages = target_branches(stree,gtree,newpop,tnew,gtree->travbuffer);
 
     /* randomly pick one lineage */
     j = (long)(lineages * legacy_rndu(thread_index));
@@ -12567,8 +12559,7 @@ void migdissolveandism2(stree_t * stree,
     gnode_t * gtarget = gtree->travbuffer[j];
 
     /* regraft */
-    subtree_regraft(stree,
-                    gtree,
+    subtree_regraft(gtree,
                     simnodes[i],
                     parents[p],
                     gtarget,
@@ -12994,7 +12985,7 @@ long stree_migration_flip_wrapper(gtree_t *** gtreeptr,
   if (debug_rjmcmc)
   {
     printf("Flip__  ");
-    debug_print_migrations_flip(stree);
+    debug_print_migrations(stree);
     debug_print_migmatrix(stree);
     //debug_print_bitmatrix(stree);
   }
@@ -13016,7 +13007,7 @@ l_unwind:
   #if 0
   if (debug_rjmcmc)
   {
-    debug_print_migrations_flip(stree);
+    debug_print_migrations(stree);
     debug_print_migmatrix(stree);
     //debug_print_bitmatrix(stree);
   }
@@ -13100,6 +13091,7 @@ l_unwind:
   return rc;
 }
 
+#if 0
 static long lh_tree_counter(stree_t * stree)
 {
   long i,j;
@@ -13148,85 +13140,12 @@ static long mig_models_count(long n)
 {
   return n*(n+1)*(n-1)/3;
 }
+#endif
 
 
 /*** Ziheng $$$ ***/
 #define DEBUG_zy
 int times = 0;
-
-static void debug_print_migrations_flip(stree_t * stree)
-{
-  long i;
-  printf("%ld: ", opt_migration_count);
-  for (i = 0; i < opt_migration_count; ++i)
-  {
-    migspec_t * spec = opt_mig_specs+i;
-    unsigned int si = spec->si;
-    unsigned int ti = spec->ti;
-    printf("  M_%s->%s=%f (%d,%d,%f,%f)", stree->nodes[si]->label, stree->nodes[ti]->label, spec->M, spec->si,spec->ti,spec->alpha,spec->beta);
-  }
-  printf("\n");
-  //printf("  ");
-}
-static void debug_print_migrations(stree_t * stree)
-{
-  long i;
-  printf("%ld: ", opt_migration_count);
-  for (i = 0; i < opt_migration_count; ++i)
-  {
-    migspec_t * spec = opt_mig_specs+i;
-
-    printf("  M_%s->%s=%f", stree->nodes[spec->si]->label, stree->nodes[spec->ti]->label, spec->M);
-  }
-  printf("\n");
-  //printf("  ");
-}
-static void debug_print_bitmatrix(stree_t * stree)
-{
-  long i,j;
-  long total_nodes = stree->tip_count + stree->inner_count;
-
-  printf("      ");
-  for (i = 0; i < total_nodes; ++i)
-    printf(" %2s", stree->nodes[i]->label);
-  printf("\n");
-  for (i = 0; i < total_nodes; ++i)
-  {
-    printf("   ");
-    printf(" %2s", stree->nodes[i]->label);
-    for (j = 0; j < total_nodes; ++j)
-    {
-      if (opt_mig_bitmatrix[i][j] != 0)
-        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_mig_bitmatrix[i][j]);
-      else
-        printf(" %2ld", opt_mig_bitmatrix[i][j]);
-    }
-    printf("\n");
-  }
-}
-static void debug_print_migmatrix(stree_t * stree)
-{
-  long i,j;
-  long total_nodes = stree->tip_count + stree->inner_count;
-
-  printf("      ");
-  for (i = 0; i < total_nodes; ++i)
-    printf(" %2s", stree->nodes[i]->label);
-  printf("\n");
-  for (i = 0; i < total_nodes; ++i)
-  {
-    printf("   ");
-    printf(" %2s", stree->nodes[i]->label);
-    for (j = 0; j < total_nodes; ++j)
-    {
-      if (opt_migration_matrix[i][j] != -1)
-        printf(ANSI_COLOR_RED " %2ld" ANSI_COLOR_RESET, opt_migration_matrix[i][j]);
-      else
-        printf(" %2ld", opt_migration_matrix[i][j]);
-    }
-    printf("\n");
-  }
-}
 
 static void debug_check_matrix(stree_t * stree)
 {

@@ -676,7 +676,7 @@ static void replace_hybrid(stree_t * stree,
 
     /* fill hnodes and mnodes */
     unsigned int hindex = GET_HINDEX(stree,epoch);
-    assert(hindex >= 0 && hindex < stree->hybrid_count);
+    assert(hindex < stree->hybrid_count);
 
     /* make sure epoch is a mirror node */
     if (node_is_bidirection(epoch))
@@ -1810,7 +1810,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         long bidir = node_is_bidirection(father);
 
         unsigned int hindex = GET_HINDEX(stree, father);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
+        assert(hindex < stree->hybrid_count);
 
         if (legacy_rndu(thread_index) <= father->hphi)
            gtree->root->hpath[hindex] = BPP_HPATH_LEFT;
@@ -2663,7 +2663,7 @@ static void interchange_flags(stree_t * stree,
         assert(!node_is_mirror(pop));
 
         unsigned int hindex = GET_HINDEX(stree,pop);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
+        assert(hindex < stree->hybrid_count);
 
         assert(a->hpath[hindex] != BPP_HPATH_NONE);
         assert(b->hpath[hindex] == BPP_HPATH_NONE);
@@ -2694,7 +2694,7 @@ static void interchange_flags(stree_t * stree,
         assert(!node_is_mirror(pop));
 
         unsigned int hindex = GET_HINDEX(stree,pop);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
+        assert(hindex < stree->hybrid_count);
 
         assert(b->hpath[hindex] != BPP_HPATH_NONE);
         assert(a->hpath[hindex] == BPP_HPATH_NONE);
@@ -2752,7 +2752,7 @@ static void split_flags(stree_t * stree, gnode_t * a)
       assert(!node_is_mirror(pop));
 
       unsigned hindex = GET_HINDEX(stree,pop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       assert(a->hpath[hindex] != BPP_HPATH_NONE);
 
@@ -2801,7 +2801,7 @@ static void join_flags(stree_t * stree, gnode_t * a, int * bpath, snode_t * old_
       assert(!node_is_mirror(pop));
 
       unsigned int hindex = GET_HINDEX(stree,pop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       assert(bpath[hindex] != BPP_HPATH_NONE);
 
@@ -2853,7 +2853,7 @@ static double sample_hpath(stree_t * stree, gnode_t * x, long thread_index)
       assert(!node_is_mirror(pop));
 
       hindex = GET_HINDEX(stree,pop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       visited[hindex] = 1;
 
@@ -2956,7 +2956,7 @@ static double sample_hpath_reverse(stree_t * stree, gnode_t * x, int * old_hpath
       assert(!node_is_mirror(pop));
 
       hindex = GET_HINDEX(stree,pop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       if (stree->pptable[pop->node_index][end->node_index] &&
           stree->pptable[pop->hybrid->node_index][end->node_index])
@@ -3030,7 +3030,7 @@ static void decrease_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_ind
 
       /* move according to path flags */
       hindex = GET_HINDEX(stree,start);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       /* find correct parent node according to hpath flag */
       assert(x->hpath[hindex] != BPP_HPATH_NONE);
@@ -3067,7 +3067,7 @@ static void increase_gene_leaves_count(stree_t * stree, gnode_t * x, int msa_ind
 
       /* move according to path flags */
       hindex = GET_HINDEX(stree,start);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       /* find correct parent node according to hpath flag */
       assert(x->hpath[hindex] != BPP_HPATH_NONE);
@@ -3105,7 +3105,7 @@ static void decrease_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
       
       /* move according to path flags */
       hindex = GET_HINDEX(stree,start);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       /* find correct parent node according to hpath flag */
       assert(x->hpath[hindex] != BPP_HPATH_NONE);
@@ -3137,7 +3137,7 @@ static void increase_seqin_count(stree_t * stree, gnode_t * x, int msa_index)
       
       /* move according to path flags */
       hindex = GET_HINDEX(stree,start);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       assert(x->hpath[hindex] != BPP_HPATH_NONE);
       assert(start->left);
@@ -4333,7 +4333,7 @@ static int perform_spr(gtree_t * gtree, gnode_t * curnode, gnode_t * target)
   return 0;
 }
 
-void gtree_fini(int msa_count)
+void gtree_fini()
 {
   int i;
 
@@ -4399,7 +4399,7 @@ static int branch_compat(stree_t * stree,
       assert(!node_is_mirror(nextpop));
 
       hindex = GET_HINDEX(stree,nextpop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
       assert(target->hpath[hindex] != BPP_HPATH_NONE);
 
       if (target->hpath[hindex] == BPP_HPATH_RIGHT)
@@ -4628,7 +4628,7 @@ static gnode_t * network_fill_targets(stree_t * stree,
       assert(!node_is_mirror(pop));
 
       unsigned int hindex = GET_HINDEX(stree,pop);
-      assert(hindex >= 0 && hindex < stree->hybrid_count);
+      assert(hindex < stree->hybrid_count);
 
       int dbg_flag = target->hpath[hindex];
       if (target->hpath[hindex] == BPP_HPATH_NONE)
@@ -6526,9 +6526,7 @@ static double simulate_coalescent_mig(stree_t * stree,
   return t;
 }
 
-static void subtree_prune(stree_t * stree,
-                          gtree_t * gtree,
-                          gnode_t * curnode)
+static void subtree_prune(gtree_t * gtree, gnode_t * curnode)
 {
   long i;
   long msa_index = gtree->msa_index;
@@ -6622,8 +6620,7 @@ static void subtree_prune(stree_t * stree,
   }
 }
 
-static void subtree_regraft(stree_t * stree,
-                            gtree_t * gtree,
+static void subtree_regraft(gtree_t * gtree,
                             gnode_t * curnode,
                             gnode_t * father,
                             gnode_t * target,
@@ -6779,7 +6776,7 @@ static long propose_spr_sim(locus_t * locus,
     old_mi_count = (opt_migration && curnode->mi) ? curnode->mi->count : 0;
 
     /* prune, move migrations from father to sibling and save curnode migs */
-    subtree_prune(stree,gtree,curnode);
+    subtree_prune(gtree,curnode);
 
     /* store old array of migration events for restoring in case of rejection */
     if (opt_migration)
@@ -6821,7 +6818,7 @@ static long propose_spr_sim(locus_t * locus,
     target = travbuffer[j];
 
     /* regraft */
-    subtree_regraft(stree,gtree,curnode,father,target,newpop,tnew);
+    subtree_regraft(gtree,curnode,father,target,newpop,tnew);
 
     /* update necessary p-matrices */
     k = 0;
@@ -6967,7 +6964,7 @@ static long propose_spr_sim(locus_t * locus,
         SWAP_PMAT_INDEX(gtree->edge_count,travbuffer[j]->pmatrix_index);
 
       /* prune */
-      subtree_prune(stree,gtree,curnode);
+      subtree_prune(gtree,curnode);
 
       /* restore original array of migration events on pruned edge */
       if (opt_migration)
@@ -6985,7 +6982,7 @@ static long propose_spr_sim(locus_t * locus,
       }
 
       /* regraft */
-      subtree_regraft(stree,gtree,curnode,father,sibling,oldpop,told);
+      subtree_regraft(gtree,curnode,father,sibling,oldpop,told);
 
       /* restore logpr */
       if (opt_migration)

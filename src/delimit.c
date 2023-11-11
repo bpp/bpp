@@ -43,7 +43,7 @@ static double facn;
 
 static int longint_len(long x)
 {
-  return x ? (int)floor(log10(abs(x)))+1 : 1;
+  return x ? (int)floor(log10(labs(x)))+1 : 1;
 }
 
 double * getpriorA11()

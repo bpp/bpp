@@ -834,7 +834,7 @@ static void relaxed_clock_branch_lengths(stree_t * stree, gtree_t * gtree)
         assert(!node_is_mirror(start));
 
         unsigned int hindex = GET_HINDEX(stree,start);
-        assert(hindex >= 0 && hindex < stree->hybrid_count);
+        assert(hindex < stree->hybrid_count);
 
         /* find correct parent node according to hpath flag */
         assert(x->hpath[hindex] != BPP_HPATH_NONE);
