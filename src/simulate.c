@@ -1781,7 +1781,7 @@ static void assign_thetas(stree_t * stree)
 
   for (i = 0; i < stree->tip_count; ++i)
   {
-    if (opt_sp_seqcount[i] < 2 && !opt_diploid[i])
+    if (opt_sp_seqcount[i] < 2 && (!opt_diploid || !opt_diploid[i]))
     {
       stree->nodes[i]->theta = -1;
       stree->nodes[i]->has_theta = 0;
