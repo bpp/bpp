@@ -204,6 +204,8 @@
 
 #define BPP_DATA_DNA                    0
 #define BPP_DATA_AA                     1
+#define BPP_DATA_TRAIT                  2
+#define BPP_DATA_STD                    3
 
 #define BPP_DNA_MODEL_MIN               0
 #define BPP_DNA_MODEL_DEFAULT           0
@@ -718,6 +720,18 @@ typedef struct ntree_s
   node_t ** inner;
 } ntree_t;
 
+typedef struct trait_s
+{
+  int count;
+  int length;
+
+  double ** trait;  // matrix holding continuous morphological traits
+  char ** label;
+
+  int dtype;
+  int model;
+} trait_t;
+
 typedef struct msa_s
 {
   int count;
@@ -1176,6 +1190,8 @@ extern char * opt_heredity_filename;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
+extern char * opt_traitfile;
+extern char * opt_stdfile;
 extern char * opt_msafile;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
@@ -1341,6 +1357,9 @@ msa_t * phylip_parse_interleaved(phylip_t * fd);
 msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
+
+/* functions in trait.c */
+trait_t ** parse_traitfile(const char * traitfile, long * count);
 
 /* functions in rtree.c */
 

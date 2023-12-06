@@ -2498,6 +2498,7 @@ static FILE * init(stree_t ** ptr_stree,
 {
   long i,j;
   long msa_count;
+  long trait_count;
   long pindex;
   double logl,logpr;
   double logl_sum = 0;
@@ -2513,6 +2514,7 @@ static FILE * init(stree_t ** ptr_stree,
   msa_t ** msa_list;
   gtree_t ** gtree;
   locus_t ** locus;
+  trait_t ** trait_list;
 
   const long thread_index = 0;
 
@@ -2547,6 +2549,16 @@ static FILE * init(stree_t ** ptr_stree,
 
     print_network_table(stree,fp_out);
     print_network_table(stree,stdout);
+  }
+
+  /* parse the trait file //Chi */
+  if (opt_traitfile)
+  {
+    printf("Parsing trait file...");
+    if (!(trait_list = parse_traitfile(opt_traitfile, &trait_count)))
+      fatal("Failed parsing trait file %s", opt_traitfile);
+    else
+      printf(" Done\n");
   }
 
   /* parse the phylip file */

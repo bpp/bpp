@@ -202,6 +202,8 @@ char * opt_locusrate_filename;
 char * opt_mapfile;
 char * opt_mcmcfile;
 char * opt_modelparafile;
+char * opt_traitfile;
+char * opt_stdfile;
 char * opt_msafile;
 char * opt_mscifile;
 char * opt_outfile;
@@ -530,6 +532,8 @@ void args_init(int argc, char ** argv)
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_mrate_move = BPP_MRATE_SLIDE;
+  opt_traitfile = NULL;
+  opt_stdfile = NULL;
   opt_msafile = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
@@ -927,6 +931,8 @@ static void dealloc_switches()
   if (opt_constraintfile) free(opt_constraintfile);
   if (opt_mapfile) free(opt_mapfile);
   if (opt_mcmcfile) free(opt_mcmcfile);
+  if (opt_traitfile) free(opt_traitfile);
+  if (opt_stdfile) free(opt_stdfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);
   if (opt_outfile) free(opt_outfile);

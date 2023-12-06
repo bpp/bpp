@@ -13144,8 +13144,8 @@ static long mig_models_count(long n)
 
 
 /*** Ziheng $$$ ***/
-#define DEBUG_zy
-int times = 0;
+// #define DEBUG_zy
+// int times = 0;
 
 static void debug_check_matrix(stree_t * stree)
 {
