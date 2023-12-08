@@ -1964,7 +1964,7 @@ static void check_taus(stree_t * stree)
 
     while (x->parent)
     {
-      if (x->parent->tau <= x->tau)
+      if (x->parent->tau <= x->tau && (!opt_msci || x->parent->htau))
         fatal("[ERROR] Parental node %s (tau=%f) is younger than daughter %s"
               " (tau=%f)\n",
               x->parent->label, x->parent->tau, x->label, x->tau);
@@ -1997,7 +1997,6 @@ void cmd_simulate()
   /* allocate and set pptable */
   stree_init_pptable(stree);
   stree_label(stree);
-  check_taus(stree);
 
   if (opt_msci)
   {
@@ -2008,6 +2007,7 @@ void cmd_simulate()
     assign_thetas(stree);
     validate_and_set_taus(stree);
   }
+  check_taus(stree);
 
   if (opt_migration)
   {
