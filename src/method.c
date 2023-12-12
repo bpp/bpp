@@ -188,6 +188,9 @@ static void init_outfile(FILE * fp)
     unsigned int rseed = get_legacy_rndu_status(0);
     fprintf(fp, "Seed: %d (randomly generated)\n", rseed);
   }
+  
+  if (opt_streenewick)
+    fprintf(fp, "Initial species tree: %s\n", opt_streenewick);
 }
 
 static void print_mcmc_headerline(FILE * fp,
