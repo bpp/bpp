@@ -1713,13 +1713,13 @@ static void print_migcount(FILE ** fp, gtree_t ** gtree)
   }
 }
 
-static void print_gtree(FILE ** fp, stree_t * stree, gtree_t ** gtree)
+static void print_gtree(FILE ** fp, FILE ** fp_mig, stree_t * stree, gtree_t ** gtree)
 {
   long i,j;
   double tl;
 
   /* TODO: For IM, branch lengths are incorrect */
-  assert(!opt_migration);
+  assert(!opt_migration || (opt_migration && opt_datefile));
 
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -1734,6 +1734,16 @@ static void print_gtree(FILE ** fp, stree_t * stree, gtree_t ** gtree)
     char * newick = gtree_export_newick(gtree[i]->root,NULL);
     fprintf(fp[i], "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
     free(newick);
+
+    //Anna need to print trees
+    if (opt_migration) {
+    	char * migration = gtree_export_migration(gtree[i]->root);
+    	fprintf(fp_mig[i], "%s\n", migration);
+    	free(migration);
+	  
+    }
+
+
   }
 }
 
@@ -2198,6 +2208,7 @@ static FILE * resume(stree_t ** ptr_stree,
     }
     free(gtree_files);
     *ptr_fp_gtree = fp_gtree;
+
   }
 
   /* open potential truncated rate files for appending */
@@ -2285,6 +2296,7 @@ static FILE * init(stree_t ** ptr_stree,
                    stree_t ** ptr_sclone, 
                    gtree_t *** ptr_gclones,
                    FILE *** ptr_fp_gtree,
+                   FILE *** ptr_fp_mig,
                    FILE *** ptr_fp_locus,
                    FILE *** ptr_fp_migcount,
                    FILE ** ptr_fp_out)
@@ -2303,6 +2315,7 @@ static FILE * init(stree_t ** ptr_stree,
   FILE * fp_mcmc = NULL;
   FILE * fp_out;
   FILE ** fp_gtree;
+  FILE ** fp_mig;
   FILE ** fp_locus = NULL;
   FILE ** fp_migcount = NULL;
   msa_t ** msa_list;
@@ -2715,6 +2728,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   /* gene tree and locus output files */
   *ptr_fp_gtree = NULL;
+  *ptr_fp_mig = NULL;
 
   /* if print gtree */
   if (opt_print_genetrees)
@@ -2727,11 +2741,25 @@ static FILE * init(stree_t ** ptr_stree,
       fp_gtree[i] = xopen(s,"w");
       free(s);
     }
+
+    if (opt_migration) {
+    	fp_mig = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    	for (i = 0; i < opt_locus_count; ++i)
+    	{
+    	  char * s = NULL;
+    	  xasprintf(&s, "%s.mig.L%d", opt_outfile, msa_list[i]->original_index+1);
+    	  fp_mig[i] = xopen(s,"w");
+    	  free(s);
+    	}
+    }
   }
-  else
+  else {
     fp_gtree = NULL;
+    fp_mig = NULL;
+  }
 
   *ptr_fp_gtree = fp_gtree;
+  *ptr_fp_mig = fp_mig;
 
   /* if print rates */
   *ptr_fp_locus = NULL;
@@ -2773,8 +2801,9 @@ static FILE * init(stree_t ** ptr_stree,
     create_mig_bitmatrix(stree);
   }
 
+  int tau_ctl = 0;
   /* initialize species tree (tau + theta) */
-  stree_init(stree,msa_list,map_list,msa_count,fp_out);
+  stree_init(stree,msa_list,map_list,msa_count, &tau_ctl, fp_out);
 
   stree_show_pptable(stree, BPP_FALSE);
 
@@ -2892,7 +2921,7 @@ static FILE * init(stree_t ** ptr_stree,
     stree_update_mig_subpops(stree, thread_index);
 
 
-  gtree = gtree_init(stree,msa_list,map_list,date_list,msa_count);
+  gtree = gtree_init(stree,msa_list,map_list,date_list, tau_ctl, msa_count);
 
   if (opt_datefile)
   	free(date_list);
@@ -3449,6 +3478,7 @@ void cmd_run()
   FILE * fp_out;
   stree_t * stree;
   FILE ** fp_gtree = NULL;
+  FILE ** fp_mig = NULL;
   FILE ** fp_locus = NULL;
   FILE ** fp_migcount = NULL;
   gtree_t ** gtree;
@@ -3568,6 +3598,7 @@ void cmd_run()
                    &sclone, 
                    &gclones,
                    &fp_gtree,
+                   &fp_mig,
                    &fp_locus,
                    &fp_migcount,
                    &fp_out);
@@ -3800,6 +3831,14 @@ void cmd_run()
 
   FILE * fp_debug = stdout;
 
+  //ANNA
+  /*stree->nodes[0]->theta = 0.007;
+  stree->nodes[1]->theta = 0.004;
+  stree->nodes[2]->theta = 0.005;
+  stree->nodes[3]->theta = 0.006;
+  stree->nodes[4]->theta = 0.008; */
+
+
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
@@ -3944,8 +3983,9 @@ void cmd_run()
     if (opt_migration)
     {
       ratio = gtree_propose_migevent_ages_serial(locus,gtree,stree);
-    }
+    } 
 
+    
     /* propose gene tree topologies using SPR */
     /* Note: call serial version when thetas are integrated out */
     if (!opt_est_theta || opt_threads == 1)
@@ -3969,9 +4009,12 @@ void cmd_run()
       check_lnprior(stree, gtree, i, "GSPR");
       #endif
       if (opt_debug_bruce)
-        debug_bruce(stree,gtree,"GSPR", i, fp_debug);
+        debug_bruce(stree,gtree,"GSPR", i, fp_debug); 
 
     /* propose population sizes on species tree */
+      
+      
+      
     if (opt_est_theta)
     {
       ratio = stree_propose_theta(gtree,locus,stree);
@@ -3986,9 +4029,11 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "THETA");
       #endif
-    }
-
+    } 
+ 
+    
     /* propose species tree taus */
+     
     if (stree->tip_count > 1 && stree->root->tau > 0)
     {
 
@@ -4008,9 +4053,10 @@ void cmd_run()
       #ifdef CHECK_LNPRIOR
       check_lnprior(stree, gtree, i, "TAU");
       #endif
-    } 
+    }   
 
     /* propose migration rates */
+      
     if (opt_migration)
     {
       ratio = prop_migrates(stree,gtree,locus);
@@ -4024,13 +4070,14 @@ void cmd_run()
                                     (double)ft_round;
       }
     }
+    
 
     /* mixing step */
     if (!opt_datefile) {
    	 ratio = proposal_mixing(gtree, stree, locus);
     	pjump[BPP_MOVE_MIX_INDEX] = (pjump[BPP_MOVE_MIX_INDEX] * (ft_round - 1) + ratio) /
                                 (double)ft_round;
-    }
+    } 
     #ifdef CHECK_LOGL
     check_logl(stree, gtree, locus, i, "MIXING");
     #endif
@@ -4041,6 +4088,7 @@ void cmd_run()
     check_lnprior(stree, gtree, i, "MIXING");
     #endif
 
+    
     if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR) ||
          opt_est_heredity == HEREDITY_ESTIMATE)
@@ -4154,9 +4202,14 @@ void cmd_run()
       }
     }
 
+    
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
-	    if (stree->tip_count > 1)
-		ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
+	    if (stree->tip_count > 1) {
+		    if (opt_migration)
+		   	fatal("Mutation rate proposal not implemented with migration \n");
+		    else
+			ratio = prop_tipDate_muGtree(gtree, stree, locus, thread_index_zero);
+	    }
 	    else {
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
@@ -4222,8 +4275,8 @@ void cmd_run()
         print_migcount(fp_migcount,gtree);
 
       /* log gene trees */
-      if (opt_print_genetrees)
-        print_gtree(fp_gtree,stree,gtree);
+      if (opt_print_genetrees) 
+        print_gtree(fp_gtree,fp_mig, stree,gtree);
 
       /* log rates */
       if (opt_print_locusfile)
@@ -4659,8 +4712,14 @@ void cmd_run()
 
   if (opt_print_genetrees)
   {
-    for (i = 0; i < opt_locus_count; ++i)
+    for (i = 0; i < opt_locus_count; ++i){
       fclose(fp_gtree[i]);
+      if (opt_migration)
+      	fclose(fp_mig[i]);
+    }
+    if (opt_migration)
+	free(fp_mig);
+
     free(fp_gtree);
     if (opt_checkpoint)
       free(gtree_offset);

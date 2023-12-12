@@ -1162,6 +1162,9 @@ static void set_migration_rates(stree_t * stree)
     s = t = -1;
     for (j = 0; j < nodes_count; ++j)
     {
+      if (!spec->source || !spec->target) {
+	      fatal("Check migration rates in control file. There are fewer than %d rates specified.", opt_migration);
+      }
       if (s == -1 && !strcmp(spec->source, stree->nodes[j]->label))
         s = j;
 
@@ -1719,7 +1722,7 @@ static void simulate(stree_t * stree)
         fatal("Missing theta values for some of the species tree inner nodes");
 
     /* simulate gene tree */
-    gtree[i] = gtree_simulate(stree,msa[i],i, tipDateArray, tipDateArrayLen);
+    gtree[i] = gtree_simulate(stree,msa[i],i, tipDateArray, tipDateArrayLen, 0);
     gtree[i]->travbuffer = NULL;
 
     if (opt_est_locusrate)

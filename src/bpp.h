@@ -314,6 +314,7 @@ extern const char * global_freqs_strings[28];
 #define EVENT_MIG_SOURCE  1
 #define EVENT_MIG_TARGET  2
 #define EVENT_TAU         3
+#define EVENT_SAMPLE      4
 
 
 /* libpll related definitions */
@@ -1376,6 +1377,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
+		int * tau_ctl,
                 FILE * fp_out);
 
 void stree_init_pptable(stree_t * stree);
@@ -1592,12 +1594,15 @@ gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
 		      list_t * datelist,
+		      int tau_ctl,
                       int msa_count);
 void gtree_simulate_init(stree_t * stree, list_t * maplist);
 void gtree_simulate_fini(void);
 
 char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *));
+
+char * gtree_export_migration(const gnode_t * root);
 
 void gtree_destroy(gtree_t * tree, void (*cb_destroy)(void *));
 
@@ -1676,7 +1681,8 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, 
                         mappingDate_t ** tipDateArray,
-                        int tipDateArrayLen);
+                        int tipDateArrayLen, 
+			int tau_ctl);
 
 double prop_branch_rates_serial(gtree_t ** gtree,
                                 stree_t * stree,

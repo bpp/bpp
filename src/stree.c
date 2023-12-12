@@ -544,6 +544,35 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
              snode->migbuffer[i].active_count * sizeof(double));
     }
   }
+
+  if (opt_datefile && snode->epoch_count) {
+
+	  if (!clone->epoch_count) {
+	  	clone->epoch_count = (int *) xmalloc(msa_count * sizeof(int));
+	  }
+
+	  memcpy(clone->epoch_count, snode->epoch_count, msa_count *sizeof(int));
+
+	  if (!clone->date_count) {
+	  	clone->date_count = (int    **) xmalloc (msa_count * sizeof(int *));
+	  	for (i = 0; i < msa_count; i++ ) {
+			clone->date_count[i] = (int *) xmalloc(clone->epoch_count[i] * sizeof(int));
+	  	}
+	  }
+
+	  if (!clone->tip_date) {
+	  	clone->tip_date   = (double **) xmalloc (msa_count * sizeof(double *));
+	  	for (i = 0; i < msa_count; i++ ) {
+			clone->tip_date[i]   = (double *) xmalloc(clone->epoch_count[i] * sizeof(double));
+	  	}
+  	}
+
+  	for (i = 0; i < msa_count; i++ ) {
+		memcpy(clone->date_count[i], snode->date_count[i], clone->epoch_count[i] *sizeof(int));
+		memcpy(clone->tip_date[i], snode->tip_date[i], clone->epoch_count[i] * sizeof(double));
+  	}
+  }
+  
 }
 
 static void gnode_clone(gnode_t * gnode,
@@ -644,13 +673,8 @@ static void stree_clone(stree_t * stree, stree_t * clone)
              nodes_count*sizeof(long));
   }
   if (opt_datefile)  {
-
-    for (i = 0; i < nodes_count; ++i) {
-	memcpy(clone->nodes[i]->epoch_count, stree->nodes[i]->epoch_count, (size_t)opt_locus_count *  sizeof(int));
-	memcpy(clone->nodes[i]->tip_date, stree->nodes[i]->tip_date, (size_t)opt_locus_count *  sizeof(double *));
-	memcpy(clone->nodes[i]->date_count, stree->nodes[i]->date_count, (size_t)opt_locus_count *  sizeof(int * ));
-  	}
-	memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
+	if (clone->u_constraint)
+		memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
 	memcpy(clone->l_constraint, stree->l_constraint, stree->inner_count * sizeof(double));
   }
 }
@@ -667,6 +691,11 @@ stree_t * stree_clone_init(stree_t * stree)
   assert(!opt_msci);
   clone = (stree_t *)xcalloc(1, sizeof(stree_t));
   memcpy(clone, stree, sizeof(stree_t));
+
+  if (stree->u_constraint)
+	  clone->u_constraint = xmalloc(stree->inner_count* sizeof(double));
+  if (stree->l_constraint)
+  	clone->l_constraint = xmalloc(stree->inner_count* sizeof(double));
 
   /* create cloned species tree nodes */
   clone->nodes = (snode_t **)xmalloc(nodes_count * sizeof(snode_t *));
@@ -729,7 +758,6 @@ stree_t * stree_clone_init(stree_t * stree)
     clone->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
   }
-
 
   return clone;
 }
@@ -1263,7 +1291,7 @@ static void stree_init_tau_recursive(snode_t * node,
   stree_init_tau_recursive(node->right, prop, thread_index);
 }
 
-static void stree_init_tau(stree_t * stree, long thread_index)
+static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 {
   unsigned int i;
   unsigned int total_nodes;
@@ -1299,15 +1327,39 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 
    double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
 
+   // ANNA these are being read in as real time units
+   if (opt_datefile) {
+   	unsigned int setDates = 0; 
+	unsigned int tipDates = 0;
+	for (i = 0; i < stree->tip_count; i++) 
+	        if (stree->nodes[i]->length > 0 ) tipDates++;
+
+	for (i = stree->tip_count; i < stree->inner_count + stree->tip_count; i++) 
+	        if (stree->nodes[i]->length > 0 ) setDates++;
+
+	if ((tipDates && setDates != stree->inner_count) || (setDates > 0 && setDates < stree->inner_count))
+		 fatal ("If node ages are specified in the control files, all interal nodes must have a starting age"); 
+
+	   if (setDates) {
+	   	*tau_ctl  = 1; 
+	   	for (i = 0; i < stree->inner_count + stree->tip_count; i++) 
+		   	stree->nodes[i]->tau = stree->nodes[i]->length;
+	   
+	   }
+
+  }
+
    /* set the speciation time for root */
-   if (stree->root->tau)
-   {
-     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-       stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
-                          (0.9 + 0.2*legacy_rndu(thread_index));
-     else
-       stree->root->tau = opt_tau_alpha / opt_tau_beta *
-                          (0.9 + 0.2*legacy_rndu(thread_index));
+   if (!*tau_ctl) {
+   	if (stree->root->tau)
+   	{
+   	  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
+   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	  else
+   	    stree->root->tau = opt_tau_alpha / opt_tau_beta *
+   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	}
    }
 
    /* recursively set the speciation time for the remaining inner nodes. For
@@ -1318,8 +1370,10 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    }
    else
    {
-     stree_init_tau_recursive(stree->root->left, prop, thread_index);
-     stree_init_tau_recursive(stree->root->right, prop, thread_index);
+	   if (!*tau_ctl) {
+     		stree_init_tau_recursive(stree->root->left, prop, thread_index);
+     		stree_init_tau_recursive(stree->root->right, prop, thread_index);
+	   }
    }
 
    /* check to see if everything is OK */
@@ -2467,6 +2521,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
+		int * tau_ctl,
                 FILE * fp_out)
 {
   unsigned int i, j;
@@ -2498,12 +2553,18 @@ void stree_init(stree_t * stree,
   if (stree->tip_count > 1 || opt_msci)
   {
     /* Initialize speciation times and create extinct species groups */
-    stree_init_tau(stree, thread_index);
+    stree_init_tau(stree, thread_index, tau_ctl);
   }
   else
   {
     stree->nodes[0]->tau = 0;
   }
+  //ANNA
+  //stree->nodes[2]->tau = 1.4;
+  /*stree->nodes[4]->tau = .1; 
+  stree->nodes[3]->tau = .016;
+  stree->nodes[4]->tau = .008; */
+  
   nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   stree->td = (snode_t **)xmalloc((size_t)nodes_count * sizeof(snode_t *));
@@ -2568,7 +2629,7 @@ void stree_init(stree_t * stree,
                                                         sizeof(int *));
     }
 	  
-  }
+  } 
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
      species tree cloning functions do not call wraptree and that would require
@@ -4080,6 +4141,18 @@ static long update_migs(locus_t * locus,
       else if (x->parent)
         maxb = MIN(x->parent->time,maxb);
 
+      if (opt_datefile) {
+    
+    	  int index = snode->node_index - stree->tip_count;
+    	  //Check constraints
+    	  if (stree->l_constraint[index] != 0) 
+    		minb = MAX(minb, stree->l_constraint[index]);
+    	  	
+    	  if (stree->u_constraint[index] != 0) 
+    		maxb = MIN(maxb, stree->u_constraint[index]);
+    
+      }
+
       if (x->mi->me[j].time <= minb || x->mi->me[j].time >= maxb)
         return 0;
     }
@@ -5248,6 +5321,17 @@ static long propose_tau_mig(locus_t ** loci,
   if (snode->parent)
     maxage = snode->parent->tau;
 
+  if (opt_datefile) {
+
+	  int index = snode->node_index - stree->tip_count;
+	  //Check constraints
+	  if (stree->l_constraint[index] != 0) 
+		minage = MAX(minage, stree->l_constraint[index]);
+	  	
+	  if (stree->u_constraint && stree->u_constraint[index] != 0) 
+		maxage = MIN(maxage, stree->u_constraint[index]);
+  }
+
   if (opt_exp_imrb)
   {
     double bounds[2];
@@ -5618,6 +5702,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
   stree_t * original_stree = *streeptr;
   gtree_t ** original_gtree = *gtreeptr;
 
+
   stree_t * stree = *scloneptr;
   gtree_t ** gtree = *gcloneptr;
 
@@ -5625,7 +5710,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
   candidate = (int *)xcalloc((size_t)(total_nodes), sizeof(int));
 
   /* compute number of nodes with tau > 0 */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau > 0)
     {
@@ -5661,6 +5746,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
       }
     }
   }
+
   *streeptr = original_stree;
   *gtreeptr = original_gtree;
 

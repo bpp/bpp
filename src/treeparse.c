@@ -318,7 +318,7 @@ void stree_destroy(stree_t * tree,
       free(node->event);
     }
 
-    if (opt_datefile && !opt_simulate) {
+    if (opt_datefile && !opt_simulate && node->epoch_count) {
 	if (node->node_index < tree->tip_count + opt_seqAncestral) {
 		for (j = 0; j < opt_locus_count; j++) {
 	
@@ -448,8 +448,10 @@ void stree_destroy(stree_t * tree,
   if (tree->migcount_sum)
     free(tree->migcount_sum);
 
-  free(tree->u_constraint);
-  free(tree->l_constraint);
+  if (tree->u_constraint)
+  	free(tree->u_constraint);
+  if (tree->l_constraint)
+  	free(tree->l_constraint);
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);
@@ -1686,6 +1688,7 @@ static ntree_t * syntax_parse(list_t * token_list)
       #if 0
       fatal("Invalid token type while parsing n-ary tree");
       #endif
+
       snprintf(bpp_errmsg, 200, "Invalid token type while parsing n-ary tree");
       if (root)
         node_destroy(root,NULL);
