@@ -475,7 +475,8 @@ static void write_figtree(FILE * fp_out,
                           double * hpd025,
                           double * hpd975)
 {
-  long i, theta_count = 0, tau_count = 0;
+  long i,j, theta_count = 0, tau_count = 0;
+  int maxlen = 0;
   FILE * fp_tree = NULL;
   unsigned int snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
@@ -553,15 +554,26 @@ static void write_figtree(FILE * fp_out,
   }
 
   /*** Ziheng 2020-10-2 ***/
+  for (maxlen = 0, i = 0; i < snodes_total; ++i)
+  {
+    if (maxlen < (int)strlen(stree->nodes[i]->label))
+      maxlen = strlen(stree->nodes[i]->label);
+  }
   fprintf(fp_out, "List of nodes, taus and thetas:\n");
   fprintf(fp_out, "Node (+1)       Tau      Theta    Label\n");
   for (i = 0; i < snodes_total; ++i) {
     fprintf(fp_out,
-            "%-9ld %9.6f  %9.6f    %s\n",
+            "%-9ld %9.6f  %9.6f    %*s ",
             i,
             stree->nodes[i]->tau,
             stree->nodes[i]->theta,
+            maxlen,
             stree->nodes[i]->label ? stree->nodes[i]->label : "-");
+    fprintf(fp_out, "[");
+    for (j = 0; j < stree->tip_count; ++j)
+      if (stree->pptable[j][i])
+        fprintf(fp_out, " %s", stree->nodes[j]->label);
+    fprintf(fp_out, " ]\n");
   }
   char * newick;
   if(!opt_msci)
