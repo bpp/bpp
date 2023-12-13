@@ -465,6 +465,12 @@ typedef struct migbuffer_s
   long active_count; /* number of active elements (1 or nloci) */
 } migbuffer_t;
 
+typedef struct contrast_s
+{
+  double brlen;   // transformed branch length (v_k')
+  double * trait;  // (ancestral) trait values (m_k')
+  double * contrast;  // independent contrasts (x_k)
+} contrast_t;
 
 typedef struct snode_s
 {
@@ -555,6 +561,9 @@ typedef struct snode_s
 
   /* independent theta step lengths */
   long theta_step_index;
+  
+  /* phylogenetic indepandent contrasts */
+  contrast_t ** pic;
 } snode_t;
 
 typedef struct migevent_s
@@ -609,6 +618,8 @@ typedef struct stree_s
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
+  
+  int * trait_dim;  /* dimension of trait (contrast) vector (p) */
 } stree_t;
 
 typedef struct gnode_s
@@ -1085,6 +1096,7 @@ extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
+extern long opt_trait_part_count;
 extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
@@ -1452,6 +1464,8 @@ void stree_alloc_internals(stree_t * stree,
                            long * locus_seqcount,
                            unsigned int gtree_inner_sum,
                            long msa_count);
+
+void pic_init(stree_t * stree, trait_t ** trait_list, long count);
 
 int node_is_bidirection(const snode_t * node);
 int node_is_mirror(const snode_t * node);

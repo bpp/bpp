@@ -97,6 +97,7 @@ long opt_linkedtheta;
 long opt_load_balance;
 long opt_locusrate_prior;
 long opt_locus_count;
+long opt_trait_part_count;
 long opt_locus_simlen;
 long opt_max_species_count;
 long opt_method;
@@ -515,6 +516,7 @@ void args_init(int argc, char ** argv)
   opt_locusrate_prior = -1;
   opt_locusrate_mubar = 1;
   opt_locus_count = 0;
+  opt_trait_part_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
   opt_max_species_count = 0;

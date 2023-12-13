@@ -2498,7 +2498,6 @@ static FILE * init(stree_t ** ptr_stree,
 {
   long i,j;
   long msa_count;
-  long trait_count;
   long pindex;
   double logl,logpr;
   double logl_sum = 0;
@@ -2555,10 +2554,9 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)
   {
     printf("Parsing trait file...");
-    if (!(trait_list = parse_traitfile(opt_traitfile, &trait_count)))
-      fatal("Failed parsing trait file %s", opt_traitfile);
-    else
-      printf(" Done\n");
+    trait_list = parse_traitfile(opt_traitfile, &opt_trait_part_count);
+    assert(trait_list);
+    printf(" Done\n");
   }
 
   /* parse the phylip file */
@@ -2989,6 +2987,12 @@ static FILE * init(stree_t ** ptr_stree,
   {
     assert(opt_msci == 0);
     partition_fast(stree->tip_count);
+  }
+
+  /* initialize trait values and contrasts //Chi */
+  if (opt_traitfile)
+  {
+    pic_init(stree, trait_list, opt_trait_part_count);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -3496,6 +3500,15 @@ static FILE * init(stree_t ** ptr_stree,
     msa_destroy(msa_list[i]);
   free(msa_list);
 
+  //Chi TODO: free
+  if (opt_traitfile)
+  {
+    // for (i = 0; i < trait_count; ++i)
+    //   trait_destroy(trait_list[i]);
+    // free(trait_list);
+  }
+
+  
   return fp_mcmc;
 
 }
