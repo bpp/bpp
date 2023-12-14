@@ -619,7 +619,8 @@ typedef struct stree_s
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
   
-  int * trait_dim;  /* dimension of trait (contrast) vector (p) */
+  /* morphological traits */
+  int * trait_dim;  /* dimension of trait vector (p) of each partition */
 } stree_t;
 
 typedef struct gnode_s
