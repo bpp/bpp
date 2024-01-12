@@ -1589,7 +1589,7 @@ static void print_rates(FILE ** fp_locus,
 
     if (opt_migration && !opt_est_geneflow && opt_mig_vrates_exist)
     {
-      for (j = 0; j < opt_migration; ++j)
+      for (j = 0; j < opt_migration_count; ++j)
       {
         if (!opt_mig_specs[j].Mi) continue;
 
