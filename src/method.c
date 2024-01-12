@@ -4914,11 +4914,6 @@ void cmd_run()
 
   if (opt_est_geneflow)
   {
-    fflush(NULL);
-    for (int i = 0; i < 20; i++)
-      printf(" %2.0f", mig_events_counts[i]);
-    printf("\n");
-
     /* TF: Debug 2023-06-19 */
     long dbg_max_mig_model_count = stree->tip_count == 2 ? 4 : 256;
     long dbg_mrate_count = stree->tip_count == 2 ? 2 : 8;
