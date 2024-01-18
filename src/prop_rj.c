@@ -466,17 +466,17 @@ long prop_split(gtree_t ** gtree,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
 
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += log_pdfinvgamma(node->left->theta,
                                         opt_theta_alpha,
                                         opt_theta_beta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance += log_pdfgamma(node->left->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance += log_pdfbeta4(node->left->theta,
                                      opt_theta_p,
                                      opt_theta_q,
@@ -504,17 +504,17 @@ long prop_split(gtree_t ** gtree,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
 
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += log_pdfinvgamma(node->right->theta,
                                         opt_theta_alpha,
                                         opt_theta_beta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance += log_pdfgamma(node->right->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance += log_pdfbeta4(node->right->theta,
                                      opt_theta_p,
                                      opt_theta_q,
@@ -932,17 +932,17 @@ long prop_join(gtree_t ** gtree,
                                  opt_rjmcmc_alpha,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance -= log_pdfinvgamma(node->left->theta,
                                         opt_theta_alpha,
                                         opt_theta_beta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance -= log_pdfgamma(node->left->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance -= log_pdfbeta4(node->left->theta,
                                      opt_theta_p,
                                      opt_theta_q,
@@ -970,17 +970,17 @@ long prop_join(gtree_t ** gtree,
                                  opt_rjmcmc_alpha,
                                  opt_rjmcmc_alpha/(opt_rjmcmc_mean*node->theta));
       }
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance -= log_pdfinvgamma(node->right->theta,
                                         opt_theta_alpha,
                                         opt_theta_beta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
           lnacceptance -= log_pdfgamma(node->right->theta,
                                        opt_theta_alpha,
                                        opt_theta_beta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance -= log_pdfbeta4(node->right->theta,
                                      opt_theta_p,
                                      opt_theta_q,

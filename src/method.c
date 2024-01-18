@@ -295,7 +295,7 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "  Gspr: gene-tree SPR proposal\n");
   if (opt_finetune_theta_mode == 1)
   {
-    if (opt_theta_move == BPP_THETA_MIXED)
+    if (opt_theta_move == BPP_THETA_MOVE_MIXED)
     {
       if (opt_theta_gibbs_showall_eps)
         fprintf(fp, "   th1: species tree theta proposal  (format: slide:gibbs)\n");
@@ -310,7 +310,7 @@ static void print_mcmc_headerline(FILE * fp,
   }
   else if (opt_finetune_theta_mode == 2)
   {
-    if (opt_theta_move == BPP_THETA_MIXED)
+    if (opt_theta_move == BPP_THETA_MOVE_MIXED)
     {
       if (opt_theta_gibbs_showall_eps)
       {
@@ -338,7 +338,7 @@ static void print_mcmc_headerline(FILE * fp,
       char * sth = NULL;
       xasprintf(&sth, "th%ld", k+1);
         
-      if (opt_theta_move == BPP_THETA_MIXED)
+      if (opt_theta_move == BPP_THETA_MOVE_MIXED)
       {
         if (opt_theta_gibbs_showall_eps)
           fprintf(fp, "%*s: species tree theta proposal (node %ld)  (format: slide:gibbs)\n", 6, sth,k+1);
@@ -349,7 +349,7 @@ static void print_mcmc_headerline(FILE * fp,
         fprintf(fp, "%*s: species tree theta proposal (node %ld)\n", 6, sth,k+1);
       free(sth);
     }
-    if (opt_theta_move == BPP_THETA_MIXED && !opt_theta_gibbs_showall_eps)
+    if (opt_theta_move == BPP_THETA_MOVE_MIXED && !opt_theta_gibbs_showall_eps)
       fprintf(fp, "%*s: species tree theta proposal (mean from gibbs sampler)\n", 6, "thg");
 
   }
@@ -474,7 +474,7 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp,"\n");
 
   ap_width += 4*5;
-  if (opt_theta_move == BPP_THETA_MIXED)
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED)
   {
     if (opt_theta_gibbs_showall_eps)
       ap_width += opt_finetune_theta_count*10;
@@ -527,7 +527,7 @@ static void print_mcmc_headerline(FILE * fp,
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
     int spacing = 5;
-    if (opt_theta_move == BPP_THETA_MIXED && opt_theta_gibbs_showall_eps)
+    if (opt_theta_move == BPP_THETA_MOVE_MIXED && opt_theta_gibbs_showall_eps)
       spacing = 10;
     char * sth = NULL;
     xasprintf(&sth, "th%ld", i+1);
@@ -535,7 +535,7 @@ static void print_mcmc_headerline(FILE * fp,
     linewidth += spacing;
     free(sth);
   }
-  if (opt_theta_move == BPP_THETA_MIXED && !opt_theta_gibbs_showall_eps)
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED && !opt_theta_gibbs_showall_eps)
   {
     fprintf(fp, "%*s", 5, "thg");
     linewidth += 5;
@@ -821,7 +821,7 @@ static void reset_finetune(FILE * fp_out)
 
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_gspr);
-    if (opt_theta_move == BPP_THETA_MIXED || opt_theta_move == BPP_THETA_SLIDE)
+    if (opt_theta_move == BPP_THETA_MOVE_MIXED || opt_theta_move == BPP_THETA_MOVE_SLIDE)
     {
       for (k = 0; k < opt_finetune_theta_count; ++k)
         fprintf(fp[j], " %*.5f", prec_ft+spacing, g_pj_theta_slide[k]);
@@ -912,7 +912,7 @@ static void reset_finetune(FILE * fp_out)
     fprintf(fp[j], "Current finetune:");
     fprintf(fp[j], " %*.5f", prec_ft+spacing+1, opt_finetune_gtage);
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
-    if (opt_theta_move == BPP_THETA_GIBBS)
+    if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
     {
       for (k = 0; k < opt_finetune_theta_count; ++k)
         fprintf(fp[j], " %*s", 7, "-");
@@ -1004,7 +1004,7 @@ static void reset_finetune(FILE * fp_out)
 
   reset_finetune_onestep(g_pj_gage, &opt_finetune_gtage);
   reset_finetune_onestep(g_pj_gspr, &opt_finetune_gtspr);
-  if (opt_theta_move == BPP_THETA_MIXED || opt_theta_move == BPP_THETA_SLIDE)
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED || opt_theta_move == BPP_THETA_MOVE_SLIDE)
   {
     for (j = 0; j < opt_finetune_theta_count; ++j)
       reset_finetune_onestep(g_pj_theta_slide[j],&opt_finetune_theta[j]);
@@ -1052,7 +1052,7 @@ static void reset_finetune(FILE * fp_out)
     fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_gtspr);
     //for (k = 0; k < opt_finetune_theta_count; ++k)
     //  fprintf(fp[j], " %*.5f", prec_ft+spacing, opt_finetune_theta[k]);
-    if (opt_theta_move == BPP_THETA_GIBBS)
+    if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
     {
       for (k = 0; k < opt_finetune_theta_count; ++k)
         fprintf(fp[j], " %*s", 7, "-");
@@ -1192,19 +1192,19 @@ static void status_print_pjump(FILE * fp,
 
   fprintf(fp, " %4.2f", g_pj_gage);
   fprintf(fp, " %4.2f", g_pj_gspr);
-  if (opt_theta_move == BPP_THETA_SLIDE)
+  if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
   {
     for (k = 0; k < opt_finetune_theta_count; ++k)
       fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
   }
-  else if (opt_theta_move == BPP_THETA_GIBBS)
+  else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
   {
     for (k = 0; k < opt_finetune_theta_count; ++k)
       fprintf(fp, " %4.2f", g_pj_theta_gibbs[k]);
   }
   else
   {
-    assert(opt_theta_move == BPP_THETA_MIXED);
+    assert(opt_theta_move == BPP_THETA_MOVE_MIXED);
     if (opt_theta_gibbs_showall_eps)
     {
       for (k = 0; k < opt_finetune_theta_count; ++k)
@@ -3836,24 +3836,31 @@ void cmd_run()
   if (opt_exp_imrb)
     fprintf(stdout, "[EXPERIMENTAL] - New extended IM rubberband algorithm\n");
 
-  assert(opt_theta_move>=BPP_THETA_SLIDE && opt_theta_move<=BPP_THETA_MIXED);
+  assert(opt_theta_move>=BPP_THETA_MOVE_MIN && opt_theta_move<=BPP_THETA_MOVE_MAX);
   fprintf(stdout, "Theta proposal: ");
-  if (opt_theta_move == BPP_THETA_SLIDE)
-    fprintf(stdout, "Sliding window\n");
-  else if (opt_theta_move == BPP_THETA_GIBBS)
-    fprintf(stdout, "Gibbs sampler (Inv-G conditional)\n");
-  else if (opt_theta_move == BPP_THETA_MG_GAMMA)
-    fprintf(stdout, "Metropolised Gibbs sampler (Gamma conditional)\n");
-  else if (opt_theta_move == BPP_THETA_MG_INVG)
-    fprintf(stdout, "Metropolised Gibbs sampler (Inv-G conditional)\n");
-  else if (opt_theta_move == BPP_THETA_MG_CAUCHY)
-    fprintf(stdout, "Metropolised Gibbs sampler (Cauchy conditional)\n");
-  else if (opt_theta_move == BPP_THETA_MG_T4)
-    fprintf(stdout, "Metropolised Gibbs sampler (t-4 conditional)\n");
-  else if (opt_theta_move == BPP_THETA_MIXED)
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED)
+  {
     fprintf(stdout,
-            "Mixed proposal (Sliding window (%.2f) + Gibbs sampler (%.2f))\n",
-            opt_theta_slide_prob, 1-opt_theta_slide_prob);
+            "Mixed proposal (Sliding window (%.2f) + %s conditional Gibbs sampler (%.2f))\n",
+            opt_theta_slide_prob,
+            opt_theta_prop & BPP_THETA_PROP_MG_INVG ? "Inv-G" : "Gamma",
+            1-opt_theta_slide_prob);
+  }
+  else
+  {
+    if (opt_theta_prop == BPP_THETA_PROP_SW)
+      fprintf(stdout, "Sliding window\n");
+    else if (opt_theta_prop == BPP_THETA_PROP_MG_INVG)
+      fprintf(stdout, "Metropolised Gibbs sampler (Inv-G conditional)\n");
+    else if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+      fprintf(stdout, "Metropolised Gibbs sampler (Gamma conditional)\n");
+    else if (opt_theta_prop == BPP_THETA_PROP_MG_CAUCHY)
+      fprintf(stdout, "Metropolised Gibbs sampler (Cauchy conditional)\n");
+    else if (opt_theta_prop == BPP_THETA_PROP_MG_T4)
+      fprintf(stdout, "Metropolised Gibbs sampler (t-4 conditional)\n");
+    else
+      fatal("Internal error for opt_theta_prop");
+  }
 
   if (opt_linkedtheta == BPP_LINKEDTHETA_NONE)
     fprintf(stdout, "Linked thetas: none\n");
@@ -4195,12 +4202,12 @@ void cmd_run()
     if (opt_est_theta)
     {
       stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype);
-      if (opt_theta_move == BPP_THETA_SLIDE)
+      if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
           g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
       }
-      else if (opt_theta_move == BPP_THETA_GIBBS)
+      else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
           g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
@@ -4208,11 +4215,11 @@ void cmd_run()
       else
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
-          if (theta_av_movetype[j] == BPP_THETA_SLIDE)
+          if (theta_av_movetype[j] == BPP_THETA_MOVE_SLIDE)
             g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
           else
           {
-            assert(theta_av_movetype[j] == BPP_THETA_GIBBS);
+            assert(theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS);
             g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
           }
       }

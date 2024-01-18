@@ -1970,10 +1970,10 @@ static void stree_init_theta(stree_t * stree,
      }
 
      /* otherwise set theta around the mean of the prior */
-     if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+     if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                      (0.9 + 0.2 * legacy_rndu(thread_index));
-     else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+     else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
      {
        #if 0
        node->theta = opt_theta_alpha / opt_theta_beta;
@@ -1984,7 +1984,7 @@ static void stree_init_theta(stree_t * stree,
      }
      else
      {
-       assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+       assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
        double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
        double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
        node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
@@ -2009,15 +2009,15 @@ static void stree_init_theta(stree_t * stree,
 
         if (node->htau)
         {
-          if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
             node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                           (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
             node->theta = opt_theta_alpha / opt_theta_beta *
                           (0.6+0.8*legacy_rndu(thread_index));
           else
           {
-            assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+            assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
             double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
             double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
             node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
@@ -2032,15 +2032,15 @@ static void stree_init_theta(stree_t * stree,
         
         if (node->hybrid->htau)
         {
-          if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
             node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                                   (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
             node->hybrid->theta = opt_theta_alpha / opt_theta_beta *
                                   (0.6+0.8*legacy_rndu(thread_index));
           else
           {
-            assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+            assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
             double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
             double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
             node->hybrid->theta = opt_theta_min+r*(opt_theta_max-opt_theta_min);
@@ -2057,15 +2057,15 @@ static void stree_init_theta(stree_t * stree,
       {
         /* bidirectional introgression */
 
-        if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+        if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
           node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                         (0.9 + 0.2 * legacy_rndu(thread_index));
-        else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+        else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
           node->theta = opt_theta_alpha / opt_theta_beta *
                         (0.6+0.8*legacy_rndu(thread_index));
         else
         {
-          assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+          assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
           double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
           double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
           node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
@@ -2083,10 +2083,10 @@ static void stree_init_theta(stree_t * stree,
          case of inner nodes that have an incoming number of lineages equal to 1
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                       (0.9 + 0.2 * legacy_rndu(thread_index));
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
       {
         #if 0
         node->theta = opt_theta_alpha / opt_theta_beta;
@@ -2097,7 +2097,7 @@ static void stree_init_theta(stree_t * stree,
       }
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         double bmean = opt_theta_p / (opt_theta_p+opt_theta_q);
         double r = (0.8 + 0.2*legacy_rndu(thread_index))*bmean;
         node->theta = opt_theta_min + r*(opt_theta_max-opt_theta_min);
@@ -2843,11 +2843,11 @@ static int propose_theta_gibbs_im(stree_t * stree,
 
   a1 = opt_theta_alpha + coal_sum + migcount_sum;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
     b1 = opt_theta_beta  + T2h_sum;
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
     b1 = opt_theta_beta * a1 * (a1+1) /
          (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
   }
@@ -2855,11 +2855,11 @@ static int propose_theta_gibbs_im(stree_t * stree,
   /* save old theta in case of gamma prior */
   double oldtheta = snode->theta;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
     snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
     snode->theta = legacy_rndgamma(thread_index,a1) / b1;
   }
 
@@ -2904,7 +2904,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
   }
 
   /* gamma prior acceptance-rejetion step */
-  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     /* prior ratio */
     lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
@@ -3040,25 +3040,25 @@ static int propose_theta_gibbs(stree_t * stree,
   a1 = opt_theta_alpha + coal_sum;
 
   xm = xs = ym = ys = 0;
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
     b1 = opt_theta_beta  + T2h_sum;
 
-    if (opt_theta_move == BPP_THETA_MG_INVG)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
     {
       /* debugging step -- metropolized gibbs */
       a1 *= 1.01;
       b1 *= 0.99;
     }
-    else if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
     {
       a1 -= 2;
       double a = opt_theta_alpha-2;
       double b = (opt_theta_alpha-2)*(opt_theta_alpha-1) / opt_theta_beta;
       b1 = b*a1*(a1+1)/(a*(a+1)+T2h_sum*b);
     }
-    else if (opt_theta_move == BPP_THETA_MG_CAUCHY ||
-             opt_theta_move == BPP_THETA_MG_T4)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_CAUCHY ||
+             opt_theta_prop & BPP_THETA_PROP_MG_T4)
     {
       /* mean and variance for logx ~ InvG(a1,b1) */
       xm = b1/(a1-1);
@@ -3070,9 +3070,9 @@ static int propose_theta_gibbs(stree_t * stree,
   }
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
 
-    if (opt_theta_move == BPP_THETA_MG_INVG)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
     {
       /* invgamma */
       a1 += 2;
@@ -3085,7 +3085,7 @@ static int propose_theta_gibbs(stree_t * stree,
             (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
     }
 
-    if (opt_theta_move == BPP_THETA_MG_CAUCHY || opt_theta_move == BPP_THETA_MG_T4)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_CAUCHY || opt_theta_prop & BPP_THETA_PROP_MG_T4)
     {
       /* mean and variance for logx ~ Gamma(a1,b1) */
       xm = a1/b1;
@@ -3098,28 +3098,27 @@ static int propose_theta_gibbs(stree_t * stree,
   /* save old theta in case of metropolized gibbs */
   oldtheta = snode->theta;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
-    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
       snode->theta = legacy_rndgamma(thread_index,a1) / b1; 
-    else if (opt_theta_move == BPP_THETA_GIBBS ||
-             opt_theta_move == BPP_THETA_MG_INVG)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
       snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
   }
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_GAMMA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
 
-    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
       snode->theta = legacy_rndgamma(thread_index,a1) / b1; 
-    else if (opt_theta_move == BPP_THETA_MG_INVG)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
       snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
   }
 
   yold = ynew = znew = 0;
-  if (opt_theta_move == BPP_THETA_MG_CAUCHY || opt_theta_move == BPP_THETA_MG_T4)
+  if (opt_theta_prop & BPP_THETA_PROP_MG_CAUCHY || opt_theta_prop & BPP_THETA_PROP_MG_T4)
   {
-    znew = opt_theta_move == BPP_THETA_MG_CAUCHY ?
+    znew = opt_theta_prop & BPP_THETA_PROP_MG_CAUCHY ?
              rndCauchy(thread_index) : rndt4(thread_index);
     ynew = znew*ys + ym;
     yold = log(oldtheta);
@@ -3160,12 +3159,12 @@ static int propose_theta_gibbs(stree_t * stree,
     lnacceptance += gtree[i]->logpr;
   }
 
-  /* gamma prior acceptance-rejetion step */
-  if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA ||
-      opt_theta_move != BPP_THETA_GIBBS)
+  /* acceptance-rejetion step */
+  if (!(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA &&
+        opt_theta_prop & BPP_THETA_PROP_MG_INVG))
   {
     /* prior ratio */
-    if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+    if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
       lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
                       opt_theta_beta*(newtheta - oldtheta);
     else
@@ -3173,18 +3172,18 @@ static int propose_theta_gibbs(stree_t * stree,
                       opt_theta_beta*(1/newtheta - 1/oldtheta);
 
     /* proposal ratio */
-    if (opt_theta_move == BPP_THETA_MG_GAMMA)
+    if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
       lnacceptance += (a1-1) * log(oldtheta / newtheta) -
                       b1*(oldtheta - newtheta);
-    else if (opt_theta_move == BPP_THETA_MG_INVG)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
       lnacceptance += (-a1 - 1) * log(oldtheta/newtheta) -
                       b1*(1/oldtheta - 1/newtheta);
-    else if (opt_theta_move == BPP_THETA_MG_CAUCHY)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_CAUCHY)
     {
       zold = (yold - ym) / ys;
       lnacceptance += log((1 + znew*znew) / (1+zold*zold)) + ynew - yold;
     }
-    else if (opt_theta_move == BPP_THETA_MG_T4)
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_T4)
     {
       zold = (yold - ym) / ys;
       lnacceptance += ynew - yold;
@@ -3213,8 +3212,8 @@ static int propose_theta_gibbs(stree_t * stree,
     return 0;
   }
 
-  assert(opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA &&
-         opt_theta_move == BPP_THETA_GIBBS);
+  assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA &&
+         opt_theta_prop & BPP_THETA_PROP_MG_INVG);
 
   return 1;
 }
@@ -3242,7 +3241,7 @@ static int propose_theta_slide(stree_t * stree,
   {
     /* original proposal for theta */
     thetanew = thetaold + eps*legacy_rnd_symmetrical(thread_index);
-    if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+    if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
       thetanew = reflect(thetanew, opt_theta_min, opt_theta_max, thread_index);
     else
     {
@@ -3254,7 +3253,7 @@ static int propose_theta_slide(stree_t * stree,
   {
     /* proposal on log-scale */
 
-    if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+    if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
     {
       minv = log(opt_theta_min);
       maxv = log(opt_theta_max);
@@ -3270,15 +3269,15 @@ static int propose_theta_slide(stree_t * stree,
 
   snode->theta = thetanew;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
     lnacceptance += (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
                     opt_theta_beta*(1 / thetanew - 1 / thetaold);
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
     lnacceptance += (opt_theta_alpha-1) * log(thetanew / thetaold) -
                     opt_theta_beta*(thetanew - thetaold);
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
     lnacceptance += (opt_theta_p - 1) *
                     log((thetanew-opt_theta_min) / (thetaold-opt_theta_min)) +
                     (opt_theta_q - 1) *
@@ -3391,15 +3390,11 @@ void stree_propose_theta(gtree_t ** gtree,
       long move = opt_theta_move;
 
       /* if mixed move, then decide between slide and gibbs */
-      if (move == BPP_THETA_MIXED)
-      {
+      if (move == BPP_THETA_MOVE_MIXED)
         move = legacy_rndu(thread_index) < opt_theta_slide_prob ?
-                 BPP_THETA_SLIDE : BPP_THETA_GIBBS;
-        if (move == BPP_THETA_GIBBS && opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
-          move = BPP_THETA_MG_GAMMA;
-      }
+                 BPP_THETA_MOVE_SLIDE : BPP_THETA_MOVE_GIBBS;
 
-      if (move == BPP_THETA_SLIDE)
+      if (move == BPP_THETA_MOVE_SLIDE)
       {
         av = acceptvec_slide;
 
@@ -3408,7 +3403,7 @@ void stree_propose_theta(gtree_t ** gtree,
                                                            locus,
                                                            snode,
                                                            thread_index);
-        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_SLIDE;
+        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_SLIDE;
         if (i < stree->tip_count)
           slide_tip_count++;
         else
@@ -3430,7 +3425,7 @@ void stree_propose_theta(gtree_t ** gtree,
                                                              locus,
                                                              snode,
                                                              thread_index);
-        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_GIBBS;
+        acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_GIBBS;
         if (i < stree->tip_count)
           gibbs_tip_count++;
         else
@@ -3444,13 +3439,13 @@ void stree_propose_theta(gtree_t ** gtree,
   {
     case 1:
       /* one step size for all theta */
-      if (opt_theta_move == BPP_THETA_SLIDE)
+      if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
         acceptvec_slide[0] /= slide_tip_count+slide_inner_count;
-      else if (opt_theta_move == BPP_THETA_GIBBS)
+      else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
         acceptvec_gibbs[0] /= gibbs_tip_count+gibbs_inner_count;
       else
       {
-        assert(opt_theta_move == BPP_THETA_MIXED);
+        assert(opt_theta_move == BPP_THETA_MOVE_MIXED);
         acceptvec_gibbs[0] /= gibbs_tip_count+gibbs_inner_count;
         acceptvec_slide[0] /= slide_tip_count+slide_inner_count;
       }
@@ -3458,19 +3453,19 @@ void stree_propose_theta(gtree_t ** gtree,
 
     case 2:
       /* one step size for tip theta and one for inner theta */
-      if (opt_theta_move == BPP_THETA_SLIDE)
+      if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
       {
         acceptvec_slide[0] /= slide_tip_count;
         acceptvec_slide[1] /= slide_inner_count;
       }
-      else if (opt_theta_move == BPP_THETA_GIBBS)
+      else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
       {
         acceptvec_gibbs[0] /= gibbs_tip_count;
         acceptvec_gibbs[1] /= gibbs_inner_count;
       }
       else
       {
-        assert(opt_theta_move == BPP_THETA_MIXED);
+        assert(opt_theta_move == BPP_THETA_MOVE_MIXED);
         acceptvec_gibbs[0] /= gibbs_tip_count;
         acceptvec_gibbs[1] /= gibbs_inner_count;
         acceptvec_slide[0] /= slide_tip_count;
@@ -4667,17 +4662,17 @@ static long propose_tau(locus_t ** loci,
         //snode->hybrid->theta = 
       }
 
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += -log(thetafactor) +
                         (-opt_theta_alpha - 1) * log(snode->theta / oldtheta) -
                         opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance += -log(thetafactor) +
                         (opt_theta_alpha-1) * log(snode->theta / oldtheta) -
                         opt_theta_beta*(snode->theta - oldtheta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance += -log(thetafactor) + (opt_theta_p - 1) *
                        log((snode->theta-opt_theta_min) / (oldtheta-opt_theta_min)) +
                        (opt_theta_q - 1) *
@@ -5401,17 +5396,17 @@ static long propose_tau_mig(locus_t ** loci,
       if (snode->theta != -1)
         snode->theta = oldtheta / thetafactor;
 
-      if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += -log(thetafactor) +
                         (-opt_theta_alpha - 1) * log(snode->theta / oldtheta) -
                         opt_theta_beta*(1 / snode->theta - 1 / oldtheta);
-      else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance += -log(thetafactor) +
                         (opt_theta_alpha-1) * log(snode->theta / oldtheta) -
                         opt_theta_beta*(snode->theta - oldtheta);
       else
       {
-        assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
         lnacceptance += -log(thetafactor) + (opt_theta_p - 1) *
                        log((snode->theta-opt_theta_min) / (oldtheta-opt_theta_min)) +
                        (opt_theta_q - 1) *

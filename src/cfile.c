@@ -1383,7 +1383,7 @@ static long parse_thetaprior_args(const char * line)
 
   p += count;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
     opt_theta_p = a;
     opt_theta_q = b;
@@ -1394,10 +1394,10 @@ static long parse_thetaprior_args(const char * line)
     opt_theta_beta = b;
   }
 
-  if (is_emptyline(p) && (opt_theta_dist != BPP_THETA_PRIOR_BETA))
+  if (is_emptyline(p) && (opt_theta_prior != BPP_THETA_PRIOR_BETA))
     ret = 1;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
 
     count = get_e(p, &opt_est_theta);
@@ -1407,7 +1407,7 @@ static long parse_thetaprior_args(const char * line)
 
     if (is_emptyline(p)) ret = 1;
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
     count = get_double(p, &opt_theta_min);
     if (!count) goto l_unwind;
@@ -1437,7 +1437,7 @@ static long parse_thetaprior(const char * line)
 
   long count;
 
-  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+  opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
 
   /* peek at the first argument. If not a double then read distribution type
      otherwise read the arguments of invgamma (default) */
@@ -1450,11 +1450,11 @@ static long parse_thetaprior(const char * line)
     p += count;
 
     if (!strcasecmp(dist,"invgamma"))
-      opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+      opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
     else if (!strcasecmp(dist,"gamma"))
-      opt_theta_dist = BPP_THETA_PRIOR_GAMMA;
+      opt_theta_prior = BPP_THETA_PRIOR_GAMMA;
     else if (!strcasecmp(dist,"beta"))
-      opt_theta_dist = BPP_THETA_PRIOR_BETA;
+      opt_theta_prior = BPP_THETA_PRIOR_BETA;
     else
       goto l_unwind;
   }
@@ -2409,7 +2409,7 @@ static void check_validity()
   if (!opt_usedata && opt_bfbeta != 1)
     fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
     if (opt_theta_alpha <= 1)
       fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
@@ -2417,7 +2417,7 @@ static void check_validity()
     if (opt_theta_beta <= 0)
       fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     if (opt_theta_alpha <= 0)
       fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
@@ -2427,7 +2427,7 @@ static void check_validity()
   }
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
     if (opt_theta_p <= 0)
       fatal("Theta prior Beta(p,q,min,max) requires p > 0");
     if (opt_theta_q <= 0)
@@ -2503,10 +2503,10 @@ static void check_validity()
       fatal("Invalid 'speciesmodelprior' value");
   }
 
-  if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
+  if (opt_theta_prior < BPP_THETA_PRIOR_MIN || opt_theta_prior > BPP_THETA_PRIOR_MAX)
     fatal("Internal error: invalid theta prior distribution");
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
     double invgammamean = opt_theta_beta / (opt_theta_alpha - 1);
     if (invgammamean > 1)
@@ -2514,7 +2514,7 @@ static void check_validity()
             "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
             "<= 3.3)");
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     double gammamean = opt_theta_alpha / opt_theta_beta;
     if (gammamean > 1)
@@ -3130,27 +3130,16 @@ void load_cfile()
     fatal("You can only use method A00 with one species");
 
   /* update theta method depending on prior */
-  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
-    if (opt_theta_move != BPP_THETA_SLIDE)
+    if (opt_theta_move != BPP_THETA_MOVE_SLIDE)
     {
       fprintf(stderr,"WARNING: Beta prior for thetas requires theta move to be "
               "set to 'slide'.\n");
     }
     opt_theta_slide_prob = 1;
-    opt_theta_move = BPP_THETA_SLIDE;
+    opt_theta_move = BPP_THETA_MOVE_SLIDE;
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
-  {
-    if (opt_theta_move == BPP_THETA_GIBBS)
-      opt_theta_move = BPP_THETA_MG_GAMMA;
-  }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
-  {
-    /* all ok -- do nothing */
-  }
-  else
-    fatal("Invalid theta prior distribution");
 }
 
 int parsefile_doubles(const char * filename,

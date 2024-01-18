@@ -130,9 +130,10 @@ long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
-long opt_theta_dist;
 long opt_theta_gibbs_showall_eps;
 long opt_theta_move;
+long opt_theta_prior;
+long opt_theta_prop;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -303,10 +304,11 @@ static struct option long_options[] =
   {"points",       required_argument, 0, 0 },  /* 39 */
   {"theta-move",   required_argument, 0, 0 },  /* 40 */
   {"mrate-move",   required_argument, 0, 0 },  /* 41 */
-  {"theta_slide",  required_argument, 0, 0 },  /* 42 */
+  {"theta-slide",  required_argument, 0, 0 },  /* 42 */
   {"theta_mode",   required_argument, 0, 0 },  /* 43 */
   {"no-pin",       no_argument,       0, 0 },  /* 44 */
   {"theta_showeps",no_argument,       0, 0 },  /* 45 */
+  {"theta-prop",   required_argument, 0, 0 },  /* 46 */
   { 0, 0, 0, 0 }
 };
 
@@ -580,10 +582,11 @@ void args_init(int argc, char ** argv)
   opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
-  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+  opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
-  opt_theta_move = BPP_THETA_MIXED;
+  opt_theta_move = BPP_THETA_MOVE_MIXED;
+  opt_theta_prop = BPP_THETA_PROP_DEFAULT;
   opt_theta_gibbs_showall_eps = 0;
   opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
   opt_theta_p = 0;
@@ -819,19 +822,11 @@ void args_init(int argc, char ** argv)
 
       case 40:
         if (!strcasecmp(optarg,"slide"))
-          opt_theta_move = BPP_THETA_SLIDE;
+          opt_theta_move = BPP_THETA_MOVE_SLIDE;
         else if (!strcasecmp(optarg,"gibbs"))
-          opt_theta_move = BPP_THETA_GIBBS;
-        else if (!strcasecmp(optarg,"mg_invg"))
-          opt_theta_move = BPP_THETA_MG_INVG;
-        else if (!strcasecmp(optarg,"mg_gamma"))
-          opt_theta_move = BPP_THETA_MG_GAMMA;
-        else if (!strcasecmp(optarg,"mg_cauchy"))
-          opt_theta_move = BPP_THETA_MG_CAUCHY;
-        else if (!strcasecmp(optarg,"mg_t4"))
-          opt_theta_move = BPP_THETA_MG_T4;
+          opt_theta_move = BPP_THETA_MOVE_GIBBS;
         else if (!strcasecmp(optarg,"mixed"))
-          opt_theta_move = BPP_THETA_MIXED;
+          opt_theta_move = BPP_THETA_MOVE_MIXED;
         else
           fatal("Invalid theta move (%s)", optarg);
         break;
@@ -865,6 +860,19 @@ void args_init(int argc, char ** argv)
         opt_theta_gibbs_showall_eps = 1;
         break;
 
+      case 46:
+        if (!strcasecmp(optarg,"mg_invg"))
+          opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+        else if (!strcasecmp(optarg,"mg_gamma"))
+          opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
+        else if (!strcasecmp(optarg,"mg_cauchy"))
+          opt_theta_prop = BPP_THETA_PROP_MG_CAUCHY;
+        else if (!strcasecmp(optarg,"mg_t4"))
+          opt_theta_prop = BPP_THETA_PROP_MG_T4;
+        else
+          fatal("Invalid theta prop (%s)", optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -884,9 +892,46 @@ void args_init(int argc, char ** argv)
     load_cfile_sim();
 
   if (opt_theta_slide_prob == 1)
-    opt_theta_move = BPP_THETA_SLIDE;
+    opt_theta_move = BPP_THETA_MOVE_SLIDE;
   else if (opt_theta_slide_prob == 0)
-    opt_theta_move = BPP_THETA_GIBBS;
+    opt_theta_move = BPP_THETA_MOVE_GIBBS;
+
+  /* TODO: Set opt_theta_mg_prop */
+  if (opt_theta_prop == BPP_THETA_PROP_DEFAULT)
+  {
+    if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
+    {
+      opt_theta_prop = BPP_THETA_PROP_SW;
+    }
+    else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
+    {
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
+        opt_theta_prop = BPP_THETA_PROP_SW;
+      else
+        assert(0);
+    }
+    else if (opt_theta_move == BPP_THETA_MOVE_MIXED)
+    {
+      /* default options for mixed proposal when theta prop not specified */
+      opt_theta_prop = BPP_THETA_PROP_SW;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        opt_theta_prop |= BPP_THETA_PROP_MG_GAMMA;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        opt_theta_prop |= BPP_THETA_PROP_MG_INVG;
+      else
+        assert(0);
+    }
+    else
+      fatal("Internal error in option parsing");
+  }
+
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED)
+    opt_theta_prop |= BPP_THETA_PROP_SW;
+  assert(opt_theta_prop != BPP_THETA_PROP_DEFAULT);
 
   /* check for number of independent commands selected */
   if (opt_version)
