@@ -86,6 +86,18 @@ static char * cb_serialize_branch(const snode_t * node)
   return s;
 }
 
+
+void mutation_dealloc(void * data)
+{
+  if (data)
+  {
+    mutation_t * mut = (mutation_t *)data;
+
+    free(mut);
+  }
+}
+
+
 static void print_settings(stree_t * stree)
 {
   long i;
@@ -505,6 +517,155 @@ static double * rates4sites(double locus_siterate_alpha, int cdf)
   free(counts);
 
   return rates;
+}
+
+void clear_marks (gtree_t * tree) {
+	for (unsigned i = 0; i < tree->inner_count + tree->tip_count; i++)
+		tree->nodes[i]->mark = 0;
+}
+
+void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
+	int mark = 0;
+  	char dna[4] = "TCAG";
+	if (node->left) {
+		mark_mutation(node->left, site, mutations, locus);
+		mark_mutation(node->right, site, mutations, locus);
+
+	} 
+
+	list_t * mutNode = mutations + node->clv_index;
+	list_item_t * item = mutNode->head;
+
+	while (item) {
+		mutation_t * mut = (mutation_t *) item->data;
+
+		if (mut->site == site) {
+			mark = 1;
+
+			if (!node->left || !node->left->mark || !node->right->mark) {
+				printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n", locus + 1, site + 1, mut->time, charmap_nt_tcag[mut->state], mut->pop->label);
+			}
+			break;
+
+		}
+		item = item->next;
+	}
+	
+
+}
+
+void print_mutation_information(gnode_t * node, int site) {
+
+}
+
+static void evolve_mutation_recursive(gnode_t * node, double ** rates, list_t * mutList, int * mutPresent) {
+
+  char * xparent = (char *)(node->parent->data);  /* parent sequence */
+  char * x = (char *)(node->data);                /* current sequence */
+
+  char dna[4] = "TCAG";
+  double time, wt, prob;
+  int inverse[9] = { -1, 0, 1, -1, 2, -1, -1, -1, 3};
+  int site, i, j;
+  /* See notes in make_root_seq(). inverse[9] is used to convert from unary code
+     (T=1,C=2,A=4,G=8) back to 0,1,2,3 code for states */
+
+  /* copy parent sequence to current node */
+  memcpy(x,xparent,opt_locus_simlen * sizeof(char));
+ 
+  list_t * mutNode = mutList + node->clv_index;
+
+  /* For each site */
+  for (i = 0; i < opt_locus_simlen; ++i) {
+	  time = 0; 
+
+	  /* Simulate until the end of the branch */
+	  site = inverse[(int)xparent[i]];
+	  while (1) {
+
+		/* Draw waiting time */
+		wt = legacy_rndexp(thread_index_zero, -1 / rates[site][site]);
+
+		if (time + wt > node->length) 
+		        break;
+
+		time += wt;
+		mutPresent[i] = 1;
+
+    		/* generate new state */
+		double r = legacy_rndu(thread_index_zero);
+	  	prob = 0;
+		
+		for (j = 0; j < 4; j++) {
+		  if (j != site) {
+			  if (prob - rates[site][j]/rates[site][site] > r) {
+		    		break;
+			  }
+			  else
+				  prob -= rates[site][j]/rates[site][site];
+		  }
+		}
+			  
+		
+		site = j;
+		x[i] = pll_map_nt_tcag[(int)dna[j]];
+		
+		/* Need to record that last mutation on each branch and the time */
+
+		double bwTime = node->time + (node->length - time);
+
+		mutation_t * mut = NULL; 
+		if (mutNode->tail)
+		 	mut = (mutation_t *) mutNode->tail->data;
+
+		if (!mutNode->tail || mut->site != site) {
+			mutation_t * data = (mutation_t *)  xmalloc(1 * sizeof(mutation_t));
+			list_append(mutNode, data);
+		}
+
+		mut = (mutation_t *) mutNode->tail->data;
+		mut->site = i;
+		mut->state = x[i];
+		mut->time = bwTime;
+		
+
+		/* Record population */
+		snode_t * curPop = node->pop;
+		long maxCount = 0;
+		long count = 0;
+
+		if (node->mi)
+			maxCount = node->mi->count;
+		while (curPop->parent || count < maxCount) {
+
+			if (count >= maxCount || 
+				(curPop->parent->tau < node->mi->me[count].time)) {
+
+				if (bwTime < curPop->parent->tau) {
+					break;
+				}
+				curPop = curPop->parent;
+
+			} else {
+				if (bwTime < node->mi->me[count].time) {
+					break;
+				} 
+
+				curPop = node->mi->me[count].target;
+				count++;
+			}
+		}
+		mut->pop = curPop; 
+
+		
+	  }
+
+  }
+
+  if (node->left)
+    evolve_mutation_recursive(node->left, rates, mutList, mutPresent);
+  if (node->right)
+    evolve_mutation_recursive(node->right,rates, mutList, mutPresent);
 }
 
 static void evolve_jc69_recursive(gnode_t * node,
@@ -1383,6 +1544,7 @@ static void simulate(stree_t * stree)
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
   FILE * fp_seqDates = NULL;
+  double ** rate = NULL; 
 
   double H = -1, md_full = -1, md_rand = -1;
   double mH = 0, meand_full = 0, meand_rand = 0;
@@ -1579,6 +1741,15 @@ static void simulate(stree_t * stree)
     }
   }
 
+  int * printLocusIndex = NULL; 
+  if (opt_print_locus) {
+	printLocusIndex = xcalloc(opt_locus_count, sizeof(int));
+	for (i = 0; i < opt_print_locus; i++) {
+		if (opt_print_locus_num[i] >= opt_locus_count) 
+			fatal("Locus index to print is larger than the number of loci");
+		printLocusIndex[opt_print_locus_num[i]] = 1; 
+	}
+  }
   /* start generating */
   for (i = 0; i < opt_locus_count; ++i)
   {
@@ -1784,7 +1955,7 @@ static void simulate(stree_t * stree)
       free(newick);
     }
 
-    if (opt_msafile)
+    if (opt_msafile )
     {
       /* calculate rates for each site */
       if (locus_siterate_alpha)
@@ -1810,7 +1981,76 @@ static void simulate(stree_t * stree)
       make_root_seq(gtree[i]->root, freqs);
 
       /* recursively generate ancestral sequences and tip sequences */
-      if (opt_model == BPP_DNA_MODEL_JC69)
+      if (opt_print_locus && printLocusIndex[i]) {
+
+	if (!rate) {
+		rate = xmalloc(4 * sizeof(double * ));
+        	for (int k = 0; k < 4; k++) {
+        	        rate[k] = xmalloc( 4 * sizeof(double));
+        	}
+	}
+        
+        rate[0][1] = freqs[1] * qrates[0];
+        rate[0][2] = freqs[2] * qrates[1];
+        rate[0][3] = freqs[3] * qrates[2];
+        
+        rate[1][0] = freqs[0] * qrates[0];
+        rate[1][2] = freqs[2] * qrates[3];
+        rate[1][3] = freqs[3] * qrates[4];
+        
+        rate[2][0] = freqs[0] * qrates[1];
+        rate[2][1] = freqs[1] * qrates[3];
+        rate[2][3] = freqs[3] * qrates[5];
+        
+        rate[3][0] = freqs[0] * qrates[2];
+        rate[3][1] = freqs[1] * qrates[4];
+        rate[3][2] = freqs[2] * qrates[5];
+        
+        rate[0][0] = -(rate[0][1] + rate[0][2] + rate[0][3]);
+        rate[1][1] = -(rate[1][0] + rate[1][2] + rate[1][3]);
+        rate[2][2] = -(rate[2][0] + rate[2][1] + rate[2][3]);
+        rate[3][3] = -(rate[3][0] + rate[3][1] + rate[3][2]);
+
+	double diag, weightSum = 0;
+  	for (int i = 0; i < 4; i++) {
+  	  diag = -rate[i][i];
+  	  weightSum = diag * freqs[i] + weightSum;
+
+  	}
+
+  	/* Rescales the instantaneous rate matrix so that the average substitution rate is equal to mu */
+  	for (int i = 0; i < 4; i++) {
+  	  for (int j = 0; j < 4; j ++) {
+  	    rate[i][j] = rate[i][j] / weightSum;
+  	  }
+  	}
+
+	int * mutPresent = xcalloc(opt_locus_simlen, sizeof(int));
+	list_t * mutList = xcalloc(gtree[i]->inner_count+gtree[i]->tip_count, sizeof(list_t));
+
+        evolve_mutation_recursive(gtree[i]->root->left, rate, mutList, mutPresent);
+        evolve_mutation_recursive(gtree[i]->root->right, rate, mutList, mutPresent);
+
+	/* Identify mutations that are observed*/
+	for (int k = 0; k < opt_locus_simlen; k++) {
+
+		/* Mark nodes */
+		if (mutPresent[k])
+			mark_mutation(gtree[i]->root, k, mutList, i);
+
+		clear_marks(gtree[i]);
+	}
+
+	/* Free memory */
+	for (int k = 0; k < gtree[i]->inner_count + gtree[i]->tip_count; k++) {
+		list_clear(mutList + k, mutation_dealloc);
+	}
+	free(mutList);
+	free(mutPresent);
+
+
+      } 
+      else if (opt_model == BPP_DNA_MODEL_JC69)
       {
         evolve_jc69_recursive(gtree[i]->root->left, locus_siterate_alpha, siterates);
         evolve_jc69_recursive(gtree[i]->root->right, locus_siterate_alpha, siterates);
@@ -1874,6 +2114,15 @@ static void simulate(stree_t * stree)
       printf("%10ld replicates done... mean tMRCA = %9.6f\n", i+1, tmrca/(i+1));
   }  /* end of locus loop */
   
+  free(printLocusIndex);
+  if (rate) {
+        for (int i = 0; i < 4; i++) {
+                free(rate[i]);
+        } 
+	free(rate);
+  }
+	
+
   if (stree->tip_count == 1)
   {
     mH /= opt_locus_count;  meand_full /= opt_locus_count;  meand_rand /= opt_locus_count;

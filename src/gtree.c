@@ -70,6 +70,7 @@ static int cb_cmp_nodelabel(void * a, void * b)
   return (!strcmp(node->label,label)); 
 }
 
+
 static long propose_spr_sim(locus_t * locus,
                             gtree_t * gtree,
                             stree_t * stree,
@@ -313,7 +314,7 @@ static char * export_newick_recursive(const gnode_t * root,
     }
     else
     {
-      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%.10f", root->label, root->length);
     }
   }
   else
@@ -343,7 +344,7 @@ static char * export_newick_recursive(const gnode_t * root,
     else
     {
       size_alloced = xasprintf(&newick,
-                              "(%s,%s)%s:%f",
+                              "(%s,%s)%s:%.10f",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",
@@ -358,44 +359,70 @@ static char * export_newick_recursive(const gnode_t * root,
   return newick;
 }
 
+
 static char * print_migration(const gnode_t * root) {
 	char * part1; 
 	char * part2; 
-	char * migration;
 	long size_alloced;
+	snode_t * pop = root->pop;
 
-	size_alloced = xasprintf(&part1,"%s:", root->pop->label);
+	long maxCount = 0, count = 0;
 
-	if (!root->mi || !root->mi->count) {
-		size_alloced = xasprintf(&migration, "%s;", part1);
-		free(part1);
+	if (root->mi) 
+		maxCount = root->mi->count;	
 
-	
-	} else {
-		for (long i = 0; i < root->mi->count; i++) {
-			if (i == root->mi->count - 1) {
-				size_alloced = xasprintf(&migration, "%s%f*%s&%s;", part1, 
-									root->mi->me[i].time,
-								     	root->mi->me[i].target->label,
-								       	root->mi->me[i].source->label);
-				
-				free(part1);
-	
-			} else {
+	/* Starting population */
+	if (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) 
+		size_alloced = xasprintf(&part1,"%s:", root->pop->label);
+	else
+		size_alloced = xasprintf(&part1,"%s:;", root->pop->label);
+
+	/* Add migration and taus */
+	while (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) {
+		if (count >= maxCount || (pop->parent->tau < root->mi->me[count].time)) {
+			if (count < maxCount || (pop->parent->parent && pop->parent->parent->tau < root->parent->time)) {
 				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
-									root->mi->me[i].time,
-								     	root->mi->me[i].target->label,
-								       	root->mi->me[i].source->label);
-				free(part1);
-				size_alloced = xasprintf(&part1,"%s", part2);
-				free(part2);
+								root->pop->parent->tau,
+							     	root->pop->parent->label,
+							       	root->pop->label);
+			} else {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
+								root->pop->parent->tau,
+							     	root->pop->parent->label,
+							       	root->pop->label);
 			}
-		
+			free(part1);
+			size_alloced = xasprintf(&part1,"%s", part2);
+			free(part2);
+			
+			pop = pop->parent;
+
+		} else {
+			if (count + 1 < maxCount || (pop->parent && pop->parent->tau < root->parent->time) ) {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
+									root->mi->me[count].time,
+								     	root->mi->me[count].target->label,
+								       	root->mi->me[count].source->label);
+			} else {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
+									root->mi->me[count].time,
+								     	root->mi->me[count].target->label,
+								       	root->mi->me[count].source->label);
+			}
+			free(part1);
+			size_alloced = xasprintf(&part1,"%s", part2);
+			free(part2);
+			pop = root->mi->me[count].target;
+			count++;
 		}
 	}
 
-return migration;
+  	if (size_alloced < 0)
+  	  fatal("Memory allocation during newick export failed.");
+
+return part1;
 }
+
 
 static char * export_migration_recursive(const gnode_t * root)
 {
@@ -435,8 +462,8 @@ static char * export_migration_recursive(const gnode_t * root)
     free(subtree2);
     free(node_mig);
   }
-  /*if (size_alloced < 0)
-    fatal("Memory allocation during newick export failed.");*/
+  if (size_alloced < 0)
+    fatal("Memory allocation during newick export failed.");
 
   return migration;
 }
@@ -444,12 +471,9 @@ static char * export_migration_recursive(const gnode_t * root)
 char * gtree_export_migration(const gnode_t * root)
 {
   char * migration;
-  long size_alloced;
   if (!root) return NULL;
 
   migration = export_migration_recursive(root);
- /*if (size_alloced < 0)
-    fatal("Memory allocation during newick export failed");*/
 
   return migration;
 }
@@ -471,7 +495,7 @@ char * gtree_export_newick(const gnode_t * root,
     }
     else
     {
-      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%.10f", root->label, root->length);
     }
   }
   else
@@ -497,7 +521,7 @@ char * gtree_export_newick(const gnode_t * root,
     else
     {
       size_alloced = xasprintf(&newick,
-                              "(%s,%s)%s:%f;",
+                              "(%s,%s)%s:%.10f;",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",

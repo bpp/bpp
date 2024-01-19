@@ -590,6 +590,15 @@ typedef struct stree_s
 
 } stree_t;
 
+typedef struct mutation_s
+{
+  char state; 
+  int site;
+  double time; 
+  snode_t * pop;
+  
+} mutation_t;
+
 typedef struct gnode_s
 {
   char * label;
@@ -1062,6 +1071,7 @@ extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_partition_count;
 extern long opt_print_genetrees;
+extern long opt_print_locus;
 extern long opt_print_hscalars;
 extern long opt_print_locusfile;
 extern long opt_print_locusrate;
@@ -1145,6 +1155,7 @@ extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
+extern long * opt_print_locus_num;
 extern char * opt_bfdriver;
 extern char * cmdline;
 extern char * opt_cfile;
@@ -2218,6 +2229,7 @@ int parsefile_doubles(const char * filename,
                       long n,
                       double * outbuffer,
                       long * errcontext);
+long parse_printlocus(const char * line, long * lcount);
 
 /* functions in core_partials_sse.c */
 

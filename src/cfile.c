@@ -2048,6 +2048,52 @@ static long readandvalidatecount(const char * line, long spcount)
   return ret;
 }
 
+long parse_printlocus(const char * line, long * lcount)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long alloc_size = 1;
+
+  long count;
+
+  long locus_count;
+  count = get_long(p, &locus_count);
+  *lcount = locus_count;
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read the remaining part of the line and trim comments */
+ // if (!get_string(p,&seqnames)) goto l_unwind;
+  
+  long i = 0;
+
+  opt_print_locus_num = (long*)xmalloc((size_t)locus_count*sizeof(long));
+
+  while (locus_count)
+  {
+    count = get_long(p, opt_print_locus_num+i);
+    if (!count) break;
+
+    p += count;
+
+    --locus_count;
+    ++i;
+  }
+
+  /* line contains less entries than number of species */
+  if (locus_count) goto l_unwind;
+
+  /* otherwise check if nothing else is there */
+  if (is_emptyline(p)) ret = 1;
+
+  l_unwind:
+    free(s);
+
+  return ret;
+}
+
 static long parse_speciesandtree(const char * line, long * spcount)
 {
   long ret = 0;
@@ -2926,6 +2972,13 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"printlocus",10)) 
+      {
+        if (!parse_printlocus(value,&opt_print_locus))
+          fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+	valid = 1;	
+
+      }
     }
     else if (token_len == 11)
     {
@@ -3123,6 +3176,16 @@ void load_cfile()
   }
   else
     fatal("Invalid theta prior distribution");
+  
+  /* Change to zero index */
+  if (opt_print_locus) {
+    for (long i = 0; i < opt_print_locus; i++) {
+      	opt_print_locus_num[i]--;
+      if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {
+	      fatal("printlocus not valid.");
+      }
+    }
+  }
 }
 
 int parsefile_doubles(const char * filename,

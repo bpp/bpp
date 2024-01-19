@@ -1221,6 +1221,15 @@ static void check_validity()
   if (opt_datefile && opt_clock != BPP_CLOCK_GLOBAL) 
 	  fatal("Simulating with tip dates requires a strict clock");
 
+  /* Change to zero index */
+  if (opt_print_locus) {
+    for (long i = 0; i < opt_print_locus; i++) {
+      	opt_print_locus_num[i]--;
+      if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {
+	      fatal("printlocus not valid.");
+      }
+    }
+  }
 
 }
 
@@ -1392,6 +1401,13 @@ void load_cfile_sim()
         if (!get_string(value,&opt_concatfile))
           fatal("Option 'concatfile' expects a string (line %ld)", line_count);
         valid = 1;
+      }
+      else if (!strncasecmp(token,"printlocus",10)) 
+      {
+        if (!parse_printlocus(value,&opt_print_locus))
+          fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+	valid = 1;	
+
       }
     }
     else if (token_len == 11)
