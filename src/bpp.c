@@ -109,6 +109,7 @@ long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
 long opt_print_genetrees;
+long opt_print_locus;
 long opt_print_hscalars;
 long opt_print_locusfile;
 long opt_print_locusrate;
@@ -194,6 +195,7 @@ double opt_vbar_beta;
 double opt_vi_alpha;
 long * opt_diploid;
 long * opt_sp_seqcount;
+long * opt_print_locus_num;
 char * opt_bfdriver;
 char * opt_cfile;
 char * opt_concatfile;
@@ -201,6 +203,8 @@ char * opt_constraintfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
+char * opt_datefile;
+char * opt_seqDates;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_msafile;
@@ -222,6 +226,7 @@ long ** opt_migration_matrix;
 long ** opt_mig_bitmatrix;
 double ** opt_migration_events;
 partition_t ** opt_partition_list;
+int opt_seqAncestral;
 
 long mmx_present;
 long sse_present;
@@ -464,6 +469,7 @@ void args_init(int argc, char ** argv)
   opt_debug_theta = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
+  opt_print_locus_num = NULL;
   opt_diploid_size = 0;
   opt_est_delimit = 0;
   opt_est_heredity = 0;
@@ -516,6 +522,8 @@ void args_init(int argc, char ** argv)
   opt_locus_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
+  opt_datefile = NULL;
+  opt_seqDates = NULL;
   opt_max_species_count = 0;
   opt_mcmcfile = NULL;
   opt_method = -1;
@@ -547,6 +555,7 @@ void args_init(int argc, char ** argv)
   opt_print_locusrate = 0;
   opt_print_qmatrix = 0;
   opt_print_rates = 0;
+  opt_print_locus = 0;
   opt_print_samples = 1;
   opt_prob_snl = 0.2;
   opt_prob_snl_shrink = 0.333;
@@ -596,6 +605,7 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+  opt_seqAncestral = 0; 
 
   g_pj_gage = 0;
   g_pj_gspr = 0;
@@ -959,6 +969,8 @@ static void dealloc_switches()
   if (opt_cfile) free(opt_cfile);
   if (opt_constraintfile) free(opt_constraintfile);
   if (opt_mapfile) free(opt_mapfile);
+  if (opt_datefile) free(opt_datefile);
+  if (opt_seqDates) free(opt_seqDates);
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);

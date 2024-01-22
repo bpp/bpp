@@ -945,7 +945,27 @@ static long parse_locusrate(const char * line)
     
     p += count;
   }
-  else
+  else if (opt_est_locusrate == MUTRATE_ONLY) {
+  
+    /* get a_mubar */
+    count = get_double(p, &opt_mubar_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    if (is_emptyline(p))
+      fatal("The syntax for 'locusrate' tag has changed since BPP v4.1.4.\n"
+            "Please refer to the BPP manual for the new syntax.\n");
+
+    /* get b_mubar */
+    count = get_double(p, &opt_mubar_beta);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    opt_locusrate_prior == MUTRATE_ONLY;
+
+  } else
     goto l_unwind;
 
 
@@ -2059,6 +2079,52 @@ static long readandvalidatecount(const char * line, long spcount)
   return ret;
 }
 
+long parse_printlocus(const char * line, long * lcount)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long alloc_size = 1;
+
+  long count;
+
+  long locus_count;
+  count = get_long(p, &locus_count);
+  *lcount = locus_count;
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read the remaining part of the line and trim comments */
+ // if (!get_string(p,&seqnames)) goto l_unwind;
+  
+  long i = 0;
+
+  opt_print_locus_num = (long*)xmalloc((size_t)locus_count*sizeof(long));
+
+  while (locus_count)
+  {
+    count = get_long(p, opt_print_locus_num+i);
+    if (!count) break;
+
+    p += count;
+
+    --locus_count;
+    ++i;
+  }
+
+  /* line contains less entries than number of species */
+  if (locus_count) goto l_unwind;
+
+  /* otherwise check if nothing else is there */
+  if (is_emptyline(p)) ret = 1;
+
+  l_unwind:
+    free(s);
+
+  return ret;
+}
+
 static long parse_speciesandtree(const char * line, long * spcount)
 {
   long ret = 0;
@@ -2573,6 +2639,12 @@ static void check_validity()
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");
+
+  if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
+    fatal("Cannot use species delimitation models when using tip dating.");
+
+  if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
+	fatal("locusrate must be 3 for tip dating.\n");
 }
 
 static void update_locusrate_information()
@@ -2593,6 +2665,7 @@ static void update_locusrate_information()
       else
         opt_est_mubar = 1;
     }
+    
 }
 
 
@@ -2837,6 +2910,11 @@ void load_cfile()
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"datefile",8)) {
+        if (!get_string(value, &opt_datefile))
+          fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
       else if (!strncasecmp(token,"mcmcfile",8))
       {
         if (!get_string(value,&opt_mcmcfile))
@@ -2950,6 +3028,13 @@ void load_cfile()
                 " linked-none\n linked-all\n linked-inner\n linked-msci",
                 line_count);
         valid = 1;
+      }
+      else if (!strncasecmp(token,"printlocus",10)) 
+      {
+        if (!parse_printlocus(value,&opt_print_locus))
+          fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+	valid = 1;	
+
       }
     }
     else if (token_len == 11)
@@ -3129,6 +3214,13 @@ void load_cfile()
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
 
+  if ( opt_checkpoint == 1 && opt_datefile)
+	  fatal("Checkpointing is not implemented with tip dating");
+  if ( opt_method != METHOD_00 && opt_datefile)
+	  fatal("You can only use method A00 with tip dating");
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_datefile) 
+	  fatal("You can only use a global clock with tip dating");
+  
   /* update theta method depending on prior */
   if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
@@ -3139,6 +3231,15 @@ void load_cfile()
     }
     opt_theta_slide_prob = 1;
     opt_theta_move = BPP_THETA_MOVE_SLIDE;
+  }
+  /* Change to zero index */
+  if (opt_print_locus) {
+    for (long i = 0; i < opt_print_locus; i++) {
+      	opt_print_locus_num[i]--;
+      if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {
+	      fatal("printlocus not valid.");
+      }
+    }
   }
 }
 

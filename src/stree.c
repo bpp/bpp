@@ -102,9 +102,9 @@ hashtable_t * species_hash(stree_t * tree)
   long i;
 
   /* using a hash table check whether there are duplicate nodes */
-  hashtable_t * ht = hashtable_create(tree->tip_count);
+  hashtable_t * ht = hashtable_create(tree->tip_count + opt_seqAncestral);
 
-  for (i = 0; i < tree->tip_count; ++i)
+  for (i = 0; i < tree->tip_count + opt_seqAncestral; ++i)
   {
     /* attempt to place the pair in the hash table and die with an
        error if a pair with the same label already exists */
@@ -558,6 +558,35 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
              snode->migbuffer[i].active_count * sizeof(double));
     }
   }
+
+  if (opt_datefile && snode->epoch_count) {
+
+	  if (!clone->epoch_count) {
+	  	clone->epoch_count = (int *) xmalloc(msa_count * sizeof(int));
+	  }
+
+	  memcpy(clone->epoch_count, snode->epoch_count, msa_count *sizeof(int));
+
+	  if (!clone->date_count) {
+	  	clone->date_count = (int    **) xmalloc (msa_count * sizeof(int *));
+	  	for (i = 0; i < msa_count; i++ ) {
+			clone->date_count[i] = (int *) xmalloc(clone->epoch_count[i] * sizeof(int));
+	  	}
+	  }
+
+	  if (!clone->tip_date) {
+	  	clone->tip_date   = (double **) xmalloc (msa_count * sizeof(double *));
+	  	for (i = 0; i < msa_count; i++ ) {
+			clone->tip_date[i]   = (double *) xmalloc(clone->epoch_count[i] * sizeof(double));
+	  	}
+  	}
+
+  	for (i = 0; i < msa_count; i++ ) {
+		memcpy(clone->date_count[i], snode->date_count[i], clone->epoch_count[i] *sizeof(int));
+		memcpy(clone->tip_date[i], snode->tip_date[i], clone->epoch_count[i] * sizeof(double));
+  	}
+  }
+  
 }
 
 static void gnode_clone(gnode_t * gnode,
@@ -657,10 +686,16 @@ static void stree_clone(stree_t * stree, stree_t * clone)
              stree->migcount_sum[i],
              nodes_count*sizeof(long));
   }
+  if (opt_datefile)  {
+	if (clone->u_constraint)
+		memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
+	memcpy(clone->l_constraint, stree->l_constraint, stree->inner_count * sizeof(double));
+  }
 }
 
 stree_t * stree_clone_init(stree_t * stree)
 {
+
   unsigned int i;
   unsigned int nodes_count = stree->tip_count + stree->inner_count;
   long j;
@@ -670,6 +705,11 @@ stree_t * stree_clone_init(stree_t * stree)
   assert(!opt_msci);
   clone = (stree_t *)xcalloc(1, sizeof(stree_t));
   memcpy(clone, stree, sizeof(stree_t));
+
+  if (stree->u_constraint)
+	  clone->u_constraint = xmalloc(stree->inner_count* sizeof(double));
+  if (stree->l_constraint)
+  	clone->l_constraint = xmalloc(stree->inner_count* sizeof(double));
 
   /* create cloned species tree nodes */
   clone->nodes = (snode_t **)xmalloc(nodes_count * sizeof(snode_t *));
@@ -701,6 +741,7 @@ stree_t * stree_clone_init(stree_t * stree)
       }
     }
   }
+
   for (i = 0; i < nodes_count; ++i)
     snode_clone(stree->nodes[i], clone->nodes[i], clone);
 
@@ -967,8 +1008,8 @@ static int ** populations_seqcount(stree_t * stree,
   }
 
   /* create perloci sequence counters for tip and inner nodes */
-  int ** seqcount = (int **)xmalloc(stree->tip_count * sizeof(int *));
-  for (i = 0; i < stree->tip_count; ++i)
+  int ** seqcount = (int **)xmalloc((stree->tip_count + opt_seqAncestral )* sizeof(int *));
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     seqcount[i] = (int *)xcalloc(msa_count, sizeof(int));
 
   /* one species case */
@@ -997,9 +1038,10 @@ static int ** populations_seqcount(stree_t * stree,
       /* first get the species tag */
       char * label = msa->label[j];
       label = strchr(label, '^');
-      if (!label)
+      if (!label) 
         fatal("Cannot find species tag on sequence %s of locus %d",
               msa->label[j], i);
+      
 
       /* skip the '^' mark */
       label++;
@@ -1185,6 +1227,54 @@ static void network_init_tau_iterative(stree_t * stree,
   }
 }
 
+
+void stree_init_tau_recursive_constraint(stree_t * stree, 
+				     snode_t * node,
+                                     double prop,
+                                     long thread_index, 
+				     double *u_constraint, 
+				     double *l_constraint)
+{
+  assert(!opt_msci);
+  double newage, minage, maxage;
+
+  /* end recursion if node is a tip */
+  if (!node->left && !node->right)
+  {
+
+    if (!node->parent->tau)
+      node->theta = -1;
+
+    return; 
+  }
+
+  /* get species record associate with species tree node */
+  double tau_parent = node->parent->tau;
+
+  if (!node->parent->tau)
+    node->theta = -1;
+
+  int index = node->node_index - stree->tip_count;
+  if (node->tau && node->tau > 0) {
+
+    newage = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+    if ((u_constraint[index] && newage > u_constraint[index]) || (l_constraint[index] && newage < l_constraint[index])) {
+	minage = l_constraint[index];
+	maxage = tau_parent;
+	if (u_constraint[index]) {
+		maxage = MIN (u_constraint[index], tau_parent);
+	}
+  	newage = reflect(newage, minage, maxage, thread_index);
+    } 
+    node->tau = newage;	
+  }
+  else
+    node->tau = 0;
+
+  stree_init_tau_recursive_constraint(stree, node->left, prop, thread_index, u_constraint, l_constraint);
+  stree_init_tau_recursive_constraint(stree, node->right, prop, thread_index, u_constraint, l_constraint);
+}
+
 static void stree_init_tau_recursive(snode_t * node,
                                      double prop,
                                      long thread_index)
@@ -1215,7 +1305,7 @@ static void stree_init_tau_recursive(snode_t * node,
   stree_init_tau_recursive(node->right, prop, thread_index);
 }
 
-static void stree_init_tau(stree_t * stree, long thread_index)
+static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 {
   unsigned int i;
   unsigned int total_nodes;
@@ -1251,21 +1341,39 @@ static void stree_init_tau(stree_t * stree, long thread_index)
 
    double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
 
+   // ANNA these are being read in as real time units
+   if (opt_datefile) {
+   	unsigned int setDates = 0; 
+	unsigned int tipDates = 0;
+	for (i = 0; i < stree->tip_count; i++) 
+	        if (stree->nodes[i]->length > 0 ) tipDates++;
+
+	for (i = stree->tip_count; i < stree->inner_count + stree->tip_count; i++) 
+	        if (stree->nodes[i]->length > 0 ) setDates++;
+
+	if ((tipDates && setDates != stree->inner_count) || (setDates > 0 && setDates < stree->inner_count))
+		 fatal ("If node ages are specified in the control files, all interal nodes must have a starting age"); 
+
+	   if (setDates) {
+	   	*tau_ctl  = 1; 
+	   	for (i = 0; i < stree->inner_count + stree->tip_count; i++) 
+		   	stree->nodes[i]->tau = stree->nodes[i]->length;
+	   
+	   }
+
+  }
+
    /* set the speciation time for root */
-   if (stree->root->tau)
-   {
-     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-       stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
-                          (0.9 + 0.2*legacy_rndu(thread_index));
-     else
-     {
-       #if 0
-       stree->root->tau = opt_tau_alpha / opt_tau_beta;
-       #else
-       stree->root->tau = opt_tau_alpha / opt_tau_beta *
-                          (0.9 + 0.2*legacy_rndu(thread_index));
-       #endif
-     }
+   if (!*tau_ctl) {
+   	if (stree->root->tau)
+   	{
+   	  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
+   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	  else
+   	    stree->root->tau = opt_tau_alpha / opt_tau_beta *
+   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	}
    }
 
    /* recursively set the speciation time for the remaining inner nodes. For
@@ -1276,8 +1384,10 @@ static void stree_init_tau(stree_t * stree, long thread_index)
    }
    else
    {
-     stree_init_tau_recursive(stree->root->left, prop, thread_index);
-     stree_init_tau_recursive(stree->root->right, prop, thread_index);
+	   if (!*tau_ctl) {
+     		stree_init_tau_recursive(stree->root->left, prop, thread_index);
+     		stree_init_tau_recursive(stree->root->right, prop, thread_index);
+	   }
    }
 
    /* check to see if everything is OK */
@@ -2112,7 +2222,7 @@ static void stree_init_theta(stree_t * stree,
   }
 
   /* deallocate seqcount */
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     free(seqcount[i]);
   free(seqcount);
 }
@@ -2514,6 +2624,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
+		int * tau_ctl,
                 FILE * fp_out)
 {
   unsigned int i, j;
@@ -2545,12 +2656,18 @@ void stree_init(stree_t * stree,
   if (stree->tip_count > 1 || opt_msci)
   {
     /* Initialize speciation times and create extinct species groups */
-    stree_init_tau(stree, thread_index);
+    stree_init_tau(stree, thread_index, tau_ctl);
   }
   else
   {
     stree->nodes[0]->tau = 0;
   }
+  //ANNA
+  //stree->nodes[2]->tau = 1.4;
+  /*stree->nodes[4]->tau = .1; 
+  stree->nodes[3]->tau = .016;
+  stree->nodes[4]->tau = .008; */
+  
   nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   stree->td = (snode_t **)xmalloc((size_t)nodes_count * sizeof(snode_t *));
@@ -2603,6 +2720,19 @@ void stree_init(stree_t * stree,
 
     stree->migcount_sum = migcount_sum;
   }
+
+  if (opt_datefile) {
+
+    for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i) {
+      stree->nodes[i]->epoch_count = (int *)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(int));
+      stree->nodes[i]->tip_date= (double **)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(double *));
+      stree->nodes[i]->date_count= (int **)xcalloc((size_t)opt_locus_count,
+                                                        sizeof(int *));
+    }
+	  
+  } 
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
      species tree cloning functions do not call wraptree and that would require
@@ -2997,6 +3127,7 @@ static int propose_theta_gibbs(stree_t * stree,
   double znew,zold,ynew,yold;
   double * sortbuffer = global_sortbuffer_r[thread_index];
   dlist_item_t * event;
+  int nextDateInd = -1;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
@@ -3014,6 +3145,15 @@ static int propose_theta_gibbs(stree_t * stree,
 
     sortbuffer[0] = snode->tau;
     j = 1;
+
+      if (opt_datefile && (!snode->left || opt_seqAncestral)) {
+          if (snode->epoch_count[msa_index])
+                nextDateInd = 0;
+        for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ ) {
+                sortbuffer[j] = snode->tip_date[msa_index][k];
+        }
+  }
+
     for (event = snode->event[msa_index]->head; event; event = event->next)
     {
       gnode_t* gnode = (gnode_t*)(event->data);
@@ -3031,6 +3171,15 @@ static int propose_theta_gibbs(stree_t * stree,
     for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
     {
       T2h_sum += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+
+      if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
+        n += 1 + snode->date_count[msa_index][nextDateInd];
+        if (nextDateInd + 1 < snode->epoch_count[msa_index])
+                nextDateInd++;
+        else
+                nextDateInd = -1;
+     }
+
     }
   }
 
@@ -3236,7 +3385,7 @@ static int propose_theta_slide(stree_t * stree,
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   thetaold = snode->theta;
-
+  
   if (!opt_exp_theta)
   {
     /* original proposal for theta */
@@ -3740,7 +3889,8 @@ void propose_tau_update_gtrees(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
     {
       /* process events for current population */
-      if (affected[j]->seqin_count[i] > 1)
+      /* there can be events even if seqin_count = 0 or 1 with tip dating */
+      if ((affected[j]->seqin_count[i] > 1) || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
       {
         dlist_item_t * event;
         for (event = affected[j]->event[i]->head; event; event = event->next)
@@ -4179,6 +4329,18 @@ static long update_migs(gtree_t * gtree,
       else if (x->parent)
         maxb = MIN(x->parent->time,maxb);
 
+      if (opt_datefile) {
+    
+    	  int index = snode->node_index - stree->tip_count;
+    	  //Check constraints
+    	  if (stree->l_constraint[index] != 0) 
+    		minb = MAX(minb, stree->l_constraint[index]);
+    	  	
+    	  if (stree->u_constraint[index] != 0) 
+    		maxb = MIN(maxb, stree->u_constraint[index]);
+    
+      }
+
       if (x->mi->me[j].time <= minb || x->mi->me[j].time >= maxb)
         return 0;
     }
@@ -4594,6 +4756,18 @@ static long propose_tau(locus_t ** loci,
       maxage = snode->parent->tau;
   }
 
+  if (opt_datefile) {
+
+	  int index = snode->node_index - stree->tip_count;
+	  //Check constraints
+	  if (stree->l_constraint[index] != 0) 
+		minage = MAX(minage, stree->l_constraint[index]);
+	  	
+	  if (stree->u_constraint[index] != 0) 
+		maxage = MIN(maxage, stree->u_constraint[index]);
+
+  }
+
   /* propose new tau */
   newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
   newage = reflect(newage, minage, maxage, thread_index);
@@ -4951,7 +5125,7 @@ static long propose_tau(locus_t ** loci,
       {
         for (j = 0; j < paffected_count; ++j)
         {
-          if (affected[j]->seqin_count[i] > 1)
+          if (affected[j]->seqin_count[i] > 1 || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
           {
             if (opt_migration)
               gtree_update_logprob_contrib_mig(affected[j],
@@ -4971,7 +5145,7 @@ static long propose_tau(locus_t ** loci,
       else
       {
         for (j = 0; j < paffected_count; ++j)
-          if (affected[j]->seqin_count[i] > 1)
+          if (affected[j]->seqin_count[i] > 1 || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
             logprob_revert_notheta(affected[j], i);
       }
 
@@ -5333,6 +5507,17 @@ static long propose_tau_mig(locus_t ** loci,
 
   if (snode->parent)
     maxage = snode->parent->tau;
+
+  if (opt_datefile) {
+
+	  int index = snode->node_index - stree->tip_count;
+	  //Check constraints
+	  if (stree->l_constraint[index] != 0) 
+		minage = MAX(minage, stree->l_constraint[index]);
+	  	
+	  if (stree->u_constraint && stree->u_constraint[index] != 0) 
+		maxage = MIN(maxage, stree->u_constraint[index]);
+  }
 
   if (opt_exp_imrb)
   {
@@ -5704,6 +5889,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
   stree_t * original_stree = *streeptr;
   gtree_t ** original_gtree = *gtreeptr;
 
+
   stree_t * stree = *scloneptr;
   gtree_t ** gtree = *gcloneptr;
 
@@ -5711,7 +5897,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
   candidate = (int *)xcalloc((size_t)(total_nodes), sizeof(int));
 
   /* compute number of nodes with tau > 0 */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau > 0)
     {
@@ -5747,6 +5933,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
       }
     }
   }
+
   *streeptr = original_stree;
   *gtreeptr = original_gtree;
 
@@ -5813,10 +6000,10 @@ void stree_rootdist(stree_t * stree,
     {
       char * label = msalist[i]->label[j];
       label = strchr(label, '^');
-      if (!label)
+      if (!label) 
         fatal("Cannot find species tag on sequence %s of locus %d",
               msalist[i]->label[j], i);
-
+	
       /* skip the '^' mark */
       label++;
       if (!(*label))
@@ -7616,6 +7803,346 @@ double prop_locusrate_mui(gtree_t ** gtree,
   }
   return ((double)accepted / opt_locus_count);
 }
+
+double prop_tipDate_muGtree(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index)
+{
+  if (opt_seqAncestral) 
+	  fatal("Sampling of ancestral samples is not implemented with estimation of mu");
+  if (stree->tip_count == 1)
+	  fatal("Mu proposal not yet implemented for single population");
+  unsigned int j;
+  unsigned int total_nodes;
+  long i;
+  long accepted = 0;
+  double old_mui, old_logmui;
+  double new_mui, new_logmui;
+  double lnacceptance = 0;
+  double * logl = xcalloc(opt_locus_count, sizeof(double)) ;
+  double logpr_sum, logpr_old, logpr; 
+  gnode_t ** gnodeptr;
+  snode_t * pop;
+  int reject = 0;
+
+  old_mui = stree->locusrate_mubar;
+  old_logmui = log(old_mui);
+  double r = old_logmui + opt_finetune_mubar * legacy_rnd_symmetrical(thread_index);
+  double mu_bound  = find_maxMuGtree(stree);
+  
+
+  if (!mu_bound)
+  	new_logmui = reflect(r,-99, 99, thread_index);
+  else
+  	new_logmui = reflect(r,-99, log(mu_bound), thread_index);
+  
+  stree->locusrate_mubar = new_mui = exp(new_logmui);
+
+  if (mu_bound)
+  	assert(mu_bound > new_mui);
+
+  /* Proposal ratio */
+  lnacceptance = new_logmui - old_logmui;
+
+  /*Calculate prior */
+  lnacceptance += (opt_mubar_alpha-1)*log(new_mui/old_mui) -
+                  opt_mubar_beta*(new_mui-old_mui);
+
+  double rateMultiplier = stree->locusrate_mubar / old_mui;
+  /* Update constraints based on new times */
+  for (i = 0; i < stree->inner_count;  i++) {
+  	stree->u_constraint[i] = stree->u_constraint[i] * rateMultiplier;
+  	stree->l_constraint[i] = stree->l_constraint[i] * rateMultiplier;
+
+      /* Check for conflicts between the constraints and the taus */
+      if ((stree->nodes[i + stree->tip_count]->tau < stree->l_constraint[i]) || 
+      		((stree->u_constraint[i]  != 0) && (stree->nodes[i + stree->tip_count]->tau > stree->u_constraint[i]))) {
+
+              	/* If there is a conflict, reset constraints and rate and exit */
+  		for ( ; i >= 0;  i--) {
+  			stree->u_constraint[i] = stree->u_constraint[i] / rateMultiplier;
+  			stree->l_constraint[i] = stree->l_constraint[i] / rateMultiplier;
+
+  			stree->locusrate_mubar= old_mui;
+  		}
+		assert(0 == 1) ;
+  		return 0;
+      }
+  }
+    
+
+  for (i = 0; i < opt_locus_count; ++i) {
+	for (j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
+		snode_t* snode = stree->nodes[j];
+
+		for (int k = 0; k < snode->epoch_count[i]; k++) {
+               		snode->tip_date[i][k] = snode->tip_date[i][k] * rateMultiplier; 
+		}
+	}
+
+  }
+
+  //gnodeptr = xmalloc(opt_locus_count * sizeof(gnode_t **));
+
+  long int locusFail = 0;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    lnacceptance += prop_mu_updateCoal(gtree[i], stree, rateMultiplier, new_mui);
+
+    for (j = 0; j < gtree[i]->inner_count + gtree[i]->tip_count; j ++) {
+	    if (gtree[i]->nodes[j]->parent) {
+	    	if (gtree[i]->nodes[j]->time > gtree[i]->nodes[j]->parent->time) {
+		    reject = 1;
+			locusFail = i;
+		}
+	    }
+    }
+    if (reject) 
+	    break;
+
+    //We are enforcing a strict clock
+    assert (opt_clock == BPP_CLOCK_GLOBAL);
+    
+      /* swap pmatrices */
+
+      gnodeptr = gtree[i]->nodes;
+      total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+
+      for (j = 0; j < total_nodes; ++j)
+        if (gnodeptr[j]->parent)
+          gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                                    gnodeptr[j]->pmatrix_index);
+
+
+    //gtree[i]->rate_mui = new_mui;
+
+    /* recompute pmatrices, CLVs and log-L */
+    locus_update_all_matrices(locus[i],gtree[i],stree,i);
+
+    gnodeptr = gtree[i]->nodes;
+
+    for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+    {
+      gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                              gnodeptr[j]->clv_index);
+      if (opt_scaling)
+        gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                   gnodeptr[j]->scaler_index);
+    }
+
+    locus_update_all_partials(locus[i],gtree[i]);
+
+    logl[i] = locus_root_loglikelihood(locus[i],
+                                    gtree[i]->root,
+                                    locus[i]->param_indices,
+                                    NULL);
+
+    lnacceptance += logl[i] - gtree[i]->logl;
+
+  }
+  
+  if (!reject) {
+  logpr_sum = 0;
+  logpr_old = 0;
+  if (!opt_est_theta) {
+  	logpr_old = stree->notheta_logpr;
+	stree->notheta_old_logpr = stree->notheta_logpr;
+  }
+
+  else 
+	for (i = 0; i < opt_locus_count; i++ ) {
+		logpr_old += gtree[i]->logpr;
+		gtree[i]->old_logpr = gtree[i]->logpr;
+	}
+  
+  /* We might not need to recalculate the coalescent for every population: could be more efficient */
+  for (i = 0; i < opt_locus_count; ++i) { 
+    if (opt_est_theta)
+    {
+      if (opt_migration)
+	      fatal("Tip dating not implemented with migration.");
+      else{
+        logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+        gtree[i]->logpr = logpr;
+        logpr_sum += logpr;
+      }
+    }
+    else
+    {
+      if (opt_migration)
+        fatal("Integrating out thetas not implemented yet for IM model");
+
+      for (j = 0; j < stree->tip_count + stree->inner_count+stree->hybrid_count; ++j)
+        logpr_sum += gtree_update_logprob_contrib(stree->nodes[j],
+                                                  locus[i]->heredity[0],
+                                                  i,
+                                                  thread_index);
+      stree->notheta_logpr = logpr_sum;
+    }
+  }
+
+    lnacceptance += logpr_sum - logpr_old;
+  }
+    /* Accept or reject */
+    if ((lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance)) && !reject)
+    {
+	accepted++;
+
+	for (i = 0; i < opt_locus_count; ++i) {
+		/* update log-likelihood */
+		gtree[i]->logl = logl[i];
+	}
+
+    } else {
+	/* rejected */
+    	stree->locusrate_mubar = old_mui;
+
+	/* Reset constraints */
+    	for (i = 0; i < stree->inner_count;  i++) {
+    		stree->u_constraint[i] = stree->u_constraint[i] / rateMultiplier;
+    		stree->l_constraint[i] = stree->l_constraint[i] / rateMultiplier;
+    	}
+
+	/* Reset the epoch dates */
+  	for (i = 0; i < opt_locus_count; ++i) {
+  	      for (j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
+  	      	snode_t* snode = stree->nodes[j];
+
+  	      	for (int k = 0; k < snode->epoch_count[i]; k++) {
+  	             		snode->tip_date[i][k] = snode->tip_date[i][k] / rateMultiplier; 
+		}
+  	      }
+
+  	}
+
+	long int loopMax = reject ? locusFail :opt_locus_count;
+	
+	for (i = 0; i < opt_locus_count; ++i) {
+
+		if ((!reject) || (reject && (i <= loopMax) )) {
+			reset_mu_coal(gtree[i]);
+		}
+		if ( i < loopMax) {
+		
+		/* Reset rate */
+		//gtree[i]->rate_mui = old_mui;
+		
+		/* reset selected locus */
+		gnodeptr = gtree[i]->nodes;
+		total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
+		
+		for (j = 0; j < total_nodes; ++j)
+		{
+		  if (gnodeptr[j]->parent)
+		    gnodeptr[j]->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+		                                                 gnodeptr[j]->pmatrix_index);
+		}
+		
+		for (j = gtree[i]->tip_count; j < total_nodes; ++j)
+		{
+		  gnodeptr[j]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+		                                          gnodeptr[j]->clv_index);
+		  if (opt_scaling)
+		    gnodeptr[j]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+		                                                  gnodeptr[j]->scaler_index);
+		}
+		} 
+		if (!reject) {
+		for (j = 0; j < stree->inner_count + stree->tip_count; j++) {
+			pop = stree->nodes[j];
+        	    	if (opt_est_theta) {
+        	      		pop->logpr_contrib[i] = pop->old_logpr_contrib[i];
+
+			}
+        	    	else
+        	      		logprob_revert_notheta(pop,i);
+        	  }
+		if (!opt_est_theta)
+			stree->notheta_logpr = stree->notheta_old_logpr;
+
+		gtree[i]->logpr = gtree[i]->old_logpr;
+		}
+	}
+  }
+
+  //free(gnodeptr);
+  free(logl);
+
+  return accepted;
+}
+
+double prop_mu_updateCoal_recursive(gnode_t * gnode, stree_t * stree, double rateMultiplier, double *prop_ratio) {
+
+	double left, right, tau, b, h;
+	gnode->old_time = gnode->time;
+	if (! gnode->left) 
+		return(gnode->time);
+
+	left = prop_mu_updateCoal_recursive(gnode->left, stree, rateMultiplier, prop_ratio);
+	right = prop_mu_updateCoal_recursive(gnode->right, stree, rateMultiplier, prop_ratio);
+
+	if (gnode->pop->left)
+		return 0;
+
+	if (!gnode->pop->parent->left)
+		fatal("need to implement mu move with no upper bound");
+	tau = gnode->pop->parent->tau; 
+	b = MAX(left, right);
+	if (!b)
+		return b; 
+	h = (tau- b * rateMultiplier) / (tau - b);
+	gnode->time = tau - h * (tau - gnode->time);
+	*prop_ratio += log(h);
+		
+	return (b);
+}
+
+double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui) {
+
+	/* Update the tip dates */
+	double prop_ratio = 0;
+	prop_mu_updateCoal_recursive (gtree->root, stree, rateMultiplier, &prop_ratio);
+	
+	/* Update the tip dates */
+	for (unsigned j = 0; j < gtree->tip_count; j++) {
+	        gtree->nodes[j]->time = gtree->nodes[j]->time_fixed * new_mui;
+	}
+
+	return prop_ratio;
+}
+
+void reset_mu_coal(gtree_t * gtree) {
+
+	for (unsigned i = 0; i < gtree->inner_count + gtree->tip_count; i++)
+		gtree->nodes[i]->time = gtree->nodes[i]->old_time;
+}
+
+double find_maxMuGtree(stree_t * stree) {
+	double max_i, max;
+
+	/* Fix the maximum possible mu to ensure the parent is older than the tip
+	 * for each tip */
+	if (stree->l_constraint[0])
+		max = stree->nodes[stree->tip_count]->tau * stree->locusrate_mubar / stree->l_constraint[0];
+	else 
+		max = INFINITY;
+
+	for (unsigned i = stree->tip_count; i < stree->tip_count + stree->inner_count; i++) {
+
+		max_i = stree->nodes[i]->tau * stree->locusrate_mubar / stree->l_constraint[i - stree->tip_count];
+				/* Find the maximum possible mu for all the tips in the tree */
+				if (max_i < max) 
+					max = max_i;
+			
+		
+	}
+	if (isinf(max))
+		return 0; 
+
+	return max; 
+}
+
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree)
 {

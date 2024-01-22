@@ -661,9 +661,14 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         col_count++;
 
   /* compute number of tau parameters */
-  for (i = 0; i < stree->inner_count; ++i)
-    if (stree->nodes[stree->tip_count+i]->tau)
+  for (i = 0; i < stree->inner_count; ++i) {
+    if (stree->nodes[stree->tip_count+i]->tau) {
       col_count++;
+      if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) 
+     	 col_count++;
+    }
+    
+  }
 
   if (opt_migration && !opt_est_geneflow)
   {
@@ -678,7 +683,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     col_count += stree->hybrid_count;
 
   /* column for mubar */
-  if (opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+  if ((opt_est_mubar && opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL) || opt_datefile )
     ++col_count;
 
   /* add one more for log-L if usedata is on */
@@ -787,6 +792,10 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   free(header);
 
   /* compute means */
+  int prec = 6;
+  if (opt_datefile)
+    prec = 12;
+
   fprintf(stdout, "mean    ");
   fprintf(fp_out, "mean    ");
   for (i = 0; i < col_count; ++i)
@@ -796,8 +805,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       sum += matrix[i][j];
 
     mean[i] = sum/opt_samples;
-    fprintf(stdout, "  %f", mean[i]);
-    fprintf(fp_out, "  %f", mean[i]);
+    fprintf(stdout, "  %.*f", prec, mean[i]);
+    fprintf(fp_out, "  %.*f", prec, mean[i]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -832,8 +841,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       median /= 2;
     }
 
-    fprintf(stdout, "  %f", median);
-    fprintf(fp_out, "  %f", median);
+    fprintf(stdout, "  %.*f", prec, median);
+    fprintf(fp_out, "  %.*f", prec, median);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -843,8 +852,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "S.D     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", stdev[i]);
-    fprintf(fp_out, "  %f", stdev[i]);
+    fprintf(stdout, "  %.*f", prec, stdev[i]);
+    fprintf(fp_out, "  %.*f", prec, stdev[i]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -854,8 +863,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "min     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][0]);
-    fprintf(fp_out, "  %f", matrix[i][0]);
+    fprintf(stdout, "  %.*f", prec, matrix[i][0]);
+    fprintf(fp_out, "  %.*f", prec, matrix[i][0]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -865,8 +874,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "max     ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][opt_samples-1]);
-    fprintf(fp_out, "  %f", matrix[i][opt_samples-1]);
+    fprintf(stdout, "  %.*f", prec, matrix[i][opt_samples-1]);
+    fprintf(fp_out, "  %.*f", prec, matrix[i][opt_samples-1]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -876,8 +885,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "2.5%%    ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.025)]);
-    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.025)]);
+    fprintf(stdout, "  %.*f", prec, matrix[i][(long)(opt_samples*.025)]);
+    fprintf(fp_out, "  %.*f", prec, matrix[i][(long)(opt_samples*.025)]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -887,8 +896,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "97.5%%   ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", matrix[i][(long)(opt_samples*.975)]);
-    fprintf(fp_out, "  %f", matrix[i][(long)(opt_samples*.975)]);
+    fprintf(stdout, "  %.*f", prec, matrix[i][(long)(opt_samples*.975)]);
+    fprintf(fp_out, "  %.*f", prec, matrix[i][(long)(opt_samples*.975)]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -902,8 +911,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "2.5%%HPD ");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", hpd025[i]);
-    fprintf(fp_out, "  %f", hpd025[i]);
+    fprintf(stdout, "  %.*f", prec, hpd025[i]);
+    fprintf(fp_out, "  %.*f", prec, hpd025[i]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -913,8 +922,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(fp_out, "97.5%%HPD");
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", hpd975[i]);
-    fprintf(fp_out, "  %f", hpd975[i]);
+    fprintf(stdout, "  %.*f", prec, hpd975[i]);
+    fprintf(fp_out, "  %.*f", prec, hpd975[i]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
