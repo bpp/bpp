@@ -110,6 +110,7 @@ long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
 long opt_print_genetrees;
+long opt_print_locus;
 long opt_print_hscalars;
 long opt_print_locusfile;
 long opt_print_locusrate;
@@ -131,9 +132,10 @@ long opt_seed;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
-long opt_theta_dist;
 long opt_theta_gibbs_showall_eps;
 long opt_theta_move;
+long opt_theta_prior;
+long opt_theta_prop;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -194,6 +196,7 @@ double opt_vbar_beta;
 double opt_vi_alpha;
 long * opt_diploid;
 long * opt_sp_seqcount;
+long * opt_print_locus_num;
 char * opt_bfdriver;
 char * opt_cfile;
 char * opt_concatfile;
@@ -201,6 +204,8 @@ char * opt_constraintfile;
 char * opt_heredity_filename;
 char * opt_locusrate_filename;
 char * opt_mapfile;
+char * opt_datefile;
+char * opt_seqDates;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_traitfile;
@@ -224,6 +229,7 @@ long ** opt_migration_matrix;
 long ** opt_mig_bitmatrix;
 double ** opt_migration_events;
 partition_t ** opt_partition_list;
+int opt_seqAncestral;
 
 long mmx_present;
 long sse_present;
@@ -264,52 +270,52 @@ double g_pj_rj;
 
 static struct option long_options[] =
 {
-  {"help",         no_argument,       0, 0 },  /*  0 */
-  {"version",      no_argument,       0, 0 },  /*  1 */
-  {"quiet",        no_argument,       0, 0 },  /*  2 */
-  {"cfile",        required_argument, 0, 0 },  /*  3 */
-  {"arch",         required_argument, 0, 0 },  /*  4 */
-  {"exp_method",   required_argument, 0, 0 },  /*  5 */
-  {"exp_debug",    no_argument,       0, 0 },  /*  6 */
-  {"resume",       required_argument, 0, 0 },  /*  7 */
-  {"simulate",     required_argument, 0, 0 },  /*  8 */
-  {"exp_random",   no_argument,       0, 0 },  /*  9 */
-  {"rev_gspr",     no_argument,       0, 0 },  /* 10 */
-  {"debugrates",   no_argument,       0, 0 },  /* 11 */
-  {"msci-create",  required_argument, 0, 0 },  /* 12 */
-  {"comply",       no_argument,       0, 0 },  /* 13 */
-  {"tree",         required_argument, 0, 0 },  /* 14 */
-  {"constraint",   required_argument, 0, 0 },  /* 15 */
-  {"full",         no_argument,       0, 0 },  /* 16 */
-  {"debug",        optional_argument, 0, 0 },  /* 17 */
-  {"debug_gage",   optional_argument, 0, 0 },  /* 18 */
-  {"debug_gspr",   optional_argument, 0, 0 },  /* 19 */
-  {"debug_mui",    optional_argument, 0, 0 },  /* 20 */
-  {"debug_hs",     optional_argument, 0, 0 },  /* 21 */
-  {"debug_mix",    optional_argument, 0, 0 },  /* 22 */
-  {"debug_rj",     optional_argument, 0, 0 },  /* 23 */
-  {"debug_theta",  optional_argument, 0, 0 },  /* 24 */
-  {"debug_tau",    optional_argument, 0, 0 },  /* 25 */
-  {"debug_sspr",   optional_argument, 0, 0 },  /* 26 */
-  {"debug_br",     optional_argument, 0, 0 },  /* 27 */
-  {"debug_snl",    optional_argument, 0, 0 },  /* 28 */
-  {"debug_parser", optional_argument, 0, 0 },  /* 29 */
-  {"debug_start",  required_argument, 0, 0 },  /* 30 */
-  {"debug_end",    required_argument, 0, 0 },  /* 31 */
-  {"debug_abort",  required_argument, 0, 0 },  /* 32 */
-  {"exp_theta",    no_argument,       0, 0 },  /* 33 */
-  {"debug_bruce",  no_argument,       0, 0 },  /* 34 */
-  {"exp_sim",      no_argument,       0, 0 },  /* 35 */
-  {"summary",      required_argument, 0, 0 },  /* 36 */
-  {"exp_imrb",     no_argument,       0, 0 },  /* 37 */
-  {"bfdriver",     required_argument, 0, 0 },  /* 38 */
-  {"points",       required_argument, 0, 0 },  /* 39 */
-  {"theta-move",   required_argument, 0, 0 },  /* 40 */
-  {"mrate-move",   required_argument, 0, 0 },  /* 41 */
-  {"theta_slide",  required_argument, 0, 0 },  /* 42 */
-  {"theta_mode",   required_argument, 0, 0 },  /* 43 */
-  {"no-pin",       no_argument,       0, 0 },  /* 44 */
-  {"theta_showeps",no_argument,       0, 0 },  /* 45 */
+  {"help",             no_argument,       0, 0 },  /*  0 */
+  {"version",          no_argument,       0, 0 },  /*  1 */
+  {"quiet",            no_argument,       0, 0 },  /*  2 */
+  {"cfile",            required_argument, 0, 0 },  /*  3 */
+  {"arch",             required_argument, 0, 0 },  /*  4 */
+  {"exp_method",       required_argument, 0, 0 },  /*  5 */
+  {"exp_debug",        no_argument,       0, 0 },  /*  6 */
+  {"resume",           required_argument, 0, 0 },  /*  7 */
+  {"simulate",         required_argument, 0, 0 },  /*  8 */
+  {"exp_random",       no_argument,       0, 0 },  /*  9 */
+  {"rev_gspr",         no_argument,       0, 0 },  /* 10 */
+  {"debugrates",       no_argument,       0, 0 },  /* 11 */
+  {"msci-create",      required_argument, 0, 0 },  /* 12 */
+  {"comply",           no_argument,       0, 0 },  /* 13 */
+  {"tree",             required_argument, 0, 0 },  /* 14 */
+  {"constraint",       required_argument, 0, 0 },  /* 15 */
+  {"full",             no_argument,       0, 0 },  /* 16 */
+  {"debug",            optional_argument, 0, 0 },  /* 17 */
+  {"debug_gage",       optional_argument, 0, 0 },  /* 18 */
+  {"debug_gspr",       optional_argument, 0, 0 },  /* 19 */
+  {"debug_mui",        optional_argument, 0, 0 },  /* 20 */
+  {"debug_hs",         optional_argument, 0, 0 },  /* 21 */
+  {"debug_mix",        optional_argument, 0, 0 },  /* 22 */
+  {"debug_rj",         optional_argument, 0, 0 },  /* 23 */
+  {"debug_theta",      optional_argument, 0, 0 },  /* 24 */
+  {"debug_tau",        optional_argument, 0, 0 },  /* 25 */
+  {"debug_sspr",       optional_argument, 0, 0 },  /* 26 */
+  {"debug_br",         optional_argument, 0, 0 },  /* 27 */
+  {"debug_snl",        optional_argument, 0, 0 },  /* 28 */
+  {"debug_parser",     optional_argument, 0, 0 },  /* 29 */
+  {"debug_start",      required_argument, 0, 0 },  /* 30 */
+  {"debug_end",        required_argument, 0, 0 },  /* 31 */
+  {"debug_abort",      required_argument, 0, 0 },  /* 32 */
+  {"exp_theta",        no_argument,       0, 0 },  /* 33 */
+  {"debug_bruce",      no_argument,       0, 0 },  /* 34 */
+  {"exp_sim",          no_argument,       0, 0 },  /* 35 */
+  {"summary",          required_argument, 0, 0 },  /* 36 */
+  {"exp_imrb",         no_argument,       0, 0 },  /* 37 */
+  {"bfdriver",         required_argument, 0, 0 },  /* 38 */
+  {"points",           required_argument, 0, 0 },  /* 39 */
+  {"mrate-move",       required_argument, 0, 0 },  /* 40 */
+  {"theta-slide-prob", required_argument, 0, 0 },  /* 41 */
+  {"theta_mode",       required_argument, 0, 0 },  /* 42 */
+  {"no-pin",           no_argument,       0, 0 },  /* 43 */
+  {"theta-showeps",    no_argument,       0, 0 },  /* 44 */
+  {"theta-prop",       required_argument, 0, 0 },  /* 45 */
   { 0, 0, 0, 0 }
 };
 
@@ -466,6 +472,7 @@ void args_init(int argc, char ** argv)
   opt_debug_theta = 0;
   opt_delimit_prior = BPP_SPECIES_PRIOR_UNIFORM;
   opt_diploid = NULL;
+  opt_print_locus_num = NULL;
   opt_diploid_size = 0;
   opt_est_delimit = 0;
   opt_est_heredity = 0;
@@ -519,6 +526,8 @@ void args_init(int argc, char ** argv)
   opt_trait_part_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
+  opt_datefile = NULL;
+  opt_seqDates = NULL;
   opt_max_species_count = 0;
   opt_mcmcfile = NULL;
   opt_method = -1;
@@ -552,6 +561,7 @@ void args_init(int argc, char ** argv)
   opt_print_locusrate = 0;
   opt_print_qmatrix = 0;
   opt_print_rates = 0;
+  opt_print_locus = 0;
   opt_print_samples = 1;
   opt_prob_snl = 0.2;
   opt_prob_snl_shrink = 0.333;
@@ -586,10 +596,11 @@ void args_init(int argc, char ** argv)
   opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
-  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+  opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
-  opt_theta_move = BPP_THETA_MIXED;
+  opt_theta_move = BPP_THETA_MOVE_MIXED;
+  opt_theta_prop = BPP_THETA_PROP_DEFAULT;
   opt_theta_gibbs_showall_eps = 0;
   opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
   opt_theta_p = 0;
@@ -600,6 +611,7 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+  opt_seqAncestral = 0; 
 
   g_pj_gage = 0;
   g_pj_gspr = 0;
@@ -825,25 +837,6 @@ void args_init(int argc, char ** argv)
 
       case 40:
         if (!strcasecmp(optarg,"slide"))
-          opt_theta_move = BPP_THETA_SLIDE;
-        else if (!strcasecmp(optarg,"gibbs"))
-          opt_theta_move = BPP_THETA_GIBBS;
-        else if (!strcasecmp(optarg,"mg_invg"))
-          opt_theta_move = BPP_THETA_MG_INVG;
-        else if (!strcasecmp(optarg,"mg_gamma"))
-          opt_theta_move = BPP_THETA_MG_GAMMA;
-        else if (!strcasecmp(optarg,"mg_cauchy"))
-          opt_theta_move = BPP_THETA_MG_CAUCHY;
-        else if (!strcasecmp(optarg,"mg_t4"))
-          opt_theta_move = BPP_THETA_MG_T4;
-        else if (!strcasecmp(optarg,"mixed"))
-          opt_theta_move = BPP_THETA_MIXED;
-        else
-          fatal("Invalid theta move (%s)", optarg);
-        break;
-
-      case 41:
-        if (!strcasecmp(optarg,"slide"))
           opt_mrate_move = BPP_MRATE_SLIDE;
         else if (!strcasecmp(optarg,"gibbs"))
           opt_mrate_move = BPP_MRATE_GIBBS;
@@ -851,24 +844,37 @@ void args_init(int argc, char ** argv)
           fatal("Invalid mrate move (%s)", optarg);
         break;
 
-      case 42:
+      case 41:
         if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
           fatal("Invalid proportion of sliding window proposals (%s)", optarg);
         opt_theta_slide_prob = atof(optarg);
         break;
 
-      case 43:
+      case 42:
         opt_finetune_theta_mode = atol(optarg);
         if (opt_finetune_theta_mode < 1 || opt_finetune_theta_mode > 3)
           fatal("Invalid theta mode (%s)", optarg);
         break;
 
-      case 44:
+      case 43:
         opt_corepin = 0;
         break;
 
-      case 45:
+      case 44:
         opt_theta_gibbs_showall_eps = 1;
+        break;
+
+      case 45:
+        if (!strcasecmp(optarg,"mg_invg"))
+          opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+        else if (!strcasecmp(optarg,"mg_gamma"))
+          opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
+        else if (!strcasecmp(optarg,"mg_cauchy"))
+          opt_theta_prop = BPP_THETA_PROP_MG_CAUCHY;
+        else if (!strcasecmp(optarg,"mg_t4"))
+          opt_theta_prop = BPP_THETA_PROP_MG_T4;
+        else
+          fatal("Invalid theta prop (%s)", optarg);
         break;
 
       default:
@@ -890,9 +896,46 @@ void args_init(int argc, char ** argv)
     load_cfile_sim();
 
   if (opt_theta_slide_prob == 1)
-    opt_theta_move = BPP_THETA_SLIDE;
+    opt_theta_move = BPP_THETA_MOVE_SLIDE;
   else if (opt_theta_slide_prob == 0)
-    opt_theta_move = BPP_THETA_GIBBS;
+    opt_theta_move = BPP_THETA_MOVE_GIBBS;
+
+  /* TODO: Set opt_theta_mg_prop */
+  if (opt_theta_prop == BPP_THETA_PROP_DEFAULT)
+  {
+    if (opt_theta_move == BPP_THETA_MOVE_SLIDE)
+    {
+      opt_theta_prop = BPP_THETA_PROP_SW;
+    }
+    else if (opt_theta_move == BPP_THETA_MOVE_GIBBS)
+    {
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
+        opt_theta_prop = BPP_THETA_PROP_SW;
+      else
+        assert(0);
+    }
+    else if (opt_theta_move == BPP_THETA_MOVE_MIXED)
+    {
+      /* default options for mixed proposal when theta prop not specified */
+      opt_theta_prop = BPP_THETA_PROP_SW;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        opt_theta_prop |= BPP_THETA_PROP_MG_GAMMA;
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        opt_theta_prop |= BPP_THETA_PROP_MG_INVG;
+      else
+        assert(0);
+    }
+    else
+      fatal("Internal error in option parsing");
+  }
+
+  if (opt_theta_move == BPP_THETA_MOVE_MIXED)
+    opt_theta_prop |= BPP_THETA_PROP_SW;
+  assert(opt_theta_prop != BPP_THETA_PROP_DEFAULT);
 
   /* check for number of independent commands selected */
   if (opt_version)
@@ -932,6 +975,8 @@ static void dealloc_switches()
   if (opt_cfile) free(opt_cfile);
   if (opt_constraintfile) free(opt_constraintfile);
   if (opt_mapfile) free(opt_mapfile);
+  if (opt_datefile) free(opt_datefile);
+  if (opt_seqDates) free(opt_seqDates);
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_traitfile) free(opt_traitfile);
   if (opt_stdfile) free(opt_stdfile);
@@ -961,17 +1006,22 @@ void cmd_help()
   fprintf(stderr,
           "\n"
           "General options:\n"
-          "  --help                  display help information\n"
-          "  --version               display version information\n"
-          "  --quiet                 only output warnings and fatal errors to stderr\n"
-          "  --cfile FILENAME        run analysis for the specified control file\n"
-          "  --resume FILENAME       resume analysis from a specified checkpoint file\n"
-          "  --arch SIMD             force specific vector instruction set (default: auto)\n"
-          "  --msci-create FILENAME  construct an MSci graph using a definitions file\n"
-          "  --bfdriver FILENAME     create control files to calculate marginal likelihood\n"
-          "  --points INTEGER        number of G-L quadrature points (used with --bfdriver)\n"
-          "  --summary FILENAME      summarize results using specified control file\n"
-          "  --theta_slide FLOAT     frequency for theta sliding window move (default: 0.2)\n"
+          "  --help                   display help information\n"
+          "  --version                display version information\n"
+          "  --quiet                  only output warnings and fatal errors to stderr\n"
+          "  --cfile FILENAME         run analysis for the specified control file\n"
+          "  --simulate FILENAME      run simulation for the specified control file\n"
+          "  --resume FILENAME        resume analysis from a specified checkpoint file\n"
+          "  --arch SIMD              force specific vector instruction set (default: auto)\n"
+          "  --msci-create FILENAME   construct an MSci graph using a definitions file\n"
+          "  --bfdriver FILENAME      create control files to calculate marginal likelihood\n"
+          "  --points INTEGER         number of G-L quadrature points (used with --bfdriver)\n"
+          "  --summary FILENAME       summarize results using specified control file\n"
+          "  --no-pin                 do not pin threads to cores\n"
+          "  --theta-eps-mode INTEGER step lengths for theta proposals (default: 1)\n"
+          "  --theta-prop STRING      proposal distribution for theta gibbs move\n"
+          "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
+          "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.2)\n"
           "\n"
          );
 

@@ -945,7 +945,27 @@ static long parse_locusrate(const char * line)
     
     p += count;
   }
-  else
+  else if (opt_est_locusrate == MUTRATE_ONLY) {
+  
+    /* get a_mubar */
+    count = get_double(p, &opt_mubar_alpha);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    if (is_emptyline(p))
+      fatal("The syntax for 'locusrate' tag has changed since BPP v4.1.4.\n"
+            "Please refer to the BPP manual for the new syntax.\n");
+
+    /* get b_mubar */
+    count = get_double(p, &opt_mubar_beta);
+    if (!count) goto l_unwind;
+
+    p += count;
+
+    opt_locusrate_prior == MUTRATE_ONLY;
+
+  } else
     goto l_unwind;
 
 
@@ -1383,7 +1403,7 @@ static long parse_thetaprior_args(const char * line)
 
   p += count;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
     opt_theta_p = a;
     opt_theta_q = b;
@@ -1394,10 +1414,10 @@ static long parse_thetaprior_args(const char * line)
     opt_theta_beta = b;
   }
 
-  if (is_emptyline(p) && (opt_theta_dist != BPP_THETA_PRIOR_BETA))
+  if (is_emptyline(p) && (opt_theta_prior != BPP_THETA_PRIOR_BETA))
     ret = 1;
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
 
     count = get_e(p, &opt_est_theta);
@@ -1407,7 +1427,7 @@ static long parse_thetaprior_args(const char * line)
 
     if (is_emptyline(p)) ret = 1;
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
     count = get_double(p, &opt_theta_min);
     if (!count) goto l_unwind;
@@ -1437,7 +1457,7 @@ static long parse_thetaprior(const char * line)
 
   long count;
 
-  opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+  opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
 
   /* peek at the first argument. If not a double then read distribution type
      otherwise read the arguments of invgamma (default) */
@@ -1450,11 +1470,11 @@ static long parse_thetaprior(const char * line)
     p += count;
 
     if (!strcasecmp(dist,"invgamma"))
-      opt_theta_dist = BPP_THETA_PRIOR_INVGAMMA;
+      opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
     else if (!strcasecmp(dist,"gamma"))
-      opt_theta_dist = BPP_THETA_PRIOR_GAMMA;
+      opt_theta_prior = BPP_THETA_PRIOR_GAMMA;
     else if (!strcasecmp(dist,"beta"))
-      opt_theta_dist = BPP_THETA_PRIOR_BETA;
+      opt_theta_prior = BPP_THETA_PRIOR_BETA;
     else
       goto l_unwind;
   }
@@ -2059,6 +2079,52 @@ static long readandvalidatecount(const char * line, long spcount)
   return ret;
 }
 
+long parse_printlocus(const char * line, long * lcount)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long alloc_size = 1;
+
+  long count;
+
+  long locus_count;
+  count = get_long(p, &locus_count);
+  *lcount = locus_count;
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  /* now read the remaining part of the line and trim comments */
+ // if (!get_string(p,&seqnames)) goto l_unwind;
+  
+  long i = 0;
+
+  opt_print_locus_num = (long*)xmalloc((size_t)locus_count*sizeof(long));
+
+  while (locus_count)
+  {
+    count = get_long(p, opt_print_locus_num+i);
+    if (!count) break;
+
+    p += count;
+
+    --locus_count;
+    ++i;
+  }
+
+  /* line contains less entries than number of species */
+  if (locus_count) goto l_unwind;
+
+  /* otherwise check if nothing else is there */
+  if (is_emptyline(p)) ret = 1;
+
+  l_unwind:
+    free(s);
+
+  return ret;
+}
+
 static long parse_speciesandtree(const char * line, long * spcount)
 {
   long ret = 0;
@@ -2409,7 +2475,7 @@ static void check_validity()
   if (!opt_usedata && opt_bfbeta != 1)
     fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
     if (opt_theta_alpha <= 1)
       fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
@@ -2417,7 +2483,7 @@ static void check_validity()
     if (opt_theta_beta <= 0)
       fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     if (opt_theta_alpha <= 0)
       fatal("Alpha value of Gamma(a,b) of thetaprior must be > 0");
@@ -2427,7 +2493,7 @@ static void check_validity()
   }
   else
   {
-    assert(opt_theta_dist == BPP_THETA_PRIOR_BETA);
+    assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
     if (opt_theta_p <= 0)
       fatal("Theta prior Beta(p,q,min,max) requires p > 0");
     if (opt_theta_q <= 0)
@@ -2503,10 +2569,10 @@ static void check_validity()
       fatal("Invalid 'speciesmodelprior' value");
   }
 
-  if (opt_theta_dist < BPP_THETA_PRIOR_MIN || opt_theta_dist > BPP_THETA_PRIOR_MAX)
+  if (opt_theta_prior < BPP_THETA_PRIOR_MIN || opt_theta_prior > BPP_THETA_PRIOR_MAX)
     fatal("Internal error: invalid theta prior distribution");
 
-  if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
     double invgammamean = opt_theta_beta / (opt_theta_alpha - 1);
     if (invgammamean > 1)
@@ -2514,7 +2580,7 @@ static void check_validity()
             "are indeed using Inv-Gamma as prior and not Gamma (bpp versions "
             "<= 3.3)");
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     double gammamean = opt_theta_alpha / opt_theta_beta;
     if (gammamean > 1)
@@ -2573,6 +2639,12 @@ static void check_validity()
   /* check clock and locusrate/branchrate */
   if (opt_clock < BPP_CLOCK_MIN || opt_clock > BPP_CLOCK_MAX)
     fatal("Invalid 'clock' value");
+
+  if (opt_datefile && (opt_method == METHOD_10 || opt_method == METHOD_11))
+    fatal("Cannot use species delimitation models when using tip dating.");
+
+  if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
+	fatal("locusrate must be 3 for tip dating.\n");
 }
 
 static void update_locusrate_information()
@@ -2593,6 +2665,7 @@ static void update_locusrate_information()
       else
         opt_est_mubar = 1;
     }
+    
 }
 
 
@@ -2837,6 +2910,11 @@ void load_cfile()
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"datefile",8)) {
+        if (!get_string(value, &opt_datefile))
+          fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
       else if (!strncasecmp(token,"mcmcfile",8))
       {
         if (!get_string(value,&opt_mcmcfile))
@@ -2956,6 +3034,13 @@ void load_cfile()
                 " linked-none\n linked-all\n linked-inner\n linked-msci",
                 line_count);
         valid = 1;
+      }
+      else if (!strncasecmp(token,"printlocus",10)) 
+      {
+        if (!parse_printlocus(value,&opt_print_locus))
+          fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+	valid = 1;	
+
       }
     }
     else if (token_len == 11)
@@ -3135,28 +3220,33 @@ void load_cfile()
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
 
+  if ( opt_checkpoint == 1 && opt_datefile)
+	  fatal("Checkpointing is not implemented with tip dating");
+  if ( opt_method != METHOD_00 && opt_datefile)
+	  fatal("You can only use method A00 with tip dating");
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_datefile) 
+	  fatal("You can only use a global clock with tip dating");
+  
   /* update theta method depending on prior */
-  if (opt_theta_dist == BPP_THETA_PRIOR_BETA)
+  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
   {
-    if (opt_theta_move != BPP_THETA_SLIDE)
+    if (opt_theta_move != BPP_THETA_MOVE_SLIDE)
     {
       fprintf(stderr,"WARNING: Beta prior for thetas requires theta move to be "
               "set to 'slide'.\n");
     }
     opt_theta_slide_prob = 1;
-    opt_theta_move = BPP_THETA_SLIDE;
+    opt_theta_move = BPP_THETA_MOVE_SLIDE;
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_GAMMA)
-  {
-    if (opt_theta_move == BPP_THETA_GIBBS)
-      opt_theta_move = BPP_THETA_MG_GAMMA;
+  /* Change to zero index */
+  if (opt_print_locus) {
+    for (long i = 0; i < opt_print_locus; i++) {
+      	opt_print_locus_num[i]--;
+      if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {
+	      fatal("printlocus not valid.");
+      }
+    }
   }
-  else if (opt_theta_dist == BPP_THETA_PRIOR_INVGAMMA)
-  {
-    /* all ok -- do nothing */
-  }
-  else
-    fatal("Invalid theta prior distribution");
 }
 
 int parsefile_doubles(const char * filename,

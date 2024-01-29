@@ -307,6 +307,21 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read name of map file");
   }
 
+  #if 0
+  long datefile_present;
+  opt_datefile = NULL;
+  if (!LOAD(&datefile_present,1,fp))
+    fatal("Cannot read datefile information");
+
+  if (datefile_present)
+  {
+    /* read imap filename */
+    if (!load_string(fp,&opt_datefile))
+      fatal("Cannot read name of date file");
+    printf(" Map file: %s\n", opt_datefile);
+  }
+  #endif
+
   /* read output filename */
   if (!load_string(fp,&opt_outfile))
     fatal("Cannot read name of output file");
@@ -471,7 +486,7 @@ static void load_chk_section_1(FILE * fp,
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
   /* read theta prior */
-  if (!LOAD(&opt_theta_dist,1,fp))
+  if (!LOAD(&opt_theta_prior,1,fp))
     fatal("Cannot read type of theta prior");
   if (!LOAD(&opt_theta_alpha,1,fp))
     fatal("Cannot read alpha of 'theta' tag");
@@ -491,6 +506,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read linked theta tag");
   if (!LOAD(&opt_theta_move,1,fp))
     fatal("Cannot read theta move tag");
+  if (!LOAD(&opt_theta_prop,1,fp))
+    fatal("Cannot read theta prop tag");
   if (!LOAD(&opt_theta_gibbs_showall_eps,1,fp))
     fatal("Cannot read theta gibbs showall eps");
   if (!LOAD(&opt_theta_slide_prob,1,fp))

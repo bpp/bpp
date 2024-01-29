@@ -298,6 +298,7 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
+    
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
@@ -316,6 +317,23 @@ void stree_destroy(stree_t * tree,
           dlist_destroy(tree->nodes[i]->event[j]);
         }
       free(node->event);
+    }
+
+    if (opt_datefile && !opt_simulate && node->epoch_count) {
+	if (node->node_index < tree->tip_count + opt_seqAncestral) {
+		for (j = 0; j < opt_locus_count; j++) {
+	
+			if (node->epoch_count[j]) {
+				free(node->date_count[j]);
+				free(node->tip_date[j]);
+			}	
+		} 
+		free(node->epoch_count);
+		free(node->tip_date);
+		free(node->date_count);
+	
+	}
+
     }
 
     if (opt_migration)
@@ -354,7 +372,7 @@ void stree_destroy(stree_t * tree,
         free(node->mig_source);
       }
     }
-    
+
     if (node->event_count)
       free(node->event_count);
 
@@ -431,6 +449,10 @@ void stree_destroy(stree_t * tree,
   if (tree->migcount_sum)
     free(tree->migcount_sum);
 
+  if (tree->u_constraint)
+  	free(tree->u_constraint);
+  if (tree->l_constraint)
+  	free(tree->l_constraint);
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);
@@ -1667,6 +1689,7 @@ static ntree_t * syntax_parse(list_t * token_list)
       #if 0
       fatal("Invalid token type while parsing n-ary tree");
       #endif
+
       snprintf(bpp_errmsg, 200, "Invalid token type while parsing n-ary tree");
       if (root)
         node_destroy(root,NULL);
@@ -1963,20 +1986,33 @@ static void reorder(stree_t * stree)
     if (opt_reorder[i] == ',')
       commas_count++;
 
-  if (commas_count+1 != stree->tip_count)
-    fatal("Labels (%d) specified in --reorder do not match species tree (%d)", commas_count, stree->tip_count);
+  int hashSize = stree->tip_count;
 
-  hashtable_t * ht = hashtable_create(stree->tip_count);
+  if (commas_count+1 != stree->tip_count) {
+          if (!(opt_datefile && commas_count + 1 == stree->tip_count + stree->inner_count)) {
+                fatal("Labels (%d) specified in --reorder do not match species tree (%d)", commas_count, stree->tip_count);
+          } else {
+                hashSize = stree->tip_count + stree->inner_count;
+                opt_seqAncestral = stree->inner_count;
 
-  pairlist = (pair_t **)xmalloc(stree->tip_count * sizeof(pair_t *));
+          }
+  }
 
-  for (i = 0; i < stree->tip_count; ++i)
+
+  hashtable_t * ht = hashtable_create(hashSize);
+
+  pairlist = (pair_t **)xmalloc(hashSize * sizeof(pair_t *));
+
+  for (i = 0; i < hashSize; ++i)
   {
+    if (!stree->nodes[i]->label) {
+	    fatal("Internal nodes are not all labeled. They must be labeled with sampling from ancestral populations.");
+    }
     pair_t * pair = (pair_t *)xmalloc(sizeof(pair_t));
     pair->label = stree->nodes[i]->label;
+
     pair->data = (void *)(uintptr_t)i;
     pairlist[i] = pair;
-
     if (!hashtable_insert(ht,
                           (void *)pair,
                           hash_fnv(stree->nodes[i]->label),
@@ -2110,7 +2146,7 @@ stree_t * stree_from_ntree(ntree_t * ntree)
   /* apply diploid information */
   if (opt_diploid)
   {
-    if (opt_diploid_size != stree->tip_count)
+    if (opt_diploid_size != stree->tip_count + opt_seqAncestral)
       fatal("Number of 'phase' assignments mismatch number of species");
 
     for (i = 0; i < stree->tip_count; ++i)

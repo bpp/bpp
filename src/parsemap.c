@@ -160,6 +160,79 @@ l_unwind:
   return ret;
 }
 
+list_t * parse_date_mapfile(const char * mapfile)
+{
+  long line_count = 0;
+  long ret = 1;
+  FILE * fp;
+  list_t * list;
+  mappingDate_t * mapping = NULL;
+  char * tag = NULL;
+  char * date = NULL;
+
+  fp = xopen(mapfile,"r");
+
+  list = (list_t *)xcalloc(1,sizeof(list_t));
+
+  regex_t regDecimal;
+  int regCompiled, regMatch;
+  char* ptr; /* Needed for the strtod function */
+   /* Regex of decimal number */
+   regCompiled = regcomp(&regDecimal, "^([0-9]*)((\\.)?([0-9]+))$" , REG_EXTENDED);
+   if (regCompiled == 1) {
+     fprintf(stderr, "Regular expression did not compile.\n");
+     exit(1);
+   }
+
+  while (getnextline(fp))
+  {
+    ++line_count;
+
+    if (is_emptyline(line)) continue;
+
+    if (!parse_mapping(line,&tag,&date))
+    {
+      ret = 0;
+      fprintf(stderr, "Invalid entry in %s (line %ld)\n", mapfile, line_count);
+      goto l_unwind;
+    }
+
+    /* construct a mapping record */
+    mapping = (mappingDate_t *)xmalloc(sizeof(mapping_t));
+    mapping->individual = tag;
+
+
+    /* Need to convert to double*/
+
+     regMatch = regexec(&regDecimal, date, 0, NULL, 0);
+      if (regMatch != 0) {
+        fprintf(stderr, "Problem reading datefile. Regular expression does not match a decimal number.\n");
+        exit(1);
+      }
+
+    mapping->date = strtod(date, &ptr);
+    free(date);
+
+    /* insert item into list */
+    list_append(list,(void *)mapping);
+
+    tag = date = NULL;
+  }
+
+
+l_unwind:
+  fclose(fp);
+  if (ret == 0)
+  {
+    list_clear(list,mapDate_dealloc);
+    free(list);
+    list = NULL;
+  }
+
+  regfree(&regDecimal);
+  return list;
+}
+
 list_t * parse_mapfile(const char * mapfile)
 {
   long line_count = 0;
@@ -191,6 +264,7 @@ list_t * parse_mapfile(const char * mapfile)
     mapping = (mapping_t *)xmalloc(sizeof(mapping_t));
     mapping->individual = tag;
     mapping->species = species;
+    printf("%s %s\n", tag, species);
 
     /* insert item into list */
     list_append(list,(void *)mapping);
@@ -208,3 +282,42 @@ l_unwind:
   }
   return list;
 }
+
+
+static int cmp_tipDates(const void * a, const void * b){
+  
+  mappingDate_t * const * x = a;
+  mappingDate_t * const * y = b;
+
+  if ((*x)->date - (*y)->date > 0) return 1;
+  return -1;
+} 
+
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t* dateList,
+		 double mu_bar) {
+
+	int i = 0;
+
+	/* Converts dates to expected number of substitutions and creates an sorted 
+	 * array of the dates */ 
+        list_item_t* list = dateList->head;
+
+	int tipDateArrayLen = dateList->count;
+        mappingDate_t ** tipDateArray = xmalloc(tipDateArrayLen * sizeof(mappingDate_t *));
+        list = dateList->head;
+
+        while (list) {
+		((mappingDate_t *) list->data)->date = ((mappingDate_t *) list->data )->date * mu_bar;
+                tipDateArray[i] = (mappingDate_t *)list->data;
+
+                i++;
+                list = list->next;
+
+        }
+
+        qsort(tipDateArray, tipDateArrayLen, sizeof(mappingDate_t *), cmp_tipDates);
+
+
+  return tipDateArray;
+}
+

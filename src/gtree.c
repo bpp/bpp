@@ -21,6 +21,8 @@
 
 #include "bpp.h"
 
+#define PROP_THRESHOLD 10
+
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
 #define SWAP_PMAT_INDEX(e,i) (i) = (((e)+(i))%((e)<<1))
 #define SWAP_SCALER_INDEX(n,i) (((n)+((i)-1))%(2*(n)-2))
@@ -45,6 +47,7 @@ typedef struct pop_s
 
 static hashtable_t * sht;
 static hashtable_t * mht;
+static hashtable_t * dht;
 
 /* one sortbuffer per thread (used as space to sort coalescent times when
    computing MSC density) to avoid reallocation */
@@ -58,6 +61,15 @@ __THREAD gnode_t * dbg_msci_y = NULL;
 __THREAD gnode_t * dbg_msci_a = NULL;
 __THREAD gnode_t * dbg_msci_s = NULL;
 __THREAD gnode_t * dbg_msci_t = NULL;
+
+static int cb_cmp_nodelabel(void * a, void * b) 
+{ 
+  snode_t * node = (snode_t *)a; 
+  char * label = (char * )b; 
+ 
+  return (!strcmp(node->label,label)); 
+}
+
 
 static long propose_spr_sim(locus_t * locus,
                             gtree_t * gtree,
@@ -302,7 +314,7 @@ static char * export_newick_recursive(const gnode_t * root,
     }
     else
     {
-      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%.10f", root->label, root->length);
     }
   }
   else
@@ -332,7 +344,7 @@ static char * export_newick_recursive(const gnode_t * root,
     else
     {
       size_alloced = xasprintf(&newick,
-                              "(%s,%s)%s:%f",
+                              "(%s,%s)%s:%.10f",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",
@@ -346,6 +358,126 @@ static char * export_newick_recursive(const gnode_t * root,
 
   return newick;
 }
+
+
+static char * print_migration(const gnode_t * root) {
+	char * part1; 
+	char * part2; 
+	long size_alloced;
+	snode_t * pop = root->pop;
+
+	long maxCount = 0, count = 0;
+
+	if (root->mi) 
+		maxCount = root->mi->count;	
+
+	/* Starting population */
+	if (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) 
+		size_alloced = xasprintf(&part1,"%s:", root->pop->label);
+	else
+		size_alloced = xasprintf(&part1,"%s:;", root->pop->label);
+
+	/* Add migration and taus */
+	while (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) {
+		if (count >= maxCount || (pop->parent->tau < root->mi->me[count].time)) {
+			if (count < maxCount || (pop->parent->parent && pop->parent->parent->tau < root->parent->time)) {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
+								root->pop->parent->tau,
+							     	root->pop->parent->label,
+							       	root->pop->label);
+			} else {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
+								root->pop->parent->tau,
+							     	root->pop->parent->label,
+							       	root->pop->label);
+			}
+			free(part1);
+			size_alloced = xasprintf(&part1,"%s", part2);
+			free(part2);
+			
+			pop = pop->parent;
+
+		} else {
+			if (count + 1 < maxCount || (pop->parent && pop->parent->tau < root->parent->time) ) {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
+									root->mi->me[count].time,
+								     	root->mi->me[count].target->label,
+								       	root->mi->me[count].source->label);
+			} else {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
+									root->mi->me[count].time,
+								     	root->mi->me[count].target->label,
+								       	root->mi->me[count].source->label);
+			}
+			free(part1);
+			size_alloced = xasprintf(&part1,"%s", part2);
+			free(part2);
+			pop = root->mi->me[count].target;
+			count++;
+		}
+	}
+
+  	if (size_alloced < 0)
+  	  fatal("Memory allocation during newick export failed.");
+
+return part1;
+}
+
+
+static char * export_migration_recursive(const gnode_t * root)
+{
+  char * migration;
+  long size_alloced;
+  assert(root != NULL);
+
+  if (!(root->left) || !(root->right))
+  {
+	  migration = print_migration(root);
+	  return migration;
+  }
+  else
+  {
+    char * subtree1 = export_migration_recursive(root->left);
+    assert(subtree1);
+    if (subtree1 == NULL)
+    {
+      return NULL;
+    }
+    char * subtree2 = export_migration_recursive(root->right);
+    if (subtree2 == NULL)
+    {
+      free(subtree1);
+      return NULL;
+    }
+    
+    char * node_mig = print_migration(root);
+
+    size_alloced = xasprintf(&migration,
+                              "%s%s%s",
+                              subtree1,
+                              subtree2,
+                              node_mig);
+
+    free(subtree1);
+    free(subtree2);
+    free(node_mig);
+  }
+  if (size_alloced < 0)
+    fatal("Memory allocation during newick export failed.");
+
+  return migration;
+}
+
+char * gtree_export_migration(const gnode_t * root)
+{
+  char * migration;
+  if (!root) return NULL;
+
+  migration = export_migration_recursive(root);
+
+  return migration;
+}
+
 
 char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *))
@@ -363,7 +495,7 @@ char * gtree_export_newick(const gnode_t * root,
     }
     else
     {
-      size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+      size_alloced = xasprintf(&newick, "%s:%.10f", root->label, root->length);
     }
   }
   else
@@ -389,7 +521,7 @@ char * gtree_export_newick(const gnode_t * root,
     else
     {
       size_alloced = xasprintf(&newick,
-                              "(%s,%s)%s:%f;",
+                              "(%s,%s)%s:%.10f;",
                               subtree1,
                               subtree2,
                               root->label ? root->label : "",
@@ -481,15 +613,21 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
 
     /* go through the sequences of the current locus and match each sequence
        with the corresponding population using its species tag */
-  for (j = 0; j < stree->tip_count; ++j)
+  for (j = 0; j < stree->tip_count + opt_seqAncestral; ++j) {
     pop[j].snode = stree->nodes[j];
+
+  if (opt_seqAncestral) {
+	  if (j < stree->tip_count && (stree->nodes[j]->left || stree->nodes[j]->right))
+		 fatal("Tip species should be listed before ancestral species on the species&tree line in control file."); 
+  }
+  }
 
   if (stree->tip_count == 1)
   {
     pop[0].seq_count = msa->count;
     pop[0].seq_indices = (int *)xcalloc((size_t)(msa->count),sizeof(int));
     pop[0].nodes = (gnode_t **)xcalloc((size_t)(msa->count),sizeof(gnode_t *));
-    for (i = 0; i < msa->count; ++i)
+    for (i = 0; (int) i < msa->count; ++i)
       pop[0].seq_indices[i] = i;
     return;
   }
@@ -499,9 +637,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
     /* first get the species tag */
     char * label = msa->label[j];
     label = strchr(label, '^');
-    if (!label)
+    if (!label) 
       fatal("Cannot find species tag on sequence %s of locus %d",
             msa->label[j], msa_id);
+    
 
     /* skip the '^' mark */
     label++;
@@ -514,9 +653,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
                           (void *)label,
                           hash_fnv(label),
                           cb_cmp_pairlabel);
-    if (!pair)
+    if (!pair) 
       fatal("Cannot find species mapping for sequence %s of locus %d",
             label, msa_id);
+    
 
     snode_t * node = (snode_t *)(pair->data);
 
@@ -528,8 +668,8 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
   }
 
   /* now repeat that for obtaining the sequence indices */
-  int * counter = (int *)xcalloc(stree->tip_count, sizeof(int));
-  for (i = 0; i < stree->tip_count; ++i)
+  int * counter = (int *)xcalloc(stree->tip_count + opt_seqAncestral, sizeof(int));
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     size_t alloc_size = pop[i].seq_count;
     if (opt_migration)
@@ -544,9 +684,10 @@ static void fill_pop(pop_t * pop, stree_t * stree, msa_t * msa, int msa_id)
     /* first get the species tag */
     char * label = msa->label[j];
     label = strchr(label, '^');
-    if (!label)
+    if (!label) 
       fatal("Cannot find species tag on sequence %s of locus %d",
             msa->label[j], msa_id);
+    
 
     /* skip the '^' mark */
     label++;
@@ -822,7 +963,7 @@ static void replace_hybrid(stree_t * stree,
   *count = *count + 1;
 }
 
-static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
+static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_t * stree, int * maxSeqIndex)
 {
   int i,j;
 
@@ -836,7 +977,7 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
   for (i = 0; i < count; ++i)
   {
     if (pop[i].snode == epoch->left)
-      break;
+      break; 
   }
   assert(i != count);
 
@@ -853,12 +994,30 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
   if (j < i)
     SWAP(i,j);
 
+  int parentIndex = 0;
   /* allocate indices and nodes arrays for the new population */
   size_t alloc_size;
-  if (opt_migration)
+  if (!opt_migration)
+     alloc_size = pop[i].seq_count + pop[j].seq_count;
+  else 
     alloc_size = msa->count;
-  else
-    alloc_size = pop[i].seq_count + pop[j].seq_count;
+  /* add number of sampled lineages in ancestral population*/
+   if (opt_seqAncestral) {
+           snode_t * parent = pop[i].snode->parent;
+           for (unsigned l = stree->tip_count; l < stree->tip_count + stree->inner_count; l++){
+                   if (parent == stree->nodes[l]) {
+                           parentIndex = l;
+                           break;
+                   }
+
+           }
+
+   }
+   if (opt_seqAncestral && !opt_migration)
+           alloc_size = pop[i].seq_count + pop[j].seq_count + pop[parentIndex].seq_count;
+  
+
+  /* allocate indices and nodes arrays for the new population */
 
   int * indices = (int *)xmalloc(alloc_size * sizeof(int));
   gnode_t ** nodes = (gnode_t **)xmalloc(alloc_size * sizeof(gnode_t *));
@@ -873,6 +1032,19 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
   memcpy(nodes+pop[i].seq_count,
          pop[j].nodes,
          pop[j].seq_count*sizeof(gnode_t *));
+  if(opt_seqAncestral) {
+        memcpy(nodes+pop[i].seq_count+pop[j].seq_count,
+                  pop[parentIndex].nodes,
+                  pop[parentIndex].seq_count*sizeof(gnode_t *));
+	memcpy(indices+pop[i].seq_count+pop[j].seq_count, 
+			pop[parentIndex].seq_indices,
+			pop[parentIndex].seq_count *sizeof(int));
+
+	free(pop[parentIndex].seq_indices);
+	pop[parentIndex].seq_indices = NULL;
+	free(pop[parentIndex].nodes);
+	pop[parentIndex].nodes = NULL;
+  }
   pop[i].seq_count += pop[j].seq_count;
 
   /* deallocate indices and nodes array of the two children populations */
@@ -888,10 +1060,23 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa)
   pop[i].seq_indices = indices;
   pop[i].nodes = nodes;
 
+  if (opt_migration && opt_datefile) {
+	  maxSeqIndex[i] = pop[i].seq_count;
+	  if (opt_seqAncestral)
+		maxSeqIndex[i] += maxSeqIndex[parentIndex];
+  }
+
   /* if population j was not the last one, replace the last population in the
      list with j */
-  if (j < count-1)
+  //ANNA
+  if (j < count-1) {
     memcpy(pop+j,pop+count-1,sizeof(pop_t));
+    if (opt_migration && opt_datefile) {
+	    maxSeqIndex[j] = maxSeqIndex[count-1];
+    }
+  }
+  
+
 }
 
 static int cb_cmp_spectime(const void * a, const void * b)
@@ -1087,6 +1272,25 @@ static void fill_seqin_counts_recursive(stree_t * stree,
     }
 
   }
+
+  if (opt_datefile && opt_cfile) {
+    int j;	
+    snode_t * node_l = node->left;
+    snode_t * node_r = node->right;
+
+    if (node_l && node_l->node_index < stree->tip_count+opt_seqAncestral) {
+    	for (j = 0; j < node_l->epoch_count[msa_index]; j++) 
+		node->seqin_count[msa_index] += node_l->date_count[msa_index][j];
+	
+    }
+    if (node_r && node_r->node_index < stree->tip_count+opt_seqAncestral) {
+    	for (j = 0; j < node_r->epoch_count[msa_index]; j++) 
+		node->seqin_count[msa_index] += node_r->date_count[msa_index][j];
+	
+    }
+	    
+  }
+
 }
 
 void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
@@ -1125,6 +1329,7 @@ void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
       }
     }
   }
+
 }
 
 static int cb_trav_full(snode_t * x)
@@ -1334,7 +1539,711 @@ static void sim_gtroot_migs(stree_t * stree, gtree_t * gtree, long msa_index)
     pop->seqin_count[msa_index]++;
 }
 
-gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
+/* Adds samples when using serial sampling */
+void addSamples (mappingDate_t ** tipDateArray, int * tipDateIndex, double tmax, pop_t * pop, int msa_index, int * lineage_count, double maxTipDateIndex, int pop_count, int * dateUsed) {
+
+	gnode_t * tmp;
+
+	/* Until all samples taken at the same time have been added */
+	while (*tipDateIndex < maxTipDateIndex &&  tipDateArray[*tipDateIndex]->date <= tmax) {
+	
+		int i, popUpdate; 
+		if (opt_simulate) {
+	      		for (i = 0 ; i < pop_count; i ++ ) {
+		      		if (!strcmp(pop[i].snode->label, tipDateArray[*tipDateIndex]->individual)) break;
+	      		}
+			assert(i < pop_count);
+
+	      		popUpdate = i;
+		}
+		/* Inference */
+		else {
+			int snode_index = (int) dateUsed[*tipDateIndex];
+			if (snode_index < 0) {
+				(*tipDateIndex)++;
+				continue;
+			}
+	      		for (i = 0 ; i < pop_count; i ++ ) {
+				if (pop[i].snode->node_index == snode_index) {
+					break;
+				}
+			}
+			popUpdate = i;
+		}
+		
+	      assert(popUpdate < pop_count);
+
+	      if (pop[popUpdate].snode->event_count[msa_index] > 0) {
+
+	     	 unsigned int  node1Index = pop[popUpdate].seq_count; 
+	     	 unsigned int  node2Index = pop[popUpdate].seq_count + pop[popUpdate].snode->event_count[msa_index];
+	
+
+		 /* Swap the pointers from the sample (node) to be added
+		  * and the node that has been coalesced */
+		 tmp = pop[popUpdate].nodes[node1Index];
+		 pop[popUpdate].nodes[node1Index] = pop[popUpdate].nodes[node2Index];
+		 pop[popUpdate].nodes[node2Index] = tmp;
+	        
+	      }
+
+	      pop[popUpdate].seq_count++;
+	      (*tipDateIndex)++; 
+	      (*lineage_count)++;
+	}
+
+}	
+
+static int cmp_Dates(const void * a, const void * b){
+
+  gnode_t * const * x = a;
+  gnode_t * const * y = b;
+
+  if ((*x)->time - (*y)->time > 0) return 1;
+  return -1;
+}
+
+void update_tau_constraint_recursive_to_root(stree_t * stree, snode_t * node, double * constraint) {
+	/* These are lower bounds */
+	snode_t * parent = node->parent;
+	if (!parent)
+		return;
+	int index = node->node_index - stree->tip_count;
+	int indexP = parent->node_index - stree->tip_count;
+	if (index >= 0 && constraint[index] > constraint[indexP]){
+		constraint[indexP] = constraint[index];
+	}
+	update_tau_constraint_recursive_to_root(stree, node->parent, constraint);
+}
+
+void update_tau_constraint_recursive_to_tip(stree_t * stree, snode_t * node, double * constraint) {
+	/* These are upper bounds */
+
+	snode_t * daughterL = node->left;
+	snode_t * daughterR = node->right;
+	if (!daughterR)
+		return;
+
+	int index = node->node_index - stree->tip_count;
+	int indexD = daughterL->node_index - stree->tip_count;
+	if (indexD >= 0 && (constraint[index] <  constraint[indexD] && constraint[index] != 0))
+		constraint[indexD] = constraint[index];
+
+	indexD = daughterR->node_index - stree->tip_count;
+	if (indexD >= 0 && (constraint[index] <  constraint[indexD] || constraint[index] != 0))
+		constraint[indexD] = constraint[index];
+
+	update_tau_constraint_recursive_to_tip(stree, node->left, constraint);
+	update_tau_constraint_recursive_to_tip(stree, node->right, constraint);
+}
+
+void update_tau_constraint(stree_t * stree, pop_t * pop) {
+
+	double * u_constraint = stree->u_constraint;
+	double * l_constraint = stree->l_constraint;
+
+	int left, right; 
+	double t_left, t_right, max;
+	snode_t * popl;
+	snode_t * popr;
+
+	// If there are no ancestral sequences, there is only memory allocated for the tip nodes,
+	// This means that there are only lower bounds on the speciations times
+	if(opt_seqAncestral) {
+	for (unsigned i = stree->tip_count; i < stree->tip_count+stree->inner_count; i++) {
+		t_left = 0;
+		t_right = 0;
+	
+		/* In the ancestral populations, you are constrained by 
+		 * (1) the oldest daughter sample (lower), 
+		 * (2) the youngest parent sample (upper), 
+		 * (3) the oldest sample in the current pop (lower), 
+		 * (4) the youngest sample in the current pop (upper).
+		 */
+		
+		/* Find the population of the daughter */
+		popl = pop[i].snode->left;
+		if (popl) {
+			left = popl->node_index;
+		}
+		popr = pop[i].snode->right;
+		if (popr)
+			right = popr->node_index;
+		
+		/* Oldest sample from left daughter */
+		if (popl && pop[left].nodes[pop[left].seq_count - 1]->time > 0 ) {
+			t_left = pop[left].nodes[pop[left].seq_count - 1]->time;
+
+		}
+
+		/* Oldest sample from right daughter */
+		if (popr && pop[right].nodes[pop[right].seq_count - 1] > 0 ) {
+			t_right = pop[right].nodes[pop[right].seq_count - 1]->time;
+		}
+
+		if (t_left && t_right ) {
+
+			max = MAX(t_left, t_right);
+			if (max > l_constraint[i - stree->tip_count]) 
+				l_constraint[i - stree->tip_count] = max;
+		}
+		else if (t_left && t_left > l_constraint[i - stree->tip_count])
+			l_constraint[i - stree->tip_count] = t_left;
+		else if (t_right && t_right > l_constraint[i - stree->tip_count])
+			l_constraint[i - stree->tip_count] = t_right;
+		
+
+		int index = pop[i].snode->node_index;
+
+		if ((pop[index].seq_count > 0) && (u_constraint[i - stree->tip_count] > pop[index].nodes[0]->time || ! u_constraint[i - stree->tip_count]))  {
+			u_constraint[i - stree->tip_count] = pop[index].nodes[0]->time;
+		}
+		
+		
+		
+	// Would be good to check constraints that are removed a node
+	
+	}	
+	/* Only constraints are from the tips */
+	} else {
+		if (stree->tip_count == 1) {
+			l_constraint[0] = 0;
+			u_constraint[0] = 0;
+
+		} else {
+			for (unsigned i = 0; i < stree->tip_count; i++) {
+				int parent = pop[i].snode->parent->node_index;
+				double time = pop[i].nodes[pop[i].seq_count - 1]->time;
+				if (time > l_constraint[parent-stree->tip_count]) {
+					l_constraint[parent-stree->tip_count] = time;
+				}
+			}
+		}
+	
+	}
+	
+	if (stree->tip_count > 1) {
+		for (unsigned i = 0; i < stree->tip_count; i++) {
+			update_tau_constraint_recursive_to_root(stree, stree->nodes[i]->parent, l_constraint);
+		}
+
+		if (opt_seqAncestral)
+			update_tau_constraint_recursive_to_tip(stree, stree->root, u_constraint);
+	}
+
+}
+
+double set_tip_date_infer (stree_t * stree, 
+			   pop_t * pop, 
+			   int tipDateArrayLen, 
+			   mappingDate_t ** tipDateArray,
+			   hashtable_t * mht,
+			   int * useDate, 
+			   int * lineage_count,
+			   int * tipDateIndex, 
+			   int pop_count, 
+			   int * seqCurrent, 
+			   int * maxSeqIndex, 
+			   int msa_index, 
+			   int tau_ctl
+			   ) {
+
+	int k;
+	pair_t * pair; 
+  	char * label;
+	char * carrot; 
+
+	for (int i = 0; i < pop_count + opt_seqAncestral; i++)
+		maxSeqIndex[i] = 0; 
+	for (int i = 0; i < tipDateArrayLen; i++) {
+		useDate[i] = -1; 
+	}
+
+	/* This parts sets the dates in the gene trees */
+	for (unsigned i = 0; i < stree->tip_count + opt_seqAncestral; i++) {
+		for (unsigned j = 0; j < pop[i].seq_count; ++j) {
+			label = pop[i].nodes[j]->label;
+			//look for ^
+			carrot = strchr(label, '^');
+
+			if (carrot) {
+				label = carrot + 1; 
+			}
+
+  			pair = hashtable_find(dht,
+  			                       (void *)label,
+  			                       hash_fnv(label),
+  			                       cb_cmp_pairlabel);
+  			if ( ! pair) {
+  			       fatal("pair not found\n");
+  			     } else {
+			             if (pair) {
+				     	pop[i].nodes[j]->time = *(double *)pair->data;
+				     	pop[i].nodes[j]->time_fixed = (*(double *)pair->data) /stree->locusrate_mubar;
+					if (tau_ctl && pop[i].snode->tau > pop[i].nodes[j]->time) 
+						fatal("Tip dates are incompatible with taus");
+					
+					maxSeqIndex[i]++;
+				     }
+				     
+  			}
+  		}
+    	}
+
+	/* This sorts the the arrays of gene tree nodes by date */ 
+	for (unsigned i = 0; i < stree->tip_count + opt_seqAncestral; i++) {
+		qsort(pop[i].nodes, pop[i].seq_count, sizeof(gnode_t *), cmp_Dates);
+	}
+
+	/* Check if each date is used */
+	for (int i = 0; i < tipDateArrayLen; i++) {
+
+  		label = tipDateArray[i]->individual;
+		carrot = strchr(label, '^');
+		if (carrot) {
+			label = carrot + 1; 
+		}
+		if (stree->tip_count > 1) {
+  			pair = hashtable_find(mht,
+  	        	        (void *)label,
+  	        	        hash_fnv(label),
+  	        	        cb_cmp_pairlabel);
+
+			/* Finds the population with the sequence */
+  			if (pair) {
+				snode_t * node = (snode_t*) pair->data;
+				k = node->node_index;
+
+				for (unsigned j =0; j < pop[k].seq_count; j++){
+				
+					char * label2 = pop[k].nodes[j]->label;
+					char * carrot = strchr(label2, '^');
+					if (carrot) 
+						label2 = carrot + 1;
+
+					if (! strcmp(label, label2)) {
+						useDate[i] = k; //Set to population index
+						break;
+					}
+
+				}	
+				
+			}
+
+		} else {
+
+			k = 0;
+			for (unsigned j = 0; j < pop[k].seq_count; j++){
+				char * label2 = pop[k].nodes[j]->label;
+				char * carrot = strchr(label2, '^');
+				if (carrot) 
+					label2 = carrot + 1;
+
+				if (! strcmp(label, label2)) {
+					useDate[i] = k; //Set to population index
+					break;
+				}
+			}
+		}
+	}
+
+	int startingIndex = 0; 
+	int i;
+	for (i = 0; i < tipDateArrayLen; i++ ) {
+		
+		if (useDate[i] != -1 ) {
+			startingIndex = i;
+			break;
+		}
+	}
+
+	assert(i < tipDateArrayLen);
+
+	double * lastDate = (double *)xcalloc(stree->tip_count + opt_seqAncestral, sizeof(double));
+	for (unsigned j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
+		lastDate[j] = -1;
+	}
+
+	/* Finds the number of epochs for each population */
+	for (int j = 0; j < tipDateArrayLen ; j++ ) {
+		int n = useDate[j]; /* n is the population */
+		
+		/* If the date is used for this msa */
+		if (n >= 0) {
+			/* New date */
+			if (tipDateArray[j]->date > lastDate[n]) {
+				lastDate[n] = tipDateArray[j]->date;
+				stree->nodes[n]->epoch_count[msa_index]++; 
+			}
+		}
+	}
+
+	for (unsigned j = 0; j < stree->tip_count + opt_seqAncestral; j++) {
+		if (stree->nodes[j]->epoch_count[msa_index]) {
+			stree->nodes[j]->tip_date[msa_index] = xmalloc(sizeof(double *) * (stree->nodes[j]->epoch_count[msa_index]));
+			stree->nodes[j]->date_count[msa_index] = (int *)xcalloc(sizeof(int *),  (stree->nodes[j]->epoch_count[msa_index]));
+		}
+		stree->nodes[j]->epoch_count[msa_index]= 0; 
+
+	}
+
+	for (unsigned j = 0; j < stree->tip_count + opt_seqAncestral; j++)
+		lastDate[j] = -1;
+
+	for (int j = 0; j < tipDateArrayLen ; j++ ) {
+		int n = useDate[j]; /* i is the population */
+		
+		/* If the date is used for this msa */
+		if (n >= 0) {
+			/* New date */
+			if (tipDateArray[j]->date > lastDate[n]) {
+				lastDate[n] = tipDateArray[j]->date;
+				stree->nodes[n]->tip_date[msa_index][stree->nodes[n]->epoch_count[msa_index]] = lastDate[n];
+				stree->nodes[n]->epoch_count[msa_index]++; 
+			} 
+
+			stree->nodes[n]->date_count[msa_index][stree->nodes[n]->epoch_count[msa_index]-1]++;
+
+
+			
+		}
+	}
+	free(lastDate);
+
+	// Now we need to set the starting population sizes and indeces
+	for (int j = 0; j < tipDateArrayLen; j++ ) {
+		
+		int n = useDate[j]; /* i is the population */
+		if (n < 0) {
+			if (tipDateArray[j]->date <= tipDateArray[startingIndex]->date)
+  				(*tipDateIndex)++;
+			continue;
+		}
+
+
+  		if ((tipDateArray[j]->date <= tipDateArray[startingIndex]->date) || (n >= (int) stree->tip_count)) {
+			/* Will be used as the number of nodes avaliable to draw from */
+  			seqCurrent[n]++;
+  		
+			/* Increases the number of lineages in the starting population 
+			 * and the index for the array with the dates */
+  			if (tipDateArray[j]->date <= tipDateArray[startingIndex]->date) {
+  				(*lineage_count)++;
+  				(*tipDateIndex)++;
+  			}
+  		} 
+  	}
+
+  	/* Sets the starting pop counts */
+  	for (int j = 0; j < pop_count; j++) {
+  		pop[j].seq_count = seqCurrent[j];
+	}
+  	
+	free(seqCurrent);
+  	return  tipDateArray[startingIndex]->date;
+
+}
+
+double set_tip_date_simulate (stree_t * stree, 
+			   pop_t * pop, 
+			   mappingDate_t ** tipDateArray,
+			   int * useDate, 
+			   int * lineage_count,
+			   int * tipDateIndex, 
+			   int pop_count, 
+			   int * seqCurrent,
+			   int * seqIndex,
+			   msa_t * msa
+			   ) {
+
+	int i, j; 
+	char * label;
+  	
+  	for (j = 0; j < msa->count; j++ ) {
+  	
+		/* If there is more than one population, find the population in 
+		 * the species tree */
+  		if (stree->tip_count > 1) {
+  			label = tipDateArray[j]->individual; 
+  			
+			   snode_t * node = hashtable_find(sht,
+                                    (void *)(label),
+                                    hash_fnv(label),
+                                    cb_cmp_nodelabel);
+
+  			if (!node)
+  			  fatal("Cannot find species mapping for sequence %s from datefile",
+  			        label);
+  		 	
+  			i = node->node_index;
+  			assert(node == pop[i].snode);
+
+		/* With one population, the index in always zero */
+  		} else {
+  			i = 0; 
+  		}
+  		
+		/* Set the time equal of a gnode equal to the date read in 
+		 * from the date file */
+  		pop[i].nodes[seqIndex[i]]->time = tipDateArray[j]->date;
+  		
+  		if (tipDateArray[j]->date == tipDateArray[0]->date || i >= (int) stree->tip_count) {
+			/* Will be used as the number of nodes avaliable to draw from */
+  			seqCurrent[i]++;
+  		
+			/* Increases the number of lineages in the starting population 
+			 * and the index for the array with the dates */
+  			if (tipDateArray[j]->date == tipDateArray[0]->date) {
+  				(*lineage_count)++;
+  				(*tipDateIndex)++;
+  			}
+  		} 
+  		
+		/* Keeps track of where to add the next node */
+  		seqIndex[i]++;
+  	}
+
+  	/* Sets the starting pop counts */
+  	for (j = 0; j < pop_count; j++) { 
+  		pop[j].seq_count = seqCurrent[j];
+  	}
+
+	free(seqCurrent);
+  	return  tipDateArray[0]->date;
+}
+
+
+void reset_tau_tip_date(stree_t * stree, double * u_constraint, double * l_constraint) {
+	double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
+  	const long thread_index = 0;
+	double newage;
+	int root_index = stree->root->node_index;		
+
+	if (stree->root->tau) {
+     	      if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
+       	      	newage = opt_tau_beta / (opt_tau_alpha - 1) *
+                	(0.9 + 0.2*legacy_rndu(thread_index));
+     	      else
+       	      	newage = opt_tau_alpha / opt_tau_beta *
+                	(0.9 + 0.2*legacy_rndu(thread_index));
+   	} else {
+		fatal("No tau for root?");
+	}
+
+	 stree->root->tau = reflect(newage, l_constraint[root_index-stree->tip_count], 999, thread_index); 
+
+
+		  // This needs to be different with network
+	stree_init_tau_recursive_constraint(stree, stree->root->left, prop, 0, u_constraint, l_constraint);
+	stree_init_tau_recursive_constraint(stree, stree->root->right, prop, 0, u_constraint, l_constraint);
+
+}
+
+void set_constraints (stree_t * stree, 
+			   pop_t * pop) {
+
+	unsigned i, j; 
+	pair_t * pair; 
+  	char * label; 
+
+	/* This parts sets the dates in the gene trees */
+	for (i = 0; i < stree->tip_count + opt_seqAncestral; i++) {
+		for (j = 0; j < pop[i].seq_count; ++j) {
+			label = pop[i].nodes[j]->label;
+			//look for ^
+			char * carrot = strchr(label, '^');
+			if (carrot) {
+			
+				label = carrot + 1;
+				//carrot++;
+			} else {
+				fatal("Label not found\n");
+			}
+
+  			pair = hashtable_find(dht,
+  			                       (void *)label,
+  			                       hash_fnv(label),
+  			                       cb_cmp_pairlabel);
+  			if ( ! pair) {
+  			       fatal("pair not found\n");
+  			     } else {
+			             if (pair) {
+					     pop[i].nodes[j]->time = *(double *)pair->data;
+				     }
+  			}
+  		}
+    	}
+
+	/* This sorts the the arrays of gene tree nodes by date */ 
+	for (i = 0; i < stree->tip_count + opt_seqAncestral; i++) {
+		qsort(pop[i].nodes, pop[i].seq_count, sizeof(gnode_t *), cmp_Dates);
+	}
+
+	update_tau_constraint(stree, pop);
+
+}
+
+void tau_constraint_find(stree_t * stree, msa_t * msa, int msa_index) {
+
+  unsigned int i,j,k;
+  pop_t * pop;
+
+  /* create one hash table of species and one for sequence->species mappings */
+  pop = (pop_t *)xcalloc((size_t)(stree->tip_count+stree->hybrid_count+ opt_seqAncestral),
+                         sizeof(pop_t));
+  fill_pop(pop,stree,msa,msa_index);
+
+  gnode_t ** gtips = (gnode_t **)xcalloc((size_t)(msa->count),
+                                         sizeof(gnode_t *));
+
+  for (i = 0; i < (unsigned int)(msa->count); ++i)
+  {
+    gtips[i] = (gnode_t *)xcalloc(1,sizeof(gnode_t));
+
+    if (opt_msci)
+    {
+      gtips[i]->hpath = (int *)xmalloc((size_t)(stree->hybrid_count) *
+                                       sizeof(int));
+      for (j = 0; j < stree->hybrid_count; ++j)
+        gtips[i]->hpath[j] = BPP_HPATH_NONE;
+    }
+  }
+
+  /* fill each population with one gene tip node for each lineage */
+  for (i = 0, j=0; i < stree->tip_count + opt_seqAncestral; ++i)
+  {
+    memcpy(pop[i].nodes,gtips+j,pop[i].seq_count*sizeof(gnode_t *));
+    for (k = 0; k < pop[i].seq_count; ++k)
+      pop[i].nodes[k]->pop = pop[i].snode;
+
+    j += pop[i].seq_count;
+  }
+
+  /* set the clv index for each gene tip node. The index must be equal to the
+     number of the sequence it represents in the current msa, and will be used
+     later for setting up and computing the CLVs */
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
+  {
+    for (j = 0; j < pop[i].seq_count; ++j)
+    {
+      int index = pop[i].seq_indices[j];
+      pop[i].nodes[j]->label = xstrdup(msa->label[index]);
+    }
+  }
+  
+  set_constraints(stree, pop);	
+
+
+  for(i = 0; i < stree->tip_count + opt_seqAncestral;  ++i)
+  {
+    for (j = 0; j < pop[i].seq_count; ++j)
+    {
+     free( pop[i].nodes[j]->label);
+    }
+    free(pop[i].seq_indices);
+    free(pop[i].nodes);
+  }
+   
+  for (i = 0; i < (unsigned int)(msa->count); ++i)
+  {
+   free(gtips[i]);
+    if (opt_msci)
+    {
+      free(gtips[i]->hpath);
+    }
+  }	
+  free(pop); 
+  free(gtips);
+
+}
+
+void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
+
+	
+	/* First, find memory to move. Save memory tmp, move memory. 
+	Adjust seq counts and indicies */
+
+	void * startMove = pop[k].nodes + pop[k].seq_count;
+	void * moveTo;
+	gnode_t * tmp;
+	int * tmpInt; 
+	long  moveSize =   (maxSeqIndex[k] - (int) pop[k].seq_count) * (long) sizeof(gnode_t *); 
+
+	/* Moves memory one space to the "right" in the array to make room for new sequence 
+	that is migrating into the pop */
+	if (moveSize > 0) {
+
+		moveTo = pop[k].nodes + (pop[k].seq_count + 1); 
+		tmp = xmalloc(moveSize);
+		memcpy(tmp, startMove,  (moveSize));
+		memcpy(moveTo, tmp, (moveSize));
+		
+		free(tmp);
+
+		startMove = pop[k].seq_indices + pop[k].seq_count;
+		moveTo = pop[k].seq_indices + (pop[k].seq_count + 1);
+		moveSize = sizeof(int) * (maxSeqIndex[k] - pop[k].seq_count); 
+		
+		tmpInt = xmalloc(moveSize);
+		memcpy(tmpInt, startMove,  (moveSize));
+		memcpy(moveTo, tmpInt, (moveSize));
+		free(tmpInt);
+
+	} 
+
+	/* Update the index for the sequence that is being move */
+        pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+	maxSeqIndex[k]++;
+
+	/* Move the sequence */
+        pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+
+
+	/* Move the memory to the left where the sequence is remove */
+	moveSize = (long) sizeof(gnode_t *) * (maxSeqIndex[j] - i - 1);
+	assert(i <= maxSeqIndex[j]);
+
+	if (moveSize > 0 ) {
+
+		startMove = pop[j].nodes + (i + 1);
+		moveTo = pop[j].nodes + i;
+
+		tmp = xmalloc(moveSize);
+		memcpy(tmp, startMove,  moveSize);
+		memcpy(moveTo, tmp, moveSize);
+		free(tmp);
+
+		startMove = pop[k].seq_indices + (i + 1);
+		moveTo = pop[k].seq_indices + i;
+		moveSize = sizeof(int) * (maxSeqIndex[j] - i - 1); 
+		
+		tmpInt = xmalloc(moveSize);
+
+		memcpy(tmpInt, startMove,  (moveSize));
+		memcpy(moveTo, tmpInt, (moveSize));
+		free(tmpInt);
+		
+	}
+
+	maxSeqIndex[j]--;
+	--pop[j].seq_count;
+	
+
+	/* This is moving the last sequence from the end to the middle where the sequence was removed
+	 * This isn't necessary with tip dating, as we just moved the memory around */
+     /*   	if (i != --pop[j].seq_count)
+        	{
+        	  pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
+        	  pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
+        	}
+		*/
+
+}
+
+
+
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, mappingDate_t ** tipDateArray,
+int tipDateArrayLen, int tau_ctl)
 {
   int lineage_count = 0;
   int scaler_index = 0;
@@ -1443,11 +2352,11 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   }
 
   /* create one hash table of species and one for sequence->species mappings */
-  pop = (pop_t *)xcalloc((size_t)(stree->tip_count+stree->hybrid_count),
+  pop = (pop_t *)xcalloc((size_t)(stree->tip_count+stree->hybrid_count + opt_seqAncestral),
                          sizeof(pop_t));
   fill_pop(pop,stree,msa,msa_index);
 
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     stree->nodes[i]->seqin_count[msa_index] = pop[i].seq_count;
 
   if (!opt_est_theta)
@@ -1462,9 +2371,10 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     for (i = 0; i < opt_locus_count; ++i)
     {
       long seqs = 0;
-      for (j = 0; j < stree->tip_count; ++j)
+      for (j = 0; j < stree->tip_count + opt_seqAncestral; ++j)
         seqs += stree->nodes[j]->seqin_count[i];
 
+      /* The constant in ln(2) */
       stree->notheta_logpr   += (seqs-1)*0.6931471805599453;
       stree->notheta_sfactor += (seqs-1)*0.6931471805599453;
     }
@@ -1504,7 +2414,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   }
 
   /* fill each population with one gene tip node for each lineage */
-  for (i = 0, j=0; i < stree->tip_count; ++i)
+  for (i = 0, j=0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     memcpy(pop[i].nodes,gtips+j,pop[i].seq_count*sizeof(gnode_t *));
     for (k = 0; k < pop[i].seq_count; ++k)
@@ -1516,7 +2426,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   /* set the clv index for each gene tip node. The index must be equal to the
      number of the sequence it represents in the current msa, and will be used
      later for setting up and computing the CLVs */
-  for (i = 0; i < stree->tip_count; ++i)
+  for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
   {
     for (j = 0; j < pop[i].seq_count; ++j)
     {
@@ -1532,13 +2442,42 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
   /* initialize the number of currently available populations for choosing
      to coalesce lineages in */
-  unsigned int pop_count = stree->tip_count;
+  unsigned int pop_count = stree->tip_count + opt_seqAncestral;
+
+  int * seqCurrent = NULL;
+  int * maxSeqIndex = NULL; 
+  int tipDateIndex = 0;
+  int maxTipDateIndex = tipDateArrayLen;
+  int * useDate = NULL;
+
+  /* Pop seq counts are reset */
+  if (tipDateArray) {
+        seqCurrent = xcalloc(pop_count, sizeof(int));
+
+        maxSeqIndex = xcalloc(pop_count, sizeof(int));
+        lineage_count = 0;
+          if (opt_simulate) {
+                t = set_tip_date_simulate (stree, pop, tipDateArray, useDate,
+                                &lineage_count, &tipDateIndex, pop_count, seqCurrent, maxSeqIndex, msa);
+        } else {
+                useDate = xcalloc(maxTipDateIndex, sizeof(int));
+                t = set_tip_date_infer(stree, pop, tipDateArrayLen, tipDateArray, mht,
+                           useDate, &lineage_count, &tipDateIndex, pop_count, seqCurrent, maxSeqIndex, msa_index, tau_ctl);
+		if (opt_migration)
+  			stree_update_mig_subpops(stree, 0);
+        }
+
+  }
+
+  pop_count = stree->tip_count;
 
   /* TODO: The below loop is written to match exactly the loop in the original
      BPP. It is possible to implement a simpler, more understandable routine but
      it might change the structure of the randomly generated gene trees */
 
   /* loop until we are left with only 1 lineage in one ancestral population */
+  int updateSamples = 0; 
+
   for (; ; --pop_count)
   {
     /* set max waiting time for this epoch */
@@ -1546,7 +2485,12 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
       tmax = -1;
     else
       tmax = epoch[e]->tau;
-      
+
+    if (tipDateArray && tipDateIndex < maxTipDateIndex && ((tipDateArray[tipDateIndex]->date < tmax) || (tmax == -1))) {
+            tmax = tipDateArray[tipDateIndex]->date;
+            updateSamples = 1;
+    }
+
     while (1)
     {
       if (!tmax) break;
@@ -1586,25 +2530,98 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
                 migrate[j] += pop[j].seq_count *
                               opt_mig_specs[mindex].M /
                               pop[j].snode->theta*4;
+	      
 
-            }
+            
+	    }
           }
           msum += migrate[j];
         }
       }
 
-      if (csum+msum < 1e-300)
-        break;
+      if (csum+msum < 1e-300) {
+                if (!tipDateArray || (tipDateArray && !updateSamples)) {
+                        break;
+                } else {
+
+                        addSamples(tipDateArray, &tipDateIndex, tmax, pop, msa_index, &lineage_count, maxTipDateIndex, pop_count, useDate);
+                        t = tmax;
+                        if (epoch_count) {
+                                if (tipDateIndex < maxTipDateIndex && tipDateArray[tipDateIndex]->date <= epoch[e]->tau) {
+                                        tmax = tipDateArray[tipDateIndex]->date;
+                                } else if (tipDateIndex < maxTipDateIndex && tipDateArray[tipDateIndex]->date >  epoch[e]->tau) {
+                                        tmax = epoch[e]->tau;
+                                        updateSamples = 0;
+
+                                } else if (pop_count > 1 ) {
+                                        tmax = epoch[e]->tau;
+                                        updateSamples = 0;
+                                } else {
+                                        tmax = -1;
+                                        updateSamples = 0;
+                                }
+
+                        /* Only one population */
+                        } else {
+                                if (tipDateIndex < maxTipDateIndex) {
+                                        tmax = tipDateArray[tipDateIndex]->date;
+                                } else {
+                                        tmax = -1;
+                                        updateSamples = 0;
+                                }
+                        }
+              }
+
+        continue;
+      }
 
       /* generate random waiting time from exponential distribution */
       t += legacy_rndexp(thread_index,1/(csum+msum));
 
-      
       /* if the generated time is larger than the current epoch, and we are not
          yet at the root of the species tree, then break and, subsequently, 
          merge the lineages of the two populations into the current epoch */
-      if (t > tmax && (pop_count != 1 || pop[0].snode != stree->root)) break;
+      if (t > tmax && !updateSamples && (pop_count != 1 || pop[0].snode != stree->root)) break;
+      if (t > tmax && updateSamples) {
+                addSamples(tipDateArray, &tipDateIndex, tmax, pop, msa_index, &lineage_count, maxTipDateIndex, pop_count,  useDate);
+                t = tmax;
 
+                /* Multiple populations */
+                if (epoch_count) {
+                        /* Samples to add and they are before the next epoch */
+                        if (tipDateIndex < maxTipDateIndex && tipDateArray[tipDateIndex]->date <= epoch[e]->tau) {
+                                tmax = tipDateArray[tipDateIndex]->date;
+
+                        /* Samples to add but not before next epoch */
+                        } else if (tipDateIndex < maxTipDateIndex && tipDateArray[tipDateIndex]->date >  epoch[e]->tau) {
+                                tmax = epoch[e]->tau;
+                                updateSamples = 0;
+
+                        /* No Samples to add, next epoch */
+                        } else if (pop_count > 1 ) {
+                                tmax = epoch[e]->tau;
+                                updateSamples = 0;
+
+                        /* At root */
+                        } else {
+                                tmax = -1;
+                                updateSamples = 0;
+
+                        }
+
+                /* Only one population */
+                } else {
+                        if (tipDateIndex < maxTipDateIndex ) {
+                                tmax = tipDateArray[tipDateIndex]->date;
+                        } else {
+                                tmax = -1;
+                                updateSamples = 0;
+                        }
+                }
+
+                continue;
+      }
+ 
       if (opt_debug_sim)
         fprintf(stdout, "[Debug]: Coalescent waiting time: %f\n", t);
 
@@ -1693,7 +2710,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         }
         
         /* break if this was the last available lineage in the current locus */
-        if (--lineage_count == 1) break;
+	if ((--lineage_count == 1 && !tipDateArray) || (lineage_count == 1 && tipDateIndex == maxTipDateIndex)) break;
       }
       else
       {
@@ -1744,8 +2761,10 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
         i = (long)(pop[j].seq_count * legacy_rndu(thread_index));
 
         /* shift up lineages in pop j */
-        pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
-        pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+        //pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+        //pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+	
+
         /* add migration info backwards in time (from j to k) */
         if (!opt_simulate)
           miginfo_append(&(pop[j].nodes[i]->mi),
@@ -1759,24 +2778,37 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
 
         /* increase # of migrations from pop k to j (forward in time) */
         migcount[pop[k].snode->node_index][pop[j].snode->node_index]++;
-        if (i != --pop[j].seq_count)
-        {
-          pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
-          pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
-        }
+	if (tipDateArray)
+                migrateTipDate(pop, i, j, k, maxSeqIndex);
+        else {
+        	/* shift up lineages in pop j */
+		pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+                pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+
+       		if (i != --pop[j].seq_count)
+        	{
+        	  pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
+        	  pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
+        	}
+      	}
+
       }
     }
 
     t = tmax;
 
-    if (lineage_count == 1 || (pop_count == 1 && pop[0].snode == stree->root)) break;
+    if (lineage_count == 1 || (pop_count == 1 && pop[0].snode == stree->root)) {
+            if (!tipDateArray || tipDateIndex == maxTipDateIndex) break;
+	    
+
+    }
 
     /* place current epoch in the list of populations, remove its two children
        and add up the lineages of the two descendants */
     if (opt_msci && epoch[e]->hybrid)
       replace_hybrid(stree,pop,&pop_count,epoch[e],thread_index);
     else
-      replace(pop,pop_count,epoch[e],msa);
+      replace(pop,pop_count,epoch[e],msa, stree, maxSeqIndex);
     
     if (e != epoch_count-1)
     {
@@ -1792,12 +2824,25 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
     free(pop[i].seq_indices);
     free(pop[i].nodes);
   }
+    if (opt_seqAncestral && tmax != -1 )  {
 
+	    for (i = pop_count; i < stree->tip_count + stree->inner_count; i++) { 
+		    if (pop[i].snode->tau >= t) {
+    			free(pop[i].seq_indices);
+    			free(pop[i].nodes);
+		    }
+	    }
+    }
+  
+
+  
+  assert(lineage_count == 1);
   /* wrap the generated tree structure (made up of linked nodes) into gtree_t */
   gtree_t * gtree = gtree_wraptree(inner, (unsigned int)(msa->count));
 
   gtree->migcount = migcount;
 
+  assert(lineage_count == 1);
   /* set path flags for gene tree root lineage if root coalesces before root
      population */
   if (opt_msci)
@@ -1853,6 +2898,11 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   free(pop);
   free(ci);
   free(epoch);
+  if (tipDateArray) {
+	free(maxSeqIndex);
+  	free(useDate);
+  }
+	  
 
 
   snode_t ** mp = NULL;
@@ -1871,6 +2921,11 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index)
   /* Update the number of lineages coming into each ancestral population as the
      sum of lineages coming into its two children populations minus the
      coalescent events that have occured */
+
+  if (tipDateArray) {
+  	for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
+    		stree->nodes[i]->seqin_count[msa_index] = 0;
+  }	
   fill_seqin_counts(stree,gtree,msa_index);
 
   if (opt_migration)
@@ -1973,6 +3028,7 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
   if (node->right)
     reset_gene_leaves_count_recursive(node->right,locus_count);
 
+
   if (opt_msci && node->hybrid)
   {
     /* TODO: The below if block is only for testing correctness - it is not
@@ -2009,9 +3065,26 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
     return;
   }
 
-  for (j = 0; j < locus_count; ++j)
+ 
+  int datedTips; 
+  if (opt_datefile) {
+  	for (j = 0; j < locus_count; ++j) {
+  	        datedTips = 0;
+  	        if (opt_seqAncestral) {
+  	      	for (int i = 0; i < node->epoch_count[j]; i++) 
+  	      		datedTips += node->date_count[j][i];
+  	      	
+  	        } 
+  		node->gene_leaves[j] = node->left->gene_leaves[j] +
+  	                 node->right->gene_leaves[j] + datedTips;
+  	}
+  
+  } else {
+    for (j = 0; j < locus_count; ++j)
     node->gene_leaves[j] = node->left->gene_leaves[j] +
                            node->right->gene_leaves[j];
+  }
+
 
 }
 void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
@@ -2026,10 +3099,26 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
       reset_hybrid_gene_leaves_count(stree,gtree[i],i);
   }
 
+  /* Add the number of leaves from tip dated seqeunces*/
+  if (opt_datefile) {
+  	for (i = 0; i < stree->tip_count; ++i) {
+		snode_t * node = stree->nodes[i];
+  		for (j = 0; j < stree->locus_count; ++j) {
+  			int datedTips = 0;
+  		      	for (int k = 0; k < node->epoch_count[j]; k++) 
+  		      		datedTips += node->date_count[j][k];
+  		 
+  		node->gene_leaves[j] =  datedTips;
+		}	
+  	}
+
+  } else { 
   /* gene leaves is the same as sequences coming in for tip nodes */
-  for (i = 0; i < stree->tip_count; ++i)
-    for (j = 0; j < stree->locus_count; ++j)
-      stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
+   for (i = 0; i < stree->tip_count; ++i)
+     for (j = 0; j < stree->locus_count; ++j) {
+       stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
+     }
+  }
 
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
 
@@ -2044,7 +3133,8 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 
 void gtree_alloc_internals(gtree_t ** gtree,
                            long msa_count,
-                           unsigned int stree_inner_count)
+                           unsigned int stree_inner_count, 
+			   int totEpochs)
 {
   long i;
 
@@ -2076,19 +3166,19 @@ void gtree_alloc_internals(gtree_t ** gtree,
       opt_threads = DEBUG_THREADS_COUNT;
       global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
       opt_threads = 1;
     }
     else
     {
       global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
       for (i = 0; i < opt_threads; ++i)
-        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+        global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
     }
     #else
     global_sortbuffer_r = (double **)xmalloc((size_t)(opt_threads) * sizeof(double *));
     for (i = 0; i < opt_threads; ++i)
-      global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2) * sizeof(double));
+      global_sortbuffer_r[i] = (double *)xmalloc((size_t)(max_count+2 + totEpochs) * sizeof(double));
     #endif
   }
 }
@@ -2144,12 +3234,15 @@ void gtree_simulate_fini()
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
+		      list_t * datelist,
+		      int tau_ctl,
                       int msa_count)
 {
   int i;
   gtree_t ** gtree;
 
   assert(msa_count > 0);
+  mappingDate_t ** tipDateArray = NULL;
 
   gtree = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
 
@@ -2165,11 +3258,59 @@ gtree_t ** gtree_init(stree_t * stree,
     mht = maplist_hash(maplist,sht);
   }
 
+  dht = NULL;
+
+  int tipDateArrayLen = 0;
+  if (opt_datefile && opt_cfile) {
+        tipDateArrayLen = datelist->count;  
+        dht = datelist_hash(datelist);
+	stree->locusrate_mubar = opt_mubar_alpha / (opt_mubar_beta);
+        tipDateArray = prepTipDatesInfer(stree, datelist, stree->locusrate_mubar);
+  }
+
   /* generate random starting gene trees for each alignment */
   printf("Generating gene trees....");
+
+   /* Find the constraints on the internal nodes imposed by the sample times */
+  if (datelist) {
+
+ 	stree->locusrate_mubar = opt_mubar_alpha / opt_mubar_beta;
+
+        stree->u_constraint = xcalloc(stree->inner_count, sizeof(double));
+        stree->l_constraint = xcalloc(stree->inner_count, sizeof(double));
+        for (i = 0; i < msa_count; ++i) {
+                tau_constraint_find(stree, msalist[i], i);
+        }
+  }
+
+  /* Resets the speciation times so that they do not conflict the sample times*/
+  if (!opt_simulate && opt_datefile) {
+
+	if (tau_ctl) {
+		//Check compatibility, reset to be in units of expected number of substitutions
+		for (i = 0; i < stree->tip_count + stree->inner_count; i++) 
+			stree->nodes[i]->tau = stree->nodes[i]->tau * stree->locusrate_mubar; 
+
+		for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; i++) {
+			if (stree->nodes[i]->tau < stree->nodes[i]->left->tau || stree->nodes[i]->tau < stree->nodes[i]->right->tau )
+				fatal("Taus specified in control file violate the constraint that daughter nodes must be younger than parent nodes");
+
+			if (stree->nodes[i]->tau < stree->l_constraint[i - stree->tip_count]) {
+				fatal("Taus specified in the control file are not compatible with tip dates");
+			}
+		}
+		
+	}
+	else if (stree->tip_count > 1) {
+        	reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
+	}
+	  //Anna
+	  //stree->nodes[2]->tau = 1.4;
+  }
+
   for (i = 0; i < msa_count; ++i)
   {
-    gtree[i] = gtree_simulate(stree, msalist[i],i);
+    gtree[i] = gtree_simulate(stree, msalist[i],i, tipDateArray, tipDateArrayLen, tau_ctl);
 
     /* in the gene tree SPR it is possible that this scenario happens:
 
@@ -2195,12 +3336,28 @@ gtree_t ** gtree_init(stree_t * stree,
     hashtable_destroy(mht,cb_dealloc_pairlabel);
   }
 
+  if (opt_datefile)
+  	hashtable_destroy(dht,cb_dealloc_pairlabel);
+
+  int maxEpochs = 0;
+  if (opt_datefile) { 
+	  for (i = 0; i < (int) (stree->tip_count + opt_seqAncestral); i++) {
+		  for(unsigned j = 0; j < opt_locus_count; j++) {
+		  if (maxEpochs < stree->nodes[i]->epoch_count[j])
+	  		maxEpochs = stree->nodes[i]->epoch_count[j];
+		  }
+	  }
+  }
   /* allocate static internal arrays sortbuffer */
-  gtree_alloc_internals(gtree,msa_count, stree->inner_count);
+  gtree_alloc_internals(gtree,msa_count, stree->inner_count, maxEpochs);
 
   /* reset number of gene leaves associated with each species tree subtree */
   reset_gene_leaves_count(stree,gtree);
 
+  if (opt_datefile) {
+  	list_clear(datelist, mapDate_dealloc);
+  	free(tipDateArray);
+  }
   return gtree;
 }
 
@@ -2291,6 +3448,9 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   size_t alloc_required = snode->migevent_count[msa_index] +
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
+  //ANNA
+  if (opt_datefile && snode->epoch_count) 
+	  alloc_required = alloc_required + snode->epoch_count[msa_index];
   migbuffer_check_and_realloc(thread_index,alloc_required);
   migbuffer = global_migbuffer_r[thread_index];
 
@@ -2356,6 +3516,14 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   }
   long epoch = 0;
   assert(!snode->parent || snode->mb_count);
+  int sampleEpoch = 0;
+
+  if (snode->epoch_count)
+  for (k = 0; k < snode->epoch_count[msa_index]; k++) {
+	  migbuffer[j].time = snode->tip_date[msa_index][k];
+	  migbuffer[j].type = EVENT_SAMPLE;
+	  j++;
+  }
 
   double mrsum = 0;
   if (epoch < snode->mb_count)
@@ -2363,7 +3531,6 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
     assert(snode->migbuffer[epoch].active_count == 1 || snode->migbuffer[epoch].active_count == opt_locus_count);
     idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
     mrsum = snode->migbuffer[epoch].mrsum[idx];
-    //printf("snode->mb_count: %ld epoch: %ld  active count: %ld idx: %ld\n", snode->mb_count, epoch, snode->migbuffer[epoch].active_count, idx);
   }
 
   /* TODO: Probably split the following qsort case into two:
@@ -2391,6 +3558,11 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
       ++epoch;
       idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
       mrsum = snode->migbuffer[epoch].mrsum[idx];
+    }
+    else if (migbuffer[k].type == EVENT_SAMPLE) {
+      n +=  snode->date_count[msa_index][sampleEpoch];
+      sampleEpoch++;
+
     }
   }
 
@@ -2440,16 +3612,28 @@ double gtree_update_logprob_contrib(snode_t* snode,
   double logpr = 0;
   double T2h = 0;
   dlist_item_t* event;
-
+  int nextDateInd = -1; 
   double* sortbuffer = global_sortbuffer_r[thread_index];
 
   sortbuffer[0] = snode->tau;
   j = 1;
+  if (opt_datefile && (!snode->left || opt_seqAncestral)) {
+	  if (snode->epoch_count[msa_index])
+		nextDateInd = 0;
+  	for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ ) {
+		sortbuffer[j] = snode->tip_date[msa_index][k];
+  	}
+  }	
+
+  /* Events are coalescent events. This is a list of coalescent events in a
+   a population. Note that is all within a population */
   for (event = snode->event[msa_index]->head; event; event = event->next)
   {
     gnode_t* gnode = (gnode_t*)(event->data);
     sortbuffer[j++] = gnode->time;
   }
+
+
   if (snode->parent)
     sortbuffer[j++] = snode->parent->tau;
 
@@ -2460,6 +3644,8 @@ double gtree_update_logprob_contrib(snode_t* snode,
   */
 
   /* if there was at least one coalescent event, sort */
+  /* We don't need to sort the first or last elements since they are the speciation times
+   and the coalescent times are inbetween the speciation times */
   if (j > 1)
     qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
 
@@ -2483,10 +3669,19 @@ double gtree_update_logprob_contrib(snode_t* snode,
 #endif
 
   /* skip the last step in case the last value of n was supposed to be 1 */
-  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
+
+  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
   {
     T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+
+     if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
+     	n += 1 + snode->date_count[msa_index][nextDateInd];
+     	if (nextDateInd + 1 < snode->epoch_count[msa_index])
+      	 	nextDateInd++;
+    	else
+    		nextDateInd = -1;
+     }
   }
 
   if (opt_msci && snode->hybrid)
@@ -2516,9 +3711,11 @@ double gtree_update_logprob_contrib(snode_t* snode,
   /* now distinguish between estimating theta and analytical computation */
   if (opt_est_theta)
   {
+    /* This is the 2/theta in the product over coalescent events */
     if (snode->event_count[msa_index])
       logpr += snode->event_count[msa_index] * log(2.0 / (heredity*snode->theta));
 
+    /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
     if (T2h)
       logpr -= T2h / snode->theta;
 
@@ -3386,6 +4583,7 @@ static long propose_ages(locus_t * locus,
       for (; pop->parent; pop = pop->parent)
         if (pop->parent->tau > tnew)
           break;
+      
     }
 
     if (opt_msci)
@@ -3457,8 +4655,10 @@ static long propose_ages(locus_t * locus,
            path from new population (excluding) to the old population */
         if (!opt_msci)
         {
-          for (pop = node->pop; pop != oldpop; pop = pop->parent)
+          for (pop = node->pop; pop != oldpop; pop = pop->parent) {
             pop->parent->seqin_count[msa_index]--;
+	  assert( 0!= pop->parent->seqin_count[msa_index]);
+	  }
         }
       }
     }
@@ -3570,6 +4770,7 @@ static long propose_ages(locus_t * locus,
         for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
         {
           snode_t * x = stree->nodes[j];
+	  //ANNA
           if (x->seqin_count[msa_index] + x->event_count[msa_index] == x->hx[thread_index])
           {
             x->hx[thread_index] = 0;  /* MSC density is not changed */
@@ -3893,6 +5094,7 @@ static long propose_ages(locus_t * locus,
                ( SWAP(node->pop,oldpop) ) and so, oldpop is actually the new
                population, and node->pop is the old population, and so the for
                loop below is correct */
+		  //ANNA
             for (pop=oldpop; pop != node->pop; pop = pop->parent)
               pop->parent->seqin_count[msa_index]++;
           }
@@ -3947,6 +5149,7 @@ static long propose_ages(locus_t * locus,
       free(old_hpath_c2);
     }
   }
+
   return accepted;
 }
 
@@ -4810,6 +6013,7 @@ static long propose_spr(locus_t * locus,
           break;
     }
 
+
     /* TODO: Set age limits. 999 is set for backwards compatibility with bpp */
     minage = MAX(curnode->time, pop->tau);
     maxage = 999;
@@ -4865,8 +6069,9 @@ static long propose_spr(locus_t * locus,
           p = gtree->nodes[j];
           m = p->pop->node_index;
           if (p != curnode && p != gtree->root && p->time <= tnew &&
-              p->parent->time > tnew && stree->pptable[m][n])
+              p->parent->time > tnew && stree->pptable[m][n]) {
             travbuffer[target_count++] = (p == father) ? sibling : p;
+	  }
         }
       }
 
@@ -4928,6 +6133,10 @@ static long propose_spr(locus_t * locus,
               source_count++;
           }
         }
+      }
+
+      if (! target_count ) {
+	     continue;
       }
 
       assert(target_count);
@@ -6103,7 +7312,8 @@ static long target_branches(stree_t * stree,
                             snode_t * snode,
                             gnode_t * curnode,
                             double t,
-                            gnode_t ** outbuf)
+                            gnode_t ** outbuf, 
+			    double tnew)
 {
   long i,j;
   long count = 0;
@@ -6133,6 +7343,10 @@ static long target_branches(stree_t * stree,
     if (opt_migration && gnode->mi && gnode->mi->count)
     {
       assert(snode->tau < t && (!snode->parent || snode->parent->tau > t));
+      //ANNA
+      if (opt_datefile && tnew < gnode->time) 
+	      continue;
+      
       assert(t > gnode->time && (!gnode->parent || gnode->parent->time > t));
       /* check if part of the lineage passes through snode at time t */
       for (j = 0; j < gnode->mi->count; ++j)
@@ -6141,8 +7355,12 @@ static long target_branches(stree_t * stree,
         curpop = gnode->mi->me[j].target;
       }
     }
+
     if (!stree->pptable[curpop->node_index][snode->node_index])
       continue;
+    if (opt_datefile && tnew < gnode->time){
+	    continue;
+    }
     outbuf[count++] = gnode;
     gnode->mark = 1;
   }
@@ -6177,13 +7395,33 @@ static double simulate_coalescent(gtree_t * gtree,
   dlist_item_t * dlitem;
   snode_t * snode = gnode->pop;
   snode_t * sibling = NULL;
+  int epoch = -1;
+  int j = 0;
 
+  //fatal("This function does not work for tipdating. Anna needs to fix it");
   wtimes = (double *)xmalloc((size_t)(gtree->inner_count+1) * sizeof(double));
 
   t = gnode->time;
 
   /* start with the lineages entering the current population */
   lineages = snode->seqin_count[msa_index];
+
+  if (opt_datefile && snode->epoch_count && snode->epoch_count[msa_index]) {
+	  epoch = 0;
+
+	  for (j = 0; j < snode->epoch_count[msa_index]; j++) {
+		  if (t >= snode->tip_date[msa_index][j])
+		  	lineages += snode->date_count[msa_index][j];
+		  else
+			  break;
+	  }
+	  if (j == snode->epoch_count[msa_index])
+	  	epoch = -1;
+	  else
+	  	epoch = j;
+
+
+  }
 
   /* make a list of waiting times older than t and at the same time reduces
      number of lineages by the amount of coalescent events younger than t
@@ -6200,16 +7438,27 @@ static double simulate_coalescent(gtree_t * gtree,
   /* subtract the pruned lineage (branch) */
   --lineages;
 
+  /* Could start with no lineages */
+  if (!lineages && epoch != -1 ) {
+	lineages += snode->date_count[msa_index][epoch];
+	t = snode->tip_date[msa_index][epoch];
+	epoch++;
+	if (epoch == snode->epoch_count[msa_index])
+	       	epoch = -1;
+  } 
+
   /* determine time to coalesce */
   while (1)
   {
 
-    if (lineages)
+  /* determine time to coalesce */
+    if (lineages || epoch != -1 )
     {
       /* if not root population add tau and sort waiting times */
       if (snode->parent)
         wtimes[k++] = snode->parent->tau;
       qsort(wtimes,k, sizeof(double), cb_cmp_double);
+
       /* simulate until all waiting times are exhausted */
       for (i = 0; i < k; ++i)
       {
@@ -6217,11 +7466,25 @@ static double simulate_coalescent(gtree_t * gtree,
         rate = 2*lineages / snode->theta;
         tnew = legacy_rndexp(thread_index, 1/rate);
 
-        if (t+tnew <= wtimes[i])
+
+        if (t+tnew <= wtimes[i] && (epoch == -1 || t+tnew <= snode->tip_date[msa_index][epoch]))
         {
-          t += tnew;
-          break;
-        }
+
+          	t += tnew;
+          	break;
+
+        } else if (epoch != -1 && t+tnew > snode->tip_date[msa_index][epoch]) {
+
+		lineages += snode->date_count[msa_index][epoch];
+		t = snode->tip_date[msa_index][epoch];
+		epoch++;
+			if (epoch == snode->epoch_count[msa_index])
+				epoch = -1;
+
+		/* To account for the loop decrease */
+		i--;
+		continue;
+	}
 
         t = wtimes[i];
 
@@ -6229,8 +7492,9 @@ static double simulate_coalescent(gtree_t * gtree,
       }
 
       /* stop if coalescence happened */
-      if (i != k)
+      if (i != k) {
         break;
+      }
 
       /* also stop if we were in the root population */
       if (!snode->parent)
@@ -6242,6 +7506,7 @@ static double simulate_coalescent(gtree_t * gtree,
         t += legacy_rndexp(thread_index, 1/rate);
         break;
       }
+
       else
         ++lineages;
     }
@@ -6258,6 +7523,12 @@ static double simulate_coalescent(gtree_t * gtree,
 
     lineages += sibling->seqin_count[msa_index] - sibling->event_count[msa_index];
 
+    if (sibling->epoch_count) {
+	  for (int j = 0; j < sibling->epoch_count[msa_index]; j++)
+		  lineages += sibling->date_count[msa_index][j];
+    }
+
+
 
     snode = snode->parent;
     /* make a list of waiting times older than t and at the same time reduces
@@ -6270,12 +7541,20 @@ static double simulate_coalescent(gtree_t * gtree,
       if (coal->time > t)
         wtimes[k++] = coal->time;
     }
+
+
+  if (opt_datefile && snode->epoch_count && snode->epoch_count[msa_index])
+	  epoch = 0;
+   else
+	  epoch = -1;
+
   }
 
   free(wtimes);
 
   return t;
 }
+
 
 static migbuffer_t * wtimes_and_lineages(stree_t * stree,
                                          gtree_t * gtree,
@@ -6285,7 +7564,8 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
                                          long * lineages_count,
                                          long * wtimes_count,
                                          long msa_index,
-                                         long thread_index)
+                                         long thread_index,
+					 int * dateIndex)
 {
   long i,j,k;
   long lineages;
@@ -6295,6 +7575,9 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
   size_t alloc_required = snode->migevent_count[msa_index] +
                           snode->event_count[msa_index] +
                           stree->inner_count+1;
+  if (opt_datefile && snode->epoch_count) 
+	  alloc_required = alloc_required + snode->epoch_count[msa_index]; 
+
   migbuffer_check_and_realloc(thread_index,alloc_required);
   wtimes = global_migbuffer_r[thread_index];
 
@@ -6309,7 +7592,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
   {
     gnode_t * x = gtree->nodes[i];
 
-    if (x == gnode && x->pop == snode) --lineages;
+    if (x == gnode && x->pop == snode) --lineages; 
     /* skip pruned node */
     /* TODO: Note the last x != gtree->root is very important. This is because we may have
        x may be a tip and the sibling of the pruned subtree as well as a child of the root
@@ -6328,8 +7611,9 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
           wtimes[k].mrsum  = 0;
           wtimes[k++].type = EVENT_COAL;
         }
-        else
+        else {
           --lineages;
+	} 
       }
     }
 
@@ -6343,7 +7627,6 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
     /* migrations */
     miginfo_t * mi = x->mi;
     if (!mi) continue;
-
     for (j = 0; j < mi->count; ++j)
     {
       if (mi->me[j].source != snode && mi->me[j].target != snode) continue;
@@ -6357,10 +7640,12 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
       }
       else
       {
-        if (mi->me[j].source == snode)
+        if (mi->me[j].source == snode) {
           --lineages;
-        else
+	}
+        else{
           ++lineages;
+	}
       }
     }
   }
@@ -6370,16 +7655,36 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
   {
     if (snode->migbuffer[i].time > t)
     {
+	    // ANNA this migbuffer snode time is different than the one in snode->tau
       wtimes[k++] = snode->migbuffer[i];
     }
   }
 
+  if (opt_datefile && snode->epoch_count) {
+ 	 for (i = 0; i < snode->epoch_count[msa_index]; i++) {
+		 if (snode->tip_date[msa_index][i] > t){
+ 	           wtimes[k].time = snode->tip_date[msa_index][i];
+ 	           wtimes[k].mrsum = 0; 
+ 	           wtimes[k++].type = EVENT_SAMPLE;
+
+		   if (*dateIndex == -1) 
+			   *dateIndex = i;
+
+		 } else {
+      		  /* add lineages that are sampled between tau and t */
+		  lineages += snode->date_count[msa_index][i];
+		 }
+
+ 	 }
+  }
   qsort(wtimes,k,sizeof(migbuffer_t),cb_migbuf_asctime);
+  
 
   *lineages_count = lineages;
   *wtimes_count = k;
   return wtimes;
 }
+
 static double simulate_coalescent_mig(stree_t * stree,
                                       gtree_t * gtree,
                                       gnode_t * gnode,
@@ -6393,6 +7698,7 @@ static double simulate_coalescent_mig(stree_t * stree,
   double crate,mrate,rate;
   double t;
   double tnew;
+  int dateIndex = -1;
   migbuffer_t * wtimes;
   snode_t * snode = gnode->pop;
 
@@ -6405,7 +7711,8 @@ static double simulate_coalescent_mig(stree_t * stree,
   /* determine time to coalesce */
   while (1)
   {
-    wtimes = wtimes_and_lineages(stree,gtree,snode,gnode,t,&lineages,&k,msa_index,thread_index);
+	  dateIndex = -1;
+    wtimes = wtimes_and_lineages(stree,gtree,snode,gnode,t,&lineages,&k,msa_index,thread_index,&dateIndex);
     assert(lineages >= 0 && k >= 0);
 
     mrate = crate = rate = 0; epoch = 0;
@@ -6440,6 +7747,7 @@ static double simulate_coalescent_mig(stree_t * stree,
       long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
       mrate = snode->parent ? 4*snode->migbuffer[epoch].mrsum[idx]/snode->theta : 0;
 
+ 
       crate = 2*lineages / snode->theta;
       rate = mrate + crate;
 
@@ -6447,6 +7755,7 @@ static double simulate_coalescent_mig(stree_t * stree,
       {
         /* no lineages to coalesce and no pops to migrate */
         //assert(k==1 && rate == 0);
+
         t = wtimes[i].time;
         if (wtimes[i].type == EVENT_MIG_SOURCE)
           --lineages;
@@ -6454,6 +7763,10 @@ static double simulate_coalescent_mig(stree_t * stree,
           ++lineages;
         else if (wtimes[i].type == EVENT_COAL)
           --lineages;
+	else if (wtimes[i].type == EVENT_SAMPLE) {
+	 lineages = lineages + snode->date_count[msa_index][dateIndex];
+	 dateIndex++;
+	}
 
         continue;
       }
@@ -6475,9 +7788,13 @@ static double simulate_coalescent_mig(stree_t * stree,
         ++lineages;
       else if (wtimes[i].type == EVENT_COAL)
         --lineages;
+      else if (wtimes[i].type == EVENT_SAMPLE) {
+	 lineages +=  snode->date_count[msa_index][dateIndex];
+	 dateIndex++;
+      }
     }
     
-    if (i != k)
+    if (i != k )
     {
       /* choose between coalescence and migration */
       double r = legacy_rndu(thread_index) * rate;
@@ -6632,7 +7949,6 @@ static void subtree_regraft(gtree_t * gtree,
   gnode_t * tmp;
   snode_t * pop;
   snode_t * curpop;
-
   father->parent = target->parent;
   target->parent = father;
   if (father->parent)
@@ -6656,7 +7972,7 @@ static void subtree_regraft(gtree_t * gtree,
   }
   else
   {
-    for (tmp = father->parent; tmp; tmp = tmp->parent)
+    for (tmp = father->parent; tmp; tmp = tmp->parent) 
       tmp->leaves = tmp->left->leaves + tmp->right->leaves;
   }
 
@@ -6723,6 +8039,7 @@ static long propose_spr_sim(locus_t * locus,
                             int msa_index,
                             long thread_index)
 {
+  
   long i,j,k;
   long accepted = 0;
   long old_mi_count = 0;
@@ -6801,6 +8118,7 @@ static long propose_spr_sim(locus_t * locus,
     else
       tnew = simulate_coalescent(gtree,curnode,msa_index,thread_index);
 
+
     newpop = curnode->pop;
     if (opt_migration && curnode->mi && curnode->mi->count)
       newpop = curnode->mi->me[curnode->mi->count-1].target;
@@ -6810,10 +8128,11 @@ static long propose_spr_sim(locus_t * locus,
       newpop = newpop->parent;
 
     /* get lineages entering that population */
-    long lineages = target_branches(stree,gtree,newpop,curnode,tnew,travbuffer);
+    long lineages = target_branches(stree,gtree,newpop,curnode,tnew,travbuffer, tnew);
 
     /* randomly pick one lineage */
     j = (long)(lineages*legacy_rndu(thread_index));
+
     assert(j < lineages);
     target = travbuffer[j];
 
@@ -7018,6 +8337,7 @@ static long propose_spr_sim(locus_t * locus,
       }
     }
   }
+  
   return accepted;
 }
 

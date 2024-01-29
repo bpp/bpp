@@ -35,6 +35,7 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <regex.h>
 
 
 #define PROG_NAME "bpp"
@@ -252,6 +253,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_MIN           0
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
+#define BPP_LOCRATE_PRIOR_NONE          2
 #define BPP_LOCRATE_PRIOR_MAX           1
 #define BPP_LOCRATE_PRIOR_DIR           2
 
@@ -272,13 +274,18 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_BETA            3
 #define BPP_THETA_PRIOR_MAX             3
 
-#define BPP_THETA_SLIDE                 0
-#define BPP_THETA_GIBBS                 1
-#define BPP_THETA_MG_INVG               2
-#define BPP_THETA_MG_GAMMA              3
-#define BPP_THETA_MG_CAUCHY             4
-#define BPP_THETA_MG_T4                 5
-#define BPP_THETA_MIXED                 6 /* mixed gibbs and slide */
+#define BPP_THETA_MOVE_MIN              0
+#define BPP_THETA_MOVE_SLIDE            0
+#define BPP_THETA_MOVE_GIBBS            1
+#define BPP_THETA_MOVE_MIXED            2 /* mixed gibbs and slide */
+#define BPP_THETA_MOVE_MAX              2
+
+#define BPP_THETA_PROP_DEFAULT          0
+#define BPP_THETA_PROP_SW               1
+#define BPP_THETA_PROP_MG_INVG          2
+#define BPP_THETA_PROP_MG_GAMMA         4
+#define BPP_THETA_PROP_MG_CAUCHY        8
+#define BPP_THETA_PROP_MG_T4            16
 
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
@@ -343,6 +350,7 @@ extern const char * global_freqs_strings[28];
 #define EVENT_MIG_SOURCE  1
 #define EVENT_MIG_TARGET  2
 #define EVENT_TAU         3
+#define EVENT_SAMPLE      4
 
 
 /* libpll related definitions */
@@ -397,6 +405,7 @@ extern const char * global_freqs_strings[28];
 #define MUTRATE_CONSTANT                0
 #define MUTRATE_ESTIMATE                1
 #define MUTRATE_FROMFILE                2
+#define MUTRATE_ONLY                    3
 #define HEREDITY_ESTIMATE               1
 #define HEREDITY_FROMFILE               2
 
@@ -556,6 +565,11 @@ typedef struct snode_s
   dlist_t ** mig_source;
   dlist_t ** mig_target;
 
+  /* tip dating */
+  int * epoch_count; /*Number of sampling epochs */
+  double ** tip_date; /* Date at time of epoch*/
+  int ** date_count;  /* Number of sequences sampled at the epoch */
+
   /* linked theta model */
   struct snode_s * linked_theta;
 
@@ -621,13 +635,27 @@ typedef struct stree_s
   
   /* morphological traits */
   int * trait_dim;  /* dimension of trait vector (p) of each partition */
+
+  double * u_constraint;
+  double * l_constraint;
+
 } stree_t;
+
+typedef struct mutation_s
+{
+  char state; 
+  int site;
+  double time; 
+  snode_t * pop;
+  
+} mutation_t;
 
 typedef struct gnode_s
 {
   char * label;
   double length;
   double time;
+  double time_fixed;
   double old_time;
   struct gnode_s * left;
   struct gnode_s * right;
@@ -868,6 +896,13 @@ typedef struct mapping_s
   char * species;
   int lineno;
 } mapping_t;
+
+typedef struct mappingDate_s
+{
+  char * individual;
+  double date;
+  int lineno;
+} mappingDate_t;
 
 typedef struct mscidefs_s
 {
@@ -1110,6 +1145,7 @@ extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_partition_count;
 extern long opt_print_genetrees;
+extern long opt_print_locus;
 extern long opt_print_hscalars;
 extern long opt_print_locusfile;
 extern long opt_print_locusrate;
@@ -1131,9 +1167,10 @@ extern long opt_seed;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
-extern long opt_theta_dist;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_move;
+extern long opt_theta_prior;
+extern long opt_theta_prop;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
@@ -1194,6 +1231,7 @@ extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
 extern long * opt_sp_seqcount;
+extern long * opt_print_locus_num;
 extern char * opt_bfdriver;
 extern char * cmdline;
 extern char * opt_cfile;
@@ -1201,6 +1239,8 @@ extern char * opt_concatfile;
 extern char * opt_constraintfile;
 extern char * opt_heredity_filename;
 extern char * opt_mapfile;
+extern char * opt_datefile;
+extern char * opt_seqDates;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_traitfile;
@@ -1223,6 +1263,7 @@ extern long ** opt_migration_matrix;
 extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
 extern partition_t ** opt_partition_list;
+extern int  opt_seqAncestral;
 
 /* common data */
 
@@ -1412,6 +1453,8 @@ void stree_propose_theta(gtree_t ** gtree,
                          double * acceptvec_slide,
                          long * acceptvec_movetype);
 
+hashtable_t * datelist_hash(list_t * datelist);
+
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 double stree_propose_tau_mig(stree_t ** streeptr,
                              gtree_t *** gtreeptr,
@@ -1457,6 +1500,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
+		int * tau_ctl,
                 FILE * fp_out);
 
 void stree_init_pptable(stree_t * stree);
@@ -1544,6 +1588,25 @@ long stree_migration_flip_wrapper(gtree_t *** gtreeptr,
                                   locus_t ** locus);
                         
 
+void stree_init_tau_recursive_constraint(stree_t * stree,
+                                     snode_t * node,
+                                     double prop,
+                                     long thread_index,
+                                     double *u_constraint,
+                                     double *l_constraint);
+
+
+double prop_tipDate_muGtree(gtree_t ** gtree,
+                          stree_t * stree,
+                          locus_t ** locus,
+                          long thread_index); 
+
+double find_maxMuGtree(stree_t * stree);
+double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
+void reset_mu_coal(gtree_t * gtree);
+
+
+
 /* functions in arch.c */
 
 uint64_t arch_get_memused(void);
@@ -1575,7 +1638,10 @@ void maplist_print(list_t * map_list);
 
 void map_dealloc(void * data);
 
+void mapDate_dealloc(void * data);
+
 hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
+
 
 /* functions in list.c */
 
@@ -1656,17 +1722,22 @@ int pll_compute_gamma_cats(double alpha,
 
 void gtree_alloc_internals(gtree_t ** gtree,
                            long msa_count,
-                           unsigned int stree_inner_count);
+                           unsigned int stree_inner_count, 
+			   int totEpochs);
 
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
+		      list_t * datelist,
+		      int tau_ctl,
                       int msa_count);
 void gtree_simulate_init(stree_t * stree, list_t * maplist);
 void gtree_simulate_fini(void);
 
 char * gtree_export_newick(const gnode_t * root,
                            char * (*cb_serialize)(const gnode_t *));
+
+char * gtree_export_migration(const gnode_t * root);
 
 void gtree_destroy(gtree_t * tree, void (*cb_destroy)(void *));
 
@@ -1743,7 +1814,10 @@ double prop_locusrate_and_heredity(gtree_t ** gtree,
                                    locus_t ** locus,
                                    long thread_index);
 
-gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index);
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, 
+                        mappingDate_t ** tipDateArray,
+                        int tipDateArrayLen, 
+			int tau_ctl);
 
 double prop_branch_rates_serial(gtree_t ** gtree,
                                 stree_t * stree,
@@ -1769,9 +1843,19 @@ double prop_locusrate_mui(gtree_t ** gtree,
                           stree_t * stree,
                           locus_t ** locus,
                           long thread_index);
+
+void update_tau_constraint_recursive_to_root(stree_t * stree,
+                                                snode_t * node,
+                                                double * constraint);
+
+void update_tau_constraint_recursive_to_tip(stree_t * stree,
+                                                snode_t * node,
+                                                double * constraint);
+
 double gtree_propose_migevent_ages_serial(locus_t ** locus,
                                           gtree_t ** gtree,
                                           stree_t * stree);
+
 void migbuffer_check_and_realloc(long thread_index, size_t alloc_required);
 int cb_migbuf_asctime(const void * x, const void * y);
 
@@ -1961,6 +2045,7 @@ unsigned int pll_popcount64(unsigned long x);
 unsigned long ** diploid_resolve(stree_t * stree,
                                  msa_t ** msa_list,
                                  list_t * maplist,
+                                 list_t * datelist,
                                  unsigned int ** weights,
                                  int msa_count);
 
@@ -2260,6 +2345,7 @@ int parsefile_doubles(const char * filename,
                       long n,
                       double * outbuffer,
                       long * errcontext);
+long parse_printlocus(const char * line, long * lcount);
 
 /* functions in core_partials_sse.c */
 
@@ -2648,10 +2734,13 @@ stree_t * bpp_parse_newick_string(const char * line);
 ntree_t * bpp_parse_newick_string_ntree(const char * line);
 ntree_t * ntree_wraptree(node_t * root, int tip_count, int inner_count);
 stree_t * stree_from_ntree(ntree_t * ntree);
+mappingDate_t ** prepTipDatesInfer(stree_t * stree, list_t *  dateList, 
+		 double mu_bar);
 
 /* functions in parsemap.c */
 
 list_t * parse_mapfile(const char * mapfile);
+list_t * parse_date_mapfile(const char * mapfile);
 
 /* functions in msci_gen.c */
 
