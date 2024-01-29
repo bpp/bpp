@@ -476,6 +476,7 @@ typedef struct migbuffer_s
 
 typedef struct contrast_s
 {
+  double brate;   // branch rate (r_k)
   double brlen;   // transformed branch length (v_k')
   double * trait;  // (ancestral) trait values (m_k')
   double * contrast;  // independent contrasts (x_k)
@@ -566,8 +567,8 @@ typedef struct snode_s
   dlist_t ** mig_target;
 
   /* tip dating */
-  int * epoch_count; /*Number of sampling epochs */
-  double ** tip_date; /* Date at time of epoch*/
+  int * epoch_count;  /* Number of sampling epochs */
+  double ** tip_date; /* Date at time of epoch */
   int ** date_count;  /* Number of sequences sampled at the epoch */
 
   /* linked theta model */
@@ -576,7 +577,7 @@ typedef struct snode_s
   /* independent theta step lengths */
   long theta_step_index;
   
-  /* phylogenetic indepandent contrasts */
+  /* phylogenetic indepandent contrasts (per partition) */
   contrast_t ** pic;
 } snode_t;
 
@@ -634,7 +635,7 @@ typedef struct stree_s
   long ** migcount_sum;      /* migrations across loci */
   
   /* morphological traits */
-  int * trait_dim;  /* dimension of trait vector (p) of each partition */
+  int * trait_dim;  /* dimension of trait vector of each partition */
 
   double * u_constraint;
   double * l_constraint;

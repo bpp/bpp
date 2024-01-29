@@ -91,33 +91,33 @@ trait_t * parse_trait_part(FILE * fp)
 {
   int i, j;
   
-  trait_t * m = (trait_t *)xmalloc(sizeof(trait_t));
+  trait_t * morph = (trait_t *)xmalloc(sizeof(trait_t));
   
   /* read header */
-  if (!parse_header(fp, &(m->count), &(m->length)))
+  if (!parse_header(fp, &(morph->count), &(morph->length)))
     return NULL;
 
-  m->label = (char **)xcalloc((m->count),sizeof(char *));
-  m->trait = (double **)xcalloc((m->count),sizeof(double *));
-  for (i = 0; i < m->count; ++i)
+  morph->label = (char **)xcalloc((morph->count),sizeof(char *));
+  morph->trait = (double **)xcalloc((morph->count),sizeof(double *));
+  for (i = 0; i < morph->count; ++i)
   {
-    m->trait[i] = (double *)xmalloc((m->length)*sizeof(double));
-    m->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
+    morph->trait[i] = (double *)xmalloc((morph->length)*sizeof(double));
+    morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
   }
   
   /* read morphological traits of each species,
      assuming each line has a label followed by m->length numbers.
      m->trait has dimension m->count * m->length */
-  for (i = 0; i < m->count; ++i)
+  for (i = 0; i < morph->count; ++i)
   {
     /* read the label (species name) */
-    if (!parse_label(fp, m->label[i], LABEL_LEN+1))
+    if (!parse_label(fp, morph->label[i], LABEL_LEN+1))
     {
       fprintf(stderr, "Failed to read label of species %d\n", i+1);
       return NULL;
     }
     /* read the trait values of this species */
-    if (!parse_value(fp, m->trait[i], m->length))
+    if (!parse_value(fp, morph->trait[i], morph->length))
     {
       fprintf(stderr, "Failed to read traits of species %d\n", i+1);
       return NULL;
@@ -125,18 +125,18 @@ trait_t * parse_trait_part(FILE * fp)
   }
   
 #if(DEBUG_Chi)
-  printf("\n%d %d\n", m->count, m->length);
-  for (i = 0; i < m->count; ++i) {
-    printf("%s\t", m->label[i]);
-    for (j = 0; j < m->length; ++j)
-      printf("%lf\t", m->trait[i][j]);
+  printf("\n%d %d\n", morph->count, morph->length);
+  for (i = 0; i < morph->count; ++i) {
+    printf("%s\t", morph->label[i]);
+    for (j = 0; j < morph->length; ++j)
+      printf("%lf\t", morph->trait[i][j]);
     printf("\n");
   }
 #endif
   
-  m->dtype = BPP_DATA_TRAIT;
+  morph->dtype = BPP_DATA_TRAIT;
   
-  return m;
+  return morph;
 }
 
 trait_t ** parse_traitfile(const char * traitfile, long * count)
@@ -147,7 +147,7 @@ trait_t ** parse_traitfile(const char * traitfile, long * count)
   
   FILE * fp = xopen(traitfile,"r");
 
-  trait_t ** mm = (trait_t **)xmalloc(m_maxcount*sizeof(trait_t *));
+  trait_t ** pmorph = (trait_t **)xmalloc(m_maxcount*sizeof(trait_t *));
 
   *count = 0;
 
@@ -160,13 +160,13 @@ trait_t ** parse_traitfile(const char * traitfile, long * count)
     {
       m_maxcount += m_slotalloc;
       trait_t ** temp = (trait_t **)xmalloc(m_maxcount*sizeof(trait_t *));
-      memcpy(temp, mm, *count * sizeof(trait_t *));
-      free(mm);
-      mm = temp;
+      memcpy(temp, pmorph, (*count)*sizeof(trait_t *));
+      free(pmorph);
+      pmorph = temp;
     }
 
-    mm[*count] = parse_trait_part(fp);
-    if (mm[*count] == NULL)
+    pmorph[*count] = parse_trait_part(fp);
+    if (pmorph[*count] == NULL)
       fatal("Error parsing trait partition %d", (*count)+1);
 
     *count += 1;
@@ -174,12 +174,12 @@ trait_t ** parse_traitfile(const char * traitfile, long * count)
 
   fclose(fp);
 
-  return mm;
+  return pmorph;
 }
 
 static void pic_init_recursive(snode_t * snode, long n_part, int * dim)
 {
-  int i, j, k;
+  int i, j, n;
   double v_k, v_k1, v_k2, *m_k1, *m_k2;
   contrast_t * ic;
 
@@ -191,29 +191,25 @@ static void pic_init_recursive(snode_t * snode, long n_part, int * dim)
     
     /* allocate twice the amount of space for store/restore */
     snode->pic = (contrast_t **)xmalloc(2*n_part*sizeof(contrast_t *));
-    for (k = 0; k < 2*n_part; ++k)
-    {
-      ic = snode->pic[k] = (contrast_t *)xmalloc(sizeof(contrast_t));
-      ic->trait = (double *)xmalloc(dim[k]*sizeof(double));
-      ic->contrast = (double *)xmalloc(dim[k]*sizeof(double));
-    }
-    
-    /* loop over the trait partitions */
-    for (k = 0; k < n_part; ++k)
-    {
-      ic = snode->pic[k];
 
+    /* loop over the trait partitions */
+    for (n = 0; n < n_part; ++n)
+    {
+      ic = snode->pic[n] = (contrast_t *)xmalloc(sizeof(contrast_t));
+      ic->brate = 1.0;
       if (snode->parent != NULL)
-        v_k = snode->parent->tau - snode->tau;
+        v_k = (snode->parent->tau - snode->tau) * ic->brate;
       else
         v_k = 0;
-      v_k1 = snode->left->pic[k]->brlen;
-      v_k2 = snode->right->pic[k]->brlen;
+      v_k1 = snode->left->pic[n]->brlen;
+      v_k2 = snode->right->pic[n]->brlen;
       ic->brlen = v_k + v_k1*v_k2/(v_k1+v_k2);                     // v_k'
       
-      m_k1 = snode->left->pic[k]->trait;
-      m_k2 = snode->right->pic[k]->trait;
-      for (j = 0; j < dim[k]; ++j)
+      m_k1 = snode->left->pic[n]->trait;
+      m_k2 = snode->right->pic[n]->trait;
+      ic->trait = (double *)xmalloc(dim[n]*sizeof(double));
+      ic->contrast = (double *)xmalloc(dim[n]*sizeof(double));
+      for (j = 0; j < dim[n]; ++j)
       {
         ic->contrast[j] = m_k1[j] - m_k2[j];                       // x_k
         ic->trait[j] = (v_k2*m_k1[j] + v_k1*m_k2[j]) /(v_k1+v_k2); // m_k'
@@ -224,39 +220,41 @@ static void pic_init_recursive(snode_t * snode, long n_part, int * dim)
 
 void pic_init(stree_t * stree, trait_t ** trait_list, long n_part)
 {
-  assert(stree != NULL && trait_list != NULL);
-  assert(n_part > 0);
-  
-  int i, j, k, l, found;
+  int i, j, n, l, found;
   snode_t * snode;
   contrast_t * ic;
-  trait_t * m;
+  trait_t * morph;
+  
+  assert(stree != NULL && trait_list != NULL && n_part > 0);
+  for (n = 0; n < n_part; ++n) assert(trait_list[n] != NULL);
   
   /* tip node(_k) has trait values (m_k) and branch length (v_k) as is */
   for (i = 0; i < stree->tip_count; ++i)
   {
     snode = stree->nodes[i];
-    snode->pic = (contrast_t **)xmalloc(n_part*sizeof(contrast_t *));
+
+    /* allocate twice the amount of space for store/restore */
+    snode->pic = (contrast_t **)xmalloc(2*n_part*sizeof(contrast_t *));
     
     /* loop over the trait partitions */
-    for (k = 0; k < n_part; ++k)
+    for (n = 0; n < n_part; ++n)
     {
-      m = trait_list[k];
-      ic = snode->pic[k] = (contrast_t *)xmalloc(sizeof(contrast_t));
-
+      ic = snode->pic[n] = (contrast_t *)xmalloc(sizeof(contrast_t));
+      ic->brate = 1.0;
+      ic->brlen = (snode->parent->tau - snode->tau) * ic->brate;
       /* TODO: how to deal with zero branch length */
-      ic->brlen = snode->parent->tau - snode->tau;
-      
+
       /* find and fill the trait values for this tip node */
+      morph = trait_list[n];
       found = 0;
-      for (l = 0; l < m->count; ++l)
+      for (l = 0; l < morph->count; ++l)
       {
-        if (strncmp(snode->label, m->label[l], LABEL_LEN) == 0)
+        if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
         {
           /* copy the trait values over */
-          ic->trait = (double *)xmalloc((m->length)*sizeof(double));
-          for (j = 0; j < m->length; ++j)
-            ic->trait[j] = m->trait[l][j];
+          ic->trait = (double *)xmalloc((morph->length)*sizeof(double));
+          for (j = 0; j < morph->length; ++j)
+            ic->trait[j] = morph->trait[l][j];
           
           found++;
           break;
@@ -264,40 +262,41 @@ void pic_init(stree_t * stree, trait_t ** trait_list, long n_part)
       }
       if (found == 0)
       {
-        fatal("Species name %s not found in partition %d", snode->label, k+1);
+        fatal("Species name %s not found in partition %d", snode->label, n+1);
       }
     }
   }
   
   stree->trait_dim = (int *)xmalloc(n_part*sizeof(int));
-  for (k = 0; k < n_part; ++k)
-    stree->trait_dim[k] = trait_list[k]->length;
+  for (n = 0; n < n_part; ++n)
+    stree->trait_dim[n] = trait_list[n]->length;
 
   /* internal node: compute contrasts (x_k), ancestral traits (m_k'), and
                     transformed branch length (v_k') */
   pic_init_recursive(stree->root, n_part, stree->trait_dim);
   
 #if(DEBUG_Chi)
-  for (k = 0; k < n_part; ++k)
+  for (n = 0; n < n_part; ++n)
   {
-    printf("Trait partition %d\n", k+1);
+    printf("Trait partition %d\n", n+1);
     for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
       printf("%s\t", snode->label);
-      printf("v'=%lf, ", snode->pic[k]->brlen);
+      printf("v'=%lf, ", snode->pic[n]->brlen);
       printf("m':");
-      for (j = 0; j < stree->trait_dim[k]; ++j)
-        printf(" %lf", snode->pic[k]->trait[j]);
+      for (j = 0; j < stree->trait_dim[n]; ++j)
+        printf(" %lf", snode->pic[n]->trait[j]);
       printf(", ");
       if (i >= stree->tip_count)
       {
         printf("x:");
-        for (j = 0; j < stree->trait_dim[k]; ++j)
-          printf(" %lf", snode->pic[k]->contrast[j]);
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf(" %lf", snode->pic[n]->contrast[j]);
       }
       printf("\n");
     }
+    printf("\n");
   }
 #endif
 }

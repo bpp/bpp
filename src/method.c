@@ -3362,8 +3362,8 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_est_locusrate == MUTRATE_ONLY)
 	    locusrate[i] = stree->locusrate_mubar; 
     gtree[i]->rate_mui = locusrate[i];
-    if (opt_datefile )
-	gtree[i]->rate_mui = 1;
+    if (opt_datefile)
+      gtree[i]->rate_mui = 1;
     locus_set_heredity_scalers(locus[i],heredity+i);
 
     /* set pattern weights and free the weights array */
@@ -4396,10 +4396,8 @@ void cmd_run()
  
     
     /* propose species tree taus */
-     
     if (stree->tip_count > 1 && stree->root->tau > 0)
     {
-
       if (opt_migration) 
 	      ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
       else
@@ -4417,7 +4415,6 @@ void cmd_run()
     }
 
     /* propose migration rates */
-      
     if (opt_migration)
     {
       ratio = prop_migrates(stree,gtree,locus);
