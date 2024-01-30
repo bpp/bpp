@@ -2620,7 +2620,7 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)
   {
     printf("Parsing trait file...");
-    trait_list = parse_traitfile(opt_traitfile, &opt_trait_part_count);
+    trait_list = parse_traitfile(opt_traitfile, &opt_trait_count);
     assert(trait_list);
     printf(" Done\n");
   }
@@ -3107,10 +3107,13 @@ static FILE * init(stree_t ** ptr_stree,
     partition_fast(stree->tip_count);
   }
 
-  /* initialize trait values and contrasts //Chi */
-  if (opt_traitfile)
+  if (opt_traitfile)  //Chi
   {
-    pic_init(stree, trait_list, opt_trait_part_count);
+    /* initialize trait values and contrasts */
+    pic_init(stree, trait_list, opt_trait_count);
+    
+    /* calculate log likelihood for morphological traits */
+    logl_sum += loglikelihood_trait(stree, opt_trait_count);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -3627,14 +3630,12 @@ static FILE * init(stree_t ** ptr_stree,
     msa_destroy(msa_list[i]);
   free(msa_list);
 
-  //Chi TODO: free
   if (opt_traitfile)
   {
-    // for (i = 0; i < trait_count; ++i)
-    //   trait_destroy(trait_list[i]);
-    // free(trait_list);
+    for (i = 0; i < opt_trait_count; ++i)
+      trait_destroy(trait_list[i]);
+    free(trait_list);
   }
-
   
   return fp_mcmc;
 

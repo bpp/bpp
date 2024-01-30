@@ -1133,7 +1133,7 @@ extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
-extern long opt_trait_part_count;
+extern long opt_trait_count;
 extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
@@ -1413,8 +1413,9 @@ msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
-/* functions in trait.c */
+/* functions in morph.c */
 trait_t ** parse_traitfile(const char * traitfile, long * count);
+void trait_destroy(trait_t * morph);
 
 /* functions in rtree.c */
 
@@ -1501,7 +1502,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
-		int * tau_ctl,
+                int * tau_ctl,
                 FILE * fp_out);
 
 void stree_init_pptable(stree_t * stree);
@@ -1512,6 +1513,7 @@ void stree_alloc_internals(stree_t * stree,
                            long msa_count);
 
 void pic_init(stree_t * stree, trait_t ** trait_list, long count);
+double loglikelihood_trait(stree_t * stree, long n_part);
 
 int node_is_bidirection(const snode_t * node);
 int node_is_mirror(const snode_t * node);
