@@ -35,7 +35,6 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <pthread.h>
-#include <regex.h>
 
 
 #define PROG_NAME "bpp"
