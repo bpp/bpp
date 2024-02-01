@@ -860,7 +860,8 @@ static list_t * create_maplist_msa(stree_t * stree, msa_t ** msa)
     mapping_t * m = (mapping_t *)xmalloc(sizeof(mapping_t));
 
     m->individual = xstrdup(strchr(msa[0]->label[j], '^')+1);
-    m->species    = strndup(msa[0]->label[j], strchr(msa[0]->label[j], '^') - msa[0]->label[j]);
+    m->species    = xstrndup(msa[0]->label[j],
+                             strchr(msa[0]->label[j],'^') - msa[0]->label[j]);
     m->lineno     = j+1;
 
     list_append(list,(void *)m);
