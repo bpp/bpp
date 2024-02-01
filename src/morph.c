@@ -252,14 +252,16 @@ void pic_destroy(stree_t * stree)
 static void debug_print_pic(stree_t * stree)
 {
   int n, i, j, dim;
-
+  snode_t * snode;
+  
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
-    snode_t * snode = stree->nodes[i];
+    snode = stree->nodes[i];
     printf("%s\t", snode->label);
     for (n = 0; n < 2*stree->trait_count; ++n)
     {
       printf("# %lf |", snode->pic[n]->brlen);
+      printf("  %lf |", snode->pic[n]->brate);
       if (n < stree->trait_count)
         dim = stree->trait_dim[n];
       else
@@ -286,7 +288,7 @@ static void debug_print_pic(stree_t * stree)
   printf("\n");
 }
 
-int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
+static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
 {
   int n, i, j, l;
   snode_t * snode;
@@ -412,6 +414,62 @@ void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
   
   /* update the independent contrasts */
   pic_update(stree->root, stree->trait_dim, n_part);
+}
+
+void pic_store(stree_t * stree)
+{
+  int n, i, j, n_part;
+  snode_t * snode;
+
+  n_part = stree->trait_count;
+  for (n = 0; n < n_part; ++n)
+    stree->trait_old_logl[n] = stree->trait_logl[n];
+    
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+      
+    for (n = 0; n < n_part; ++n)
+    {
+      snode->pic[n+ n_part]->brate = snode->pic[n]->brate;
+      snode->pic[n+ n_part]->brlen = snode->pic[n]->brlen;
+      
+      if (i >= stree->tip_count)
+      for (j = 0; j < stree->trait_dim[n]; ++j)
+      {
+        snode->pic[n+ n_part]->trait[j] = snode->pic[n]->trait[j];
+        snode->pic[n+ n_part]->contrast[j] = snode->pic[n]->contrast[j];
+      }
+    }
+  }
+}
+
+void pic_restore(stree_t * stree)
+{
+  int n, i, j, n_part;
+  snode_t * snode;
+
+  n_part = stree->trait_count;
+  for (n = 0; n < n_part; ++n)
+    stree->trait_logl[n] = stree->trait_old_logl[n];
+    
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+      
+    for (n = 0; n < n_part; ++n)
+    {
+      snode->pic[n]->brate = snode->pic[n+ n_part]->brate;
+      snode->pic[n]->brlen = snode->pic[n+ n_part]->brlen;
+      
+      if (i >= stree->tip_count)
+      for (j = 0; j < stree->trait_dim[n]; ++j)
+      {
+        snode->pic[n]->trait[j] = snode->pic[n+ n_part]->trait[j];
+        snode->pic[n]->contrast[j] = snode->pic[n+ n_part]->contrast[j];
+      }
+    }
+  }
 }
 
 double loglikelihood_trait(stree_t * stree)
