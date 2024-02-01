@@ -164,6 +164,7 @@ list_t * parse_date_mapfile(const char * mapfile)
 {
   long line_count = 0;
   long ret = 1;
+  int len;
   FILE * fp;
   list_t * list;
   mappingDate_t * mapping = NULL;
@@ -173,16 +174,6 @@ list_t * parse_date_mapfile(const char * mapfile)
   fp = xopen(mapfile,"r");
 
   list = (list_t *)xcalloc(1,sizeof(list_t));
-
-  regex_t regDecimal;
-  int regCompiled, regMatch;
-  char* ptr; /* Needed for the strtod function */
-   /* Regex of decimal number */
-   regCompiled = regcomp(&regDecimal, "^([0-9]*)((\\.)?([0-9]+))$" , REG_EXTENDED);
-   if (regCompiled == 1) {
-     fprintf(stderr, "Regular expression did not compile.\n");
-     exit(1);
-   }
 
   while (getnextline(fp))
   {
@@ -204,13 +195,14 @@ list_t * parse_date_mapfile(const char * mapfile)
 
     /* Need to convert to double*/
 
-     regMatch = regexec(&regDecimal, date, 0, NULL, 0);
-      if (regMatch != 0) {
-        fprintf(stderr, "Problem reading datefile. Regular expression does not match a decimal number.\n");
-        exit(1);
-      }
+    ret = sscanf(date, "%lf%n", &mapping->date, &len); 
+    if ((ret == 0) || (((unsigned int)(len)) < strlen(date)))
+    {
+      free(date);
+      ret = 0;
+      goto l_unwind;
+    }
 
-    mapping->date = strtod(date, &ptr);
     free(date);
 
     /* insert item into list */
@@ -229,7 +221,6 @@ l_unwind:
     list = NULL;
   }
 
-  regfree(&regDecimal);
   return list;
 }
 
