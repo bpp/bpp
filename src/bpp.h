@@ -633,12 +633,15 @@ typedef struct stree_s
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
-  
-  /* morphological traits */
-  int * trait_dim;  /* dimension of trait vector of each partition */
 
   double * u_constraint;
   double * l_constraint;
+
+  /* morphological traits //Chi */
+  int      trait_count;    /* number of trait partitions */
+  int    * trait_dim;      /* dimension of trait vector of each partition */
+  double * trait_logl;     /* log likelihood of each partition */
+  double * trait_old_logl; /* store old log likelihood values */
 
 } stree_t;
 
@@ -1413,9 +1416,15 @@ msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
-/* functions in morph.c */
-trait_t ** parse_traitfile(const char * traitfile, long * count);
+/* functions in morph.c //Chi */
+
+trait_t ** parse_traitfile(const char * traitfile, int * count);
 void trait_destroy(trait_t * morph);
+
+void pic_init(stree_t * stree, trait_t ** trait_list, int count);
+void pic_destroy(stree_t * stree);
+
+double loglikelihood_trait(stree_t * stree);
 
 /* functions in rtree.c */
 
@@ -1511,9 +1520,6 @@ void stree_alloc_internals(stree_t * stree,
                            long * locus_seqcount,
                            unsigned int gtree_inner_sum,
                            long msa_count);
-
-void pic_init(stree_t * stree, trait_t ** trait_list, long count);
-double loglikelihood_trait(stree_t * stree, long n_part);
 
 int node_is_bidirection(const snode_t * node);
 int node_is_mirror(const snode_t * node);

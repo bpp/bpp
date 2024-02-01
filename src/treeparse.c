@@ -453,6 +453,9 @@ void stree_destroy(stree_t * tree,
   	free(tree->u_constraint);
   if (tree->l_constraint)
   	free(tree->l_constraint);
+
+  pic_destroy(tree);  //Chi
+
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);

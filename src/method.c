@@ -2616,15 +2616,6 @@ static FILE * init(stree_t ** ptr_stree,
     print_network_table(stree,stdout);
   }
 
-  /* parse the trait file //Chi */
-  if (opt_traitfile)
-  {
-    printf("Parsing trait file...");
-    trait_list = parse_traitfile(opt_traitfile, &opt_trait_count);
-    assert(trait_list);
-    printf(" Done\n");
-  }
-
   /* parse the phylip file */
   phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
   assert(fd);
@@ -2812,11 +2803,11 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   if (opt_datefile) {
-        printf("Parsing date file...");
-        if (! (date_list = parse_date_mapfile(opt_datefile)))
-                fatal("Failed to parse date file %s", opt_datefile);
-        else
-                printf(" Done\n");
+    printf("Parsing date file...");
+    if (! (date_list = parse_date_mapfile(opt_datefile)))
+      fatal("Failed to parse date file %s", opt_datefile);
+    else
+      printf(" Done\n");
   }
 
   #if 0
@@ -3109,11 +3100,17 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_traitfile)  //Chi
   {
+    /* parse the trait file */
+    printf("Parsing trait file...");
+    trait_list = parse_traitfile(opt_traitfile, &opt_trait_count);
+    assert(trait_list);
+    printf(" Done\n");
+
     /* initialize trait values and contrasts */
     pic_init(stree, trait_list, opt_trait_count);
     
     /* calculate log likelihood for morphological traits */
-    logl_sum += loglikelihood_trait(stree, opt_trait_count);
+    logl_sum += loglikelihood_trait(stree);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -4357,9 +4354,6 @@ void cmd_run()
         debug_bruce(stree,gtree,"GSPR", i, fp_debug); 
 
     /* propose population sizes on species tree */
-      
-      
-      
     if (opt_est_theta)
     {
       stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype);
