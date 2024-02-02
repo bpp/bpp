@@ -4676,6 +4676,14 @@ static long propose_tau(locus_t ** loci,
 
   oldage = snode->tau;
 
+  if (opt_traitfile)  //Chi
+  {
+    /* store the old values before changing the species tree */
+    /* TODO: this is not necessary when the previous move was rejected or
+       irrelevant, but we leave it as is for now */
+    pic_store(stree);
+  }
+
   /* TODO: Implement a generic version */
   if (opt_linkedtheta)
     theta_method = 0;
@@ -5044,6 +5052,21 @@ static long propose_tau(locus_t ** loci,
     stree->notheta_logpr = logpr;
   }
 
+  if (opt_traitfile)  //Chi
+  {
+    /* TODO: this can be optimized. Instead of calculating the full likelihood,
+       calculate the normal densities at the current node and its ancestors all
+       the way to the root.  */
+    
+    /* update the contrasts as node age (tau) has been changed */
+    pic_update(stree->root, stree->trait_dim, stree->trait_count);
+    
+    /* then calculate the log likelihood difference */
+    for (i = 0; i < stree->trait_count; ++i)
+      logl_diff -= stree->trait_old_logl[i];
+    logl_diff += loglikelihood_trait(stree);
+  }
+
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
 
@@ -5071,6 +5094,10 @@ static long propose_tau(locus_t ** loci,
   {
     /* rejected */
     snode->tau = oldage;
+
+    if (opt_traitfile)  //Chi
+      pic_restore(stree);
+
     if (opt_msci && snode->hybrid)
     {
       if (node_is_hybridization(snode))
@@ -5229,6 +5256,7 @@ static long propose_tau(locus_t ** loci,
       stree->notheta_logpr = stree->notheta_old_logpr;
     }
   }
+
   return accepted;
 }
 

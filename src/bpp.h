@@ -1422,6 +1422,9 @@ void trait_destroy(trait_t * morph);
 
 void pic_init(stree_t * stree, trait_t ** trait_list, int count);
 void pic_destroy(stree_t * stree);
+void pic_store(stree_t * stree);
+void pic_restore(stree_t * stree);
+void pic_update(snode_t * snode, int * ncol, int count);
 
 double loglikelihood_trait(stree_t * stree);
 
