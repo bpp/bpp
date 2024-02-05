@@ -492,22 +492,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read alpha of 'theta' tag");
   if (!LOAD(&opt_theta_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
-  if (!LOAD(&opt_theta_p,1,fp))
-    fatal("Cannot read p of 'theta' tag");
-  if (!LOAD(&opt_theta_q,1,fp))
-    fatal("Cannot read q of 'theta' tag");
-  if (!LOAD(&opt_theta_min,1,fp))
-    fatal("Cannot read min of 'theta' tag");
-  if (!LOAD(&opt_theta_max,1,fp))
-    fatal("Cannot read max of 'theta' tag");
   if (!LOAD(&opt_est_theta,1,fp))
     fatal("Cannot read est 'theta' tag");
   if (!LOAD(&opt_linkedtheta,1,fp))
     fatal("Cannot read linked theta tag");
-  if (!LOAD(&opt_theta_move,1,fp))
-    fatal("Cannot read theta move tag");
-  if (!LOAD(&opt_theta_prop,1,fp))
-    fatal("Cannot read theta prop tag");
   if (!LOAD(&opt_theta_gibbs_showall_eps,1,fp))
     fatal("Cannot read theta gibbs showall eps");
   if (!LOAD(&opt_theta_slide_prob,1,fp))

@@ -1403,18 +1403,10 @@ static long parse_thetaprior_args(const char * line)
 
   p += count;
 
-  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
-  {
-    opt_theta_p = a;
-    opt_theta_q = b;
-  }
-  else
-  {
-    opt_theta_alpha = a;
-    opt_theta_beta = b;
-  }
+  opt_theta_alpha = a;
+  opt_theta_beta = b;
 
-  if (is_emptyline(p) && (opt_theta_prior != BPP_THETA_PRIOR_BETA))
+  if (is_emptyline(p))
     ret = 1;
 
   if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
@@ -1426,21 +1418,6 @@ static long parse_thetaprior_args(const char * line)
     p += count;
 
     if (is_emptyline(p)) ret = 1;
-  }
-  else if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
-  {
-    count = get_double(p, &opt_theta_min);
-    if (!count) goto l_unwind;
-
-    p += count;
-
-    count = get_double(p, &opt_theta_max);
-    if (!count) goto l_unwind;
-
-    p += count;
-
-    if (is_emptyline(p))
-      ret = 1;
   }
 
 l_unwind:
@@ -1473,8 +1450,6 @@ static long parse_thetaprior(const char * line)
       opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
     else if (!strcasecmp(dist,"gamma"))
       opt_theta_prior = BPP_THETA_PRIOR_GAMMA;
-    else if (!strcasecmp(dist,"beta"))
-      opt_theta_prior = BPP_THETA_PRIOR_BETA;
     else
       goto l_unwind;
   }
@@ -2491,20 +2466,6 @@ static void check_validity()
     if (opt_theta_beta <= 0)
       fatal("Beta value of Gamma(a,b) of thetaprior must be > 0");
   }
-  else
-  {
-    assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-    if (opt_theta_p <= 0)
-      fatal("Theta prior Beta(p,q,min,max) requires p > 0");
-    if (opt_theta_q <= 0)
-      fatal("Theta prior Beta(p,q,min,max) requires q > 0");
-    if (opt_theta_min < 0)
-      fatal("Theta prior Beta(p,q,min,max) requires min >= 0");
-    if (opt_theta_max < 0)
-      fatal("Theta prior Beta(p,q,min,max) requires max >= 0");
-    if (opt_theta_max <= opt_theta_min)
-      fatal("Theta prior Beta(p,q,min,max) requires max > min");
-  }
 
   if (opt_migration)
   {
@@ -3221,17 +3182,6 @@ void load_cfile()
   if (opt_clock != BPP_CLOCK_GLOBAL && opt_datefile) 
 	  fatal("You can only use a global clock with tip dating");
   
-  /* update theta method depending on prior */
-  if (opt_theta_prior == BPP_THETA_PRIOR_BETA)
-  {
-    if (opt_theta_move != BPP_THETA_MOVE_SLIDE)
-    {
-      fprintf(stderr,"WARNING: Beta prior for thetas requires theta move to be "
-              "set to 'slide'.\n");
-    }
-    opt_theta_slide_prob = 1;
-    opt_theta_move = BPP_THETA_MOVE_SLIDE;
-  }
   /* Change to zero index */
   if (opt_print_locus) {
     for (long i = 0; i < opt_print_locus; i++) {

@@ -288,14 +288,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         lnacceptance += (opt_theta_alpha-1)*lnc -
                        opt_theta_beta*(snodes[i]->theta - snodes[i]->old_theta);
-      else
-      {
-        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-        lnacceptance += (opt_theta_p-1) *
-                        log((snodes[i]->theta-opt_theta_min) / (snodes[i]->old_theta-opt_theta_min)) +
-                        (opt_theta_q-1) *
-                        log((opt_theta_max-snodes[i]->theta) / (opt_theta_max-snodes[i]->old_theta));
-      }
     }
   }
 

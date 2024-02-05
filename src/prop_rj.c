@@ -474,15 +474,6 @@ long prop_split(gtree_t ** gtree,
         lnacceptance += log_pdfgamma(node->left->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
-      else
-      {
-        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-        lnacceptance += log_pdfbeta4(node->left->theta,
-                                     opt_theta_p,
-                                     opt_theta_q,
-                                     opt_theta_min,
-                                     opt_theta_max);
-      }
     }
 
     /* Store the right child theta, and update it according to RJ algorithm */
@@ -512,15 +503,6 @@ long prop_split(gtree_t ** gtree,
         lnacceptance += log_pdfgamma(node->right->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
-      else
-      {
-        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-        lnacceptance += log_pdfbeta4(node->right->theta,
-                                     opt_theta_p,
-                                     opt_theta_q,
-                                     opt_theta_min,
-                                     opt_theta_max);
-      }
     }
   }
 
@@ -940,15 +922,6 @@ long prop_join(gtree_t ** gtree,
         lnacceptance -= log_pdfgamma(node->left->theta,
                                      opt_theta_alpha,
                                      opt_theta_beta);
-      else
-      {
-        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-        lnacceptance -= log_pdfbeta4(node->left->theta,
-                                     opt_theta_p,
-                                     opt_theta_q,
-                                     opt_theta_min,
-                                     opt_theta_max);
-      }
     }
 
     /* Now store the right child theta, and update it according to RJ algorithm */
@@ -978,15 +951,6 @@ long prop_join(gtree_t ** gtree,
           lnacceptance -= log_pdfgamma(node->right->theta,
                                        opt_theta_alpha,
                                        opt_theta_beta);
-      else
-      {
-        assert(opt_theta_prior == BPP_THETA_PRIOR_BETA);
-        lnacceptance -= log_pdfbeta4(node->right->theta,
-                                     opt_theta_p,
-                                     opt_theta_q,
-                                     opt_theta_min,
-                                     opt_theta_max);
-      }
     }
   }
 

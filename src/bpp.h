@@ -268,21 +268,12 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_MIN             1
 #define BPP_THETA_PRIOR_INVGAMMA        1
 #define BPP_THETA_PRIOR_GAMMA           2
-#define BPP_THETA_PRIOR_BETA            3
-#define BPP_THETA_PRIOR_MAX             3
+#define BPP_THETA_PRIOR_MAX             2
 
 #define BPP_THETA_MOVE_MIN              0
 #define BPP_THETA_MOVE_SLIDE            0
 #define BPP_THETA_MOVE_GIBBS            1
-#define BPP_THETA_MOVE_MIXED            2 /* mixed gibbs and slide */
-#define BPP_THETA_MOVE_MAX              2
-
-#define BPP_THETA_PROP_DEFAULT          0
-#define BPP_THETA_PROP_SW               1
-#define BPP_THETA_PROP_MG_INVG          2
-#define BPP_THETA_PROP_MG_GAMMA         4
-#define BPP_THETA_PROP_MG_CAUCHY        8
-#define BPP_THETA_PROP_MG_T4            16
+#define BPP_THETA_MOVE_MAX              1
 
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
@@ -1140,9 +1131,7 @@ extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
 extern long opt_theta_gibbs_showall_eps;
-extern long opt_theta_move;
 extern long opt_theta_prior;
-extern long opt_theta_prop;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
