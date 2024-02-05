@@ -147,6 +147,7 @@ double opt_bfbeta;
 double opt_clock_vbar;
 double opt_finetune_alpha;
 double opt_finetune_branchrate;
+double opt_finetune_brate_m;
 double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
@@ -259,6 +260,7 @@ double g_pj_nubar;
 double g_pj_mui;
 double g_pj_nui;
 double g_pj_brate;
+double g_pj_brate_m;
 double g_pj_mrate;
 double g_pj_migvr;
 double * g_pj_theta_gibbs;
@@ -494,6 +496,7 @@ void args_init(int argc, char ** argv)
 #endif
   opt_finetune_alpha = 0.1;
   opt_finetune_branchrate = 0.1;
+  opt_finetune_brate_m = 0.1;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
@@ -627,6 +630,7 @@ void args_init(int argc, char ** argv)
   g_pj_mui = 0;
   g_pj_nui = 0;
   g_pj_brate = 0;
+  g_pj_brate_m = 0;
   g_pj_mrate = 0;
   g_pj_migvr = 0;
   g_pj_theta_gibbs = NULL;

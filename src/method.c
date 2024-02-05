@@ -3109,8 +3109,12 @@ static FILE * init(stree_t ** ptr_stree,
     /* initialize trait values and contrasts */
     pic_init(stree, trait_list, opt_trait_count);
     
-    /* calculate log likelihood for morphological traits */
+    /* calculate log likelihood and log prior for traits */
     logl_sum += loglikelihood_trait(stree);
+    logpr_sum += logprior_trait(stree);
+    
+    /* store current values for later use */
+    pic_store(stree);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -3787,6 +3791,7 @@ static void pjump_reset()
   g_pj_mui = 0;
   g_pj_nui = 0;
   g_pj_brate = 0;
+  g_pj_brate_m = 0;
   g_pj_mrate = 0;
   g_pj_migvr = 0;
   for (i = 0; i < opt_finetune_theta_count; ++i)
@@ -4645,6 +4650,14 @@ void cmd_run()
       check_lnprior(stree, gtree, i, "BRATE");
       #endif
     }
+
+    /* propose branch rates for traits */
+    if (opt_traitfile)  //Chi
+    {
+      ratio = prop_branch_rates_trait(stree);
+      g_pj_brate_m = (g_pj_brate_m*(ft_round-1)+ratio) / ft_round;
+    }
+
 
     /* log sample into file (dparam_count is only used in method 10) */
     if ((i + 1) % (opt_samplefreq*5) == 0)

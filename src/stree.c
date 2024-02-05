@@ -4676,14 +4676,6 @@ static long propose_tau(locus_t ** loci,
 
   oldage = snode->tau;
 
-  if (opt_traitfile)  //Chi
-  {
-    /* store the old values before changing the species tree */
-    /* TODO: this is not necessary when the previous move was rejected or
-       irrelevant, but we leave it as is for now */
-    pic_store(stree);
-  }
-
   /* TODO: Implement a generic version */
   if (opt_linkedtheta)
     theta_method = 0;
@@ -5059,7 +5051,7 @@ static long propose_tau(locus_t ** loci,
        the way to the root.  */
     
     /* update the contrasts as node age (tau) has been changed */
-    pic_update(stree->root, stree->trait_dim, stree->trait_count);
+    pic_update(stree);
     
     /* then calculate the log likelihood difference */
     for (i = 0; i < stree->trait_count; ++i)
@@ -5077,6 +5069,9 @@ static long propose_tau(locus_t ** loci,
   {
     /* accepted */
     accepted++;
+
+    if (opt_traitfile)  //Chi
+      pic_store(stree);
 
     for (i = 0; i < stree->locus_count; ++i)
     {

@@ -475,10 +475,11 @@ typedef struct migbuffer_s
 
 typedef struct contrast_s
 {
-  double brate;   // branch rate (r_k)
-  double brlen;   // transformed branch length (v_k')
-  double * trait;  // (ancestral) trait values (m_k')
-  double * contrast;  // independent contrasts (x_k)
+  double brate;      // branch rate (r_k)
+  double old_brate;
+  double brlen;      // transformed branch length (v_k')
+  double * trait;    // (ancestral) trait values (m_k')
+  double * contrast; // independent contrasts (x_k)
 } contrast_t;
 
 typedef struct snode_s
@@ -637,10 +638,12 @@ typedef struct stree_s
   double * l_constraint;
 
   /* morphological traits //Chi */
-  int      trait_count;    /* number of trait partitions */
-  int    * trait_dim;      /* dimension of trait vector of each partition */
-  double * trait_logl;     /* log likelihood of each partition */
+  int      trait_count;         /* number of trait partitions */
+  int    * trait_dim;  /* dimension of trait vector of each partition */
+  double * trait_logl;    /* log likelihood of each partition */
   double * trait_old_logl; /* store old log likelihood values */
+  double * trait_logpr;        /* log prior of each partition */
+  double * trait_old_logpr;     /* store old log prior values */
 
 } stree_t;
 
@@ -1184,6 +1187,7 @@ extern double opt_alpha_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
+extern double opt_finetune_brate_m;
 extern double opt_finetune_freqs;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
@@ -1354,6 +1358,7 @@ extern double g_pj_nubar;
 extern double g_pj_mui;
 extern double g_pj_nui;
 extern double g_pj_brate;
+extern double g_pj_brate_m;
 extern double g_pj_mrate;
 extern double g_pj_migvr;
 extern double * g_pj_theta_slide;
@@ -1424,9 +1429,10 @@ void pic_init(stree_t * stree, trait_t ** trait_list, int count);
 void pic_destroy(stree_t * stree);
 void pic_store(stree_t * stree);
 void pic_restore(stree_t * stree);
-void pic_update(snode_t * snode, int * ncol, int count);
+void pic_update(stree_t * stree);
 
 double loglikelihood_trait(stree_t * stree);
+double logprior_trait(stree_t * stree);
 
 /* functions in rtree.c */
 
@@ -1841,6 +1847,8 @@ void prop_branch_rates_parallel(gtree_t ** gtree,
                                 long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted);
+
+double prop_branch_rates_trait(stree_t * stree);
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree);
 long prop_locusrate_nubar(stree_t * stree, gtree_t ** gtree);
