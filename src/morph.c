@@ -31,7 +31,7 @@ static int parse_header(FILE * fp, int * nrow, int * ncol)
     return 0;
   }
 
-  /* TODO: read in here ldetRs? */
+  /* TODO: read in here v_pop and ldetRs? */
 
   return 1;
 }
@@ -318,7 +318,7 @@ static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
 static void pic_update_part(int idx, snode_t * snode, int dim)
 {
   int j;
-  double v_k, v_k1, v_k2, *m_k1, *m_k2;
+  double v_pop, v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
@@ -345,9 +345,10 @@ static void pic_update_part(int idx, snode_t * snode, int dim)
   {
     v_k = (snode->parent->tau - snode->tau) * snode->pic[idx]->brate;
     /* The trait matrix has been standardized so that all characters have the
-       same variance and so that the population noise has unit variance. See
+       same variance and the population noise has variance of v_pop.
        Alvarez-Carretero et al. 2019. p.970. */
-    snode->pic[idx]->brlen = v_k + 1.0;
+    v_pop = 0.01;  /* TODO: //Chi */
+    snode->pic[idx]->brlen = v_k + v_pop;
   }
 }
 
@@ -362,7 +363,7 @@ void pic_update(stree_t * stree)
 
 void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
 {
-  int n, i, dim;
+  int n, i;
   snode_t * snode;
   
   assert(stree != NULL && trait_list != NULL && n_part > 0);
@@ -499,30 +500,12 @@ double loglikelihood_trait(stree_t * stree)
   return logl_sum;
 }
 
-double logprior_trait(stree_t * stree)
-{
-  int n;
-  double logpr_sum = 0.0;
-  
-  if (BPP_CLOCK_GLOBAL)
-  {
-    
-  }
-  else
-  {
-    /* loop over the trait partitions */
-    for (n = 0; n < stree->trait_count; ++n)
-      logpr_sum += -1; // TODO: //Chi
-  }
-  
-  return logpr_sum;
-}
 
 static double prop_branch_rates_relax(stree_t * stree)
 {
   int n, i,  proposed, accepted;
   long thread_index = 0;
-  double old_lograte, new_lograte;
+  double old_rate, old_lograte, new_rate, new_lograte;
   double lnacceptance;
   snode_t * snode;
 
@@ -539,16 +522,18 @@ static double prop_branch_rates_relax(stree_t * stree)
       if (!snode->parent)
         continue;
       
-      old_lograte = log(snode->pic[n]->brate);
+      old_rate = snode->pic[n]->brate;
+      old_lograte = log(old_rate);
       new_lograte = old_lograte +
            opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
       new_lograte = reflect(new_lograte, -99, 99, thread_index);
-      snode->pic[n]->brate = exp(new_lograte);
+      snode->pic[n]->brate = new_rate = exp(new_lograte);
       
       lnacceptance = new_lograte - old_lograte;
       
-      /* TODO: calculate the log prior difference */
-      // lnacceptance += ;
+      /* calculate the log prior difference */
+      lnacceptance += (opt_brate_alpha-1) * log(new_rate/old_rate)
+                         - opt_brate_beta * (new_rate - old_rate);
       
       /* update the contrasts as branch rate has been changed */
       pic_update_part(n, stree->root, stree->trait_dim[n]);
@@ -594,8 +579,9 @@ static double prop_branch_rates_strict(stree_t * stree)
   
   lnacceptance = new_lograte - old_lograte;
 
-  /* TODO: calculate the log prior difference */
-  // lnacceptance += ;
+  /* calculate the log prior difference */
+  lnacceptance += (opt_brate_alpha-1) * log(new_rate/old_rate)
+                     - opt_brate_beta * (new_rate - old_rate);
 
   for (n = 0; n < stree->trait_count; ++n)
   {

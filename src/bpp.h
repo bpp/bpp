@@ -1184,6 +1184,8 @@ extern long opt_usedata;
 extern long opt_version;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
+extern double opt_brate_alpha;
+extern double opt_brate_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;

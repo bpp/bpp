@@ -143,6 +143,8 @@ long opt_usedata;
 long opt_version;
 double opt_alpha_alpha;
 double opt_alpha_beta;
+double opt_brate_alpha;
+double opt_brate_beta;
 double opt_bfbeta;
 double opt_clock_vbar;
 double opt_finetune_alpha;
@@ -423,6 +425,8 @@ void args_init(int argc, char ** argv)
   opt_arch = -1;
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
+  opt_brate_alpha = 1;
+  opt_brate_beta = 1;
   opt_bfbeta = 1;
   opt_bfdriver = NULL;
   opt_bfd_points = 0;

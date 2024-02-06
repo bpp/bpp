@@ -3109,9 +3109,8 @@ static FILE * init(stree_t ** ptr_stree,
     /* initialize trait values and contrasts */
     pic_init(stree, trait_list, opt_trait_count);
     
-    /* calculate log likelihood and log prior for traits */
+    /* calculate log likelihood for morphological traits */
     logl_sum += loglikelihood_trait(stree);
-    logpr_sum += logprior_trait(stree);
     
     /* store current values for later use */
     pic_store(stree);
