@@ -1213,7 +1213,7 @@ static void status_print_pjump(FILE * fp,
     for (k = 0; k < opt_finetune_theta_count; ++k)
       fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
   }
-  else if (opt_theta_slide_prob == 1)
+  else if (opt_theta_slide_prob == 0)
   {
     for (k = 0; k < opt_finetune_theta_count; ++k)
       fprintf(fp, " %4.2f", g_pj_theta_gibbs[k]);
