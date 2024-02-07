@@ -402,6 +402,8 @@ void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
 
   stree->trait_count = n_part;
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
   for (n = 0; n < n_part; ++n)
   {
     stree->trait_dim[n] = trait_list[n]->length;
