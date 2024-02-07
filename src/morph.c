@@ -16,7 +16,8 @@ static int get_nb_char(FILE *fp)
   return c;
 }
 
-static int parse_header(FILE * fp, int * nrow, int * ncol)
+static int parse_header(FILE * fp, int * nrow, int * ncol,
+                        double * v_pop, double * ldetRs)
 {
   if (fscanf(fp, "%d %d", nrow, ncol) != 2) {
     fprintf(stderr, "Expecting two numbers\n");
@@ -31,8 +32,13 @@ static int parse_header(FILE * fp, int * nrow, int * ncol)
     return 0;
   }
 
-  /* TODO: read in here v_pop and ldetRs? */
-
+  /* also read in here v_pop and ldetRs, which have been obtained when
+     preprocessing the trait data */
+  if (fscanf(fp, "%lf %lf", v_pop, ldetRs) != 2) {
+    fprintf(stderr, "Expecting population variance and log(det(R*))\n");
+    return 0;
+  }
+  
   return 1;
 }
 
@@ -93,14 +99,28 @@ static int parse_value(FILE * fp, double * trait, int len)
   return 1;
 }
 
+static void parse_comment(FILE * fp)
+{
+  int c;
+  
+  while ((c=get_nb_char(fp)) == '#')
+    while ((c=fgetc(fp)) != '\n'); //eat the line
+
+  ungetc(c, fp);
+}
+
 static trait_t * parse_trait_part(FILE * fp)
 {
   int i, j;
   
   trait_t * morph = (trait_t *)xmalloc(sizeof(trait_t));
   
+  /* skip comments, assuming they are at the beginning of the trait block */
+  parse_comment(fp);
+  
   /* read header */
-  if (!parse_header(fp, &(morph->count), &(morph->length)))
+  if (!parse_header(fp, &(morph->count), &(morph->length),
+                        &(morph->v_pop), &(morph->ldetRs)))
   {
     fprintf(stderr, "Error in header\n");
     return NULL;
@@ -134,7 +154,8 @@ static trait_t * parse_trait_part(FILE * fp)
   }
   
 #ifdef DEBUG_Chi
-  printf("\n%d %d\n", morph->count, morph->length);
+  printf("\n%d %d\t", morph->count, morph->length);
+  printf("%lf %lf\n", morph->v_pop, morph->ldetRs);
   for (i = 0; i < morph->count; ++i) {
     printf("%s\t", morph->label[i]);
     for (j = 0; j < morph->length; ++j)
@@ -150,7 +171,7 @@ static trait_t * parse_trait_part(FILE * fp)
 
 trait_t ** parse_traitfile(const char * traitfile, int * count)
 {
-  int c, i, m_slotalloc = 10, m_maxcount = 0;
+  int c, i, m_slotalloc = 10, m_maxcount = 10;
   
   FILE * fp = xopen(traitfile,"r");
 
@@ -243,6 +264,11 @@ void pic_destroy(stree_t * stree)
   if (stree->trait_dim)
     free(stree->trait_dim);
   
+  if (stree->trait_v_pop)
+    free(stree->trait_v_pop);
+  if (stree->trait_ldetRs)
+    free(stree->trait_ldetRs);
+
   if (stree->trait_logl)
     free(stree->trait_logl);
   if (stree->trait_old_logl)
@@ -315,15 +341,15 @@ static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
   return 1;
 }
 
-static void pic_update_part(int idx, snode_t * snode, int dim)
+static void pic_update_part(int idx, snode_t * snode, stree_t * stree)
 {
   int j;
   double v_pop, v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
-    pic_update_part(idx, snode->left, dim);
-    pic_update_part(idx, snode->right, dim);
+    pic_update_part(idx, snode->left, stree);
+    pic_update_part(idx, snode->right, stree);
     
     if (snode->parent)
       v_k = (snode->parent->tau - snode->tau) * snode->pic[idx]->brate;
@@ -335,7 +361,7 @@ static void pic_update_part(int idx, snode_t * snode, int dim)
     
     m_k1 = snode->left->pic[idx]->trait;
     m_k2 = snode->right->pic[idx]->trait;
-    for (j = 0; j < dim; ++j)
+    for (j = 0; j < stree->trait_dim[idx]; ++j)
     {
       snode->pic[idx]->contrast[j] = m_k1[j] - m_k2[j];  // x_k and m_k'
       snode->pic[idx]->trait[j] = (v_k2*m_k1[j] + v_k1*m_k2[j]) /(v_k1+v_k2);
@@ -347,7 +373,7 @@ static void pic_update_part(int idx, snode_t * snode, int dim)
     /* The trait matrix has been standardized so that all characters have the
        same variance and the population noise has variance of v_pop.
        Alvarez-Carretero et al. 2019. p.970. */
-    v_pop = 0.01;  /* TODO: //Chi */
+    v_pop = stree->trait_v_pop[idx];
     snode->pic[idx]->brlen = v_k + v_pop;
   }
 }
@@ -358,7 +384,7 @@ void pic_update(stree_t * stree)
 
   /* loop over the trait partitions */
   for (n = 0; n < stree->trait_count; ++n)
-    pic_update_part(n, stree->root, stree->trait_dim[n]);
+    pic_update_part(n, stree->root, stree);
 }
 
 void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
@@ -377,7 +403,11 @@ void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
   stree->trait_count = n_part;
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
   for (n = 0; n < n_part; ++n)
+  {
     stree->trait_dim[n] = trait_list[n]->length;
+    stree->trait_v_pop[n] = trait_list[n]->v_pop;
+    stree->trait_ldetRs[n] = trait_list[n]->ldetRs;
+  }
   
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
@@ -460,7 +490,7 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
   double v_k1, v_k2, zz, ldetRs, logl;
   snode_t * snode;
 
-  ldetRs = 0.0; /* TODO: //Chi */
+  ldetRs = stree->trait_ldetRs[idx];
   p = stree->trait_dim[idx];
 
   logl = 0.0;
@@ -536,7 +566,7 @@ static double prop_branch_rates_relax(stree_t * stree)
                          - opt_brate_beta * (new_rate - old_rate);
       
       /* update the contrasts as branch rate has been changed */
-      pic_update_part(n, stree->root, stree->trait_dim[n]);
+      pic_update_part(n, stree->root, stree);
       
       /* then calculate the log likelihood difference */
       lnacceptance += loglikelihood_trait_part(n, stree)

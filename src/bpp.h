@@ -635,7 +635,9 @@ typedef struct stree_s
   double * trait_old_logl; /* store old log likelihood values */
   double * trait_logpr;        /* log prior of each partition */
   double * trait_old_logpr;     /* store old log prior values */
-
+  double * trait_v_pop;         /* within population variance */
+  double * trait_ldetRs;  /* log determinant of shrinkage estimate of
+                             correlation matrix, i.e. log(det(R*)) */
 } stree_t;
 
 typedef struct mutation_s
@@ -759,13 +761,16 @@ typedef struct ntree_s
 
 typedef struct trait_s
 {
-  int count;
-  int length;
+  int count;        // number of species
+  int length;       // number of traits
 
-  double ** trait;  // matrix holding continuous morphological traits
-  char ** label;
+  double ** trait;  // continuous trait matrix
+  char ** label;    // #count labels
 
-  int dtype;
+  double v_pop;     // population variance
+  double ldetRs;    // log determinant of R*
+
+  int dtype;        // data type: continuous or discrete
   int model;
 } trait_t;
 
