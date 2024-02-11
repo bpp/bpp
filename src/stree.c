@@ -92,6 +92,8 @@ double mig_model_prop_acc[256][256] = {0};
 #endif
 
 static long debug_rjmcmc = 0;
+static long debug_gibbs = 0;
+static long debug_gibbs_times = 0;
 
 #define SHRINK          1
 #define EXPAND          2
@@ -2823,6 +2825,33 @@ static int cb_cmp_double_asc(const void * a, const void * b)
 }
 
 
+static double cubic_f(double x, double coeff[4]) {
+  return (coeff[0] * x * x * x + coeff[1] * x * x + coeff[2] * x + coeff[3]);
+}
+static double cubic_root(double coeff[4], double x0, double x1)
+{
+  /* this finds the root for the cubic equation 
+  *     a x^3 + b x^2 + c x + d = 0
+  */
+  double a = coeff[0], b = coeff[1], c = coeff[2], d = coeff[3];
+  double p = (3*a*c-b*b)/(3*a*a), q = (2*b*b*b-9*a*b*c+27*a*a*d)/(27*a*a*a), det, x;
+  double f0 = cubic_f(x0, coeff), f1 = cubic_f(x1, coeff), f, e = 1e-6;
+
+  det = -(4 * p * p * p + 27 * q * q);
+  if (det > 0) printf("? three distinct real roots?\n");
+  if (f0 * f1 > 0)
+    fatal("root_cubic bounds error");
+  /* bisection to find cubic root.  Try something smarter? */
+  for (long i = 0; i < 100; i++) {
+    x = (x0 + x1) / 2;
+    if (fabs(x0 - x1) < e) break;
+    f = cubic_f(x, coeff);
+    if (f0 * f > 0) { x0 = x; f0 = f; }
+    else            { x1 = x; f1 = f; }
+  }
+  return(x);
+}
+
 static int get_gamma_conditional_approx(double a, double b, long k, double T, double* a1, double* b1)
 {
   /* This returns the approximate posterior for the expected waiting time for a Poisson event,
@@ -2832,33 +2861,45 @@ static int get_gamma_conditional_approx(double a, double b, long k, double T, do
     2*T).
     ziheng-2024.1.31
   */
-  int method = 0;
+  int gamma_method = 0;
   double dl, ddl, m, v, a1k = a - 1 - k, mmv;
+  double coeff[4] = { 1 }, x0, x1;
 
+  assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
   m = (a1k + sqrt(a1k * a1k + 4 * b * T)) / (2 * b);  /* m is the mode of the posterior */
   dl = (a1k - b * m + T / m) / m;
-  if (fabs(dl) > 1e-4)
-    fprintf(stderr, "\ndl = %12.5g != 0\n", dl);   /* dl should be 0 */
+  if (fabs(dl) > 1e-4)   /* dl should be 0 */
+    fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.6f) \n", dl, k, T);
   ddl = -(a1k + 2 * T / m) / (m * m);
   v = -1 / ddl;
   mmv = m * m / v;
-  if (method == 0) {
-    *a1 = 1 + mmv / 2 + sqrt(mmv + mmv * mmv / 4);
-    *b1 = (*a1 - 1) / m;
-    // *b1 /= 2;
+
+  if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
+    if (gamma_method == 0) {
+      *a1 = 1 + mmv / 2 + sqrt(mmv + mmv * mmv / 4);
+      *b1 = (*a1 - 1) / m;
+    }
+    else {          /* this b1 looks better */
+      *a1 = 1 + mmv;   *b1 = m / v;
+    }
   }
-  else {          /* this b1 looks better */
-    *a1 = 1 + mmv;   *b1 = m / v;
+  else {   /* inverse-gamma conditional for gamma prior */
+    coeff[1] = -(4 + mmv);  coeff[2] = 5 - 2 * mmv;  coeff[3] = -(2 + mmv);
+    x0 = (mmv + 2) / 2;
+    x1 = (mmv + 2) * 2;
+    *a1 = cubic_root(coeff, x0, x1);
+    *b1 = m * (*a1 + 1);
   }
+
   return(0);
 }
 
 
-static int propose_theta_gibbs_im(stree_t * stree,
-                                 gtree_t ** gtree,
-                                 locus_t ** locus,
-                                 snode_t * snode,
-                                 long thread_index)
+static int propose_theta_gibbs_im(stree_t* stree,
+  gtree_t** gtree,
+  locus_t** locus,
+  snode_t* snode,
+  long thread_index)
 {
   unsigned int i, j, k, n;
   unsigned int si;
@@ -2871,19 +2912,19 @@ static int propose_theta_gibbs_im(stree_t * stree,
   double T2h_sum = 0;
   double a1, b1;
   size_t alloc_required;
-  dlist_item_t * event;
-  dlist_item_t * li;
-  migbuffer_t * migbuffer;
+  dlist_item_t* event;
+  dlist_item_t* li;
+  migbuffer_t* migbuffer;
 
-  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+  long total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
   for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
   {
     /* make sure migbuffer is large enough */
     alloc_required = snode->migevent_count[msa_index] +
-                     snode->event_count[msa_index] +
-                     stree->inner_count+1;
-    migbuffer_check_and_realloc(thread_index,alloc_required);
+      snode->event_count[msa_index] +
+      stree->inner_count + 1;
+    migbuffer_check_and_realloc(thread_index, alloc_required);
     migbuffer = global_migbuffer_r[thread_index];
 
     heredity = locus[msa_index]->heredity[0];
@@ -2904,20 +2945,20 @@ static int propose_theta_gibbs_im(stree_t * stree,
     for (event = snode->event[msa_index]->head; event; event = event->next)
     {
       gnode_t* gnode = (gnode_t*)(event->data);
-      migbuffer[j].time   = gnode->time;
+      migbuffer[j].time = gnode->time;
       migbuffer[j++].type = EVENT_COAL;
     }
 
     for (li = snode->mig_source[msa_index]->head; li; li = li->next)
     {
-      migevent_t * me     = (migevent_t *)(li->data);
-      migbuffer[j].time   = me->time;
+      migevent_t* me = (migevent_t*)(li->data);
+      migbuffer[j].time = me->time;
       migbuffer[j++].type = EVENT_MIG_SOURCE;
     }
     for (li = snode->mig_target[msa_index]->head; li; li = li->next)
     {
-      migevent_t * me     = (migevent_t *)(li->data);
-      migbuffer[j].time   = me->time;
+      migevent_t* me = (migevent_t*)(li->data);
+      migbuffer[j].time = me->time;
       migbuffer[j++].type = EVENT_MIG_TARGET;
     }
 
@@ -2953,14 +2994,14 @@ static int propose_theta_gibbs_im(stree_t * stree,
     {
       double t = migbuffer[k].time - migbuffer[k - 1].time;
       T2h_sum += n * (n - 1) * t / heredity;
-      if (n>0 && snode->parent)  /* no need to count migration for stree root. */
+      if (n > 0 && snode->parent)  /* no need to count migration for stree root. */
         T2h_sum += 4 * n * mrsum * t / heredity;
 
       if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
         --n;
       else if (migbuffer[k].type == EVENT_MIG_TARGET)
         ++n;
-      else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
+      else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count - 1)
       {
         ++epoch;
         long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
@@ -2969,46 +3010,35 @@ static int propose_theta_gibbs_im(stree_t * stree,
     }
   }
 
-  a1 = opt_theta_alpha + coal_sum + migcount_sum;  /* ziheng-2024.1.31: why does this count include migration events? */
-  //a1 = opt_theta_alpha + coal_sum;  /* ziheng-2024.1.31: why does this count include migration events? */
-
-  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-    b1 = opt_theta_beta  + T2h_sum;
-  else
+  /* ziheng-2024.1.31 */
+  if (debug_gibbs)
+    debug_gibbs_times++;
+  //a1 = opt_theta_alpha + coal_sum + migcount_sum;
+  a1 = opt_theta_alpha + coal_sum;  /* ziheng-2024.1.31: this count should not include migration events */
+  b1 = opt_theta_beta + T2h_sum;
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
-    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
-    b1 = opt_theta_beta * a1 * (a1+1) /
-         (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
-
     /* ziheng-2024.1.31 */
-    double a1t = a1, b1t = b1, T2 = T2h_sum;  long k = coal_sum;
+    // b1 = opt_theta_beta * a1 * (a1+1) / (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
     get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, T2h_sum, &a1, &b1);
-//    printf("theta_%s: T k = %9.6f %6ld a1 = %8.1f %8.1f  b1 = %8.0f %8.0f  mean = %8.5f %8.5f %8.5f\n", 
-//      snode->label, T2, k, a1t, a1, b1t, b1, T2/k, a1t/b1t, a1/b1);
   }
-  
+
   /* save old theta in case of gamma prior */
-  double oldtheta = snode->theta;
-
-  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-    snode->theta = 1/(legacy_rndgamma(thread_index,a1) / b1);
-  else
-  {
-    assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
-    snode->theta = legacy_rndgamma(thread_index,a1) / b1;
-  }
-
+  double oldtheta = snode->theta, newtheta;
   /* new theta */
-  double newtheta = snode->theta;
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop & BPP_THETA_PROP_MG_INVG))
+    newtheta = snode->theta = 1 / (legacy_rndgamma(thread_index, a1) / b1);
+  else
+    newtheta = snode->theta = legacy_rndgamma(thread_index, a1) / b1;
 
   lcount = 1;
   stree->td[0] = snode;
 
   if (opt_linkedtheta)
   {
-    for (i=0; i < total_nodes; ++i)
+    for (i = 0; i < total_nodes; ++i)
     {
-      snode_t * x = stree->nodes[i];
+      snode_t* x = stree->nodes[i];
 
       if (x->theta >= 0 && x->has_theta && x->linked_theta == snode)
       {
@@ -3027,12 +3057,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
       snode_t * x = stree->td[j];
 
       gtree[i]->logpr -= x->logpr_contrib[i];
-      gtree_update_logprob_contrib_mig(x,
-                                       stree,
-                                       gtree[i],
-                                       locus[i]->heredity[0],
-                                       i,
-                                       thread_index);
+      gtree_update_logprob_contrib_mig(x, stree, gtree[i], locus[i]->heredity[0], i, thread_index);
       gtree[i]->logpr += x->logpr_contrib[i];
     }
     lnacceptance += gtree[i]->logpr;
@@ -3046,10 +3071,37 @@ static int propose_theta_gibbs_im(stree_t * stree,
                     opt_theta_beta*(newtheta - oldtheta);
 
     /* proposal ratio */
-    lnacceptance += (a1-1)*log(oldtheta / newtheta) - b1*(oldtheta - newtheta);
+    if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
+      lnacceptance += (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
+      lnacceptance += (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
       return 1;         /* accept */
+
+
+    /* ziheng-2024.1.31 */
+    /* gibbs move rejected. */
+    if (debug_gibbs) {
+      long k = coal_sum;
+      double a = opt_theta_alpha, b = opt_theta_beta, T2 = T2h_sum, lnacc;
+      if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
+        /* proposal ratio & posterior ratio */
+        lnacc = (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, a1 / b1,
+          oldtheta, newtheta, lnacceptance, lnacc);
+      }
+      else {
+        /* proposal ratio & posterior ratio */
+        lnacc = (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, b1 / (a1 - 1),
+          oldtheta, newtheta, lnacceptance, lnacc);
+      }
+    }
 
     /* reject */
     for (i = 0; i < lcount; ++i)
@@ -3069,7 +3121,7 @@ static int propose_theta_gibbs_im(stree_t * stree,
     }
     return 0;
   }
-
+  assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA);
   return 1;
 }
 
@@ -3178,32 +3230,34 @@ static int propose_theta_gibbs(stree_t * stree,
       if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
         n += 1 + snode->date_count[msa_index][nextDateInd];
         if (nextDateInd + 1 < snode->epoch_count[msa_index])
-                nextDateInd++;
+          nextDateInd++;
         else
-                nextDateInd = -1;
+          nextDateInd = -1;
      }
-
     }
   }
 
 
-  /* MSC(i) model */
+  /* ziheng-2024.1.31 */
+  if (debug_gibbs)
+    debug_gibbs_times++;
+
+  /* MSC and MSC-I models */
   a1 = opt_theta_alpha + coal_sum;
   b1 = opt_theta_beta + T2h_sum;
   if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
-    b1 = opt_theta_beta * a1 * (a1 + 1) /
-      (opt_theta_alpha * (opt_theta_alpha + 1) + T2h_sum * opt_theta_beta);
-    double a1t = a1, b1t = b1, T2 = T2h_sum;
+    /* ziheng-2024.1.31 */
     get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, T2h_sum, &a1, &b1);
-    //      printf("theta_%s: T k = %9.6f %6ld a1 = %8.1f %8.1f  b1 = %8.0f %8.0f  mean = %8.5f %8.5f %8.5f\n",
-    //        snode->label, T2, coal_sum, a1t, a1, b1t, b1, T2 /coal_sum, a1t / b1t, a1 / b1);
   }
 
   /* save old theta in case of metropolized gibbs */
   oldtheta = snode->theta;
   /* new theta */
-  newtheta = snode->theta = legacy_rndgamma(thread_index, a1) / b1;
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop & BPP_THETA_PROP_MG_INVG))
+    newtheta = snode->theta = 1 / (legacy_rndgamma(thread_index, a1) / b1);
+  else
+    newtheta = snode->theta = legacy_rndgamma(thread_index, a1) / b1;
 
   lcount = 1;
   stree->td[0] = snode;
@@ -3237,33 +3291,65 @@ static int propose_theta_gibbs(stree_t * stree,
   }
 
   /* acceptance-rejetion step */
-  /* prior ratio */
-  lnacceptance += (opt_theta_alpha-1) * log(newtheta / oldtheta) -
-                  opt_theta_beta*(newtheta - oldtheta);
-
-  /* proposal ratio */
-  lnacceptance += (a1-1) * log(oldtheta / newtheta) - b1*(oldtheta - newtheta);
-
-  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
-    return 1;         /* accept */
-
-  /* reject */
-  for (i = 0; i < lcount; ++i)
-    stree->td[i]->theta = oldtheta;
-
-  for (i = 0; i < opt_locus_count; ++i)
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
-    for (j = 0; j < lcount; ++j)
-    {
-      snode_t * x = stree->td[j];
+    /* prior ratio */
+    lnacceptance += (opt_theta_alpha - 1) * log(newtheta / oldtheta) -
+      opt_theta_beta * (newtheta - oldtheta);
 
-      /* revert density contributions */
-      gtree[i]->logpr -= x->logpr_contrib[i];
-      gtree[i]->logpr += x->old_logpr_contrib[i];
-      x->logpr_contrib[i] = x->old_logpr_contrib[i];
+    /* proposal ratio */
+    if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
+      lnacceptance += (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
+    else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
+      lnacceptance += (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
+
+    /* ziheng-2024.1.31 */
+    /* gibbs move rejected. */
+    if (debug_gibbs) {
+      long k = coal_sum;
+      double a = opt_theta_alpha, b = opt_theta_beta, T2 = T2h_sum, lnacc;
+      if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
+        /* proposal ratio & posterior ratio */
+        lnacc = (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, a1 / b1,
+          oldtheta, newtheta, lnacceptance, lnacc);
+      }
+      else {
+        /* proposal ratio & posterior ratio */
+        lnacc = (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, b1 / (a1 - 1),
+          oldtheta, newtheta, lnacceptance, lnacc);
+      }
     }
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+      return 1;         /* accept */
+
+    /* reject */
+    for (i = 0; i < lcount; ++i)
+      stree->td[i]->theta = oldtheta;
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      for (j = 0; j < lcount; ++j)
+      {
+        snode_t* x = stree->td[j];
+
+        /* revert density contributions */
+        gtree[i]->logpr -= x->logpr_contrib[i];
+        gtree[i]->logpr += x->old_logpr_contrib[i];
+        x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      }
+    }
+    return 0;
   }
-  return 0;
+
+  assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA);
+  return 1;
 }
 
 static int propose_theta_slide(stree_t * stree,
@@ -3415,7 +3501,7 @@ void stree_propose_theta(gtree_t ** gtree,
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (legacy_rndu(thread_index) < opt_theta_slide_prob) /* slide */
+      if (opt_theta_slide_prob>0 && legacy_rndu(thread_index) < opt_theta_slide_prob) /* slide */
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_SLIDE;
         av = acceptvec_slide;

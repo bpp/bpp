@@ -269,6 +269,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_INVGAMMA        1
 #define BPP_THETA_PRIOR_GAMMA           2
 #define BPP_THETA_PRIOR_MAX             2
+#define BPP_THETA_PROP_MG_INVG          1
+#define BPP_THETA_PROP_MG_GAMMA         2
 
 #define BPP_THETA_MOVE_MIN              0
 #define BPP_THETA_MOVE_SLIDE            0
@@ -1132,6 +1134,7 @@ extern long opt_siterate_fixed;
 extern long opt_tau_dist;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_prior;
+extern long opt_theta_prop;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;

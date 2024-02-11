@@ -270,15 +270,13 @@ static void print_mcmc_headerline(FILE * fp,
     /* compute mean taus */
 
     /* 2a. calculate number of taus to print */
-    max_param_count = MIN(stree->tip_count+stree->inner_count,
-                          MAX_TAU_OUTPUT);
+    max_param_count = MIN(stree->tip_count+stree->inner_count, MAX_TAU_OUTPUT);
 
     /* 2b. calculate means */
     k = 0;
     for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
     {
       if (stree->nodes[j]->tau == 0) continue;
-      
       if (++k == max_param_count) break;
     }
     mean_tau_count = k;
@@ -3976,15 +3974,23 @@ void cmd_run()
   fprintf(stdout, "Theta proposal: ");
   if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1)
   {
-    fprintf(stdout,
-      "Mixed: Sliding window (%.2f) + %s Gibbs sampler (%.2f))\n",
-      opt_theta_slide_prob,
-      opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA ? "Inv-G" : "Gamma approx", 1 - opt_theta_slide_prob);
+    if(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+      fprintf(stdout, "Mixed: Sliding window (%.2f) + %s Gibbs sampler (%.2f))\n",
+        opt_theta_slide_prob, "Inv-G", 1 - opt_theta_slide_prob);
+    else 
+      fprintf(stdout, "Mixed: Sliding window (%.2f) + %s approx Gibbs (%.2f))\n",
+        opt_theta_slide_prob, 
+        (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA ? "Gamma" : "Inv-G"),
+        1 - opt_theta_slide_prob);
   }
   else if (opt_theta_slide_prob == 1)
     fprintf(stdout, "Sliding window\n");
-  else if (opt_theta_slide_prob == 0)
-    fprintf(stdout, "%s\n", opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA ? "Inv-G" : "Gamma approx");
+  else if (opt_theta_slide_prob == 0) {
+    if(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+      fprintf(stdout, "%s\n",  "Inv-G");
+    else
+      fprintf(stdout, "%s approx\n", (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA ? "Gamma" : "Inv-G"));
+  }
   else
     fatal("opt_theta_slide_prob out of range");
 
