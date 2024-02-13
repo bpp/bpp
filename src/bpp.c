@@ -874,6 +874,10 @@ void args_init(int argc, char ** argv)
 
     if(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA && opt_theta_prop != -1)
       fatal("command-line theta-prop error: only inv-G is used for inv-G prior on theta");
+
+    if(opt_theta_prior == BPP_THETA_PRIOR_GAMMA && opt_theta_prop == -1)
+      opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+
   }
   if (opt_simulate)
     load_cfile_sim();
