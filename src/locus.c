@@ -656,6 +656,11 @@ locus_t * locus_create(unsigned int dtype,
   locus->diploid_resolution_count = NULL;
   locus->likelihood_vector = NULL;
 
+  if (attributes & PLL_ATTRIB_ARCH_NEON)
+  {
+    locus->alignment = PLL_ALIGNMENT_NEON;
+    locus->states_padded = (states+1) & 0xFFFFFFFE;
+  }
   if (attributes & PLL_ATTRIB_ARCH_SSE)
   {
     locus->alignment = PLL_ALIGNMENT_SSE;

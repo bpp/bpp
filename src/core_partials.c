@@ -94,6 +94,34 @@ void pll_core_update_partial_tt(unsigned int states,
   unsigned int j,k,n;
   const double * offset;
 
+  #ifdef HAVE_NEON
+  if (attrib & PLL_ATTRIB_ARCH_NEON)
+  {
+    if (states == 4)
+      pll_core_update_partial_tt_4x4_neon(sites,
+                                          rate_cats,
+                                          parent_clv,
+                                          parent_scaler,
+                                          left_tipchars,
+                                          right_tipchars,
+                                          lookup,
+                                          attrib);
+    else
+      pll_core_update_partial_tt_neon(states,
+                                      sites,
+                                      rate_cats,
+                                      parent_clv,
+                                      parent_scaler,
+                                      left_tipchars,
+                                      right_tipchars,
+                                      lookup,
+                                      tipmap_size,
+                                      attrib);
+
+    return;
+  }
+  
+  #endif
   #ifdef HAVE_SSE3
   if (attrib & PLL_ATTRIB_ARCH_SSE)
   {
@@ -221,6 +249,22 @@ void pll_core_update_partial_ti_4x4(unsigned int sites,
   const double * lmat;
   const double * rmat;
 
+  #ifdef HAVE_NEON
+  if (attrib & PLL_ATTRIB_ARCH_NEON)
+  {
+    pll_core_update_partial_ti_4x4_neon(sites,
+                                        rate_cats,
+                                        parent_clv,
+                                        parent_scaler,
+                                        left_tipchars,
+                                        right_clv,
+                                        left_matrix,
+                                        right_matrix,
+                                        right_scaler,
+                                        attrib);
+    return;
+  }
+  #endif
   #ifdef HAVE_SSE3
   if (attrib & PLL_ATTRIB_ARCH_SSE)
   {
@@ -374,6 +418,37 @@ void pll_core_update_partial_ti(unsigned int states,
   const double * lmat;
   const double * rmat;
 
+#ifdef HAVE_NEON
+  if (attrib & PLL_ATTRIB_ARCH_NEON)
+  {
+    if (states == 4)
+      pll_core_update_partial_ti_4x4_neon(sites,
+                                          rate_cats,
+                                          parent_clv,
+                                          parent_scaler,
+                                          left_tipchars,
+                                          right_clv,
+                                          left_matrix,
+                                          right_matrix,
+                                          right_scaler,
+                                          attrib);
+    else
+      pll_core_update_partial_ti_neon(states,
+                                      sites,
+                                      rate_cats,
+                                      parent_clv,
+                                      parent_scaler,
+                                      left_tipchars,
+                                      right_clv,
+                                      left_matrix,
+                                      right_matrix,
+                                      right_scaler,
+                                      tipmap,
+                                      tipmap_size,
+                                      attrib);
+    return;
+  }
+#endif
 #ifdef HAVE_SSE3
   if (attrib & PLL_ATTRIB_ARCH_SSE)
   {
@@ -531,6 +606,24 @@ void pll_core_update_partial_ii(unsigned int states,
 
   unsigned int span = states * rate_cats;
 
+#ifdef HAVE_NEON
+  if (attrib & PLL_ATTRIB_ARCH_NEON)
+  {
+    pll_core_update_partial_ii_neon(states,
+                                    sites,
+                                    rate_cats,
+                                    parent_clv,
+                                    parent_scaler,
+                                    left_clv,
+                                    right_clv,
+                                    left_matrix,
+                                    right_matrix,
+                                    left_scaler,
+                                    right_scaler,
+                                    attrib);
+    return;
+  }
+#endif
 #ifdef HAVE_SSE3
   if (attrib & PLL_ATTRIB_ARCH_SSE)
   {
@@ -732,6 +825,25 @@ void pll_core_create_lookup(unsigned int states,
                             unsigned int attrib)
 {
 
+  #ifdef HAVE_NEON
+  if (attrib & PLL_ATTRIB_ARCH_NEON)
+  {
+    if (states == 4)
+      pll_core_create_lookup_4x4_neon(rate_cats,
+                                      lookup,
+                                      left_matrix,
+                                      right_matrix);
+    else
+      pll_core_create_lookup_neon(states,
+                                  rate_cats,
+                                  lookup,
+                                  left_matrix,
+                                  right_matrix,
+                                  tipmap,
+                                  tipmap_size);
+    return;
+  }
+  #endif
   #ifdef HAVE_SSE3
   if (attrib & PLL_ATTRIB_ARCH_SSE)
   {

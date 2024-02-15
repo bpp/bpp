@@ -648,6 +648,8 @@ void args_init(int argc, char ** argv)
           opt_arch = PLL_ATTRIB_ARCH_AVX;
         else if (!strcasecmp(optarg,"avx2"))
           opt_arch = PLL_ATTRIB_ARCH_AVX2;
+        else if (!strcasecmp(optarg, "neon"))
+          opt_arch = PLL_ATTRIB_ARCH_NEON;
         else
           fatal("Invalid instruction set (%s)", optarg);
         break;

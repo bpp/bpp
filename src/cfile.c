@@ -2743,6 +2743,8 @@ void load_cfile()
           opt_arch = PLL_ATTRIB_ARCH_AVX;
         else if (!strcasecmp(temp,"avx2"))
           opt_arch = PLL_ATTRIB_ARCH_AVX2;
+        else if (!strcasecmp(temp,"neon"))
+          opt_arch = PLL_ATTRIB_ARCH_NEON;
         else
           fatal("Invalid instruction set (%s) (line %ld)", temp, line_count);
 

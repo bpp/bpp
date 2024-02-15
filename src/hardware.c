@@ -233,6 +233,8 @@ void cpu_setarch()
       printf("User specified SIMD ISA: AVX\n\n");
     else if (opt_arch == PLL_ATTRIB_ARCH_AVX2)
       printf("User specified SIMD ISA: AVX2\n\n");
+    else if (opt_arch == PLL_ATTRIB_ARCH_NEON)
+      printf("User specified SIMD ISA: NEON\n\n");
     else
       fatal("Internal error when setting arch");
 
@@ -252,6 +254,10 @@ void cpu_setarch()
   if (avx2_present)
     opt_arch = PLL_ATTRIB_ARCH_AVX2;
 #endif
+#ifdef HAVE_NEON
+  if (neon_present)
+    opt_arch = PLL_ATTRIB_ARCH_NEON;
+#endif
 
   if (opt_arch == PLL_ATTRIB_ARCH_CPU)
     printf("Auto-selected SIMD ISA: CPU\n\n");
@@ -261,6 +267,8 @@ void cpu_setarch()
     printf("Auto-selected SIMD ISA: AVX\n\n");
   else if (opt_arch == PLL_ATTRIB_ARCH_AVX2)
     printf("Auto-selected SIMD ISA: AVX2\n\n");
+  else if (opt_arch == PLL_ATTRIB_ARCH_NEON)
+    printf("Auto-selected SIMD ISA: NEON\n\n");
   else
     fatal("Internal error when setting arch");
 }
