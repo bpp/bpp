@@ -1698,7 +1698,7 @@ static void print_rates(FILE ** fp_locus,
           fprintf(fp_locus[i],
                   "%s%.6f",
                   tab_required ? "\t" : "",
-                  locus[i]->subst_params[0][0]/locus[i]->subst_params[0][1]);
+                  locus[i]->subst_params[0][1]/locus[i]->subst_params[0][0]);
           tab_required = 1;
         }
         else if (locus[i]->model == BPP_DNA_MODEL_F81)
@@ -1717,7 +1717,7 @@ static void print_rates(FILE ** fp_locus,
           fprintf(fp_locus[i],
                   "%s%.6f",
                   tab_required ? "\t" : "",
-                  locus[i]->subst_params[0][0] / locus[i]->subst_params[0][1]);
+                  locus[i]->subst_params[0][1] / locus[i]->subst_params[0][0]);
           tab_required = 1;
           for (j = 0; j < 4; ++j)
             fprintf(fp_locus[i], "\t%.6f", locus[i]->frequencies[0][findices[j]]);
