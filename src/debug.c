@@ -551,9 +551,9 @@ void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index)
     snode_t * snode = stree->nodes[i];
 
     long lout = snode->left->seqin_count[msa_index] -
-                snode->left->event_count[msa_index];
+                snode->left->coal_count[msa_index];
     long rout = snode->right->seqin_count[msa_index] -
-                snode->right->event_count[msa_index];
+                snode->right->coal_count[msa_index];
 
     if (opt_migration)
     {
@@ -570,7 +570,7 @@ void debug_check_relations(stree_t * stree, gtree_t * gtree, long msa_index)
     assert(snode->seqin_count[msa_index] == lout+rout);
   }
   snode_t * sroot = stree->root;
-  assert(sroot->seqin_count[msa_index] - sroot->event_count[msa_index] == 1);
+  assert(sroot->seqin_count[msa_index] - sroot->coal_count[msa_index] == 1);
 
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
@@ -1310,8 +1310,8 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
     unsigned int event_count = 0;
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
     {
-      event_count += stree->nodes[j]->event_count[i];
-      dlist_item_t * item = stree->nodes[j]->event[i]->head;
+      event_count += stree->nodes[j]->coal_count[i];
+      dlist_item_t * item = stree->nodes[j]->coalevent[i]->head;
       int pop_event_count = 0;
       while (item)
       {
@@ -1321,7 +1321,7 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
 
         item = item->next;
       }
-      assert(pop_event_count == stree->nodes[j]->event_count[i]);
+      assert(pop_event_count == stree->nodes[j]->coal_count[i]);
     }
     assert(event_count == gtree->inner_count);
   }

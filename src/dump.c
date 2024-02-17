@@ -620,7 +620,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   /* write number of coalescent events */
   assert(opt_locus_count == stree->locus_count);
   for (i = 0; i < total_nodes; ++i)
-    DUMP(stree->nodes[i]->event_count,opt_locus_count,fp);
+    DUMP(stree->nodes[i]->coal_count,opt_locus_count,fp);
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
@@ -654,7 +654,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     {
       DUMP(stree->nodes[i]->t2h,opt_locus_count,fp);
       DUMP(&(stree->nodes[i]->t2h_sum),1,fp);
-      DUMP(&(stree->nodes[i]->event_count_sum),1,fp);
+      DUMP(&(stree->nodes[i]->coal_count_sum),1,fp);
       DUMP(&(stree->nodes[i]->notheta_logpr_contrib),1,fp);
     }
 
@@ -685,7 +685,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
   {
     for (j = 0; j < opt_locus_count; ++j)
     {
-      dlist_item_t * di = stree->nodes[i]->event[j]->head;
+      dlist_item_t * di = stree->nodes[i]->coalevent[j]->head;
       while (di)
       {
         gnode_t * gnode = (gnode_t *)(di->data);

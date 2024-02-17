@@ -357,7 +357,7 @@ void debug_print_network_node_attribs(stree_t * stree)
       xasprintf(&s,
                 "%d/%d/%d",
                 stree->nodes[i]->seqin_count[msa_index],
-                stree->nodes[i]->event_count[msa_index],
+                stree->nodes[i]->coal_count[msa_index],
                 stree->nodes[i]->gene_leaves[msa_index]);
       if (strlen(s) > (size_t)pad)
       {
@@ -474,22 +474,22 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->data = NULL;
 
   /* event doubly-linked lists */
-  if (!clone->event)
+  if (!clone->coalevent)
   {
-    clone->event = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
+    clone->coalevent = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
     for (i = 0; i < msa_count; ++i)
-      clone->event[i] = dlist_create();
+      clone->coalevent[i] = dlist_create();
   }
   else
   {
     for (i = 0; i < msa_count; ++i)
-      dlist_clear(clone->event[i], NULL);
+      dlist_clear(clone->coalevent[i], NULL);
   }
 
   /* event counts per locus */
-  if (!clone->event_count)
-    clone->event_count = (int *)xmalloc(msa_count * sizeof(int));
-  memcpy(clone->event_count, snode->event_count, msa_count * sizeof(int));
+  if (!clone->coal_count)
+    clone->coal_count = (int *)xmalloc(msa_count * sizeof(int));
+  memcpy(clone->coal_count, snode->coal_count, msa_count * sizeof(int));
 
   /* branch rate (per locus) */
   if (snode->brate)
@@ -530,7 +530,7 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   if (!opt_est_theta)
   {
     clone->t2h_sum = snode->t2h_sum;
-    clone->event_count_sum = snode->event_count_sum;
+    clone->coal_count_sum = snode->coal_count_sum;
     clone->notheta_logpr_contrib = snode->notheta_logpr_contrib;
     clone->notheta_old_logpr_contrib = snode->notheta_old_logpr_contrib;
 
@@ -874,15 +874,15 @@ static void events_clone(stree_t * stree,
     {
       gtree_t * clone_gtree = clone_gtree_list[j];
 
-      for (item = stree->nodes[i]->event[j]->head; item; item = item->next)
+      for (item = stree->nodes[i]->coalevent[j]->head; item; item = item->next)
       {
         gnode_t * original_node = (gnode_t *)(item->data);
         unsigned int node_index = original_node->node_index;
         gnode_t * cloned_node = (gnode_t *)(clone_gtree->nodes[node_index]);
 
-        cloned = dlist_append(clone_stree->nodes[i]->event[j], cloned_node);
+        cloned = dlist_append(clone_stree->nodes[i]->coalevent[j], cloned_node);
 
-        cloned_node->event = cloned;
+        cloned_node->coalevent = cloned;
       }
     }
   }
@@ -2714,8 +2714,8 @@ void stree_init(stree_t * stree,
   {
     snode_t * snode = stree->nodes[i];
 
-    snode->event = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
-    snode->event_count = (int *)xcalloc(msa_count, sizeof(int));
+    snode->coalevent = (dlist_t **)xcalloc(msa_count, sizeof(dlist_t *));
+    snode->coal_count = (int *)xcalloc(msa_count, sizeof(int));
     snode->seqin_count = (int *)xcalloc(msa_count, sizeof(int));
     snode->gene_leaves = (unsigned int *)xcalloc(msa_count,sizeof(unsigned int));
     /* TODO: The next two allocations might not be necessary when computing
@@ -2730,11 +2730,11 @@ void stree_init(stree_t * stree,
       snode->t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
       snode->old_t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
       snode->t2h_sum = 0;
-      snode->event_count_sum = 0;
+      snode->coal_count_sum = 0;
     }
 
     for (j = 0; j < stree->locus_count; ++j)
-      snode->event[j] = dlist_create();
+      snode->coalevent[j] = dlist_create();
   }
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -2912,7 +2912,7 @@ static int propose_theta_gibbs_im(stree_t* stree,
   double T2h_sum = 0;
   double a1, b1;
   size_t alloc_required;
-  dlist_item_t* event;
+  dlist_item_t* coalevent;
   dlist_item_t* li;
   migbuffer_t* migbuffer;
 
@@ -2922,14 +2922,14 @@ static int propose_theta_gibbs_im(stree_t* stree,
   {
     /* make sure migbuffer is large enough */
     alloc_required = snode->migevent_count[msa_index] +
-      snode->event_count[msa_index] +
+      snode->coal_count[msa_index] +
       stree->inner_count + 1;
     migbuffer_check_and_realloc(thread_index, alloc_required);
     migbuffer = global_migbuffer_r[thread_index];
 
     heredity = locus[msa_index]->heredity[0];
 
-    coal_sum += snode->event_count[msa_index];
+    coal_sum += snode->coal_count[msa_index];
     for (j = 0; j < total_nodes; ++j)
     {
       if (stree->nodes[j] == snode) continue;
@@ -2942,9 +2942,9 @@ static int propose_theta_gibbs_im(stree_t* stree,
     migbuffer[0].time = snode->tau;
     migbuffer[0].type = EVENT_TAU;
     j = 1;
-    for (event = snode->event[msa_index]->head; event; event = event->next)
+    for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
     {
-      gnode_t* gnode = (gnode_t*)(event->data);
+      gnode_t* gnode = (gnode_t*)(coalevent->data);
       migbuffer[j].time = gnode->time;
       migbuffer[j++].type = EVENT_COAL;
     }
@@ -3196,7 +3196,7 @@ static int propose_theta_gibbs(stree_t * stree,
   {
     heredity = locus[msa_index]->heredity[0];
 
-    coal_sum += snode->event_count[msa_index];
+    coal_sum += snode->coal_count[msa_index];
 
     sortbuffer[0] = snode->tau;
     j = 1;
@@ -3209,7 +3209,7 @@ static int propose_theta_gibbs(stree_t * stree,
       }
     }
 
-    for (event = snode->event[msa_index]->head; event; event = event->next)
+    for (event = snode->coalevent[msa_index]->head; event; event = event->next)
     {
       gnode_t* gnode = (gnode_t*)(event->data);
       sortbuffer[j++] = gnode->time;
@@ -3847,7 +3847,7 @@ void propose_tau_update_gtrees(locus_t ** loci,
       if ((affected[j]->seqin_count[i] > 1) || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
       {
         dlist_item_t * event;
-        for (event = affected[j]->event[i]->head; event; event = event->next)
+        for (event = affected[j]->coalevent[i]->head; event; event = event->next)
         {
           gnode_t * node = (gnode_t *)(event->data);
           //if (node->time < minage) continue;
@@ -4393,7 +4393,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     {
       /* process events for current population */
         dlist_item_t * event;
-        for (event = affected[j]->event[i]->head; event; event = event->next)
+        for (event = affected[j]->coalevent[i]->head; event; event = event->next)
         {
           gnode_t * node = (gnode_t *)(event->data);
           if ((node->time < minage) || (node->time > maxage)) continue;
@@ -4839,8 +4839,8 @@ static long propose_tau(locus_t ** loci,
         paffected_count = 0;
         for (i = 0; i < stree->locus_count; ++i)
         {
-          assert(snode->event_count[i] == 0);
-          assert(snode->hybrid->event_count[i] == 0);
+          assert(snode->coal_count[i] == 0);
+          assert(snode->hybrid->coal_count[i] == 0);
         }
 
         affected[paffected_count++] = snode->parent;
@@ -4871,10 +4871,10 @@ static long propose_tau(locus_t ** loci,
         /* assertions */
         if (!snode->htau)
           for (i = 0; i < stree->locus_count; ++i)
-            assert(snode->event_count[i] == 0);
+            assert(snode->coal_count[i] == 0);
         if (!snode->hybrid->htau)
           for (i = 0; i < stree->locus_count; ++i)
-            assert(snode->hybrid->event_count[i] == 0);
+            assert(snode->hybrid->coal_count[i] == 0);
 
         if (!snode->htau)
         {
@@ -4901,8 +4901,8 @@ static long propose_tau(locus_t ** loci,
       assert(node_is_bidirection(snode));
       for (i = 0; i < stree->locus_count; ++i)
       {
-        assert(snode->hybrid->event_count[i] == 0);
-        assert(snode->right->event_count[i] == 0);
+        assert(snode->hybrid->coal_count[i] == 0);
+        assert(snode->right->coal_count[i] == 0);
       }
 
       paffected_count = 0;
@@ -6671,14 +6671,14 @@ long stree_propose_spr(stree_t ** streeptr,
       /* remove  gene node from list of coalescent events of its old population */
       unlink_event(node, i);
 
-      node->pop->event_count[i]--;
+      node->pop->coal_count[i]--;
       if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
       {
         node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
         snode_contrib[snode_contrib_count[i]++] = node->pop;
       }
       if (!opt_est_theta)
-        node->pop->event_count_sum--;
+        node->pop->coal_count_sum--;
 
       node->pop = pop_cz;
       if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
@@ -6687,11 +6687,11 @@ long stree_propose_spr(stree_t ** streeptr,
         snode_contrib[snode_contrib_count[i]++] = node->pop;
       }
 
-      dlist_item_append(node->pop->event[i], node->event);
+      dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-      node->pop->event_count[i]++;
+      node->pop->coal_count[i]++;
       if (!opt_est_theta)
-        node->pop->event_count_sum++;
+        node->pop->coal_count_sum++;
 
       /* update leaf counts */
       while (node)
@@ -6714,14 +6714,14 @@ long stree_propose_spr(stree_t ** streeptr,
         /* remove  gene node from list of coalescent events of its old population */
         unlink_event(node, i);
 
-        node->pop->event_count[i]--;
+        node->pop->coal_count[i]--;
         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
         {
           node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
         if (!opt_est_theta)
-          node->pop->event_count_sum--;
+          node->pop->coal_count_sum--;
 
         node->pop = b;
         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
@@ -6730,11 +6730,11 @@ long stree_propose_spr(stree_t ** streeptr,
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
 
-        dlist_item_append(node->pop->event[i], node->event);
+        dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-        node->pop->event_count[i]++;
+        node->pop->coal_count[i]++;
         if (!opt_est_theta)
-          node->pop->event_count_sum++;
+          node->pop->coal_count_sum++;
       }
       else if (node->pop == c && node->time > y->tau)
       {
@@ -6755,14 +6755,14 @@ long stree_propose_spr(stree_t ** streeptr,
         /* remove  gene node from list of coalescent events of its old population */
         unlink_event(node, i);
 
-        node->pop->event_count[i]--;
+        node->pop->coal_count[i]--;
         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
         {
           node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
         if (!opt_est_theta)
-          node->pop->event_count_sum--;
+          node->pop->coal_count_sum--;
 
         node->pop = y;
         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
@@ -6771,11 +6771,11 @@ long stree_propose_spr(stree_t ** streeptr,
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
 
-        dlist_item_append(node->pop->event[i], node->event);
+        dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-        node->pop->event_count[i]++;
+        node->pop->coal_count[i]++;
         if (!opt_est_theta)
-          node->pop->event_count_sum++;
+          node->pop->coal_count_sum++;
       }
       //else if (node->mark == LINEAGE_A && node->time > y->tau && node->time < z->tau)
       else if ((node->mark & LINEAGE_A && !(node->mark & LINEAGE_OTHER)) && node->time > y->tau && node->time < z->tau)
@@ -6803,14 +6803,14 @@ long stree_propose_spr(stree_t ** streeptr,
 
         unlink_event(node, i);
 
-        node->pop->event_count[i]--;
+        node->pop->coal_count[i]--;
         if (!(node->pop->mark[thread_index] & FLAG_POP_UPDATE))
         {
           node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
         if (!opt_est_theta)
-          node->pop->event_count_sum--;
+          node->pop->coal_count_sum--;
 
         if (pop == c)
           node->pop = y;
@@ -6823,11 +6823,11 @@ long stree_propose_spr(stree_t ** streeptr,
           snode_contrib[snode_contrib_count[i]++] = node->pop;
         }
 
-        dlist_item_append(node->pop->event[i], node->event);
+        dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-        node->pop->event_count[i]++;
+        node->pop->coal_count[i]++;
         if (!opt_est_theta)
-          node->pop->event_count_sum++;
+          node->pop->coal_count_sum++;
       }
     }
 
@@ -6835,11 +6835,11 @@ long stree_propose_spr(stree_t ** streeptr,
          (a) they have not been already flagged in a previous step
          (b) there is more than one outgoing lineages (entering its parent population).
     */
-    if (!(y->mark[thread_index] & FLAG_POP_UPDATE) && (y->seqin_count[i] - y->event_count[i] > 1))
+    if (!(y->mark[thread_index] & FLAG_POP_UPDATE) && (y->seqin_count[i] - y->coal_count[i] > 1))
       snode_contrib[snode_contrib_count[i]++] = y;
-    if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->event_count[i] > 1))
+    if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->coal_count[i] > 1))
       snode_contrib[snode_contrib_count[i]++] = c;
-    if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->event_count[i] > 1))
+    if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->coal_count[i] > 1))
       snode_contrib[snode_contrib_count[i]++] = b;
 
     moved_nodes += gtree->inner_count;
@@ -8671,17 +8671,17 @@ long snl_scale_clade(gnode_t * node,
     {
       /* remove gene node from list of coal events of its old population */
       unlink_event(node,msa_index);
-      node->pop->event_count[msa_index]--;
+      node->pop->coal_count[msa_index]--;
       if (!opt_est_theta)
-        node->pop->event_count_sum--;
+        node->pop->coal_count_sum--;
 
       node->pop = rway[i-1];
       node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
 
-      dlist_item_append(node->pop->event[msa_index], node->event);
-      node->pop->event_count[msa_index]++;
+      dlist_item_append(node->pop->coalevent[msa_index], node->coalevent);
+      node->pop->coal_count[msa_index]++;
       if (!opt_est_theta)
-        node->pop->event_count_sum++;
+        node->pop->coal_count_sum++;
     }
   }
 
@@ -8973,20 +8973,20 @@ long snl_expand_and_shrink(stree_t * stree,
 
       /* remove  gene node from list of coalescent events of its old population */
       unlink_event(node, i);
-      node->pop->event_count[i]--;
+      node->pop->coal_count[i]--;
 
       node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
       if (!opt_est_theta)
-        node->pop->event_count_sum--;
+        node->pop->coal_count_sum--;
 
       node->pop = newpop;
       node->pop->mark[thread_index] |= FLAG_POP_UPDATE;
 
-      dlist_item_append(node->pop->event[i], node->event);
+      dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-      node->pop->event_count[i]++;
+      node->pop->coal_count[i]++;
       if (!opt_est_theta)
-        node->pop->event_count_sum++;
+        node->pop->coal_count_sum++;
 
       /* update leaf counts for moved node */
       for (; node; node = node->parent)
@@ -9002,7 +9002,7 @@ long snl_expand_and_shrink(stree_t * stree,
       scaled_count += snl_scale_clade(gtree->root,rway,ytaunew,taufactor,i,thread_index);
 
     /* Now process square nodes: AB -> B */
-    dlist_item_t * item = y->event[i]->head;
+    dlist_item_t * item = y->coalevent[i]->head;
     while (item)
     {
       gnode_t * node = (gnode_t *)(item->data);
@@ -9012,24 +9012,24 @@ long snl_expand_and_shrink(stree_t * stree,
 
       /* square node */
       unlink_event(node,i);
-      node->pop->event_count[i]--;
+      node->pop->coal_count[i]--;
       if (!opt_est_theta)
-        node->pop->event_count_sum--;
+        node->pop->coal_count_sum--;
 
       node->pop = b;
 
-      dlist_item_append(node->pop->event[i], node->event);
+      dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-      node->pop->event_count[i]++;
+      node->pop->coal_count[i]++;
       if (!opt_est_theta)
-        node->pop->event_count_sum++;
+        node->pop->coal_count_sum++;
 
       y->mark[thread_index] |= FLAG_POP_UPDATE;
       b->mark[thread_index] |= FLAG_POP_UPDATE;
     }
     
     /* Now process diamond nodes: C -> AC */
-    item = c->event[i]->head;
+    item = c->coalevent[i]->head;
     while (item)
     {
       gnode_t * node = (gnode_t *)(item->data);
@@ -9039,17 +9039,17 @@ long snl_expand_and_shrink(stree_t * stree,
 
       /* diamond node */
       unlink_event(node,i);
-      node->pop->event_count[i]--;
+      node->pop->coal_count[i]--;
       if (!opt_est_theta)
-        node->pop->event_count_sum--;
+        node->pop->coal_count_sum--;
 
       node->pop = y;
 
-      dlist_item_append(node->pop->event[i], node->event);
+      dlist_item_append(node->pop->coalevent[i], node->coalevent);
 
-      node->pop->event_count[i]++;
+      node->pop->coal_count[i]++;
       if (!opt_est_theta)
-        node->pop->event_count_sum++;
+        node->pop->coal_count_sum++;
 
       y->mark[thread_index] |= FLAG_POP_UPDATE;
       c->mark[thread_index] |= FLAG_POP_UPDATE;
@@ -9064,10 +9064,10 @@ long snl_expand_and_shrink(stree_t * stree,
          (b) there is more than one outgoing lineages (entering its parent population).
     */
 
-    if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->event_count[i] > 1))
+    if (!(c->mark[thread_index] & FLAG_POP_UPDATE) && (c->seqin_count[i] - c->coal_count[i] > 1))
       c->mark[thread_index] |= FLAG_POP_UPDATE;
       //snode_contrib[snode_contrib_count[i]++] = c;
-    if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->event_count[i] > 1))
+    if (!(b->mark[thread_index] & FLAG_POP_UPDATE) && (b->seqin_count[i] - b->coal_count[i] > 1))
       b->mark[thread_index] |= FLAG_POP_UPDATE;
       //snode_contrib[snode_contrib_count[i]++] = b;
 
@@ -9776,7 +9776,7 @@ double migrate_gibbs(stree_t * stree,
   for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
   {
     alloc_required = tgt->migevent_count[msa_index] +
-                     tgt->event_count[msa_index] +
+                     tgt->coal_count[msa_index] +
                      stree->inner_count+1;
     migbuffer_check_and_realloc(thread_index,alloc_required);
     migbuffer = global_migbuffer_r[thread_index];
@@ -9790,7 +9790,7 @@ double migrate_gibbs(stree_t * stree,
     migbuffer[0].time = tgt->tau;
     migbuffer[0].type = EVENT_TAU;
     j = 1;
-    for (event = tgt->event[msa_index]->head; event; event = event->next)
+    for (event = tgt->coalevent[msa_index]->head; event; event = event->next)
     {
       gnode_t* gnode = (gnode_t*)(event->data);
       migbuffer[j].time   = gnode->time;
@@ -10511,9 +10511,9 @@ long dissolve_incoming_lineages(stree_t * stree,
     gnode_t * father = p->parent;
 
     unlink_event(p, gtree->msa_index);
-    p->pop->event_count[gtree->msa_index]--;
+    p->pop->coal_count[gtree->msa_index]--;
     if (!opt_est_theta)
-      p->pop->event_count_sum--;
+      p->pop->coal_count_sum--;
 
     /* decrease the number of incoming lineages to all populations in the path from
     p population (excluding) to the father population (including) */
@@ -10583,9 +10583,9 @@ static gnode_t * subtree_prune_from_pop(stree_t * stree,
   if (father)
   {
     unlink_event(father,msa_index);
-    father->pop->event_count[msa_index]--;
+    father->pop->coal_count[msa_index]--;
     if (!opt_est_theta)
-      father->pop->event_count_sum--;
+      father->pop->coal_count_sum--;
   }
 
   /* decrease the number of incoming lineages to all populations in the path from
@@ -10725,18 +10725,18 @@ void pruneoff(stree_t * stree,
 
     /* remove ancestor from coalescent events of its population */
     unlink_event(pruned->parent,msa_index);
-    pruned->parent->pop->event_count[msa_index]--;
+    pruned->parent->pop->coal_count[msa_index]--;
     if (!opt_est_theta)
-      pruned->parent->pop->event_count_sum--;
+      pruned->parent->pop->coal_count_sum--;
 
     pruned = pruned->parent;
   }
   if (pruned->parent)
   {
     unlink_event(pruned->parent,msa_index);
-    pruned->parent->pop->event_count[msa_index]--;
+    pruned->parent->pop->coal_count[msa_index]--;
     if (!opt_est_theta)
-      pruned->parent->pop->event_count_sum--;
+      pruned->parent->pop->coal_count_sum--;
 
     sibling = (pruned->parent->left == pruned) ? pruned->parent->right : pruned->parent->left;
     deleted[p++] = pruned->parent;
@@ -10978,9 +10978,9 @@ gnode_t * pruneoff2(stree_t * stree,
   if (father)
   {
     unlink_event(father,msa_index);
-    father->pop->event_count[msa_index]--;
+    father->pop->coal_count[msa_index]--;
     if (!opt_est_theta)
-      father->pop->event_count_sum--;
+      father->pop->coal_count_sum--;
   }
 
   /* decrease the number of incoming lineages to all populations in the path from
@@ -11167,7 +11167,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
 
   /* make sure migbuffer is large enough */
   size_t alloc_required = snode->migevent_count[msa_index] +
-                          snode->event_count[msa_index] +
+                          snode->coal_count[msa_index] +
                           stree->inner_count+1;
   migbuffer_check_and_realloc(thread_index,alloc_required);
   wtimes = global_migbuffer_r[thread_index];
@@ -11382,7 +11382,7 @@ static migbuffer_t * wtimes_and_lineages(stree_t * stree,
 
   /* make sure migbuffer is large enough */
   size_t alloc_required = snode->migevent_count[msa_index] +
-                          snode->event_count[msa_index] +
+                          snode->coal_count[msa_index] +
                           stree->inner_count+1;
   migbuffer_check_and_realloc(thread_index,alloc_required);
   wtimes = global_migbuffer_r[thread_index];
@@ -11822,11 +11822,11 @@ static void subtree_regraft(gtree_t * gtree,
   }
 
   /* now add the coalescent event to the new population, at the end */
-  dlist_item_append(father->pop->event[msa_index],father->event);
+  dlist_item_append(father->pop->coalevent[msa_index],father->coalevent);
 
-  father->pop->event_count[msa_index]++;
+  father->pop->coal_count[msa_index]++;
   if (!opt_est_theta)
-    father->pop->event_count_sum++;
+    father->pop->coal_count_sum++;
 
   /* increase number of incoming lineages to all populations in the path from
    * affected population (excluding) to the father population (including) */

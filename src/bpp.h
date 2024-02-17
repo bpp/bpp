@@ -492,9 +492,9 @@ typedef struct snode_s
   double weight;
 
   /* list of per-locus coalescent events */
-  dlist_t ** event;
+  dlist_t ** coalevent;
 
-  int * event_count;
+  int * coal_count;
 
   /* branch rate (per locus)*/
   double * brate;
@@ -524,7 +524,7 @@ typedef struct snode_s
   double * old_t2h;                 /* storage space for rollback */
   double t2h_sum;                   /* t2h sum for all loci */
   double hphi_sum;                  /* hphi sum for all loci */
-  long event_count_sum;             /* sum of coalencent events count */
+  long coal_count_sum;              /* sum of coalencent events count */
   double notheta_logpr_contrib;     /* MSC density contribution from pop */
   double notheta_old_logpr_contrib; /* storage space for rollback */
   double * notheta_phi_contrib;     /* per-locus phi contribution for hybrid */
@@ -646,7 +646,7 @@ typedef struct gnode_s
   snode_t * old_pop;
 
   /* pointer to the dlist item this node is wrapped into */
-  dlist_item_t * event;
+  dlist_item_t * coalevent;
 
   unsigned int node_index;
   unsigned int clv_valid;

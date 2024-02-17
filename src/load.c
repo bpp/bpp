@@ -1028,7 +1028,7 @@ static void load_chk_section_1(FILE * fp,
   {
     snode_t * node = stree->nodes[i];
 
-    node->event_count = (int *)xmalloc((size_t)opt_locus_count * sizeof(int));
+    node->coal_count = (int *)xmalloc((size_t)opt_locus_count * sizeof(int));
     node->seqin_count = (int *)xmalloc((size_t)opt_locus_count * sizeof(int));
     node->gene_leaves = (unsigned int *)xmalloc((size_t)opt_locus_count *
                                                 sizeof(unsigned int));
@@ -1036,7 +1036,7 @@ static void load_chk_section_1(FILE * fp,
                                             sizeof(double));
     node->old_logpr_contrib = (double *)xmalloc((size_t)opt_locus_count *
                                                 sizeof(double));
-    node->event = (dlist_t **)xmalloc((size_t)opt_locus_count *
+    node->coalevent = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                       sizeof(dlist_t *));
 
     node->t2h = NULL;
@@ -1049,7 +1049,7 @@ static void load_chk_section_1(FILE * fp,
       node->t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
       node->old_t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
       node->t2h_sum = 0;
-      node->event_count_sum = 0;
+      node->coal_count_sum = 0;
     }
 
     node->brate = NULL;  /* will be allocated during reading */
@@ -1282,7 +1282,7 @@ void load_chk_section_2(FILE * fp)
 
   /* read number of coalescent events */
   for (i = 0; i < total_nodes; ++i)
-    if (!LOAD(stree->nodes[i]->event_count,opt_locus_count,fp))
+    if (!LOAD(stree->nodes[i]->coal_count,opt_locus_count,fp))
         fatal("Cannot read species event counts");
 
   /* read branch rates */
@@ -1330,7 +1330,7 @@ void load_chk_section_2(FILE * fp)
       if (!LOAD(&(stree->nodes[i]->t2h_sum),1,fp))
         fatal("Cannot read t2h sum");
 
-      if (!LOAD(&(stree->nodes[i]->event_count_sum),1,fp))
+      if (!LOAD(&(stree->nodes[i]->coal_count_sum),1,fp))
         fatal("Cannot read coalescent events sum");
 
       if (!LOAD(&(stree->nodes[i]->notheta_logpr_contrib),1,fp))
@@ -1400,18 +1400,18 @@ void load_chk_section_2(FILE * fp)
 
     for (j = 0; j < opt_locus_count; ++j)
     {
-      snode->event[j] = dlist_create();
+      snode->coalevent[j] = dlist_create();
 
-      if (!LOAD(buffer,snode->event_count[j],fp))
+      if (!LOAD(buffer,snode->coal_count[j],fp))
         fatal("Cannot read coalescent events");
 
-      for (k = 0; k < snode->event_count[j]; ++k)
+      for (k = 0; k < snode->coal_count[j]; ++k)
       {
         gnode_t * gt_node = gtree[j]->nodes[buffer[k]];
 
-        dlist_item_t * dlitem = dlist_append(snode->event[j], (void *)gt_node);
+        dlist_item_t * dlitem = dlist_append(snode->coalevent[j], (void *)gt_node);
 
-        gt_node->event = dlitem;
+        gt_node->coalevent = dlitem;
       }
     }
   }
