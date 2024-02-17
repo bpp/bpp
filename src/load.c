@@ -496,6 +496,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read est 'theta' tag");
   if (!LOAD(&opt_linkedtheta,1,fp))
     fatal("Cannot read linked theta tag");
+  if (!LOAD(&opt_theta_prop, 1, fp))
+     fatal("Cannot read theta prop tag");
   if (!LOAD(&opt_theta_gibbs_showall_eps,1,fp))
     fatal("Cannot read theta gibbs showall eps");
   if (!LOAD(&opt_theta_slide_prob,1,fp))

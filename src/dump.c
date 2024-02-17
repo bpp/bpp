@@ -300,7 +300,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_alpha,1,fp);
   DUMP(&opt_theta_beta, 1, fp);
   DUMP(&opt_est_theta,1,fp);
-  DUMP(&opt_linkedtheta,1,fp);
+  DUMP(&opt_linkedtheta, 1, fp);
+  DUMP(&opt_theta_prop, 1, fp);
   DUMP(&opt_theta_gibbs_showall_eps,1,fp);
   DUMP(&opt_theta_slide_prob,1,fp);
 
