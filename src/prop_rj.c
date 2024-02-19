@@ -227,7 +227,7 @@ static int rubber_proportional(stree_t * stree,
   /* Go through all nodes of the snode population that have lineages coming
      from both child populations and have time <= tau_upper */
   dlist_item_t * event;
-  for (event = snode->event[msa_index]->head; event; event = event->next)
+  for (event = snode->coalevent[msa_index]->head; event; event = event->next)
   {
     gnode_t * tmp = (gnode_t *)(event->data);
 
@@ -279,7 +279,7 @@ static int rubber_proportional(stree_t * stree,
     y = 1;
     nwithin = 0;
 
-    for (event = snode->event[msa_index]->head; event; event = event->next)
+    for (event = snode->coalevent[msa_index]->head; event; event = event->next)
     {
       gnode_t * tmp = (gnode_t *)(event->data);
 
@@ -325,19 +325,19 @@ static int rubber_proportional(stree_t * stree,
         
         unlink_event(gnode, msa_index);
 
-        gnode->pop->event_count[msa_index]--;
+        gnode->pop->coal_count[msa_index]--;
         if (!opt_est_theta)
-          gnode->pop->event_count_sum--;
+          gnode->pop->coal_count_sum--;
 
         gnode->mark |= MARK_POP_CHANGE;
 
         gnode->pop = newpop;
 
-        dlist_item_append(gnode->pop->event[msa_index], gnode->event);
+        dlist_item_append(gnode->pop->coalevent[msa_index], gnode->coalevent);
 
-        gnode->pop->event_count[msa_index]++;
+        gnode->pop->coal_count[msa_index]++;
         if (!opt_est_theta)
-          gnode->pop->event_count_sum++;
+          gnode->pop->coal_count_sum++;
         
         snode->seqin_count[msa_index]--;
       }
@@ -354,20 +354,20 @@ static int rubber_proportional(stree_t * stree,
       {
         unlink_event(gnode, msa_index);
 
-        gnode->pop->event_count[msa_index]--;
+        gnode->pop->coal_count[msa_index]--;
         if (!opt_est_theta)
-          gnode->pop->event_count_sum--;
+          gnode->pop->coal_count_sum--;
 
         gnode->mark |= MARK_POP_CHANGE;
 
         gnode->old_pop = gnode->pop;
         gnode->pop = snode;
 
-        dlist_item_append(gnode->pop->event[msa_index], gnode->event);
+        dlist_item_append(gnode->pop->coalevent[msa_index], gnode->coalevent);
 
-        gnode->pop->event_count[msa_index]++;
+        gnode->pop->coal_count[msa_index]++;
         if (!opt_est_theta)
-          gnode->pop->event_count_sum++;
+          gnode->pop->coal_count_sum++;
 
         snode->seqin_count[msa_index]++;
       }
@@ -723,17 +723,17 @@ long prop_split(gtree_t ** gtree,
         if (tmp->mark & MARK_POP_CHANGE)
         {
           unlink_event(tmp,i);
-          tmp->pop->event_count[i]--;
+          tmp->pop->coal_count[i]--;
           if (!opt_est_theta)
-            tmp->pop->event_count_sum--;
+            tmp->pop->coal_count_sum--;
 
           tmp->pop = node;
 
-          dlist_item_append(tmp->pop->event[i], tmp->event); /* equiv to snode->event[i] */
+          dlist_item_append(tmp->pop->coalevent[i], tmp->coalevent); /* equiv to snode->coalevent[i] */
 
-          tmp->pop->event_count[i]++;
+          tmp->pop->coal_count[i]++;
           if (!opt_est_theta)
-            tmp->pop->event_count_sum++;
+            tmp->pop->coal_count_sum++;
 
           tmp->pop->seqin_count[i]++;
         }
@@ -1180,18 +1180,18 @@ long prop_join(gtree_t ** gtree,
         if (tmp->mark & MARK_POP_CHANGE)
         {
           unlink_event(tmp,i);
-          tmp->pop->event_count[i]--;
+          tmp->pop->coal_count[i]--;
           tmp->pop->seqin_count[i]--;
           if (!opt_est_theta)
-            tmp->pop->event_count_sum--;
+            tmp->pop->coal_count_sum--;
 
           tmp->pop = tmp->old_pop;
 
-          dlist_item_append(tmp->pop->event[i], tmp->event); /* equiv to snode->event[i] */
+          dlist_item_append(tmp->pop->coalevent[i], tmp->coalevent); /* equiv to snode->coalevent[i] */
 
-          tmp->pop->event_count[i]++;
+          tmp->pop->coal_count[i]++;
           if (!opt_est_theta)
-            tmp->pop->event_count_sum++;
+            tmp->pop->coal_count_sum++;
         }
 
         /* reset marks */

@@ -271,6 +271,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PRIOR_INVGAMMA        1
 #define BPP_THETA_PRIOR_GAMMA           2
 #define BPP_THETA_PRIOR_MAX             2
+#define BPP_THETA_PROP_MG_INVG          1
+#define BPP_THETA_PROP_MG_GAMMA         2
 
 #define BPP_THETA_MOVE_MIN              0
 #define BPP_THETA_MOVE_SLIDE            0
@@ -346,19 +348,19 @@ extern const char * global_freqs_strings[28];
 /* libpll related definitions */
 
 #define PLL_ALIGNMENT_CPU               8
+#define PLL_ALIGNMENT_NEON             16
 #define PLL_ALIGNMENT_SSE              16
 #define PLL_ALIGNMENT_AVX              32
 
 #define PLL_ATTRIB_ARCH_CPU            0
 #define PLL_ATTRIB_ARCH_SSE       (1 << 0)
-#define PLL_ATTRIB_PATTERN_TIP    (1 << 4)
-
 #define PLL_ATTRIB_ARCH_AVX       (1 << 1)
 #define PLL_ATTRIB_ARCH_AVX2      (1 << 2)
 #define PLL_ATTRIB_ARCH_AVX512    (1 << 3)
-#define PLL_ATTRIB_ARCH_MASK         0xF
+#define PLL_ATTRIB_ARCH_NEON      (1 << 4)
+#define PLL_ATTRIB_ARCH_MASK         0x1F
 
-#define PLL_ATTRIB_PATTERN_TIP    (1 << 4)
+#define PLL_ATTRIB_PATTERN_TIP    (1 << 5)
 
 #define PLL_ATTRIB_RATE_SCALERS   (1 << 9)
 
@@ -500,9 +502,9 @@ typedef struct snode_s
   double weight;
 
   /* list of per-locus coalescent events */
-  dlist_t ** event;
+  dlist_t ** coalevent;
 
-  int * event_count;
+  int * coal_count;
 
   /* branch rate (per locus)*/
   double * brate;
@@ -532,7 +534,7 @@ typedef struct snode_s
   double * old_t2h;                 /* storage space for rollback */
   double t2h_sum;                   /* t2h sum for all loci */
   double hphi_sum;                  /* hphi sum for all loci */
-  long event_count_sum;             /* sum of coalencent events count */
+  long coal_count_sum;              /* sum of coalencent events count */
   double notheta_logpr_contrib;     /* MSC density contribution from pop */
   double notheta_old_logpr_contrib; /* storage space for rollback */
   double * notheta_phi_contrib;     /* per-locus phi contribution for hybrid */
@@ -667,7 +669,7 @@ typedef struct gnode_s
   snode_t * old_pop;
 
   /* pointer to the dlist item this node is wrapped into */
-  dlist_item_t * event;
+  dlist_item_t * coalevent;
 
   unsigned int node_index;
   unsigned int clv_valid;
@@ -1171,6 +1173,7 @@ extern long opt_siterate_fixed;
 extern long opt_tau_dist;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_prior;
+extern long opt_theta_prop;
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
@@ -2362,9 +2365,143 @@ int parsefile_doubles(const char * filename,
                       long * errcontext);
 long parse_printlocus(const char * line, long * lcount);
 
-/* functions in core_partials_sse.c */
+#ifdef HAVE_NEON
+
+/* functions in core_partials_neon.c */
+
+void pll_core_create_lookup_neon(unsigned int states,
+                                 unsigned int rate_cats,
+                                 double * ttlookup,
+                                 const double * left_matrix,
+                                 const double * right_matrix,
+                                 const unsigned int * tipmap,
+                                 unsigned int tipmap_size);
+
+void pll_core_create_lookup_4x4_neon(unsigned int rate_cats,
+                                     double * lookup,
+                                     const double * left_matrix,
+                                     const double * right_matrix);
+
+void pll_core_update_partial_tt_neon(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     double * parent_clv,
+                                     unsigned int * parent_scaler,
+                                     const unsigned char * left_tipchars,
+                                     const unsigned char * right_tipchars,
+                                     const double * lookup,
+                                     unsigned int tipstates_count,
+                                     unsigned int attrib);
+
+void pll_core_update_partial_tt_4x4_neon(unsigned int sites,
+                                         unsigned int rate_cats,
+                                         double * parent_clv,
+                                         unsigned int * parent_scaler,
+                                         const unsigned char * left_tipchars,
+                                         const unsigned char * right_tipchars,
+                                         const double * lookup,
+                                         unsigned int attrib);
+
+void pll_core_update_partial_ti_neon(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     double * parent_clv,
+                                     unsigned int * parent_scaler,
+                                     const unsigned char * left_tipchars,
+                                     const double * right_clv,
+                                     const double * left_matrix,
+                                     const double * right_matrix,
+                                     const unsigned int * right_scaler,
+                                     const unsigned int * tipmap,
+                                     unsigned int tipmap_size,
+                                     unsigned int attrib);
+
+
+void pll_core_update_partial_ti_4x4_neon(unsigned int sites,
+                                         unsigned int rate_cats,
+                                         double * parent_clv,
+                                         unsigned int * parent_scaler,
+                                         const unsigned char * left_tipchar,
+                                         const double * right_clv,
+                                         const double * left_matrix,
+                                         const double * right_matrix,
+                                         const unsigned int * right_scaler,
+                                         unsigned int attrib);
+
+void pll_core_update_partial_ii_neon(unsigned int states,
+                                     unsigned int sites,
+                                     unsigned int rate_cats,
+                                     double * parent_clv,
+                                     unsigned int * parent_scaler,
+                                     const double * left_clv,
+                                     const double * right_clv,
+                                     const double * left_matrix,
+                                     const double * right_matrix,
+                                     const unsigned int * left_scaler,
+                                     const unsigned int * right_scaler,
+                                     unsigned int attrib);
+
+void pll_core_update_partial_ii_4x4_neon(unsigned int sites,
+                                         unsigned int rate_cats,
+                                         double * parent_clv,
+                                         unsigned int * parent_scaler,
+                                         const double * left_clv,
+                                         const double * right_clv,
+                                         const double * left_matrix,
+                                         const double * right_matrix,
+                                         const unsigned int * left_scaler,
+                                         const unsigned int * right_scaler,
+                                         unsigned int attrib);
+/* functions in core_likelihood_neon.c */
+
+
+double pll_core_root_loglikelihood_neon(unsigned int states,
+                                        unsigned int sites,
+                                        unsigned int rate_cats,
+                                        const double * clv,
+                                        const unsigned int * scaler,
+                                        double * const * frequencies,
+                                        const double * rate_weights,
+                                        const unsigned int * pattern_weights,
+                                        const unsigned int * freqs_indices,
+                                        double * persite_lnl);
+
+double pll_core_root_loglikelihood_4x4_neon(unsigned int sites,
+                                            unsigned int rate_cats,
+                                            const double * clv,
+                                            const unsigned int * scaler,
+                                            double * const * frequencies,
+                                            const double * rate_weights,
+                                            const unsigned int * pattern_weights,
+                                            const unsigned int * freqs_indices,
+                                            double * persite_lnl);
+
+void pll_core_root_likelihood_vec_neon(unsigned int states,
+                                       unsigned int sites,
+                                       unsigned int rate_cats,
+                                       const double * clv,
+                                       const unsigned int * scaler,
+                                       double * const * frequencies,
+                                       const double * rate_weights,
+                                       const unsigned int * pattern_weights,
+                                       const unsigned int * freqs_indices,
+                                       double * persite_lh);
+
+void pll_core_root_likelihood_vec_4x4_neon(unsigned int sites,
+                                           unsigned int rate_cats,
+                                           const double * clv,
+                                           const unsigned int * scaler,
+                                           double * const * frequencies,
+                                           const double * rate_weights,
+                                           const unsigned int * pattern_weights,
+                                           const unsigned int * freqs_indices,
+                                           double * persite_lh);
+#endif
 
 #ifdef HAVE_SSE3
+
+/* functions in core_partials_sse.c */
+
 void pll_core_create_lookup_sse(unsigned int states,
                                 unsigned int rate_cats,
                                 double * ttlookup,

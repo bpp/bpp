@@ -133,8 +133,8 @@ long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
 long opt_theta_gibbs_showall_eps;
-long opt_theta_move;
 long opt_theta_prior;
+long opt_theta_prop;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -314,6 +314,7 @@ static struct option long_options[] =
   {"theta_mode",       required_argument, 0, 0 },  /* 42 */
   {"no-pin",           no_argument,       0, 0 },  /* 43 */
   {"theta-showeps",    no_argument,       0, 0 },  /* 44 */
+  {"theta-prop",       required_argument, 0, 0 },  /* 45 */
   { 0, 0, 0, 0 }
 };
 
@@ -598,6 +599,7 @@ void args_init(int argc, char ** argv)
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
+  opt_theta_prop = -1;
   opt_theta_gibbs_showall_eps = 0;
   opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
   opt_threads = 1;
@@ -660,6 +662,8 @@ void args_init(int argc, char ** argv)
           opt_arch = PLL_ATTRIB_ARCH_AVX;
         else if (!strcasecmp(optarg,"avx2"))
           opt_arch = PLL_ATTRIB_ARCH_AVX2;
+        else if (!strcasecmp(optarg, "neon"))
+          opt_arch = PLL_ATTRIB_ARCH_NEON;
         else
           fatal("Invalid instruction set (%s)", optarg);
         break;
@@ -860,6 +864,15 @@ void args_init(int argc, char ** argv)
         opt_theta_gibbs_showall_eps = 1;
         break;
 
+      case 45:
+        if (!strcasecmp(optarg, "mg_invg"))
+          opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+        else if (!strcasecmp(optarg, "mg_gamma"))
+          opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
+        else
+          fatal("Invalid theta prop (%s)", optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -874,6 +887,13 @@ void args_init(int argc, char ** argv)
   {
     opt_model = BPP_DNA_MODEL_DEFAULT;
     load_cfile();
+
+    if(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA && opt_theta_prop != -1)
+      fatal("command-line theta-prop error: only inv-G is used for inv-G prior on theta");
+
+    if(opt_theta_prior == BPP_THETA_PRIOR_GAMMA && opt_theta_prop == -1)
+      opt_theta_prop = BPP_THETA_PROP_MG_INVG;
+
   }
   if (opt_simulate)
     load_cfile_sim();

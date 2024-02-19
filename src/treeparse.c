@@ -308,15 +308,15 @@ void stree_destroy(stree_t * tree,
     if (node->label)
       free(node->label);
 
-    if (node->event)
+    if (node->coalevent)
     {
       for (j = 0; j < tree->locus_count; ++j)
-        if (tree->nodes[i]->event[j])
+        if (tree->nodes[i]->coalevent[j])
         {
-          dlist_clear(tree->nodes[i]->event[j],NULL);
-          dlist_destroy(tree->nodes[i]->event[j]);
+          dlist_clear(tree->nodes[i]->coalevent[j],NULL);
+          dlist_destroy(tree->nodes[i]->coalevent[j]);
         }
-      free(node->event);
+      free(node->coalevent);
     }
 
     if (opt_datefile && !opt_simulate && node->epoch_count) {
@@ -373,8 +373,8 @@ void stree_destroy(stree_t * tree,
       }
     }
 
-    if (node->event_count)
-      free(node->event_count);
+    if (node->coal_count)
+      free(node->coal_count);
 
     if (node->seqin_count)
       free(node->seqin_count);

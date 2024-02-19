@@ -656,6 +656,11 @@ locus_t * locus_create(unsigned int dtype,
   locus->diploid_resolution_count = NULL;
   locus->likelihood_vector = NULL;
 
+  if (attributes & PLL_ATTRIB_ARCH_NEON)
+  {
+    locus->alignment = PLL_ALIGNMENT_NEON;
+    locus->states_padded = (states+1) & 0xFFFFFFFE;
+  }
   if (attributes & PLL_ATTRIB_ARCH_SSE)
   {
     locus->alignment = PLL_ALIGNMENT_SSE;
@@ -1471,7 +1476,7 @@ static void locus_update_all_matrices_tn93_recursive(locus_t * locus,
 
     if (locus->model == BPP_DNA_MODEL_HKY)
     {
-      double kappa = qrates[0] / qrates[1];
+      double kappa = qrates[1] / qrates[0];
       double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
       bt = bl*mr;
       a1t = a2t = kappa*bt;
@@ -1668,7 +1673,7 @@ static void locus_update_all_matrices_k80_recursive(locus_t * locus,
     qrates = locus->subst_params[locus->param_indices[n]];
     pmat = locus->pmatrix[root->pmatrix_index] + n*states*states_padded;
     double bl = t*locus->rates[n];
-    kappa = qrates[0] / qrates[1];
+    kappa = qrates[1] / qrates[0];
     e1 = expm1(-4*bl / (kappa+2));
 
     if (fabs(kappa-1) < 1e-20)
@@ -2040,7 +2045,7 @@ static void locus_update_matrices_tn93(locus_t * locus,
 
       if (locus->model == BPP_DNA_MODEL_HKY)
       {
-        double kappa = qrates[0] / qrates[1];
+        double kappa = qrates[1] / qrates[0];
         double mr = 1 / (2*T*C*kappa + 2*A*G*kappa + 2*Y*R);
         bt = bl*mr;
         a1t = a2t = kappa*bt;
@@ -2197,7 +2202,7 @@ static void locus_update_matrices_k80(locus_t * locus,
       qrates = locus->subst_params[locus->param_indices[n]];
       pmat = locus->pmatrix[node->pmatrix_index] + n*states*states_padded;
       double bl = t*locus->rates[n];
-      kappa = qrates[0] / qrates[1];
+      kappa = qrates[1] / qrates[0];
       e1 = expm1(-4*bl / (kappa+2));
 
       if (fabs(kappa-1) < 1e-20)
@@ -3099,7 +3104,7 @@ static void propose_qrates(stree_t * stree,
 #if 0
   double gtr_alpha[6] = { 1,1,1,1,1,1 };
 #else
-  double gtr_alpha[6] = { 1,2,1,1,2,1 };
+  double gtr_alpha[6] = { 2,4,2,2,4,2 };
 #endif
 
   /* TODO: Implement amino acids */

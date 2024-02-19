@@ -2511,8 +2511,8 @@ void cmd_simulate()
   {
     snode_t * snode = stree->nodes[i];
 
-    snode->event = (dlist_t **)xcalloc(opt_locus_count, sizeof(dlist_t *));
-    snode->event_count = (int *)xcalloc(opt_locus_count, sizeof(int));
+    snode->coalevent = (dlist_t **)xcalloc(opt_locus_count, sizeof(dlist_t *));
+    snode->coal_count = (int *)xcalloc(opt_locus_count, sizeof(int));
     snode->seqin_count = (int *)xcalloc(opt_locus_count, sizeof(int));
     snode->gene_leaves = (unsigned int *)xcalloc(opt_locus_count,sizeof(unsigned int));
     /* TODO: The next two allocations might not be necessary when computing
@@ -2527,12 +2527,12 @@ void cmd_simulate()
       snode->t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
       snode->old_t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
       snode->t2h_sum = 0;
-      snode->event_count_sum = 0;
+      snode->coal_count_sum = 0;
     }
 
     long j;
     for (j = 0; j < stree->locus_count; ++j)
-      snode->event[j] = dlist_create();
+      snode->coalevent[j] = dlist_create();
   }
 
   process_subst_model();

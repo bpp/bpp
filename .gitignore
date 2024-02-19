@@ -1,3 +1,9 @@
 *.o
+*.obj
+*.exe
+*.txt
+*.ctl
+*.tre
+.gitignore
 bpp
 test/anna/testSimple*.txt
