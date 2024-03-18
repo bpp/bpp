@@ -525,7 +525,6 @@ void clear_marks (gtree_t * tree) {
 }
 
 void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
-	int mark = 0;
   	char dna[4] = "TCAG";
 	if (node->left) {
 		mark_mutation(node->left, site, mutations, locus);
@@ -540,7 +539,7 @@ void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
 		mutation_t * mut = (mutation_t *) item->data;
 
 		if (mut->site == site) {
-			mark = 1;
+			node->mark = 1;
 
 			if (!node->left || !node->left->mark || !node->right->mark) {
 				printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n", locus + 1, site + 1, mut->time, charmap_nt_tcag[mut->state], mut->pop->label);
@@ -1541,6 +1540,7 @@ static void simulate(stree_t * stree)
   FILE * fp_tree = NULL;
   FILE * fp_param = NULL;
   FILE * fp_map = NULL;
+  FILE * fp_mig = NULL;
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
   FILE * fp_seqDates = NULL;
@@ -1556,6 +1556,9 @@ static void simulate(stree_t * stree)
     fp_concat = xopen(opt_concatfile, "w");
   if (opt_treefile)
     fp_tree = xopen(opt_treefile, "w");
+  //ANNA fix this
+  if (opt_print_locus)
+     fp_mig = xopen("mig.txt", "w");
   if (opt_modelparafile)
     fp_param = xopen(opt_modelparafile, "w");
   assert(opt_mapfile);
@@ -1953,6 +1956,12 @@ static void simulate(stree_t * stree)
       char * newick = gtree_export_newick(gtree[i]->root, NULL);
       fprintf(fp_tree, "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
       free(newick);
+
+      if (opt_print_locus && printLocusIndex[i]){
+      	char * mig = gtree_export_migration(gtree[i]->root);
+      	fprintf(fp_mig, "%s\n", mig);
+      	free(mig);
+      }
     }
 
     if (opt_msafile )

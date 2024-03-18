@@ -372,53 +372,50 @@ static char * print_migration(const gnode_t * root) {
 		maxCount = root->mi->count;	
 
 	/* Starting population */
-	if (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) 
+	/* At least one event */
+	if (count < maxCount || (pop->parent && root->parent && pop->parent->tau < root->parent->time))  {
 		size_alloced = xasprintf(&part1,"%s:", root->pop->label);
-	else
-		size_alloced = xasprintf(&part1,"%s:;", root->pop->label);
 
-	/* Add migration and taus */
-	while (count < maxCount || (pop->parent && pop->parent->tau < root->parent->time)) {
-		if (count >= maxCount || (pop->parent->tau < root->mi->me[count].time)) {
-			if (count < maxCount || (pop->parent->parent && pop->parent->parent->tau < root->parent->time)) {
-				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
-								root->pop->parent->tau,
-							     	root->pop->parent->label,
-							       	root->pop->label);
+		/* Add migration and taus */
+		while (count < maxCount || (pop->parent && root->parent && pop->parent->tau < root->parent->time)) {
+			if (count >= maxCount || (pop->parent->tau < root->mi->me[count].time)) {
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s", part1, 
+									pop->parent->tau,
+								     	pop->parent->label,
+								       	pop->label);
+				pop = pop->parent;
+
 			} else {
-				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
-								root->pop->parent->tau,
-							     	root->pop->parent->label,
-							       	root->pop->label);
-			}
-			free(part1);
-			size_alloced = xasprintf(&part1,"%s", part2);
-			free(part2);
-			
-			pop = pop->parent;
-
-		} else {
-			if (count + 1 < maxCount || (pop->parent && pop->parent->tau < root->parent->time) ) {
-				size_alloced = xasprintf(&part2, "%s%f*%s&%s,", part1, 
+				size_alloced = xasprintf(&part2, "%s%f*%s&%s", part1, 
 									root->mi->me[count].time,
 								     	root->mi->me[count].target->label,
 								       	root->mi->me[count].source->label);
-			} else {
-				size_alloced = xasprintf(&part2, "%s%f*%s&%s;", part1, 
-									root->mi->me[count].time,
-								     	root->mi->me[count].target->label,
-								       	root->mi->me[count].source->label);
+				pop = root->mi->me[count].target;
+				count++;
+
 			}
-			free(part1);
-			size_alloced = xasprintf(&part1,"%s", part2);
-			free(part2);
-			pop = root->mi->me[count].target;
-			count++;
+
+			/* if not last event */
+			if (count < maxCount || (pop->parent && root->parent && pop->parent->tau < root->parent->time)) {
+				free(part1);
+				size_alloced = xasprintf(&part1,"%s,", part2);
+				free(part2);
+
+			} 
+
 		}
-	}
+
+		/* Last event */
+		free(part1);
+		size_alloced = xasprintf(&part1,"%s;", part2);
+		free(part2);
+
+	} else
+		size_alloced = xasprintf(&part1,"%s:;", root->pop->label);
 
   	if (size_alloced < 0)
   	  fatal("Memory allocation during newick export failed.");
+	//printf("%p %s\n", root, part1);
 
 return part1;
 }
