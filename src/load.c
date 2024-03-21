@@ -171,8 +171,8 @@ void load_chk_header(FILE * fp)
     threads_pin_master();
 
   
-  unsigned int * rng = (unsigned int *)xmalloc((size_t)opt_threads *
-                                               sizeof(unsigned int));
+  rng_state_t * rng = (rng_state_t *)xmalloc((size_t)opt_threads *
+                                             sizeof(rng_state_t));
   if (!LOAD(rng,opt_threads,fp))
     fatal("Cannot read RNG states");
   set_legacy_rndu_array(rng);

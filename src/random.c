@@ -29,17 +29,14 @@
 #define aStrawhat 1.0
 
 /* legacy random number generators */
-static unsigned int * z_rndu = NULL;
+static rng_state_t * z_rndu = NULL;
+
 
 void legacy_init()
 {
    int seed = (int)opt_seed;
-   long i;
 
    /* z_rndu = (unsigned int)opt_seed; */
-   if (sizeof(int) != 4)
-      fatal("oh-oh, we are in trouble.  int not 32-bit?  rndu() assumes 32-bit int.");
-
    if (seed <= 0) {
       FILE *frand = fopen("/dev/urandom", "r");
       if (frand) {
@@ -62,9 +59,9 @@ void legacy_init()
    assert(opt_threads >= 1);
 
    if (z_rndu) free(z_rndu);
-   z_rndu = (unsigned int *)xmalloc((size_t)opt_threads * sizeof(unsigned int));
-   for (i = 0; i < opt_threads; ++i)
-     z_rndu[i] = (unsigned int)seed;
+   z_rndu = (rng_state_t *)xmalloc((size_t)opt_threads * sizeof(rng_state_t));
+   for (int i = 0; i < opt_threads; ++i)
+     z_rndu[i].state = (uint32_t)seed;
 }
 
 void legacy_fini()
@@ -72,22 +69,22 @@ void legacy_fini()
   free(z_rndu);
 }
 
-unsigned int get_legacy_rndu_status(long index)
+uint32_t get_legacy_rndu_status(long index)
 {
-  return z_rndu[index];
+  return z_rndu[index].state;
 }
 
-unsigned int * get_legacy_rndu_array()
+rng_state_t * get_legacy_rndu_array()
 {
   return z_rndu;
 }
 
-void set_legacy_rndu_status(long index, unsigned int x)
+void set_legacy_rndu_status(long index, uint32_t x)
 {
-  z_rndu[index] = x;
+  z_rndu[index].state = x;
 }
 
-void set_legacy_rndu_array(unsigned int * x)
+void set_legacy_rndu_array(rng_state_t * x)
 {
   if (z_rndu)
     free(z_rndu);
@@ -108,9 +105,10 @@ double legacy_rndu(long index)
    if(z_rndu[index] == 0 || z_rndu[index] == 4294967295)  z_rndu[index] = 13;
    return z_rndu[index]/4294967295.0;
    #else
-   z_rndu[index] = z_rndu[index] * 69069 + 1;
-   if (z_rndu[index] == 0)  z_rndu[index] = 12345671;
-   return ldexp((double)(z_rndu[index]), -32);
+   uint32_t * rng_site = &z_rndu[index].state;
+   *rng_site = (*rng_site) * 69069 + 1;
+   if (*rng_site == 0)  *rng_site = 12345671;
+   return ldexp((double)(*rng_site), -32);
    #endif
 }
 
