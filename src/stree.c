@@ -1686,25 +1686,25 @@ static void stree_init_phi(stree_t * stree)
   }
 }
 
-static void msci_link_thetas_bfs(stree_t * stree)
+static void msci_link_thetas_bfs(stree_t* stree)
 {
-  long i,j = 0;
-  long head,tail;
+  long i, j = 0;
+  long head, tail;
   long total_nodes;
-  snode_t * sibling;
-  snode_t ** queue;
-  snode_t ** hybrid;
+  snode_t* sibling;
+  snode_t** queue;
+  snode_t** hybrid;
 
-  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
-  queue = (snode_t **)xcalloc((size_t)(total_nodes+1),sizeof(snode_t *));
-  hybrid = (snode_t **)xcalloc((size_t)(stree->hybrid_count),sizeof(snode_t *));
-  
-  /* order nodes using BFS */  
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  queue = (snode_t**)xcalloc((size_t)(total_nodes + 1), sizeof(snode_t*));
+  hybrid = (snode_t**)xcalloc((size_t)(stree->hybrid_count), sizeof(snode_t*));
+
+  /* order nodes using BFS */
   head = tail = 0;
   queue[tail++] = stree->root;
   while (queue[head])
   {
-    snode_t * x = queue[head++];
+    snode_t* x = queue[head++];
 
     if (x->left)
       queue[tail++] = x->left;
@@ -1712,7 +1712,7 @@ static void msci_link_thetas_bfs(stree_t * stree)
     if (x->right)
       queue[tail++] = x->right;
 
-    if (x->hybrid && x->node_index < stree->tip_count+stree->inner_count)
+    if (x->hybrid && x->node_index < stree->tip_count + stree->inner_count)
       hybrid[j++] = x;
 
     printf(" %s", x->label);
@@ -1727,57 +1727,56 @@ static void msci_link_thetas_bfs(stree_t * stree)
   for (i = 0; i < j; ++i)
     printf(" %s", hybrid[i]->label);
   printf("\n");
-
+  /*** ziheng-2024.3.30 ***/
+/* edited code to link theta to (youngest) daughter for linked_msci */
   for (i = 0; i < stree->hybrid_count; ++i)
   {
-    snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
-    snode_t * mnode = snode->hybrid;
+    snode_t* snode = stree->nodes[stree->tip_count + stree->inner_count + i]->hybrid;
+    snode_t* mnode = snode->hybrid;
 
     if (!node_is_bidirection(snode))
     {
       /* hybridization */
-
       /* model A */
       if (snode->htau && mnode->htau) continue;
-
       /* model C */
-      if (!snode->htau) 
+      if (!snode->htau)
       {
-        /* sibling is linked to parent */
+        /* parent is linked to sibling */
         sibling = (snode->parent->left == snode) ?
-                    snode->parent->right : snode->parent->left;
-        sibling->linked_theta = snode->parent->linked_theta ?
-                                  snode->parent->linked_theta : snode->parent;
+          snode->parent->right : snode->parent->left;
+        snode->parent->linked_theta = sibling;
       }
       else
       {
-        /* child is linked to hybrid */
+        /* hybrid is linked to child */
         assert(snode->left && !snode->right);
-
-        snode_t * child = snode->left;
-        child->linked_theta = snode->linked_theta ? snode->linked_theta : snode;
+        snode->linked_theta = snode->left;
       }
 
       if (!mnode->htau)
       {
         sibling = (mnode->parent->left == mnode) ?
-                    mnode->parent->right : mnode->parent->left;
-        sibling->linked_theta = mnode->parent->linked_theta ?
-                            mnode->parent->linked_theta : mnode->parent;
+          mnode->parent->right : mnode->parent->left;
+        mnode->parent->linked_theta = sibling;
       }
       else
       {
         assert(!mnode->left && !mnode->right && snode->left && !snode->right);
-        snode_t * child = snode->left;
-        child->linked_theta = mnode->linked_theta ? mnode->linked_theta : mnode;
+        mnode->linked_theta = snode->left;
       }
     }
-    else
-    {
-      /* bidirection */
-      snode->left->linked_theta = snode->linked_theta ?
-                                    snode->linked_theta : snode;
-    }
+    else /* bidirection */
+      snode->linked_theta = snode->left;
+  }
+ 
+  /* reset linked_theta to the youngest daughter */
+  for (i = 0; i < total_nodes; i++)
+  {
+    snode_t* snode = stree->nodes[i], * x = snode->linked_theta;
+    if (!x) continue;
+    while ((x = x->linked_theta))
+      snode->linked_theta = x;
   }
 }
 
