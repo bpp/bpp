@@ -4577,7 +4577,7 @@ void cmd_run()
     }
 
     
-    /*
+    
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
 	    if (stree->tip_count > 1) {
 		    if (opt_migration)
@@ -4589,10 +4589,11 @@ void cmd_run()
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
 
-        //ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
-        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
+//        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
+ //                                      (double)ft_round;
+        g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
                                        (double)ft_round;
-    } */
+    } 
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
