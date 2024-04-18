@@ -1562,6 +1562,8 @@ double find_maxMuGtree(stree_t * stree);
 double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
 void reset_mu_coal(gtree_t * gtree);
 
+int get_gamma_conditional_approx(double a, double b, long k, double T,
+                                 double * a1, double * b1);
 
 
 /* functions in arch.c */

@@ -1686,25 +1686,25 @@ static void stree_init_phi(stree_t * stree)
   }
 }
 
-static void msci_link_thetas_bfs(stree_t* stree)
+static void msci_link_thetas_bfs(stree_t * stree)
 {
-  long i, j = 0;
-  long head, tail;
+  long i,j = 0;
+  long head,tail;
   long total_nodes;
-  snode_t* sibling;
-  snode_t** queue;
-  snode_t** hybrid;
+  snode_t * sibling;
+  snode_t ** queue;
+  snode_t ** hybrid;
 
-  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
-  queue = (snode_t**)xcalloc((size_t)(total_nodes + 1), sizeof(snode_t*));
-  hybrid = (snode_t**)xcalloc((size_t)(stree->hybrid_count), sizeof(snode_t*));
+  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+  queue = (snode_t **)xcalloc((size_t)(total_nodes+1),sizeof(snode_t *));
+  hybrid = (snode_t **)xcalloc((size_t)(stree->hybrid_count),sizeof(snode_t *));
 
   /* order nodes using BFS */
   head = tail = 0;
   queue[tail++] = stree->root;
   while (queue[head])
   {
-    snode_t* x = queue[head++];
+    snode_t * x = queue[head++];
 
     if (x->left)
       queue[tail++] = x->left;
@@ -1712,7 +1712,7 @@ static void msci_link_thetas_bfs(stree_t* stree)
     if (x->right)
       queue[tail++] = x->right;
 
-    if (x->hybrid && x->node_index < stree->tip_count + stree->inner_count)
+    if (x->hybrid && x->node_index < stree->tip_count+stree->inner_count)
       hybrid[j++] = x;
 
     printf(" %s", x->label);
@@ -1727,12 +1727,13 @@ static void msci_link_thetas_bfs(stree_t* stree)
   for (i = 0; i < j; ++i)
     printf(" %s", hybrid[i]->label);
   printf("\n");
+
   /*** ziheng-2024.3.30 ***/
-/* edited code to link theta to (youngest) daughter for linked_msci */
+  /* edited code to link theta to (youngest) daughter for linked_msci */
   for (i = 0; i < stree->hybrid_count; ++i)
   {
-    snode_t* snode = stree->nodes[stree->tip_count + stree->inner_count + i]->hybrid;
-    snode_t* mnode = snode->hybrid;
+    snode_t * snode = stree->nodes[stree->tip_count+stree->inner_count+i]->hybrid;
+    snode_t * mnode = snode->hybrid;
 
     if (!node_is_bidirection(snode))
     {
@@ -1744,7 +1745,7 @@ static void msci_link_thetas_bfs(stree_t* stree)
       {
         /* parent is linked to sibling */
         sibling = (snode->parent->left == snode) ?
-          snode->parent->right : snode->parent->left;
+                    snode->parent->right : snode->parent->left;
         snode->parent->linked_theta = sibling;
       }
       else
@@ -1757,7 +1758,7 @@ static void msci_link_thetas_bfs(stree_t* stree)
       if (!mnode->htau)
       {
         sibling = (mnode->parent->left == mnode) ?
-          mnode->parent->right : mnode->parent->left;
+                    mnode->parent->right : mnode->parent->left;
         mnode->parent->linked_theta = sibling;
       }
       else
@@ -1769,11 +1770,11 @@ static void msci_link_thetas_bfs(stree_t* stree)
     else /* bidirection */
       snode->linked_theta = snode->left;
   }
- 
+
   /* reset linked_theta to the youngest daughter */
   for (i = 0; i < total_nodes; i++)
   {
-    snode_t* snode = stree->nodes[i], * x = snode->linked_theta;
+    snode_t* snode = stree->nodes[i], *x = snode->linked_theta;
     if (!x) continue;
     while ((x = x->linked_theta))
       snode->linked_theta = x;
@@ -1917,7 +1918,7 @@ static void stree_init_theta(stree_t * stree,
 
   /* print table header on screen and in output file */
   fprintf(stdout, "\nPer-locus sequences in data and 'species&tree' tag:\n");
-  fprintf(stdout, 
+  fprintf(stdout,
           "C.File | Data |                Status                | Population\n");
   fprintf(stdout,
           "-------+------+--------------------------------------+-----------\n");
@@ -2008,139 +2009,104 @@ static void stree_init_theta(stree_t * stree,
 
   /* initialize 'has_theta' attribute */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (opt_est_theta)
-      stree->nodes[i]->has_theta = 1;
-    else
-      stree->nodes[i]->has_theta = 0;
+    stree->nodes[i]->has_theta = (opt_est_theta ? 1 : 0);
 
-#if 0
-   /* go through tip nodes and setup thetas only for those that have
-      two sequences in some loci */
-   for (i = 0; i < stree->tip_count; ++i)
-   {
-      snode_t * node = stree->nodes[i];
+  /* From Ziheng's email from 3.3.2018 (see also issue #62) this is changed
+     to set estimation of thetas according to the 'species&tree' tag in the
+     control file. */
+  init_theta_linkage(stree);
+  init_theta_stepsize(stree);
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
 
-      for (j = 0; j < (unsigned int)msa_count; ++j)
-         if (seqcount[i][j] >= 2)
-            break;
+    for (j = 0; j < (unsigned int)msa_count; ++j)
+      if (seqcount[i][j] >= 2)
+        break;
 
-      /* if no loci exists with two or more sequences of such species then move
-         to the next tip node */
-      if (j == (unsigned int)msa_count)
+    /*** Ziheng $$$ ***/
+    /* If(opt_est_geneflow), all tip species have theta.
+    *  If(opt_migration), under a fixed IM model, tips involved in migration have theta.
+    *  Donor population must have theta so that coalescent rate is defined.
+    *  Recipient population must have theta so that w = 4M/theta is defined.
+    *  It is possible that either donor or recipient population has only 0 or 1 sequence.
+    */
+    long mig_i_donor_or_recipient = 0;
+    if (!opt_est_geneflow && opt_migration)
+    {
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
       {
-         node->theta = -1;
-         node->has_theta = 0;
-         continue;
+        /*** Ziheng $$$ ***/
+        mig_i_donor_or_recipient += opt_mig_bitmatrix[j][snode->node_index];
+        mig_i_donor_or_recipient += opt_mig_bitmatrix[snode->node_index][j];
       }
+    }
+    /* if no loci exists with two or more sequences of such species then move
+       to the next tip node */
+    if (!opt_est_geneflow && (!opt_migration || !mig_i_donor_or_recipient))
+    {
+      if (opt_sp_seqcount[i] < 2)
+      {
+        snode->theta = -1;
+        snode->has_theta = 0;
+        continue;
+      }
+    }
 
-      /* otherwise set theta around the mean of the inverse gamma prior */
-      node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-         (0.9 + 0.2 * legacy_rndu());
-   }
-#else
-   /* From Ziheng's email from 3.3.2018 (see also issue #62) this is changed
-      to set estimation of thetas according to the 'species&tree' tag in the
-      control file. */
-   init_theta_linkage(stree);
-   init_theta_stepsize(stree);
-   for (i = 0; i < stree->tip_count; ++i)
-   {
-     snode_t * node = stree->nodes[i];
-
-     for (j = 0; j < (unsigned int)msa_count; ++j)
-       if (seqcount[i][j] >= 2)
-         break;
-
-     /*** Ziheng $$$ ***/
-     /* If(opt_est_geneflow), all tip species have theta.
-     *  If(opt_migration), under a fixed IM model, tips involved in migration have theta.
-     *  Donor population must have theta so that coalescent rate is defined.
-     *  Recipient population must have theta so that w = 4M/theta is defined.
-     *  It is possible that either donor or recipient population has only 0 or 1 sequence.
-     */
-     long mig_i_donor_or_recipient = 0;
-     if (!opt_est_geneflow && opt_migration)
-     {
-       for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-       {
-         /*** Ziheng $$$ ***/
-         mig_i_donor_or_recipient += opt_mig_bitmatrix[j][node->node_index];
-         mig_i_donor_or_recipient += opt_mig_bitmatrix[node->node_index][j];
-       }
-     }
-     /* if no loci exists with two or more sequences of such species then move
-        to the next tip node */
-     if (!opt_est_geneflow && (!opt_migration || !mig_i_donor_or_recipient))
-     {
-       if (opt_sp_seqcount[i] < 2)
-       {
-         node->theta = -1;
-         node->has_theta = 0;
-         continue;
-       }
-     }
-
-     /* otherwise set theta around the mean of the prior */
-     if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-       node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                     (0.9 + 0.2 * legacy_rndu(thread_index));
-     else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-     {
-       #if 0
-       node->theta = opt_theta_alpha / opt_theta_beta;
-       #else
-       node->theta = opt_theta_alpha / opt_theta_beta *
+    /* otherwise set theta around the mean of the prior */
+    if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+      snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                    (0.9 + 0.2 * legacy_rndu(thread_index));
+    else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+      snode->theta = opt_theta_alpha / opt_theta_beta *
                      (0.6+0.8*legacy_rndu(thread_index));
-       #endif
-     }
-   }
-#endif
+  }
 
   /* go through inner nodes and setup thetas */
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
-    snode_t * node = stree->nodes[i];
+    snode_t * snode = stree->nodes[i];
 
-    if (opt_msci && node->hybrid)
+    if (opt_msci && snode->hybrid)
     {
-      node->theta = node->hybrid->theta = -1;
-      node->has_theta = node->hybrid->has_theta = 0;
+      snode->theta = snode->hybrid->theta = -1;
+      snode->has_theta = snode->hybrid->has_theta = 0;
 
-      if (!node_is_bidirection(node))
+      if (!node_is_bidirection(snode))
       {
         /* node is a hybridization: we assign a theta to the nodes that
            compose it that have a 'tau-parent' (htau) annotation */
 
-        if (node->htau)
+        if (snode->htau)
         {
           if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                          (0.9 + 0.2 * legacy_rndu(thread_index));
+            snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                           (0.9 + 0.2 * legacy_rndu(thread_index));
           else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            node->theta = opt_theta_alpha / opt_theta_beta *
-                          (0.6+0.8*legacy_rndu(thread_index));
-          node->has_theta = 1;
+            snode->theta = opt_theta_alpha / opt_theta_beta *
+                           (0.6+0.8*legacy_rndu(thread_index));
+          snode->has_theta = 1;
         }
         else
         {
-          node->theta = -1;
-          node->has_theta = 0;
+          snode->theta = -1;
+          snode->has_theta = 0;
         }
         
-        if (node->hybrid->htau)
+        if (snode->hybrid->htau)
         {
           if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            node->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                                  (0.9 + 0.2 * legacy_rndu(thread_index));
+            snode->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                                   (0.9 + 0.2 * legacy_rndu(thread_index));
           else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            node->hybrid->theta = opt_theta_alpha / opt_theta_beta *
-                                  (0.6+0.8*legacy_rndu(thread_index));
-          node->hybrid->has_theta = 1;
+            snode->hybrid->theta = opt_theta_alpha / opt_theta_beta *
+                                   (0.6+0.8*legacy_rndu(thread_index));
+          snode->hybrid->has_theta = 1;
         }
         else
         {
-          node->hybrid->theta = -1;
-          node->hybrid->has_theta = 0;
+          snode->hybrid->theta = -1;
+          snode->hybrid->has_theta = 0;
         }
       }
       else
@@ -2148,16 +2114,16 @@ static void stree_init_theta(stree_t * stree,
         /* bidirectional introgression */
 
         if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-          node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                        (0.9 + 0.2 * legacy_rndu(thread_index));
+          snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+                         (0.9 + 0.2 * legacy_rndu(thread_index));
         else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-          node->theta = opt_theta_alpha / opt_theta_beta *
-                        (0.6+0.8*legacy_rndu(thread_index));
-        node->has_theta = 1;
+          snode->theta = opt_theta_alpha / opt_theta_beta *
+                         (0.6+0.8*legacy_rndu(thread_index));
+        snode->has_theta = 1;
 
         /* the mirrored nodes do not have a theta */
-        node->hybrid->theta = -1;
-        node->hybrid->has_theta = 0;
+        snode->hybrid->theta = -1;
+        snode->hybrid->has_theta = 0;
       }
     }
     else
@@ -2167,17 +2133,11 @@ static void stree_init_theta(stree_t * stree,
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
       if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        node->theta = opt_theta_beta / (opt_theta_alpha - 1) *
+        snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
                       (0.9 + 0.2 * legacy_rndu(thread_index));
       else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-      {
-        #if 0
-        node->theta = opt_theta_alpha / opt_theta_beta;
-        #else
-        node->theta = opt_theta_alpha / opt_theta_beta *
-                      (0.6+0.8*legacy_rndu(thread_index));
-        #endif
-      }
+        snode->theta = opt_theta_alpha / opt_theta_beta *
+                       (0.6+0.8*legacy_rndu(thread_index));
     }
   }
 
@@ -2851,7 +2811,8 @@ static double cubic_root(double coeff[4], double x0, double x1)
   return(x);
 }
 
-static int get_gamma_conditional_approx(double a, double b, long k, double T, double* a1, double* b1)
+int get_gamma_conditional_approx(double a, double b, long k, double T,
+                                 double * a1, double * b1)
 {
   /* This returns the approximate posterior for the expected waiting time for a Poisson event,
     gamma G(a1,b1), when the priori is gamma G(a,b) and data are k events over time period T.
@@ -2866,9 +2827,9 @@ static int get_gamma_conditional_approx(double a, double b, long k, double T, do
 
   assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
   m = (a1k + sqrt(a1k * a1k + 4 * b * T)) / (2 * b);  /* m is the mode of the posterior */
-  dl = (a1k - b * m + T / m) / m;
-  if (fabs(dl) > 1e-4)   /* dl should be 0 */
-    fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.6f) \n", dl, k, T);
+  dl = a1k - b * m + T / m;
+  if (fabs(dl) > 1e-3)   /* dl should be 0 */
+    fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.6f) m = %9.6f\n", dl, k, T, m);
   ddl = -(a1k + 2 * T / m) / (m * m);
   v = -1 / ddl;
   mmv = m * m / v;
@@ -2895,10 +2856,10 @@ static int get_gamma_conditional_approx(double a, double b, long k, double T, do
 
 
 static int propose_theta_gibbs_im(stree_t* stree,
-  gtree_t** gtree,
-  locus_t** locus,
-  snode_t* snode,
-  long thread_index)
+                                  gtree_t** gtree,
+                                  locus_t** locus,
+                                  snode_t* snode,
+                                  long thread_index)
 {
   unsigned int i, j, k, n;
   unsigned int si;

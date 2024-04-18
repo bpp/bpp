@@ -487,18 +487,21 @@ static void write_figtree(FILE * fp_out,
 
   /* copy theta */
   if (opt_est_theta)
+  {
     for (i = 0; i < snodes_total; ++i)
     {
       nodepinfo_t* info = (nodepinfo_t*)(stree->nodes[i]->data);
-      if (stree->nodes[i]->theta >= 0)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
       {
         info->theta = mean[theta_count++];
-        /* Ziheng 2020-10-2 */
         stree->nodes[i]->theta = info->theta;
       }
-      else
-        info->theta = -1;
     }
+    for (i = 0; i < snodes_total; ++i)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta)
+        stree->nodes[i]->theta = stree->nodes[i]->linked_theta->theta;
+  }
+
   for (i = 0; i < stree->tip_count; ++i)
   {
     nodepinfo_t * info = (nodepinfo_t *)(stree->nodes[i]->data);
@@ -657,7 +660,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   /* compute number of theta parameters */
   if (opt_est_theta)
     for (i = 0; i < snodes_total; ++i)
-      if (stree->nodes[i]->theta >= 0)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
         col_count++;
 
   /* compute number of tau parameters */

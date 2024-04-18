@@ -249,8 +249,9 @@ static void print_mcmc_headerline(FILE * fp,
     /* compute mean thetas */
 
     /* 1a. calculate number of thetas to print */
-    long max_param_count = MIN(stree->tip_count+stree->inner_count,
-                               MAX_THETA_OUTPUT);
+    long total_nodes = stree->tip_count + stree->inner_count;
+    if (opt_msci) total_nodes += stree->hybrid_count;
+    long max_param_count = MIN(total_nodes, MAX_THETA_OUTPUT);
     mean_theta_index = (long *)xcalloc((size_t)max_param_count,sizeof(long));
 
     /* 1b. calculate number of mean thetas */
@@ -259,8 +260,8 @@ static void print_mcmc_headerline(FILE * fp,
     {
       for (j=0; j < stree->tip_count+stree->inner_count; ++j)
       {
-        if (stree->nodes[j]->theta < 0) continue;
-
+        if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta)
+          continue;
         mean_theta_index[k] = j;
         if (++k == max_param_count) break;
       }
@@ -546,7 +547,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, "%*s", 5, "thg");
     linewidth += 5;
   }
-  //fprintf(fp," thet");      linewidth += 5;
+  //fprintf(fp," thet");    linewidth += 5;
   fprintf(fp,"  tau");      linewidth += 5;
   fprintf(fp,"  mix");      linewidth += 5;
   if (enabled_hrdt)
@@ -1319,7 +1320,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     for (i = 0; i < snodes_total; ++i)
     {
       /* TODO: Is the 'has_theta' check also necessary ? */
-      if (stree->nodes[i]->theta >= 0)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
       {
         if (print_labels)
           fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
@@ -1816,20 +1817,17 @@ static void mcmc_logsample(FILE * fp,
 
   /* TODO: Combine the next two loops? */
 
-  /* first print thetas for tips */
   if (opt_est_theta)
   {
+    /* first print thetas for tips */
     for (i = 0; i < stree->tip_count; ++i)
       if (stree->nodes[i]->theta >= 0)
         fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
-  }
 
-  /* then for inner nodes */
-  if (opt_est_theta)
-  {
+    /* then for inner nodes */
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
-      if (stree->nodes[i]->theta >= 0)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
         fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
   }
 
@@ -3351,8 +3349,8 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_est_locusrate == MUTRATE_ONLY)
 	    locusrate[i] = stree->locusrate_mubar; 
     gtree[i]->rate_mui = locusrate[i];
-    if (opt_datefile )
-	gtree[i]->rate_mui = 1;
+    if (opt_datefile)
+      gtree[i]->rate_mui = 1;
     locus_set_heredity_scalers(locus[i],heredity+i);
 
     /* set pattern weights and free the weights array */
@@ -4638,19 +4636,19 @@ void cmd_run()
        fflush(NULL);
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      mcmc_logsample(fp_mcmc,i+1,stree,gtree,dparam_count,ndspecies);
+      mcmc_logsample(fp_mcmc, i+1, stree, gtree, dparam_count, ndspecies);
 
       /* log migcount */
       if (opt_migration && opt_debug_migration)
         print_migcount(fp_migcount,gtree);
 
       /* log gene trees */
-      if (opt_print_genetrees) 
-        print_gtree(fp_gtree,fp_mig, stree,gtree, printLocusIndex);
+      if (opt_print_genetrees)
+        print_gtree(fp_gtree, fp_mig, stree, gtree, printLocusIndex);
 
       /* log rates */
       if (opt_print_locusfile)
-        print_rates(fp_locus,stree,gtree,locus, printLocusIndex);
+        print_rates(fp_locus, stree, gtree, locus, printLocusIndex);
     }
 
     if (opt_method == METHOD_10)
@@ -4701,16 +4699,19 @@ void cmd_run()
       /* compute mean thetas */
 
       /* 1. calculate number of thetas to print */
-      long max_param_count = MIN(stree->tip_count+stree->inner_count,
-                                 MAX_THETA_OUTPUT);
+      long max_param_count;
+      long total_nodes = stree->tip_count + stree->inner_count;
+      if (opt_msci) total_nodes += stree->hybrid_count;
 
       /* 2. calculate means */
       k = 0;
       if (opt_est_theta)
       {
+        max_param_count = MIN(total_nodes, MAX_THETA_OUTPUT);
         for (j=0; j < stree->tip_count+stree->inner_count; ++j)
         {
-          if (stree->nodes[j]->theta < 0) continue;
+          if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta) 
+            continue;
 
           mean_theta[k] = (mean_theta[k]*(ft_round-1)+stree->nodes[j]->theta) /
                           ft_round;

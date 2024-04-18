@@ -3234,8 +3234,8 @@ void gtree_simulate_fini()
 gtree_t ** gtree_init(stree_t * stree,
                       msa_t ** msalist,
                       list_t * maplist,
-		      list_t * datelist,
-		      int tau_ctl,
+                      list_t * datelist,
+                      int tau_ctl,
                       int msa_count)
 {
   int i;

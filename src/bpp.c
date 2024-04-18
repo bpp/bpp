@@ -497,7 +497,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
   opt_finetune_qrates = 0.3;
-  opt_finetune_reset = 0;
+  opt_finetune_reset = 1;
   opt_finetune_nubar = 0.1;
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
