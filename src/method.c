@@ -3530,6 +3530,22 @@ static FILE * init(stree_t ** ptr_stree,
           "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
           "\n  scaling = 1\n\nto the control file");
 
+  #if 1
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+    for (j = 0; j < opt_locus_count; ++j)
+    {
+      stree->nodes[i]->old_C2ji[j] = stree->nodes[i]->C2ji[j];
+      stree->nodes[i]->old_Wsj[j] = stree->nodes[i]->Wsj[j];
+    }
+
+
+  #endif
+  #if 0
+  printf("thetas: %s %f, %s %f, %s %f\n",
+         stree->nodes[0]->label, stree->nodes[0]->theta,
+         stree->nodes[1]->label, stree->nodes[1]->theta,
+         stree->nodes[2]->label, stree->nodes[2]->theta);
+  #endif
   #if 0
   debug_print_stree(stree);
   assert(0);
@@ -4730,7 +4746,7 @@ void cmd_run()
       for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
       {
         if (stree->nodes[j]->tau == 0) continue;
-        
+
         mean_tau[k] = (mean_tau[k]*(ft_round-1) + stree->nodes[j]->tau)/ft_round;
 
         if (++k == max_param_count) break;

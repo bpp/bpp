@@ -403,14 +403,26 @@ void stree_destroy(stree_t * tree,
     if (node->mark)
       free(node->mark);
 
-    if (opt_migration && node->migevent_count)
-      free(node->migevent_count);
-
-    if (opt_migration && node->migbuffer)
+    if (opt_migration)
     {
-      for (j = 0; j < tree->inner_count; ++j)
-        free(node->migbuffer[j].mrsum);
-      free(node->migbuffer);
+      if (node->migevent_count)
+        free(node->migevent_count);
+
+      if (node->migbuffer)
+      {
+        for (j = 0; j < tree->inner_count; ++j)
+          free(node->migbuffer[j].mrsum);
+        free(node->migbuffer);
+      }
+
+      if (node->old_C2ji)
+        free(node->old_C2ji);
+      if (node->old_Wsj)
+        free(node->old_Wsj);
+      if (node->C2ji)
+        free(node->C2ji);
+      if (node->Wsj)
+        free(node->Wsj);
     }
 
     free(node);

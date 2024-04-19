@@ -533,7 +533,7 @@ void args_init(int argc, char ** argv)
   opt_mig_vrates_exist = 0;
   opt_model = -1;
   opt_modelparafile = NULL;
-  opt_mrate_move = BPP_MRATE_SLIDE;
+  opt_mrate_move = BPP_MRATE_GIBBS;
   opt_msafile = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;

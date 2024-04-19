@@ -559,6 +559,12 @@ typedef struct snode_s
 
   /* independent theta step lengths */
   long theta_step_index;
+
+  /* additional book-keeping for speeding up theta proposal */
+  double * old_C2ji;
+  double * old_Wsj;
+  double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
+  double * Wsj;   /* total mig wait time for s->j mig in pop j summed over time segments, lineages and loci */
 } snode_t;
 
 typedef struct migevent_s

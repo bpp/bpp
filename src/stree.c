@@ -138,8 +138,6 @@ static double logPDFGamma(double x, double a, double b)
       printf("x=%.6f a=%.6f b=%.6f", x, a, b);
       fatal("x a b outside range in logPDFGamma()");
    }
-   if (a > 30000)
-      fatal("large alpha in PDFGamma()");
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
 
@@ -541,6 +539,25 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
     if (!clone->old_t2h)
       clone->old_t2h = (double*)xmalloc((size_t)opt_locus_count*sizeof(double));
     memcpy(clone->old_t2h, snode->old_t2h, opt_locus_count * sizeof(double));
+
+  }
+  else
+  {
+    if (!clone->old_C2ji)
+      clone->old_C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+    memcpy(clone->old_C2ji, snode->old_C2ji, opt_locus_count * sizeof(double));
+
+    if (!clone->old_Wsj)
+      clone->old_Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+    memcpy(clone->old_Wsj, snode->old_Wsj, opt_locus_count * sizeof(double));
+
+    if (!clone->C2ji)
+      clone->C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+    memcpy(clone->C2ji, snode->C2ji, opt_locus_count * sizeof(double));
+
+    if (!clone->Wsj)
+      clone->Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+    memcpy(clone->Wsj, snode->Wsj, opt_locus_count * sizeof(double));
   }
 
   if (opt_migration)
@@ -721,6 +738,8 @@ stree_t * stree_clone_init(stree_t * stree)
     clone->nodes[i] = (snode_t *)xcalloc(1, sizeof(snode_t));
     snode_t * x = clone->nodes[i];
 
+    snode_t * snode = stree->nodes[i];
+
     if (opt_migration)
     {
       x->migevent_count = (long *)xcalloc((size_t)opt_locus_count,sizeof(long));
@@ -741,6 +760,26 @@ stree_t * stree_clone_init(stree_t * stree)
         x->mig_source[j] = dlist_create();
         x->mig_target[j] = dlist_create();
       }
+
+      if (snode->old_C2ji)
+        x->old_C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+      else
+        x->old_C2ji = NULL;
+
+      if (snode->old_Wsj)
+        x->old_Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+      else
+        x->old_Wsj = NULL;
+
+      if (snode->C2ji)
+        x->C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+      else
+        x->C2ji = NULL;
+
+      if (snode->Wsj)
+        x->Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
+      else
+        x->Wsj = NULL;
     }
   }
 
@@ -2092,7 +2131,7 @@ static void stree_init_theta(stree_t * stree,
           snode->theta = -1;
           snode->has_theta = 0;
         }
-        
+
         if (snode->hybrid->htau)
         {
           if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
@@ -2694,6 +2733,11 @@ void stree_init(stree_t * stree,
 
     for (j = 0; j < stree->locus_count; ++j)
       snode->coalevent[j] = dlist_create();
+
+    snode->old_C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
+    snode->old_Wsj  = (double *)xcalloc((size_t)msa_count, sizeof(double));
+    snode->C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
+    snode->Wsj  = (double *)xcalloc((size_t)msa_count, sizeof(double));
   }
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -2869,7 +2913,8 @@ static int propose_theta_gibbs_im(stree_t* stree,
   long coal_sum = 0;
   long migcount_sum = 0;
   double heredity;
-  double T2h_sum = 0;
+  double C2h_sum = 0;
+  double Wsj = 0;
   double a1, b1;
   size_t alloc_required;
   dlist_item_t* coalevent;
@@ -2953,9 +2998,9 @@ static int propose_theta_gibbs_im(stree_t* stree,
     for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k)
     {
       double t = migbuffer[k].time - migbuffer[k - 1].time;
-      T2h_sum += n * (n - 1) * t / heredity;
+      C2h_sum += n * (n - 1) * t / heredity;
       if (n > 0 && snode->parent)  /* no need to count migration for stree root. */
-        T2h_sum += 4 * n * mrsum * t / heredity;
+        Wsj += n * mrsum * t;
 
       if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
         --n;
@@ -2974,13 +3019,21 @@ static int propose_theta_gibbs_im(stree_t* stree,
   if (debug_gibbs)
     debug_gibbs_times++;
   //a1 = opt_theta_alpha + coal_sum + migcount_sum;
+  #if 1
+    /* TODO: 21.3.2024 - update coal_count_sum in code */
+    snode->coal_count_sum = 0;
+    long ii;
+    for (ii = 0; ii < opt_locus_count; ++ii)
+      snode->coal_count_sum += snode->coal_count[ii];
+  #endif
+  assert(coal_sum == snode->coal_count_sum);
   a1 = opt_theta_alpha + coal_sum;  /* ziheng-2024.1.31: this count should not include migration events */
-  b1 = opt_theta_beta + T2h_sum;
+  b1 = opt_theta_beta + C2h_sum;
   if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
   {
     /* ziheng-2024.1.31 */
-    // b1 = opt_theta_beta * a1 * (a1+1) / (opt_theta_alpha*(opt_theta_alpha+1) + T2h_sum*opt_theta_beta);
-    get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, T2h_sum, &a1, &b1);
+    // b1 = opt_theta_beta * a1 * (a1+1) / (opt_theta_alpha*(opt_theta_alpha+1) + C2h_sum*opt_theta_beta);
+    get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
   }
 
   /* save old theta in case of gamma prior */
@@ -3044,21 +3097,21 @@ static int propose_theta_gibbs_im(stree_t* stree,
     /* gibbs move rejected. */
     if (debug_gibbs) {
       long k = coal_sum;
-      double a = opt_theta_alpha, b = opt_theta_beta, T2 = T2h_sum, lnacc;
+      double a = opt_theta_alpha, b = opt_theta_beta, C2 = C2h_sum, lnacc;
       if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
         /* proposal ratio & posterior ratio */
         lnacc = (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
-        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
         printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
-          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, a1 / b1,
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, C2, a1, b1, a / b, C2 / k, a1 / b1,
           oldtheta, newtheta, lnacceptance, lnacc);
       }
       else {
         /* proposal ratio & posterior ratio */
         lnacc = (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
-        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
         printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
-          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, b1 / (a1 - 1),
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, C2, a1, b1, a / b, C2 / k, b1 / (a1 - 1),
           oldtheta, newtheta, lnacceptance, lnacc);
       }
     }
@@ -3077,6 +3130,11 @@ static int propose_theta_gibbs_im(stree_t* stree,
         gtree[i]->logpr -= x->logpr_contrib[i];
         gtree[i]->logpr += x->old_logpr_contrib[i];
         x->logpr_contrib[i] = x->old_logpr_contrib[i];
+
+        if (x->C2ji)
+          x->C2ji[i] = x->old_C2ji[i];
+        if (x->Wsj)
+          x->Wsj[i] = x->old_Wsj[i];
       }
     }
     return 0;
@@ -3136,12 +3194,12 @@ static int propose_theta_gibbs(stree_t * stree,
   long lcount = 0;
   long msa_index;
   long coal_sum = 0;
-  double T2h_sum = 0;
+  double C2h_sum = 0;
   double a1, b1;
   double heredity;
   double oldtheta,newtheta;
   double * sortbuffer = global_sortbuffer_r[thread_index];
-  dlist_item_t * event;
+  dlist_item_t * coalevent;
   int nextDateInd = -1;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
@@ -3151,7 +3209,7 @@ static int propose_theta_gibbs(stree_t * stree,
   assert(!opt_migration);
 
   /* TODO: Speed this up by using coal_event_sum variable as in NoTheta */
-  /* TODO: We can store T2h in the gtree_update_logprob_contrib function */
+  /* TODO: We can store C2h in the gtree_update_logprob_contrib function */
   for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
   {
     heredity = locus[msa_index]->heredity[0];
@@ -3169,9 +3227,9 @@ static int propose_theta_gibbs(stree_t * stree,
       }
     }
 
-    for (event = snode->coalevent[msa_index]->head; event; event = event->next)
+    for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
     {
-      gnode_t* gnode = (gnode_t*)(event->data);
+      gnode_t* gnode = (gnode_t*)(coalevent->data);
       sortbuffer[j++] = gnode->time;
     }
     if (snode->parent)
@@ -3185,7 +3243,7 @@ static int propose_theta_gibbs(stree_t * stree,
     if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
     for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
     {
-      T2h_sum += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+      C2h_sum += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
 
       if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
         n += 1 + snode->date_count[msa_index][nextDateInd];
@@ -3202,14 +3260,19 @@ static int propose_theta_gibbs(stree_t * stree,
   if (debug_gibbs)
     debug_gibbs_times++;
 
+  #if 1
+    /* todo: 21.3.2024 - update coal_count_sum in code */
+    snode->coal_count_sum = 0;
+    long ii;
+    for (ii = 0; ii < opt_locus_count; ++ii)
+      snode->coal_count_sum += snode->coal_count[ii];
+  #endif
   /* MSC and MSC-I models */
+  assert(coal_sum == snode->coal_count_sum);
   a1 = opt_theta_alpha + coal_sum;
-  b1 = opt_theta_beta + T2h_sum;
+  b1 = opt_theta_beta + C2h_sum;
   if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-  {
-    /* ziheng-2024.1.31 */
-    get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, T2h_sum, &a1, &b1);
-  }
+    get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
 
   /* save old theta in case of metropolized gibbs */
   oldtheta = snode->theta;
@@ -3267,21 +3330,21 @@ static int propose_theta_gibbs(stree_t * stree,
     /* gibbs move rejected. */
     if (debug_gibbs) {
       long k = coal_sum;
-      double a = opt_theta_alpha, b = opt_theta_beta, T2 = T2h_sum, lnacc;
+      double a = opt_theta_alpha, b = opt_theta_beta, C2 = C2h_sum, lnacc;
       if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
         /* proposal ratio & posterior ratio */
         lnacc = (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
-        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
         printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
-          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, a1 / b1,
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, C2, a1, b1, a / b, C2 / k, a1 / b1,
           oldtheta, newtheta, lnacceptance, lnacc);
       }
       else {
         /* proposal ratio & posterior ratio */
         lnacc = (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
-        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - T2 * (1 / newtheta - 1 / oldtheta);
+        lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
         printf("%6ld%3ld %-2s: kT= %4ld %9.6f a1b1 = %6.1f %8.1f  means= %8.5f %8.5f %8.5f reject %8.5f %8.5f %8.3f = %8.3f\n",
-          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, T2, a1, b1, a / b, T2 / k, b1 / (a1 - 1),
+          (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, C2, a1, b1, a / b, C2 / k, b1 / (a1 - 1),
           oldtheta, newtheta, lnacceptance, lnacc);
       }
     }
@@ -3303,6 +3366,11 @@ static int propose_theta_gibbs(stree_t * stree,
         gtree[i]->logpr -= x->logpr_contrib[i];
         gtree[i]->logpr += x->old_logpr_contrib[i];
         x->logpr_contrib[i] = x->old_logpr_contrib[i];
+
+        if (x->C2ji)
+          x->C2ji[i] = x->old_C2ji[i];
+        if (x->Wsj)
+          x->Wsj[i] = x->old_Wsj[i];
       }
     }
     return 0;
@@ -3424,7 +3492,13 @@ static int propose_theta_slide(stree_t * stree,
     snode_t * x = stree->td[j];
 
     for (i = 0; i < opt_locus_count; ++i)
+    {
       x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      if (x->C2ji)
+        x->C2ji[i] = x->old_C2ji[i];
+      if (x->Wsj)
+        x->Wsj[i] = x->old_Wsj[i];
+    }
   }
 
   return 0;
@@ -4560,6 +4634,25 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_count_above = count_above;
   *ret_count_below = count_below;
 }
+static double logPDFInvG(double x, double a, double b)
+{
+   /* inverse gamma density: mean=a/b; var=a/b^2
+   */
+   if (x <= 0 || a <= 0 || b <= 0) {
+      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
+      fatal("x a b outside range in logPDFInvG()");
+   }
+   return a * log(b) - lgamma(a) + (-a - 1) * log(x) - b / x;
+}
+
+static double logPDFRatioGamma(double xnew, double x, double a, double b)
+{
+  return (a-1)*log(xnew/x) - b*(xnew-x);
+}
+static double logPDFRatioInvG(double xnew, double x, double a, double b)
+{
+  return (-a-1)*log(xnew/x) - b*(1/xnew-1/x);
+}
 
 static long propose_tau(locus_t ** loci,
                         snode_t * snode,
@@ -4572,13 +4665,13 @@ static long propose_tau(locus_t ** loci,
   #ifdef OLD_CODE
   unsigned int offset = 0;
   #endif
-  int theta_method = 2;   /* how we change theta */
+  int theta_method = 3;   /* how we change theta */
   long accepted = 0;
   double oldage, newage;
   double minage = 0, maxage = 999;
   double lnacceptance = 0;
   double minfactor, maxfactor, thetafactor;
-  double oldtheta = 0;
+  //double oldtheta = 0;
   double logpr = 0;
   double logpr_diff = 0;
   double logl_diff = 0;
@@ -4725,6 +4818,7 @@ static long propose_tau(locus_t ** loci,
                      log(newage/oldage) - opt_tau_beta*(newage-oldage);
   }
 
+  #if 0
   /* change theta as well */
   if (opt_est_theta && theta_method)
   {
@@ -4760,6 +4854,7 @@ static long propose_tau(locus_t ** loci,
                         opt_theta_beta*(snode->theta - oldtheta);
     }
   }
+  #endif
 
   snode_t * affected[7];
   double old_logpr_contrib[7] = {0,0,0,0,0,0,0};
@@ -4882,6 +4977,73 @@ static long propose_tau(locus_t ** loci,
     affected[2] = snode->right;
   }
 
+  double C2j = 0;
+  if (opt_est_theta && theta_method == 3)
+  {
+    for (j = 0; j < paffected_count; ++j)
+    {
+      snode_t * x = affected[j];
+
+      if (x->theta == -1)
+        continue;
+      /* todo: 21.3.2024 - update coal_count_sum in code */
+      x->coal_count_sum = 0;
+      long ii;
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        x->coal_count_sum += x->coal_count[ii];
+
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        C2j += x->C2ji[ii];
+
+      double mfactor = 0;
+      mfactor = ((!x->parent) || x->parent == x) ? minfactor : maxfactor;
+
+      double a1 = opt_theta_alpha + x->coal_count_sum;
+      double b1 = opt_theta_beta + C2j*mfactor;
+
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     x->coal_count_sum,
+                                     C2j*mfactor,
+                                     &a1,
+                                     &b1);
+
+      double a1_old, b1_old;
+      a1_old = a1;
+      b1_old = opt_theta_beta + C2j;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     x->coal_count_sum,
+                                     C2j,
+                                     &a1_old,
+                                     &b1_old);
+
+      x->old_theta = x->theta;
+      x->theta = legacy_rndgamma(thread_index,a1) / b1;
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop == BPP_THETA_PROP_MG_INVG))
+        x->theta = 1 / x->theta;
+
+
+      /* proposal ratio */
+      if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+        lnacceptance += logPDFGamma(x->old_theta, a1_old, b1_old) -
+                        logPDFGamma(x->theta, a1, b1);
+      else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
+        lnacceptance += logPDFInvG(x->old_theta, a1_old, b1_old) -
+                        logPDFInvG(x->theta, a1, b1);
+
+      /* prior ratio */
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+    }
+  }
+
+
+
   if (!opt_est_theta)
   {
     for (i = 0; i < paffected_count; ++i)
@@ -5002,6 +5164,7 @@ static long propose_tau(locus_t ** loci,
     {
       /* the -1 check is due to network code (when snode is hybridization with
          its two parents having no tau) */
+      #if 0
       if (snode->theta != -1)
       {
         snode->theta = oldtheta;
@@ -5009,6 +5172,15 @@ static long propose_tau(locus_t ** loci,
         {
           /* TODO: Need to update hybrid theta */
         }
+      }
+      #endif
+      for (j = 0; j < paffected_count; ++j)
+      {
+        snode_t * x = affected[j];
+
+        if (x->theta == -1) continue;
+
+        x->theta = x->old_theta;
       }
     }
 
@@ -5383,7 +5555,7 @@ static long propose_tau_mig(locus_t ** loci,
 {
   unsigned int i, j, k;
 
-  int theta_method = 2;   /* how we change theta */
+  int theta_method = 3;   /* how we change theta */
   long accepted = 0;
   long mig_reject;        /* reject move due to conflict in gene tree ages */
   double oldage, newage;
@@ -5467,6 +5639,7 @@ static long propose_tau_mig(locus_t ** loci,
                      log(newage/oldage) - opt_tau_beta*(newage-oldage);
   }
 
+  #if 0
   /* change theta as well */
   if (theta_method && opt_est_theta)
   {
@@ -5497,6 +5670,73 @@ static long propose_tau_mig(locus_t ** loci,
                         opt_theta_beta*(snode->theta - oldtheta);
     }
   }
+  #endif
+
+
+  double C2j = 0;
+  if (opt_est_theta && theta_method == 3)
+  {
+    for (j = 0; j < paffected_count; ++j)
+    {
+      snode_t * x = affected[j];
+
+      if (x->theta == -1)
+        continue;
+      /* todo: 21.3.2024 - update coal_count_sum in code */
+      x->coal_count_sum = 0;
+      long ii;
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        x->coal_count_sum += x->coal_count[ii];
+
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        C2j += x->C2ji[ii];
+
+      double mfactor = 0;
+      mfactor = ((!x->parent) || x->parent == x) ? minfactor : maxfactor;
+
+      double a1 = opt_theta_alpha + x->coal_count_sum;
+      double b1 = opt_theta_beta + C2j*mfactor;
+
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     x->coal_count_sum,
+                                     C2j*mfactor,
+                                     &a1,
+                                     &b1);
+
+      double a1_old, b1_old;
+      a1_old = a1;
+      b1_old = opt_theta_beta + C2j;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     x->coal_count_sum,
+                                     C2j,
+                                     &a1_old,
+                                     &b1_old);
+
+      x->old_theta = x->theta;
+      x->theta = legacy_rndgamma(thread_index,a1) / b1;
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop == BPP_THETA_PROP_MG_INVG))
+        x->theta = 1 / x->theta;
+
+
+      /* proposal ratio */
+      if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+        lnacceptance += logPDFGamma(x->old_theta, a1_old, b1_old) -
+                        logPDFGamma(x->theta, a1, b1);
+      else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
+        lnacceptance += logPDFInvG(x->old_theta, a1_old, b1_old) -
+                        logPDFInvG(x->theta, a1, b1);
+
+      /* prior ratio */
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+    }
+  }
 
   if (!opt_est_theta)
   {
@@ -5504,6 +5744,7 @@ static long propose_tau_mig(locus_t ** loci,
     for (j = 0; j < paffected_count; ++j)
       logpr -= affected[j]->notheta_logpr_contrib;
   }
+
   #if 1
   /* change to if 0 to disable gtrees. Note: we use the serial version when
      thetas are integrated out */
@@ -9805,7 +10046,7 @@ double migrate_gibbs(stree_t * stree,
     {
       double t = migbuffer[k].time - migbuffer[k-1].time;
       if (n > 0 && tgt->parent)
-        bsj += 4*n*ind*t;
+        bsj += n*ind*t;
 
       if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
         --n;
@@ -9814,15 +10055,14 @@ double migrate_gibbs(stree_t * stree,
       else if (migbuffer[k].type == EVENT_TAU && epoch < tgt->mb_count-1)
         ind = ts_indicator[++epoch];
     }
-    bsj /= heredity;
   }
-  bsj /= stree->nodes[ti]->theta;
 
   /* we have the new distribution */
   long mindex = opt_migration_matrix[si][ti];
   assert(mindex >= 0);
   migspec_t * spec = opt_mig_specs+mindex;
 
+  assert(asj == stree->migcount_sum[si][ti]);
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
@@ -10016,6 +10256,12 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
         {
           gtree[k]->logpr = gtree[k]->old_logpr;
           stree->nodes[j]->logpr_contrib[k] = stree->nodes[j]->old_logpr_contrib[k];
+
+          if (stree->nodes[j]->C2ji)
+            stree->nodes[j]->C2ji[k] = stree->nodes[j]->old_C2ji[k];
+          if (stree->nodes[j]->Wsj)
+            stree->nodes[j]->Wsj[k] = stree->nodes[j]->old_Wsj[k];
+
         }
       }
     }

@@ -192,6 +192,36 @@ void prop_mixing_update_gtrees(locus_t ** locus,
     *ret_logpr = logpr;
 }
 
+static double logPDFGamma(double x, double a, double b)
+{
+   /* gamma density: mean=a/b; var=a/b^2
+   */
+   if (x <= 0 || a <= 0 || b <= 0) {
+      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
+      fatal("x a b outside range in logPDFGamma()");
+   }
+   return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
+}
+static double logPDFInvG(double x, double a, double b)
+{
+   /* inverse gamma density: mean=a/b; var=a/b^2
+   */
+   if (x <= 0 || a <= 0 || b <= 0) {
+      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
+      fatal("x a b outside range in logPDFInvG()");
+   }
+   return a * log(b) - lgamma(a) + (-a - 1) * log(x) - b / x;
+}
+
+static double logPDFRatioGamma(double xnew, double x, double a, double b)
+{
+  return (a-1)*log(xnew/x) - b*(xnew-x);
+}
+static double logPDFRatioInvG(double xnew, double x, double a, double b)
+{
+  return (-a-1)*log(xnew/x) - b*(1/xnew-1/x);
+}
+
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
   unsigned i,j,k;
@@ -249,7 +279,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   for (i=0,k=0; i < stree->locus_count; ++i)
     k += gtree[i]->inner_count; 
 
-  lnacceptance = (theta_count + tau_count + k)*lnc;
+  lnacceptance = (tau_count + k)*lnc;
 
   /* account for migration events */
   if (opt_migration)
@@ -270,24 +300,86 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   for (i = 0; i < nodes_count; ++i)
     snodes[i] = stree->nodes[i];
 
-  /* change the thetas */
+  /* change thetas */
   if (opt_est_theta)
   {
     for (i = 0; i < nodes_count; ++i)
     {
-      if (snodes[i]->theta <= 0) continue;
+      if (snodes[i]->theta <= 0 || snodes[i]->linked_theta) continue;
 
       snodes[i]->old_theta = snodes[i]->theta;
-      snodes[i]->theta *= c;
 
-      if (snodes[i]->linked_theta) continue;
+      double Cjstar = 0;
+      /* todo: 21.3.2024 - update coal_count_sum in code */
+      snodes[i]->coal_count_sum = 0;
+      long ii;
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        snodes[i]->coal_count_sum += snodes[i]->coal_count[ii];
+
+      for (ii = 0; ii < opt_locus_count; ++ii)
+        Cjstar += snodes[i]->C2ji[ii];
+      Cjstar *= c;
+
+      double a1 = opt_theta_alpha + snodes[i]->coal_count_sum;
+      double b1 = opt_theta_beta + Cjstar;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     snodes[i]->coal_count_sum,
+                                     Cjstar,
+                                     &a1,
+                                     &b1);
       
-      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        lnacceptance += (-opt_theta_alpha-1)*lnc -
-                     opt_theta_beta*(1/snodes[i]->theta-1/snodes[i]->old_theta);
-      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        lnacceptance += (opt_theta_alpha-1)*lnc -
-                       opt_theta_beta*(snodes[i]->theta - snodes[i]->old_theta);
+      double a1_old, b1_old;
+      a1_old = a1;
+      b1_old = opt_theta_beta + Cjstar/c;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha,
+                                     opt_theta_beta,
+                                     snodes[i]->coal_count_sum,
+                                     Cjstar/c,
+                                     &a1_old,
+                                     &b1_old);
+
+      snodes[i]->theta = legacy_rndgamma(thread_index, a1) / b1;
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop & BPP_THETA_PROP_MG_INVG))
+        snodes[i]->theta = 1.0 / snodes[i]->theta;
+
+      if (opt_linkedtheta)
+      {
+        for (j = 0; j < nodes_count; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          
+          if (x->theta >= 0 && x->has_theta && x->linked_theta == snodes[i])
+          {
+            x->old_theta = x->theta;
+            x->theta = snodes[i]->theta;
+          }
+        }
+      }
+
+      double newtheta = snodes[i]->theta;
+      double oldtheta = snodes[i]->old_theta;
+
+      /* proposal ratio */
+      if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+      {
+        lnacceptance += logPDFGamma(oldtheta, a1_old, b1_old) -
+                        logPDFGamma(newtheta, a1, b1);
+      }
+      /* TODO: check if the following should be applied for the case of InvG prior */
+      else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
+      {
+        lnacceptance += logPDFInvG(oldtheta, a1_old, b1_old) -
+                        logPDFInvG(newtheta, a1, b1);
+      }  
+
+      /* prior ratio */
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += logPDFRatioGamma(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
+      else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += logPDFRatioInvG(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
     }
   }
 
@@ -449,18 +541,20 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       for (i = 0; i < nodes_count; ++i)
       {
         for (j = 0; j < stree->locus_count; ++j)
+        {
           snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
+          if (snodes[i]->C2ji)
+            snodes[i]->C2ji[j] = snodes[i]->old_C2ji[j];
+          if (snodes[i]->Wsj)
+            snodes[i]->Wsj[j] = snodes[i]->old_Wsj[j];
+        }
 
         if (snodes[i]->theta <= 0) continue;
 
         /* TODO: Note that, it is both faster and more precise to restore the old
            value from memory, than re-computing it with a division. For now, we
            use the division here to be compatible with the old bpp */
-#if 0
         snodes[i]->theta = snodes[i]->old_theta;
-#else
-        snodes[i]->theta /= c;
-#endif
       }
     }
     else

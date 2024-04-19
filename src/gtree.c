@@ -2243,7 +2243,7 @@ void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
 
 
 gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, mappingDate_t ** tipDateArray,
-int tipDateArrayLen, int tau_ctl)
+                         int tipDateArrayLen, int tau_ctl)
 {
   int lineage_count = 0;
   int scaler_index = 0;
@@ -2778,20 +2778,20 @@ int tipDateArrayLen, int tau_ctl)
 
         /* increase # of migrations from pop k to j (forward in time) */
         migcount[pop[k].snode->node_index][pop[j].snode->node_index]++;
-	if (tipDateArray)
-                migrateTipDate(pop, i, j, k, maxSeqIndex);
-        else {
-        	/* shift up lineages in pop j */
-		pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
-                pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
+        if (tipDateArray)
+          migrateTipDate(pop, i, j, k, maxSeqIndex);
+        else
+        {
+          /* shift up lineages in pop j */
+          pop[k].seq_indices[pop[k].seq_count] = pop[j].seq_indices[i];
+          pop[k].nodes[pop[k].seq_count++] = pop[j].nodes[i];
 
-       		if (i != --pop[j].seq_count)
-        	{
-        	  pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
-        	  pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
-        	}
-      	}
-
+          if (i != --pop[j].seq_count)
+          {
+            pop[j].seq_indices[i] = pop[j].seq_indices[pop[j].seq_count];
+            pop[j].nodes[i] = pop[j].nodes[pop[j].seq_count];
+          }
+        }
       }
     }
 
@@ -2898,9 +2898,10 @@ int tipDateArrayLen, int tau_ctl)
   free(pop);
   free(ci);
   free(epoch);
-  if (tipDateArray) {
-	free(maxSeqIndex);
-  	free(useDate);
+  if (tipDateArray)
+  {
+    free(maxSeqIndex);
+    free(useDate);
   }
 	  
 
@@ -2934,7 +2935,7 @@ int tipDateArrayLen, int tau_ctl)
   if (opt_debug_sim)
   {
     fprintf(stdout,
-            "[Debug] # coalescent events, lineages coming in locus %d:\n", 
+            "[Debug] # coalescent events, lineages coming in locus %d:\n",
             msa_index);
     for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
       fprintf(stdout, "  %-*s : %-3d %-3d (age: %f)\n", 
@@ -3430,6 +3431,194 @@ double gtree_logprob_mig(stree_t * stree,
   return logpr;
 }
 
+#if 1
+double gtree_update_logprob_contrib_mig(snode_t * snode,
+                                        stree_t * stree,
+                                        gtree_t * gtree,
+                                        double heredity,
+                                        long msa_index,
+                                        long thread_index)
+{
+  unsigned int i, j, k, n;
+  long idx;
+  double logpr = 0;
+  double C2ji = 0;
+  double Wsj = 0;
+  dlist_item_t * event;
+  migbuffer_t * migbuffer;
+
+  /* make sure migbuffer is large enough */
+  size_t alloc_required = snode->migevent_count[msa_index] +
+                          snode->coal_count[msa_index] +
+                          stree->inner_count+1;
+  //ANNA
+  if (opt_datefile && snode->epoch_count) 
+    alloc_required = alloc_required + snode->epoch_count[msa_index];
+  migbuffer_check_and_realloc(thread_index,alloc_required);
+  migbuffer = global_migbuffer_r[thread_index];
+
+  /* add taus and coalescence times in sortbuffer */
+  migbuffer[0].time = snode->tau;
+  migbuffer[0].type = EVENT_TAU;
+  j = 1;
+  for (event = snode->coalevent[msa_index]->head; event; event = event->next)
+  {
+    gnode_t* gnode = (gnode_t*)(event->data);
+    migbuffer[j].time   = gnode->time;
+    migbuffer[j++].type = EVENT_COAL;
+  }
+
+  /* add migration events in sortbuffer */
+  /* TODO: Create population indexing structure instead of going through all
+     gene tree edges */
+  #if 0
+  for (k = 0; k < gtree->tip_count+gtree->inner_count; ++k)
+  {
+    miginfo_t * mi = gtree->nodes[k]->mi;
+    if (!mi) continue;
+
+    for (n = 0; n < mi->count; ++n)
+    {
+      if (mi->me[n].source == snode)
+      {
+        migbuffer[j].time   = mi->me[n].time;
+        migbuffer[j++].type = EVENT_MIG_SOURCE;
+      }
+      else if (mi->me[n].target == snode)
+      {
+        migbuffer[j].time   = mi->me[n].time;
+        migbuffer[j++].type = EVENT_MIG_TARGET;
+      }
+    }
+  }
+  #else
+  dlist_item_t * li;
+  for (li = snode->mig_source[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_SOURCE;
+  }
+  for (li = snode->mig_target[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_TARGET;
+  }
+  #endif
+
+  /* add splitting of populations */
+  for (k = 0; k < snode->mb_count; ++k)
+  {
+    migbuffer[j++] = snode->migbuffer[k];
+  }
+
+  if (snode->parent && !snode->mb_count)
+  {
+    printf("\nError when processing node %s\n", snode->label);
+  }
+  long epoch = 0;
+  assert(!snode->parent || snode->mb_count);
+  int sampleEpoch = 0;
+
+  if (snode->epoch_count)
+  for (k = 0; k < snode->epoch_count[msa_index]; k++)
+  {
+    migbuffer[j].time = snode->tip_date[msa_index][k];
+    migbuffer[j].type = EVENT_SAMPLE;
+    j++;
+  }
+
+  double mrsum = 0;
+  if (epoch < snode->mb_count)
+  {
+    assert(snode->migbuffer[epoch].active_count == 1 ||
+           snode->migbuffer[epoch].active_count == opt_locus_count);
+    idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+    mrsum = snode->migbuffer[epoch].mrsum[idx];
+  }
+
+  /* TODO: Probably split the following qsort case into two:
+     in case snode->parent then sort j-2 elements, otherwise
+     j-1 elements.
+  */
+
+  /* if there was at least one coalescent event, sort */
+  if (j > 1)
+    qsort(migbuffer + 1, j - 1, sizeof(migbuffer_t), cb_migbuf_asctime);
+
+  for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k)
+  {
+    double t = migbuffer[k].time - migbuffer[k - 1].time;
+    C2ji += n * (n - 1) * t;
+    if (n>0 && snode->parent)  /* no need to count migration for stree root. */
+      Wsj += n * mrsum * t;
+
+    if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
+      --n;
+    else if (migbuffer[k].type == EVENT_MIG_TARGET)
+      ++n;
+    else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count-1)
+    {
+      ++epoch;
+      idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
+      mrsum = snode->migbuffer[epoch].mrsum[idx];
+    }
+    else if (migbuffer[k].type == EVENT_SAMPLE)
+    {
+      n +=  snode->date_count[msa_index][sampleEpoch];
+      sampleEpoch++;
+    }
+  }
+
+  /* now distinguish between estimating theta and analytical computation */
+  if (opt_est_theta)
+  {
+    if (snode->coal_count[msa_index])
+      logpr += snode->coal_count[msa_index] * log(2.0/(heredity*snode->theta));
+
+    long ** mc = gtree->migcount;
+    j = snode->node_index;
+    for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+      if (mc[i][j])
+      {
+        assert(snode->theta > 0);
+        long mindex = opt_migration_matrix[i][j];
+        if (opt_mig_specs[mindex].am)
+          logpr += mc[i][j] * log(opt_mig_specs[mindex].Mi[msa_index]);
+        else
+          logpr += mc[i][j] * log(opt_mig_specs[mindex].M);
+      }
+
+    if (C2ji)
+    {
+      logpr -= C2ji / (snode->theta * heredity);
+
+      snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
+      snode->C2ji[msa_index] = C2ji / heredity;
+    }
+
+    if (Wsj)
+    {
+      logpr -= Wsj;
+
+      snode->old_Wsj[msa_index] = snode->Wsj[msa_index];
+      snode->Wsj[msa_index] = Wsj;
+    }
+
+    /* TODO: Be careful about which functions update the logpr contribution
+       and which do not */
+    snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
+    snode->logpr_contrib[msa_index] = logpr;
+  }
+  else
+  {
+    assert(0);
+  }
+
+  return logpr;
+}
+#else
 double gtree_update_logprob_contrib_mig(snode_t * snode,
                                         stree_t * stree,
                                         gtree_t * gtree,
@@ -3450,7 +3639,7 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
                           stree->inner_count+1;
   //ANNA
   if (opt_datefile && snode->epoch_count) 
-	  alloc_required = alloc_required + snode->epoch_count[msa_index];
+    alloc_required = alloc_required + snode->epoch_count[msa_index];
   migbuffer_check_and_realloc(thread_index,alloc_required);
   migbuffer = global_migbuffer_r[thread_index];
 
@@ -3602,6 +3791,7 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
 
   return logpr;
 }
+#endif
 
 double gtree_update_logprob_contrib(snode_t* snode,
                                     double heredity,
@@ -3673,7 +3863,7 @@ double gtree_update_logprob_contrib(snode_t* snode,
   if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
   {
-    T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
+    T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]);
 
      if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
      	n += 1 + snode->date_count[msa_index][nextDateInd];
@@ -3717,7 +3907,12 @@ double gtree_update_logprob_contrib(snode_t* snode,
 
     /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
     if (T2h)
-      logpr -= T2h / snode->theta;
+    {
+      logpr -= T2h / (snode->theta*heredity);
+
+      snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
+      snode->C2ji[msa_index] = T2h / heredity;
+    }
 
     /* TODO: Be careful about which functions update the logpr contribution
        and which do not */
@@ -3728,7 +3923,7 @@ double gtree_update_logprob_contrib(snode_t* snode,
   {
     snode->old_t2h[msa_index] = snode->t2h[msa_index];
 
-    snode->t2h[msa_index] = T2h;
+    snode->t2h[msa_index] = T2h / heredity;
 
     snode->t2h_sum -= snode->old_t2h[msa_index];
     snode->t2h_sum += snode->t2h[msa_index];
@@ -5038,7 +5233,13 @@ static long propose_ages(locus_t * locus,
         else
         {
           if (opt_est_theta)
+          {
             node->pop->logpr_contrib[msa_index] = node->pop->old_logpr_contrib[msa_index];
+            if (node->pop->C2ji)
+              node->pop->C2ji[msa_index] = node->pop->old_C2ji[msa_index];
+            if (node->pop->Wsj)
+              node->pop->Wsj[msa_index] = node->pop->old_Wsj[msa_index];
+          }
           else
             logprob_revert_notheta(node->pop,msa_index);
         }
@@ -5135,7 +5336,13 @@ static long propose_ages(locus_t * locus,
           for (pop = start; pop != end; pop = pop->parent)
           {
             if (opt_est_theta)
+            {
               pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+              if (pop->C2ji)
+                pop->C2ji[msa_index] = pop->old_C2ji[msa_index];
+              if (pop->Wsj)
+                pop->Wsj[msa_index] = pop->old_Wsj[msa_index];
+            }
             else
               logprob_revert_notheta(pop,msa_index);
           }
@@ -5246,6 +5453,16 @@ static long propose_migevent_ages(locus_t * locus,
         {
           mi->me[j].source->logpr_contrib[msa_index] = mi->me[j].source->old_logpr_contrib[msa_index];
           mi->me[j].target->logpr_contrib[msa_index] = mi->me[j].target->old_logpr_contrib[msa_index];
+
+          if (mi->me[j].source->C2ji)
+            mi->me[j].source->C2ji[msa_index] = mi->me[j].source->old_C2ji[msa_index];
+          if (mi->me[j].target->C2ji)
+            mi->me[j].target->C2ji[msa_index] = mi->me[j].target->old_C2ji[msa_index];
+
+          if (mi->me[j].source->Wsj)
+            mi->me[j].source->Wsj[msa_index] = mi->me[j].source->old_Wsj[msa_index];
+          if (mi->me[j].target->Wsj)
+            mi->me[j].target->Wsj[msa_index] = mi->me[j].target->old_Wsj[msa_index];
         }
         else
         {
@@ -6763,7 +6980,14 @@ static long propose_spr(locus_t * locus,
         else
         {
           if (opt_est_theta)
+          {
             father->pop->logpr_contrib[msa_index] = father->pop->old_logpr_contrib[msa_index];
+
+            if (father->pop->C2ji)
+              father->pop->C2ji[msa_index] = father->pop->old_C2ji[msa_index];
+            if (father->pop->Wsj)
+              father->pop->Wsj[msa_index] = father->pop->old_Wsj[msa_index];
+          }
           else
           {
             /* TODO: The below code is the same as calling logprob_revert_notheta(father->pop,msa_index) */
@@ -6860,7 +7084,13 @@ static long propose_spr(locus_t * locus,
           for (pop = start; pop != end; pop = pop->parent)
           {
             if (opt_est_theta)
+            {
               pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
+              if (pop->C2ji)
+                pop->C2ji[msa_index] = pop->old_C2ji[msa_index];
+              if (pop->Wsj)
+                pop->Wsj[msa_index] = pop->old_Wsj[msa_index];
+            }
             else
               logprob_revert_notheta(pop,msa_index);
           }
