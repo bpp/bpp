@@ -1135,6 +1135,7 @@ extern long opt_samplefreq;
 extern long opt_samples;
 extern long opt_scaling;
 extern long opt_seed;
+extern long  opt_simulate_read_depth;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
@@ -1184,6 +1185,9 @@ extern double opt_pseudo_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern double opt_simulate_base_err;
+extern double opt_simulate_a_samples;
+extern double opt_simulate_a_sites;
 extern double opt_siterate_alpha;
 extern double opt_siterate_beta;
 extern double opt_tau_alpha;
@@ -1674,6 +1678,9 @@ long legacy_rndpoisson(long index, double m);
 unsigned int * get_legacy_rndu_array(void);
 void set_legacy_rndu_array(unsigned int * x);
 double rndNormal(long index);
+int MultiNomialAlias(long index, int n, int ncat, double* F, int* L, int* nobs);
+int MultiNomialAliasSetTable(int ncat, double* prob, double* F, int* L);
+long legacy_rndbinomial(long index, int n, double p);
 
 /* functions in gamma.c */
 
