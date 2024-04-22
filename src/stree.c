@@ -4977,11 +4977,11 @@ static long propose_tau(locus_t ** loci,
     affected[2] = snode->right;
   }
 
-  double C2j = 0;
   if (opt_est_theta && theta_method == 3)
   {
     for (j = 0; j < paffected_count; ++j)
     {
+      double C2j = 0;
       snode_t * x = affected[j];
 
       if (x->theta == -1)

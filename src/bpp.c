@@ -508,7 +508,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_theta = (double *)xmalloc(sizeof(double));
   opt_finetune_theta[0] = 0.001;
   opt_finetune_theta_count = 1;
-  opt_finetune_theta_mode = 1;
+  opt_finetune_theta_mode = 2;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
