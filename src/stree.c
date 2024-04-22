@@ -4996,7 +4996,7 @@ static long propose_tau(locus_t ** loci,
         C2j += x->C2ji[ii];
 
       double mfactor = 0;
-      mfactor = ((!x->parent) || x->parent == x) ? minfactor : maxfactor;
+      mfactor = ((!x->parent) || x->parent == snode) ? minfactor : maxfactor;
 
       double a1 = opt_theta_alpha + x->coal_count_sum;
       double b1 = opt_theta_beta + C2j*mfactor;
@@ -5692,7 +5692,7 @@ static long propose_tau_mig(locus_t ** loci,
         C2j += x->C2ji[ii];
 
       double mfactor = 0;
-      mfactor = ((!x->parent) || x->parent == x) ? minfactor : maxfactor;
+      mfactor = ((!x->parent) || x->parent == snode) ? minfactor : maxfactor;
 
       double a1 = opt_theta_alpha + x->coal_count_sum;
       double b1 = opt_theta_beta + C2j*mfactor;
