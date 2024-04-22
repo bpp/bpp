@@ -5673,12 +5673,12 @@ static long propose_tau_mig(locus_t ** loci,
   #endif
 
 
-  double C2j = 0;
   if (opt_est_theta && theta_method == 3)
   {
     for (j = 0; j < paffected_count; ++j)
     {
       snode_t * x = affected[j];
+      double C2j = 0;
 
       if (x->theta == -1)
         continue;
