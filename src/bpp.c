@@ -839,8 +839,6 @@ void args_init(int argc, char ** argv)
         break;
 
       case 41:
-        if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
-          fatal("Invalid proportion of sliding window proposals (%s)", optarg);
         opt_theta_slide_prob = atof(optarg);
         break;
 
@@ -919,6 +917,12 @@ void args_init(int argc, char ** argv)
 
   if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
     fatal("Proportion of sliding window proposals must be between 0 and 1");
+
+  if (opt_theta_slide_prob == 0)
+  {
+    opt_finetune_theta_count = 1;
+    opt_finetune_theta_mode = 1;
+  }
 
   /* if no command specified, turn on --help */
   if (!commands)
