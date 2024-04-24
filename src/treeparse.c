@@ -298,7 +298,6 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
-    
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
@@ -415,15 +414,15 @@ void stree_destroy(stree_t * tree,
         free(node->migbuffer);
       }
 
-      if (node->old_C2ji)
-        free(node->old_C2ji);
-      if (node->old_Wsj)
-        free(node->old_Wsj);
-      if (node->C2ji)
-        free(node->C2ji);
-      if (node->Wsj)
-        free(node->Wsj);
     }
+    if (node->old_C2ji)
+      free(node->old_C2ji);
+    if (node->old_Wsj)
+      free(node->old_Wsj);
+    if (node->C2ji)
+      free(node->C2ji);
+    if (node->Wsj)
+      free(node->Wsj);
 
     free(node);
   }
