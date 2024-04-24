@@ -1855,8 +1855,8 @@ static void init_theta_stepsize(stree_t * stree)
     {
       /* two step lengths, one for tips and one for inner nodes */
       opt_finetune_theta = (double *)xmalloc(2*sizeof(double));
-      opt_finetune_theta[0] = eps;
-      opt_finetune_theta[1] = eps;
+      opt_finetune_theta[0] = eps/2;
+      opt_finetune_theta[1] = eps*2;
 
       for (i = 0; i < total_nodes; ++i)
         if (stree->nodes[i]->linked_theta == NULL)
@@ -3878,28 +3878,36 @@ void propose_tau_update_gtrees(locus_t ** loci,
     {
       /* process events for current population */
       /* there can be events even if seqin_count = 0 or 1 with tip dating */
-      if ((affected[j]->seqin_count[i] > 1) || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
+      int update_nodes;
+
+      update_nodes  = affected[j]->seqin_count[i] > 1;
+      update_nodes |= (affected[j]->epoch_count && affected[j]->epoch_count[i]);
+      if (update_nodes)
+      //if ((affected[j]->seqin_count[i] > 1) || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
       {
-        dlist_item_t * event;
-        for (event = affected[j]->coalevent[i]->head; event; event = event->next)
+        if (affected[j]->flag & SN_AFFECT)
         {
-          gnode_t * node = (gnode_t *)(event->data);
-          //if (node->time < minage) continue;
-          if ((node->time < minage) || (node->time > maxage)) continue;
-
-          gt_nodesptr[k++] = node;
-          node->mark = FLAG_PARTIAL_UPDATE | FLAG_BRANCH_UPDATE;
-          node->old_time = node->time;
-
-          if (node->time >= oldage && snode != stree->root)
+          dlist_item_t * event;
+          for (event = affected[j]->coalevent[i]->head; event; event = event->next)
           {
-            node->time = maxage + maxfactor*(node->time - maxage);
-            locus_count_above++;
-          }
-          else
-          {
-            node->time = minage + minfactor*(node->time - minage);
-            locus_count_below++;
+            gnode_t * node = (gnode_t *)(event->data);
+            //if (node->time < minage) continue;
+            if ((node->time < minage) || (node->time > maxage)) continue;
+
+            gt_nodesptr[k++] = node;
+            node->mark = FLAG_PARTIAL_UPDATE | FLAG_BRANCH_UPDATE;
+            node->old_time = node->time;
+
+            if (node->time >= oldage)
+            {
+              node->time = maxage + maxfactor*(node->time - maxage);
+              locus_count_above++;
+            }
+            else
+            {
+              node->time = minage + minfactor*(node->time - minage);
+              locus_count_below++;
+            }
           }
         }
 
@@ -4069,7 +4077,8 @@ void propose_tau_update_gtrees(locus_t ** loci,
       }
       else
       {
-        assert(paffected_count == 3);
+        if (!opt_linkedtheta)
+          assert(paffected_count == 3);
         assert(affected[1]->parent == affected[2]->parent &&
                affected[1]->parent == affected[0]);
         parents[0] = affected[0];
@@ -4680,12 +4689,11 @@ static long propose_tau(locus_t ** loci,
   unsigned int count_below = 0;
 
   unsigned int paffected_count;        /* number of affected populations */
+  unsigned int theta_count = 0;
+  long * marks = NULL;
+  snode_t ** theta_list = NULL;
 
   oldage = snode->tau;
-
-  /* TODO: Implement a generic version */
-  if (opt_linkedtheta)
-    theta_method = 0;
 
   /* compute minage and maxage bounds */
   if (opt_msci && snode->hybrid)
@@ -4977,34 +4985,70 @@ static long propose_tau(locus_t ** loci,
     affected[2] = snode->right;
   }
 
+  theta_count = paffected_count;
+  theta_list = affected;
   if (opt_est_theta && theta_method == 3)
   {
-    for (j = 0; j < paffected_count; ++j)
+    size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    snode_t ** snodes = stree->nodes;
+
+    /* repopulate theta_list if linked theta model */
+    if (opt_linkedtheta)
+    {
+      theta_count = 0;
+      marks = (long *)xcalloc(totnodes,sizeof(long));
+      theta_list = (snode_t **)xmalloc(totnodes*sizeof(snode_t *));
+      for (j = 0; j < paffected_count; ++j)
+      {
+        snode_t * x = affected[j]->linked_theta ?
+                        affected[j]->linked_theta : affected[j];
+        if (!marks[x->node_index])
+        {
+          theta_list[theta_count++] = x;
+          marks[x->node_index] = 1;
+        }
+      }
+
+      for (j = 0; j < totnodes; ++j)
+        marks[j] = 0;
+    }
+
+    for (j = 0; j < theta_count; ++j)
     {
       double C2j = 0;
-      snode_t * x = affected[j];
+      long coal_count_sum = 0;
+      long ii,jj;
+
+      /* primary theta */
+      snode_t * x = theta_list[j];
 
       if (x->theta == -1)
         continue;
-      /* todo: 21.3.2024 - update coal_count_sum in code */
-      x->coal_count_sum = 0;
-      long ii;
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        x->coal_count_sum += x->coal_count[ii];
 
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        C2j += x->C2ji[ii];
+      for (jj = 0; jj < totnodes; ++jj)
+      {
+        if (snodes[jj]->linked_theta != x && snodes[jj] != x) continue;
+        for (ii = 0; ii < opt_locus_count; ++ii)
+        {
+          coal_count_sum += snodes[jj]->coal_count[ii];
+          C2j += snodes[jj]->C2ji[ii];
+        }
+      }
 
       double mfactor = 0;
+      #if 0
       mfactor = ((!x->parent) || x->parent == snode) ? minfactor : maxfactor;
+      #else
+      mfactor = (x->parent == snode) ? minfactor : maxfactor;
+      #endif
 
-      double a1 = opt_theta_alpha + x->coal_count_sum;
+      double a1 = opt_theta_alpha + coal_count_sum;
       double b1 = opt_theta_beta + C2j*mfactor;
 
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     x->coal_count_sum,
+                                     coal_count_sum,
                                      C2j*mfactor,
                                      &a1,
                                      &b1);
@@ -5015,7 +5059,7 @@ static long propose_tau(locus_t ** loci,
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     x->coal_count_sum,
+                                     coal_count_sum,
                                      C2j,
                                      &a1_old,
                                      &b1_old);
@@ -5025,6 +5069,20 @@ static long propose_tau(locus_t ** loci,
       if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop == BPP_THETA_PROP_MG_INVG))
         x->theta = 1 / x->theta;
 
+      /* update thetas for linked populations */
+      if (opt_linkedtheta)
+      {
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * y = stree->nodes[jj];
+          
+          if (y->theta >= 0 && y->has_theta && y->linked_theta == x)
+          {
+            y->old_theta = y->theta;
+            y->theta = x->theta;
+          }
+        }
+      }
 
       /* proposal ratio */
       if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
@@ -5033,16 +5091,54 @@ static long propose_tau(locus_t ** loci,
       else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
         lnacceptance += logPDFInvG(x->old_theta, a1_old, b1_old) -
                         logPDFInvG(x->theta, a1, b1);
+      if (opt_debug_tau)
+        printf("%-3s k C2h: %ld %9.6f a1 b1: %9.6f %9.6f -> %9.6f %9.6f theta: %9.5e %9.5e lna = %6.2f\n", 
+          x->label, coal_count_sum, C2j, a1_old, b1_old, a1, b1, x->old_theta, x->theta, lnacceptance);
 
       /* prior ratio */
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta,
+                                         opt_theta_alpha, opt_theta_beta);
       else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta,
+                                        opt_theta_alpha, opt_theta_beta);
+    }
+
+    /* create list of nodes for updating gene tree density contributions */
+    if (opt_linkedtheta)
+    {
+      theta_count = 0;
+      for (j = 0; j < paffected_count; ++j)
+      {
+        theta_list[theta_count++] = affected[j];
+        affected[j]->flag |= SN_AFFECT;
+        marks[affected[j]->node_index] = 1;
+      }
+
+      for (j = 0; j < paffected_count; ++j)
+      {
+        long jj;
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * x = snodes[jj];
+
+          if (x->linked_theta == affected[j] && !marks[x->node_index])
+          {
+            theta_list[theta_count++] = x;
+            marks[x->node_index] = 1;
+          }
+          else if (!x->linked_theta && affected[j]->linked_theta == x)
+          {
+            if (!marks[x->node_index])
+            {
+              theta_list[theta_count++] = x;
+              marks[x->node_index] = 1;
+            }
+          }
+        }
+      }
     }
   }
-
-
 
   if (!opt_est_theta)
   {
@@ -5064,8 +5160,10 @@ static long propose_tau(locus_t ** loci,
     tp.maxage = maxage;
     tp.minfactor = minfactor;
     tp.maxfactor = maxfactor;
-    tp.affected = affected;
-    tp.paffected_count = paffected_count;
+    //tp.affected = affected;
+    //tp.paffected_count = paffected_count;
+    tp.affected = theta_list;
+    tp.paffected_count = theta_count;
     tp.logl_diff = logl_diff;
     tp.logpr_diff = logpr_diff;
     threads_wakeup(THREAD_WORK_TAU,&tp);
@@ -5087,8 +5185,10 @@ static long propose_tau(locus_t ** loci,
                               maxfactor,
                               0,
                               stree->locus_count,
-                              affected,
-                              paffected_count,
+                              //affected,
+                              //paffected_count,
+                              theta_list,
+                              theta_count,
                               &count_above,
                               &count_below,
                               &logl_diff,
@@ -5106,6 +5206,9 @@ static long propose_tau(locus_t ** loci,
     if (opt_clock != BPP_CLOCK_CORR || opt_rate_prior != BPP_BRATE_PRIOR_LOGNORMAL)
       assert(logpr_diff == 0);
     #endif
+
+    if (opt_linkedtheta)
+      free(theta_list);
 
     logpr_diff += logpr - stree->notheta_logpr;
     stree->notheta_old_logpr = stree->notheta_logpr;
@@ -5306,6 +5409,12 @@ static long propose_tau(locus_t ** loci,
 
       stree->notheta_logpr = stree->notheta_old_logpr;
     }
+  }
+
+  if (opt_linkedtheta)
+  {
+    free(marks);
+    free(theta_list);
   }
   return accepted;
 }
