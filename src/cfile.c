@@ -1724,6 +1724,7 @@ static long parse_finetune(const char * line)
   if (p[ws] != '0' && p[ws] != '1') goto l_unwind;
 
   if (p[ws] == '1') opt_finetune_reset = 1;
+  else if (p[ws] == '0') opt_finetune_reset = 0;
 
   p += ws+1;
 
