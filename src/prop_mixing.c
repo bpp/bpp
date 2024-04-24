@@ -311,21 +311,27 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
       double Cjstar = 0;
       /* todo: 21.3.2024 - update coal_count_sum in code */
-      snodes[i]->coal_count_sum = 0;
+      long coal_count_sum = 0;
       long ii;
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        snodes[i]->coal_count_sum += snodes[i]->coal_count[ii];
 
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        Cjstar += snodes[i]->C2ji[ii];
+      long jj;
+      for (jj = 0; jj < nodes_count; ++jj)
+      {
+        if (snodes[jj]->linked_theta != snodes[i] && jj != i) continue;
+        for (ii = 0; ii < opt_locus_count; ++ii)
+        {
+          coal_count_sum += snodes[jj]->coal_count[ii];
+          Cjstar += snodes[jj]->C2ji[ii];
+        }
+      }
       Cjstar *= c;
 
-      double a1 = opt_theta_alpha + snodes[i]->coal_count_sum;
+      double a1 = opt_theta_alpha + coal_count_sum;
       double b1 = opt_theta_beta + Cjstar;
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     snodes[i]->coal_count_sum,
+                                     coal_count_sum,
                                      Cjstar,
                                      &a1,
                                      &b1);
@@ -336,7 +342,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     snodes[i]->coal_count_sum,
+                                     coal_count_sum,
                                      Cjstar/c,
                                      &a1_old,
                                      &b1_old);
