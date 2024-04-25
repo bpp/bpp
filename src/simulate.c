@@ -1008,7 +1008,7 @@ static char * consensus(const char * x, const char * y, long n)
 
 static char read_depth_model_beta = 1;  /* 1: beta; 0:gamma */
 static int read_depth_min = 2, read_depth_max = 100;
-static double read_depth_corr = 0.8;
+static double read_depth_prob_prev = 0.9;
 static double** read_depth_AliasF;  /* multinomial sampling */
 int** read_depth_AliasL;
 
@@ -1019,6 +1019,8 @@ int** read_depth_AliasL;
    FL space for multinomial is arranged as follows:
    read_depth_AliasF: Fn1-00 Fn1-01 Fn2-00 Fn2-F01 ...
    read_depth_AliasL: Ln1-00 Ln1-01 Ln2-00 Ln2-F01 ...
+   read_depth_species[ispecies] has depthx for the beta model, and depth for gamma.
+   We assume that at most two alleles are called. 
 */
 
 static void init_sequencing_machine(stree_t* stree, double** read_depth_species,
@@ -1080,7 +1082,11 @@ static void init_sequencing_machine(stree_t* stree, double** read_depth_species,
 
   printf("\nGenome-wide average read depths:\n");
   for (i = 0; i < stree->tip_count; ++i)
-    printf("%-10s: %12.9f\n", stree->nodes[i]->label, (*read_depth_species)[i]);
+    if (read_depth_model_beta)
+      printf("%-10s: %12.9f%6.0f\n", stree->nodes[i]->label, (*read_depth_species)[i],
+        read_depth_min + (*read_depth_species)[i] * (read_depth_max - read_depth_min));
+    else
+      printf("%-10s: %12.9f\n", stree->nodes[i]->label, (*read_depth_species)[i]);
 
   free(prob);
 }
@@ -1088,7 +1094,6 @@ static void init_sequencing_machine(stree_t* stree, double** read_depth_species,
 static void sequencing_machine(stree_t* stree, msa_t* msa, 
             double *read_depth_species, double *gt_err, double *gt_count)
 {
-/* We assume that at most two alleles are called. */
   long iseq, isite, i, depth, k, ib;
   double depthx=-1, xm, a = opt_simulate_a_sites;
   double eps = opt_simulate_base_err, lne = log(eps), ln1e = log(1 - eps);
@@ -1100,19 +1105,21 @@ static void sequencing_machine(stree_t* stree, msa_t* msa,
     // printf("seq %-10s is from species %-10s\n", msa->label[iseq], stree->nodes[ispecies]->label);
 
     for (isite = 0; isite < msa->length; isite++) {
-      if (isite == 0 || legacy_rndu(thread_index_zero) > read_depth_corr) {
-        xm = read_depth_species[ispecies];
-        if (read_depth_model_beta) {
-          depthx = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);
-          depth = (long)(read_depth_min + depthx * (read_depth_max - read_depth_min) + 0.5);
-        }
-        else {
-          depthx = legacy_rndgamma(thread_index_zero, a) / a * xm;
-          depth = (long)(depthx + 0.5);
-          if (depth < read_depth_min || depth > read_depth_max) fatal("bad depth");
-        }
+      /* generate depth for isite */
+      xm = read_depth_species[ispecies];
+      if (isite > 0)
+        xm = read_depth_prob_prev * depthx + (1 - read_depth_prob_prev) * xm;
+      if (read_depth_model_beta) {
+        depthx = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);  /* xm: mean of beta */
+        depth = (long)(read_depth_min + depthx * (read_depth_max - read_depth_min) + 0.5);
+      }
+      else {
+        depthx = legacy_rndgamma(thread_index_zero, a) / a * xm;
+        depth = (long)(depthx + 0.5);
+        if (depth < read_depth_min || depth > read_depth_max) fatal("bad depth");
       }
 
+      /* true gt.  nallele = 1 for homozygote or 2 for heterozygote */
       gt = msa->sequence[iseq][isite];
       for (i = 0, nallele = 0; i < 4; i++)
         if (gt & bases[i]) alleles[nallele++] = bases[i];
@@ -1129,7 +1136,6 @@ static void sequencing_machine(stree_t* stree, msa_t* msa,
       if (r > read_depth_AliasF[depth - 1][k + offset])
         k = read_depth_AliasL[depth - 1][k + offset];
 #endif
-      //assert(depth == opt_simulate_read_depth);
       lnL[0] = k * ln1e + (depth - k) * lne;
       lnL[1] = -depth * log(2.0);
       lnL[2] = (depth - k) * ln1e + k * lne;
@@ -2286,9 +2292,9 @@ static void simulate(stree_t * stree)
 
   if (opt_simulate_read_depth) {
     printf("\nObserved genotype-calling error rates\n");
-    printf("\nSpecies   :    meanDP         GT00-error        GT-01 error\n");
+    printf("\nSpecies   :    meanDP            GT00-error           GT-01 error\n");
     if (read_depth_model_beta)
-      for (i = 0; i < stree->tip_count; i++)
+      for (i = 0; i < stree->tip_count; i++)  /* change depthx -> depth for printing */
         read_depth_species[i] = read_depth_min + read_depth_species[i] * (read_depth_max - read_depth_min);
 
     for (i = 0; i < stree->tip_count; i++) {
@@ -2296,7 +2302,7 @@ static void simulate(stree_t * stree)
         opt_locus_count * opt_sp_seqcount[i] / 2 * msa[0]->length);
       gt_err[i * 2 + 0] /= gt_count[i * 2 + 0];
       gt_err[i * 2 + 1] /= gt_count[i * 2 + 1];
-      printf("%-10s: %9.4f %9.5f (%6.0f) %9.5f (%6.0f)\n", stree->nodes[i]->label,
+      printf("%-10s: %9.4f %12.7f (%8.0f) %12.7f (%8.0f)\n", stree->nodes[i]->label,
         read_depth_species[i], gt_err[i * 2 + 0], gt_count[i * 2 + 0], gt_err[i * 2 + 1], gt_count[i * 2 + 1]);
     }
     free(read_depth_species);
