@@ -565,6 +565,8 @@ typedef struct snode_s
   double * old_Wsj;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
   double * Wsj;   /* total mig wait time for s->j mig in pop j summed over time segments, lineages and loci */
+
+  long flag;
 } snode_t;
 
 typedef struct migevent_s
@@ -1040,6 +1042,8 @@ typedef struct thread_info_s
 #define FLAG_RED_LEFT                 256
 #define FLAG_RED_RIGHT                512
 #define FLAG_SIMULATE                1024
+
+#define SN_AFFECT                       1
 
 
 /* options */
