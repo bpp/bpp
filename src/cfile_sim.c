@@ -1233,6 +1233,20 @@ static void check_validity()
 
   /* Change to zero index */
   if (opt_print_locus) {
+    if (opt_model == BPP_DNA_MODEL_JC69) {
+	    opt_model = BPP_DNA_MODEL_GTR;
+  	    opt_basefreqs_params = (double *)xcalloc(DNA_STATES_COUNT,sizeof(double));
+
+  	    for (int i = 0; i < DNA_STATES_COUNT; ++i) {
+              opt_basefreqs_params[i] = 0.25;
+  	    }
+	    
+  	    opt_qrates_params = (double *)xcalloc(DNA_QRATES_COUNT,sizeof(double));
+
+  	    for (int i = 0; i < DNA_QRATES_COUNT; ++i) {
+	      opt_qrates_params[i] = 1;
+  	    }
+    }
     for (long i = 0; i < opt_print_locus; i++) {
       	opt_print_locus_num[i]--;
       if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {

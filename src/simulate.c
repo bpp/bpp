@@ -2219,6 +2219,8 @@ static void simulate(stree_t * stree)
     fclose(fp_concat);
   if (opt_treefile)
     fclose(fp_tree);
+  if (opt_print_locus)
+    fclose(fp_mig);
   if (opt_modelparafile)
     fclose(fp_param);
   assert(opt_mapfile);

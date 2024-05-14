@@ -793,7 +793,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
   /* compute means */
   int prec = 6;
-  if (opt_datefile)
+  if (opt_datefile || opt_print_locus)
     prec = 12;
 
   fprintf(stdout, "mean    ");

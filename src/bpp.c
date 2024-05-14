@@ -502,7 +502,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
   opt_finetune_qrates = 0.3;
-  opt_finetune_reset = 0;
+  opt_finetune_reset = 1;
   opt_finetune_nubar = 0.1;
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
@@ -590,6 +590,7 @@ void args_init(int argc, char ** argv)
   opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
+
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_max = 0;
   opt_theta_min = 0;
@@ -979,6 +980,7 @@ static void dealloc_switches()
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
   if (opt_bfdriver) free(opt_bfdriver);
+  if (opt_print_locus_num) free(opt_print_locus_num);
 
   /* mccoal switches */
   if (opt_basefreqs_params) free(opt_basefreqs_params);
