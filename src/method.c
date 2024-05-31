@@ -1829,7 +1829,9 @@ static void mcmc_logsample(FILE * fp,
         fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
   }
 
-    /* then for inner nodes */
+  /* then for inner nodes */
+  if (opt_est_theta)
+  {
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
@@ -4608,8 +4610,6 @@ void cmd_run()
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
 
-//        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
- //                                      (double)ft_round;
         g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
                                        (double)ft_round;
     } 
