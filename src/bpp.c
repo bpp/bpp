@@ -593,6 +593,7 @@ void args_init(int argc, char ** argv)
   opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
+
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_prop = -1;
   opt_theta_gibbs_showall_eps = 0;
@@ -947,6 +948,7 @@ static void dealloc_switches()
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
   if (opt_bfdriver) free(opt_bfdriver);
+  if (opt_print_locus_num) free(opt_print_locus_num);
 
   /* mccoal switches */
   if (opt_basefreqs_params) free(opt_basefreqs_params);

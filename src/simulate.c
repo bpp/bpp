@@ -459,48 +459,36 @@ static double * rates4sites(double locus_siterate_alpha, int cdf)
   return rates;
 }
 
-void clear_marks (gtree_t * tree)
-{
-  unsigned int i;
-
-  for (i = 0; i < tree->inner_count + tree->tip_count; i++)
-    tree->nodes[i]->mark = 0;
+void clear_marks (gtree_t * tree) {
+	for (unsigned i = 0; i < tree->inner_count + tree->tip_count; i++)
+		tree->nodes[i]->mark = 0;
 }
 
-void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus)
-{
-  if (node->left)
-  {
-    mark_mutation(node->left, site, mutations, locus);
-    mark_mutation(node->right, site, mutations, locus);
-  } 
-  
-  list_t * mutNode = mutations + node->clv_index;
-  list_item_t * item = mutNode->head;
-  
-  while (item)
-  {
-    mutation_t * mut = (mutation_t *) item->data;
-  
-    if (mut->site == site)
-    {
-      node->mark = 1;
-  
-      if (!node->left || !node->left->mark || !node->right->mark)
-      {
-        printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n",
-               locus + 1, site + 1, mut->time, charmap_nt_tcag[(int)mut->state],
-               mut->pop->label);
-      }
-      break;
-  
-    }
-    item = item->next;
-  }
-}
+void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
+  	char dna[4] = "TCAG";
+	if (node->left) {
+		mark_mutation(node->left, site, mutations, locus);
+		mark_mutation(node->right, site, mutations, locus);
 
-void print_mutation_information(gnode_t * node, int site) {
+	} 
 
+	list_t * mutNode = mutations + node->clv_index;
+	list_item_t * item = mutNode->head;
+
+	while (item) {
+		mutation_t * mut = (mutation_t *) item->data;
+
+		if (mut->site == site) {
+			node->mark = 1;
+
+			if (!node->left || !node->left->mark || !node->right->mark) {
+				printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n", locus + 1, site + 1, mut->time, charmap_nt_tcag[mut->state], mut->pop->label);
+			}
+			break;
+
+		}
+		item = item->next;
+	}
 }
 
 static void evolve_mutation_recursive(gnode_t * node, double ** rates, list_t * mutList, int * mutPresent) {
@@ -1651,6 +1639,7 @@ static void simulate(stree_t * stree)
   FILE * fp_tree = NULL;
   FILE * fp_param = NULL;
   FILE * fp_map = NULL;
+  FILE * fp_mig = NULL;
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
   FILE * fp_seqDates = NULL;
@@ -1667,6 +1656,9 @@ static void simulate(stree_t * stree)
     fp_concat = xopen(opt_concatfile, "w");
   if (opt_treefile)
     fp_tree = xopen(opt_treefile, "w");
+  //ANNA fix this
+  if (opt_print_locus)
+     fp_mig = xopen("mig.txt", "w");
   if (opt_modelparafile)
     fp_param = xopen(opt_modelparafile, "w");
   assert(opt_mapfile);
@@ -2090,6 +2082,12 @@ static void simulate(stree_t * stree)
       char * newick = gtree_export_newick(gtree[i]->root, NULL);
       fprintf(fp_tree, "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
       free(newick);
+
+      if (opt_print_locus && printLocusIndex[i]){
+      	char * mig = gtree_export_migration(gtree[i]->root);
+      	fprintf(fp_mig, "%s\n", mig);
+      	free(mig);
+      }
     }
 
     if (opt_msafile)
@@ -2372,6 +2370,8 @@ static void simulate(stree_t * stree)
     fclose(fp_concat);
   if (opt_treefile)
     fclose(fp_tree);
+  if (opt_print_locus)
+    fclose(fp_mig);
   if (opt_modelparafile)
     fclose(fp_param);
   assert(opt_mapfile);

@@ -1779,7 +1779,8 @@ static void mcmc_logsample(FILE * fp,
                            stree_t * stree,
                            gtree_t ** gtree,
                            long dparam_count,
-                           long ndspecies)
+                           long ndspecies, 
+			   int * print_locus_index)
 {
   unsigned int i,j;
   unsigned int snodes_total;
@@ -1813,6 +1814,9 @@ static void mcmc_logsample(FILE * fp,
     fprintf(fp, "\t%s", delimitation_getparam_string());
   }
 
+  int prec = 6;
+  if (print_locus_index )
+    prec = 10;
   /* 1. Print thetas */
 
   /* TODO: Combine the next two loops? */
@@ -1822,18 +1826,18 @@ static void mcmc_logsample(FILE * fp,
     /* first print thetas for tips */
     for (i = 0; i < stree->tip_count; ++i)
       if (stree->nodes[i]->theta >= 0)
-        fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
+        fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
+  }
 
     /* then for inner nodes */
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-        fprintf(fp, "\t%.6f", stree->nodes[i]->theta);
+        fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
   }
 
   /* 2. Print taus for inner nodes */
-  int prec = 6;
-  if (opt_datefile)
+  if ( opt_datefile )
     prec = 10;
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau)
@@ -1988,7 +1992,7 @@ static void print_gtree(FILE ** fp, FILE ** fp_mig, stree_t * stree, gtree_t ** 
 
   for (i = 0; i < opt_locus_count; ++i)
   {
-    if (!opt_print_locus ||  print_locus_index[i]) {
+    if (!opt_print_locus ||  (print_locus_index && print_locus_index[i])) {
       gtree_update_branchlengths(stree,gtree[i]);
       for (tl = 0, j = 0; j < gtree[i]->tip_count+gtree[i]->inner_count; ++j)
       {
@@ -1998,10 +2002,13 @@ static void print_gtree(FILE ** fp, FILE ** fp_mig, stree_t * stree, gtree_t ** 
       }
 
       char * newick = gtree_export_newick(gtree[i]->root,NULL);
-      fprintf(fp[i], "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
+      if (print_locus_index && print_locus_index[i])
+      	fprintf(fp[i], "%s [TH=%.10f, TL=%.10f]\n", newick, gtree[i]->root->time, tl);
+      else 
+      	fprintf(fp[i], "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
       free(newick);
 
-      if (opt_migration) {
+      if (opt_print_locus &&  print_locus_index[i]) {
       	char * migration = gtree_export_migration(gtree[i]->root);
       	fprintf(fp_mig[i], "%s\n", migration);
       	free(migration);
@@ -2380,7 +2387,6 @@ static FILE * resume(stree_t ** ptr_stree,
   gtree_t ** gtree = *ptr_gtree;
   stree_t  * stree = *ptr_stree;
 
-  //ANNA
   if (opt_datefile) 
 	  fatal("Check pointing is not yet implemented for tip dating");
   gtree_alloc_internals(gtree,opt_locus_count,stree->inner_count, 0);
@@ -3023,7 +3029,8 @@ static FILE * init(stree_t ** ptr_stree,
       }
     }
 
-    if (opt_migration) {
+    //ANNA
+    if (printLocusIndex) {
     	fp_mig = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
     	for (i = 0; i < opt_locus_count; ++i)
     	{
@@ -3054,7 +3061,7 @@ static FILE * init(stree_t ** ptr_stree,
       if (!printLocusIndex || (printLocusIndex)[i]) {
         char * s = NULL;
         xasprintf(&s, template_ratesfile, msa_list[i]->original_index+1);
-        if (!(fp_locus[i] = fopen(s, "w")))
+        if (!(fp_locus[i] = fopen(s, "w"))) 
           fatal("Cannot open file %s for appending...", s);
         free(s);
       } else {
@@ -4589,7 +4596,7 @@ void cmd_run()
     }
 
     
-    /*
+    
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
 	    if (stree->tip_count > 1) {
 		    if (opt_migration)
@@ -4601,10 +4608,11 @@ void cmd_run()
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
 
-        //ratio = tipDate_prop_locusrate_mubar(gtree, stree, locus, thread_index_zero);
-        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
+//        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
+ //                                      (double)ft_round;
+        g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
                                        (double)ft_round;
-    } */
+    } 
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
@@ -4652,7 +4660,7 @@ void cmd_run()
        fflush(NULL);
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      mcmc_logsample(fp_mcmc, i+1, stree, gtree, dparam_count, ndspecies);
+      mcmc_logsample(fp_mcmc,i+1,stree,gtree,dparam_count,ndspecies, printLocusIndex);
 
       /* log migcount */
       if (opt_migration && opt_debug_migration)
@@ -5215,7 +5223,8 @@ void cmd_run()
       if (!printLocusIndex || printLocusIndex[i]) {
         fclose(fp_gtree[i]);
 
-        if (opt_migration)
+        //if (opt_migration)
+        if (printLocusIndex && printLocusIndex[i])
 	  fclose(fp_mig[i]);
       }
     }
