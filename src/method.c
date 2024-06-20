@@ -2276,9 +2276,11 @@ static FILE * resume(stree_t ** ptr_stree,
                      stree_t ** ptr_sclone, 
                      gtree_t *** ptr_gclones,
                      FILE *** ptr_fp_gtree,
+                     FILE *** ptr_fp_mig,
                      FILE *** ptr_fp_locus,
                      FILE *** ptr_fp_migcount,
-                     FILE ** ptr_fp_out)
+                     FILE ** ptr_fp_out,
+		     int ** ptr_printLocusIndex)
 {
   long i,j;
   FILE * fp_mcmc;
@@ -2286,9 +2288,11 @@ static FILE * resume(stree_t ** ptr_stree,
   long mcmc_offset;
   long out_offset;
   long * gtree_offset;
+  long * mig_offset;
   long * rates_offset;
   long * migcount_offset;
   char ** gtree_files = NULL;
+  char ** mig_files = NULL;
   char ** migcount_files = NULL;
 
   if (sizeof(BYTE) != 1)
@@ -2304,6 +2308,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   &mcmc_offset,
                   &out_offset,
                   &gtree_offset,
+                  &mig_offset,
                   &rates_offset,
                   &migcount_offset,
                   ptr_dparam_count,
@@ -2325,7 +2330,8 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mean_theta_count,
                   ptr_mean_phi_count,
                   &prec_logpr,
-                  &prec_logl);
+                  &prec_logl, 
+		  ptr_printLocusIndex);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
@@ -2349,6 +2355,7 @@ static FILE * resume(stree_t ** ptr_stree,
     free(migcount_offset);
   }
 
+  int * printLocusIndex = *ptr_printLocusIndex;
   /* truncate gene tree files if available */
   if (opt_print_genetrees)
   {
@@ -2357,25 +2364,49 @@ static FILE * resume(stree_t ** ptr_stree,
 
     for (i = 0; i < opt_locus_count; ++i)
     {
-      char * s = NULL;
-      xasprintf(&s, "%s.gtree.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
-      gtree_files[i] = s;
-      checkpoint_truncate(s,gtree_offset[i]);
+      if (!printLocusIndex || printLocusIndex[i]) {
+        char * s = NULL;
+        xasprintf(&s, "%s.gtree.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
+        gtree_files[i] = s;
+        checkpoint_truncate(s,gtree_offset[i]);
+      } else {
+	gtree_files[i] = NULL;
+      }
     }
     free(gtree_offset);
+  }
+
+  if (printLocusIndex)
+  {
+    assert(mig_offset);
+    mig_files = (char **)xmalloc((size_t)opt_locus_count*sizeof(char *));
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (!printLocusIndex || printLocusIndex[i]) {
+        char * s = NULL;
+        xasprintf(&s, "%s.mig.L%d", opt_outfile, (*ptr_gtree)[i]->original_index+1);
+        mig_files[i] = s;
+        checkpoint_truncate(s,mig_offset[i]);
+      } else {
+	mig_files[i] = NULL;
+      }
+    }
+    free(mig_offset);
   }
 
   /* truncate rate files if available */
   if (opt_print_locusfile)
   {
     assert(rates_offset);
-    
     for (i = 0; i < opt_locus_count; ++i)
     {
-      char * s = NULL;
-      xasprintf(&s,template_ratesfile,(*ptr_gtree)[i]->original_index+1);
-      checkpoint_truncate(s,rates_offset[i]);
-      free(s);
+      if (!printLocusIndex || printLocusIndex[i]) {
+        char * s = NULL;
+        xasprintf(&s,template_ratesfile,(*ptr_gtree)[i]->original_index+1);
+        checkpoint_truncate(s,rates_offset[i]);
+        free(s);
+      }
     }
     free(rates_offset);
   }
@@ -2469,14 +2500,36 @@ static FILE * resume(stree_t ** ptr_stree,
     FILE ** fp_gtree = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
     for (i = 0; i < opt_locus_count; ++i)
     {
-      if (!(fp_gtree[i] = fopen(gtree_files[i], "a")))
-        fatal("Cannot open file %s for appending...", gtree_files[i]);
-      free(gtree_files[i]);
+      if (!printLocusIndex || printLocusIndex[i]) {
+        if (!(fp_gtree[i] = fopen(gtree_files[i], "a")))
+          fatal("Cannot open file %s for appending...", gtree_files[i]);
+        free(gtree_files[i]);
+      }
     }
     free(gtree_files);
     *ptr_fp_gtree = fp_gtree;
 
   }
+
+  *ptr_fp_mig = NULL;
+  if (printLocusIndex)
+  {
+    FILE ** fp_mig = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (printLocusIndex[i]) {
+        if (!(fp_mig[i] = fopen(mig_files[i], "a")))
+          fatal("Cannot open file %s for appending...what", mig_files[i]);
+        free(mig_files[i]);
+      } else {
+	fp_mig[i] = NULL;
+      }
+    }
+    free(mig_files);
+    *ptr_fp_mig = fp_mig;
+
+  }
+
 
   /* open potential truncated rate files for appending */
   *ptr_fp_locus = NULL;
@@ -2485,11 +2538,13 @@ static FILE * resume(stree_t ** ptr_stree,
     FILE ** fp_locus = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
     for (i = 0; i < opt_locus_count; ++i)
     {
-      char * s = NULL;
-      xasprintf(&s, template_ratesfile, gtree[i]->original_index+1);
-      if (!(fp_locus[i] = fopen(s, "a")))
-        fatal("Cannot open file %s for appending...", s);
-      free(s);
+      if (!printLocusIndex || printLocusIndex[i]) {
+        char * s = NULL;
+        xasprintf(&s, template_ratesfile, gtree[i]->original_index+1);
+        if (!(fp_locus[i] = fopen(s, "a")))
+          fatal("Cannot open file %s for appending...", s);
+        free(s);
+      }
     }
     *ptr_fp_locus = fp_locus;
   }
@@ -2536,6 +2591,15 @@ static FILE * resume(stree_t ** ptr_stree,
     rj_init(gtree,stree,opt_locus_count);
     if (opt_method == METHOD_11)
       partition_fast(opt_max_species_count);
+  }
+
+  if (opt_extend) {
+    if (opt_extend < 1) 
+      fatal("--extend much be a positive integer");
+    fprintf(stdout, "Extending the number of samples by %ld\n", opt_extend);
+    fprintf(fp_out, "Extending the number of samples by %ld\n", opt_extend);
+
+    opt_samples += opt_extend;
   }
 
   return fp_mcmc;
@@ -3025,7 +3089,6 @@ static FILE * init(stree_t ** ptr_stree,
       }
     }
 
-    //ANNA
     if (printLocusIndex) {
     	fp_mig = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
     	for (i = 0; i < opt_locus_count; ++i)
@@ -3045,8 +3108,7 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_fp_gtree = fp_gtree;
   *ptr_fp_mig = fp_mig;
 
-
-
+    
   /* if print rates */
   *ptr_fp_locus = NULL;
   if (opt_print_locusfile)
@@ -3802,6 +3864,7 @@ void cmd_run()
   gtree_t ** gtree;
   locus_t ** locus;
   long * gtree_offset = NULL;   /* for checkpointing when printing gene trees */
+  long * mig_offset = NULL;     /* for checkpointing when printing migration event */
   long * rates_offset = NULL;
   long * migcount_offset = NULL;
   double ratio;
@@ -3890,9 +3953,11 @@ void cmd_run()
                      &sclone, 
                      &gclones,
                      &fp_gtree,
+                     &fp_mig,
                      &fp_locus,
                      &fp_migcount,
-                     &fp_out);
+                     &fp_out,
+		     &printLocusIndex);
   else
   {
     fp_mcmc = init(&stree,
@@ -3956,6 +4021,8 @@ void cmd_run()
 
   if (opt_checkpoint && opt_print_genetrees)
     gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+  if (opt_checkpoint && opt_print_locus)
+    mig_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_checkpoint && opt_migration && opt_debug_migration)
     migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
   if (opt_checkpoint && opt_print_locusfile)
@@ -4589,8 +4656,6 @@ void cmd_run()
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
 
-//        pjump[BPP_MOVE_MUBAR_INDEX] = (pjump[BPP_MOVE_MUBAR_INDEX]*(ft_round-1)+ratio) /
- //                                      (double)ft_round;
         g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
                                        (double)ft_round;
     } 
@@ -4648,12 +4713,12 @@ void cmd_run()
         print_migcount(fp_migcount,gtree);
 
       /* log gene trees */
-      if (opt_print_genetrees) 
-        print_gtree(fp_gtree,fp_mig, stree,gtree, printLocusIndex);
+      if (opt_print_genetrees)
+        print_gtree(fp_gtree, fp_mig, stree, gtree, printLocusIndex);
 
       /* log rates */
       if (opt_print_locusfile)
-        print_rates(fp_locus,stree,gtree,locus, printLocusIndex);
+        print_rates(fp_locus, stree, gtree, locus, printLocusIndex);
     }
 
     if (opt_method == METHOD_10)
@@ -4732,7 +4797,7 @@ void cmd_run()
       for (j = stree->tip_count; j < stree->tip_count+stree->inner_count; ++j)
       {
         if (stree->nodes[j]->tau == 0) continue;
-        
+
         mean_tau[k] = (mean_tau[k]*(ft_round-1) + stree->nodes[j]->tau)/ft_round;
 
         if (++k == max_param_count) break;
@@ -4981,14 +5046,35 @@ void cmd_run()
             migcount_offset[j] = ftell(fp_migcount[j]);
 
         /* if gene tree printing is enabled get current file offsets */
-        if (opt_print_genetrees)
-          for (j = 0; j < opt_locus_count; ++j)
-            gtree_offset[j] = ftell(fp_gtree[j]);
+        if (opt_print_genetrees) {
+          for (j = 0; j < opt_locus_count; ++j) {
+            if (!printLocusIndex || printLocusIndex[j])
+              gtree_offset[j] = ftell(fp_gtree[j]);
+	    else 
+              gtree_offset[j] = 0;
+	  }
+	}
+
+        /* if gene tree printing is enabled get current file offsets */
+        if (printLocusIndex) {
+          for (j = 0; j < opt_locus_count; ++j) {
+            if (printLocusIndex[j]) {
+		    fflush(stdout);
+              mig_offset[j] = ftell(fp_mig[j]);
+	    }
+	    else 
+              mig_offset[j] = 0;
+	  }
+	}
 
         /* if relaxed clock is enabled get offsets for rates files */
         if (opt_print_locusfile)
-          for (j = 0; j < opt_locus_count; ++j)
-            rates_offset[j] = ftell(fp_locus[j]);
+          for (j = 0; j < opt_locus_count; ++j) {
+            if (!printLocusIndex || printLocusIndex[j])
+              rates_offset[j] = ftell(fp_locus[j]);
+	    else 
+              rates_offset[j] = 0;
+	  }
 
         checkpoint_dump(stree,
                         gtree,
@@ -4999,6 +5085,7 @@ void cmd_run()
                         ftell(fp_mcmc),
                         ftell(fp_out),
                         gtree_offset,
+                        mig_offset,
                         rates_offset,
                         migcount_offset,
                         dparam_count,
@@ -5022,7 +5109,8 @@ void cmd_run()
                         mean_theta_count,
                         mean_phi_count,
                         prec_logpr,
-                        prec_logl);
+                        prec_logl, 
+			printLocusIndex);
       }
     }
     if (opt_debug_abort == opt_debug_counter)
@@ -5057,9 +5145,11 @@ void cmd_run()
   /* close files containing rates sample for each locus */
   if (opt_print_locusfile)
   {
-    for (i = 0; i < opt_locus_count; ++i)
+    for (i = 0; i < opt_locus_count; ++i) {
       if (!printLocusIndex || printLocusIndex[i]) 
-      fclose(fp_locus[i]);
+        fclose(fp_locus[i]);
+    }
+
     free(fp_locus);
     if (opt_checkpoint)
       free(rates_offset);
@@ -5210,8 +5300,10 @@ void cmd_run()
 	free(fp_mig);
 
     free(fp_gtree);
-    if (opt_checkpoint)
+    if (opt_checkpoint) {
       free(gtree_offset);
+      free(mig_offset);
+    }
   }
 
   free(printLocusIndex);

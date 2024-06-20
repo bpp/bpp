@@ -525,7 +525,6 @@ void clear_marks (gtree_t * tree) {
 }
 
 void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
-  	char dna[4] = "TCAG";
 	if (node->left) {
 		mark_mutation(node->left, site, mutations, locus);
 		mark_mutation(node->right, site, mutations, locus);
