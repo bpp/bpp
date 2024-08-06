@@ -3218,6 +3218,8 @@ void load_cfile()
   
   /* Change to zero index */
   if (opt_print_locus) {
+      if (!opt_print_genetrees)
+        fatal("Migration histories can only be printed if gene trees are printed.\n Change print option or printlocus option.");
     for (long i = 0; i < opt_print_locus; i++) {
       	opt_print_locus_num[i]--;
       if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {

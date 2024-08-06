@@ -144,6 +144,7 @@ long opt_threads_start;
 long opt_threads_step;
 long opt_usedata;
 long opt_version;
+long opt_extend;
 double opt_alpha_alpha;
 double opt_alpha_beta;
 double opt_bfbeta;
@@ -320,6 +321,7 @@ static struct option long_options[] =
   {"no-rb-w-update",       no_argument,       0, 0 },  /* 47 */
   {"no-mix-theta-update",  no_argument,       0, 0 },  /* 48 */
   {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
+  {"extend",               required_argument, 0, 0 },  /* 50 */
   { 0, 0, 0, 0 }
 };
 
@@ -615,6 +617,7 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+  opt_extend = 0;
   opt_seqAncestral = 0; 
 
   g_pj_gage = 0;
@@ -893,6 +896,10 @@ void args_init(int argc, char ** argv)
         opt_mix_w_update = 0;
         break;
 
+      case 50:
+        opt_extend = atol(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -958,6 +965,9 @@ void args_init(int argc, char ** argv)
     opt_help = 1;
     return;
   }
+  if (!opt_resume && opt_extend)
+    fatal("--extend can only be used with --resume");
+
 }
 
 static void dealloc_switches()

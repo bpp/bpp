@@ -130,8 +130,14 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
   size_section += sizeof(unsigned long);              /* output file offset */
+
   if (opt_print_genetrees)
      size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
+  /* ANNA note: I did not include the size of other 
+   * variables because the size counter is not 
+   * being used */
+  if (opt_print_locus)
+     size_section += opt_locus_count*sizeof(long);    /* mig file offsets */
   if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
      size_section += opt_locus_count*sizeof(long);
     
@@ -172,6 +178,7 @@ static void dump_chk_section_1(FILE * fp,
                                long mcmc_offset,
                                long out_offset,
                                long * gtree_offset,
+			       long * mig_offset,
                                long * rates_offset,
                                long * migcount_offset,
                                long dparam_count,
@@ -194,7 +201,8 @@ static void dump_chk_section_1(FILE * fp,
                                long mean_theta_count,
                                long mean_phi_count,
                                int prec_logpg,
-                               int prec_logl)
+                               int prec_logl, 
+			       int * printLocusIndex)
 {
   size_t i;
   unsigned int hoffset = stree->tip_count+stree->inner_count;
@@ -294,6 +302,16 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_print_rates,1,fp);
   DUMP(&opt_print_qmatrix,1,fp);
   DUMP(&opt_print_locusfile,1,fp);
+
+  DUMP(&opt_print_locus,1,fp);
+
+  if (opt_print_locus) {
+    for (i = 0; i < opt_print_locus; i++) 
+      DUMP(&opt_print_locus_num[i],1,fp);
+
+    for (i = 0; i < opt_locus_count; i++) 
+      DUMP(&printLocusIndex[i],1,fp);
+  }
 
   /* write theta prior */
   DUMP(&opt_theta_prior,1,fp);
@@ -437,6 +455,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
+
+  if (opt_print_locus)
+    DUMP(mig_offset,opt_locus_count,fp);
 
   if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
@@ -983,6 +1004,7 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
+                    long * mig_offset,
                     long * rates_offset,
                     long * migcount_offset,
                     long dparam_count,
@@ -1005,7 +1027,8 @@ int checkpoint_dump(stree_t * stree,
                     long mean_theta_count,
                     long mean_phi_count,
                     int prec_logpg,
-                    int prec_logl)
+                    int prec_logl, 
+		    int * printLocusIndex)
 {
   FILE * fp;
   char * s = NULL;
@@ -1035,6 +1058,7 @@ int checkpoint_dump(stree_t * stree,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
+                     mig_offset,
                      rates_offset,
                      migcount_offset,
                      dparam_count,
@@ -1057,7 +1081,8 @@ int checkpoint_dump(stree_t * stree,
                      mean_theta_count,
                      mean_phi_count,
                      prec_logpg,
-                     prec_logl);
+                     prec_logl, 
+		     printLocusIndex);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

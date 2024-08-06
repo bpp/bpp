@@ -243,6 +243,7 @@ static void load_chk_section_1(FILE * fp,
                                long * mcmc_offset,
                                long * out_offset,
                                long ** gtree_offset,
+                               long ** mig_offset,
                                long ** rates_offset,
                                long ** migcount_offset,
                                long * dparam_count,
@@ -264,7 +265,8 @@ static void load_chk_section_1(FILE * fp,
                                long * mean_theta_count,
                                long * mean_phi_count,
                                int * prec_logpg,
-                               int * prec_logl)
+                               int * prec_logl,
+		               int ** ptr_printLocusIndex)
 {
   long i;
   long total_nodes;
@@ -482,6 +484,32 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read qmatrix flag");
   if (!LOAD(&opt_print_locusfile,1,fp))
     fatal("Cannot read locusfile flag");
+  
+
+  if (!LOAD(&opt_print_locus,1,fp))
+    fatal("Cannot read print locus flag");
+
+  *ptr_printLocusIndex = NULL;
+  int * printLocusIndex = NULL;
+
+  if (opt_print_locus) {
+    opt_print_locus_num = (long *) xmalloc(opt_print_locus * sizeof(long));
+    for (i = 0; i < opt_print_locus; i++) {
+      if (!LOAD(&opt_print_locus_num[i],1,fp))
+        fatal("Cannot read print locus num");
+    }
+
+    printLocusIndex = xmalloc(opt_locus_count * sizeof(int));
+    for (i = 0; i < opt_locus_count; i++) {
+      if (!LOAD(&printLocusIndex[i],1,fp))
+        fatal("Cannot read printLocusIndex");
+    }
+  } else {
+    opt_print_locus_num = NULL;
+  }
+
+  *ptr_printLocusIndex = printLocusIndex;
+
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
@@ -763,6 +791,13 @@ static void load_chk_section_1(FILE * fp,
     *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
     if (!LOAD(*gtree_offset,opt_locus_count,fp))
       fatal("Cannot read gtree file offsets");
+  }
+
+  if (opt_print_locus)
+  {
+    *mig_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+    if (!LOAD(*mig_offset,opt_locus_count,fp))
+      fatal("Cannot read mig file offsets");
   }
 
   if (opt_print_locusfile)
@@ -1971,6 +2006,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
+                    long ** mig_offset,
                     long ** rates_offset,
                     long ** migcount_offset,
                     long * dparam_count,
@@ -1992,7 +2028,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_theta_count,
                     long * mean_phi_count,
                     int * prec_logpg,
-                    int * prec_logl)
+                    int * prec_logl, 
+		    int ** ptr_printLocusIndex)
 {
   long i,j,k;
   FILE * fp;
@@ -2022,6 +2059,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      mcmc_offset,
                      out_offset,
                      gtree_offset,
+                     mig_offset,
                      rates_offset,
                      migcount_offset,
                      dparam_count,
@@ -2043,7 +2081,8 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_theta_count,
                      mean_phi_count,
                      prec_logpg,
-                     prec_logl);
+                     prec_logl,
+		     ptr_printLocusIndex);
 
   /* load section 2 */
   load_chk_section_2(fp);

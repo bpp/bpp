@@ -1164,6 +1164,7 @@ extern long opt_threads_start;
 extern long opt_threads_step;
 extern long opt_usedata;
 extern long opt_version;
+extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
 extern double opt_bfbeta;
@@ -2049,6 +2050,7 @@ int checkpoint_dump(stree_t * stree,
                     long mcmc_offset,
                     long out_offset,
                     long * gtree_offset,
+                    long * mig_offset,
                     long * rates_offset,
                     long * migcount_offset,
                     long dparam_count,
@@ -2071,7 +2073,8 @@ int checkpoint_dump(stree_t * stree,
                     long mean_theta_count,
                     long mean_phi_count,
                     int prec_logpg,
-                    int prec_logl);
+                    int prec_logl, 
+		    int * printLocusIndex);
 
 /* functions in load.c */
 
@@ -2084,6 +2087,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mcmc_offset,
                     long * out_offset,
                     long ** gtree_offset,
+                    long ** mig_offset,
                     long ** rates_offset,
                     long ** migcount_offset,
                     long * dparam_count,
@@ -2105,7 +2109,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_theta_count,
                     long * mean_phi_count,
                     int * prec_logpg,
-                    int * prec_logl);
+                    int * prec_logl,
+		    int ** ptr_printLocusIndex);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
 
