@@ -198,7 +198,7 @@ static double logPDFGamma(double x, double a, double b)
    */
    if (x <= 0 || a <= 0 || b <= 0) {
       printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("x a b outside range in logPDFGamma()");
+      fatal("[mixing] x a b outside range in logPDFGamma()");
    }
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
@@ -208,7 +208,7 @@ static double logPDFInvG(double x, double a, double b)
    */
    if (x <= 0 || a <= 0 || b <= 0) {
       printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("x a b outside range in logPDFInvG()");
+      fatal("[mixing] x a b outside range in logPDFInvG()");
    }
    return a * log(b) - lgamma(a) + (-a - 1) * log(x) - b / x;
 }
@@ -225,12 +225,23 @@ static double logPDFRatioInvG(double xnew, double x, double a, double b)
 long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
   unsigned i,j,k;
+  long n;
   unsigned int theta_count=0;
   unsigned int tau_count=0;
   double lnc,c;
   double logpr = 0;
   double lnacceptance;
+  double new_w, old_w;
   long accepted = 0;
+  long theta_method = 1;
+  long mig_method = 1;
+
+  theta_method = opt_mix_theta_update;
+  if (opt_theta_slide_prob == 1)
+    theta_method = 0;
+  mig_method = opt_mix_w_update;
+  if (opt_mig_vrates_exist)
+    mig_method = 0;
 
   const long thread_index = 0;
 
@@ -247,7 +258,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   }
   
   /* TODO: Account for method 11 / rj-MCMC */
-  if (opt_est_theta)
+  if (opt_est_theta && theta_method)
   {
     /* TODO: Precompute how many theta parameters we have for A00 */
     for (i = 0; i < nodes_count; ++i)
@@ -301,7 +312,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     snodes[i] = stree->nodes[i];
 
   /* change thetas */
-  if (opt_est_theta)
+  if (opt_est_theta && theta_method)
   {
     for (i = 0; i < nodes_count; ++i)
     {
@@ -388,6 +399,46 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         lnacceptance += logPDFRatioInvG(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
     }
   }
+
+  /* change migration rates */
+  if (opt_migration && mig_method)
+  {
+    migspec_t * spec = opt_mig_specs;
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      spec = opt_mig_specs+i;
+      if (!migration_valid(stree->nodes[spec->si], stree->nodes[spec->ti]))
+        continue;
+      assert(opt_migration_matrix[spec->si][spec->ti] == i);
+
+      long asj = 0;
+      double bsj = 0;
+      for (j = 0; j < opt_locus_count; ++j)
+      {
+        asj += gtree[j]->migcount[spec->si][spec->ti];
+        bsj += stree->Wsji[spec->si][spec->ti][j];
+      }
+
+      double a1 = spec->alpha + asj;
+      double b1 = spec->beta  + bsj*c;
+
+      old_w = spec->old_M = spec->M;
+      if (opt_mig_specs[i].am)
+        assert(0);  /* TODO: Go through all loci and propose Mi? */
+      else
+        new_w = spec->M = legacy_rndgamma(thread_index,a1) / b1;
+
+      /* prior ratio */
+      lnacceptance += logPDFRatioGamma(new_w, old_w, spec->alpha, spec->beta);
+
+      /* proposal ratio */
+      //printf("asj: %ld bsj: %.10f\n", asj, bsj);
+      //printf("a1: %.10f b1: %.10f\n", a1, b1);
+      lnacceptance += logPDFGamma(old_w, a1, spec->beta+bsj) -
+                      logPDFGamma(new_w,a1,b1);
+    }
+  }
+
 
   /* change the taus */
   if (opt_msci)
@@ -530,7 +581,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (opt_debug_mix)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
 
-
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     /* accept */
@@ -551,8 +601,22 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
           snodes[i]->logpr_contrib[j] = snodes[i]->old_logpr_contrib[j];
           if (snodes[i]->C2ji)
             snodes[i]->C2ji[j] = snodes[i]->old_C2ji[j];
-          if (snodes[i]->Wsj)
-            snodes[i]->Wsj[j] = snodes[i]->old_Wsj[j];
+        }
+        if (opt_migration)
+        {
+          /* restore wsji */
+          snode_t * x = snodes[i];
+          unsigned int ti = x->node_index;
+          for (n = 0; n < x->mb_count; ++n)
+          {
+            for (k = 0; k < x->migbuffer[n].donors_count;  ++k)
+            {
+              unsigned int si = x->migbuffer[n].donors[k]->node_index;
+              memcpy(stree->Wsji[si][ti],
+                     stree->old_Wsji[si][ti],
+                     opt_locus_count*sizeof(double));
+            }
+          }
         }
 
         if (snodes[i]->theta <= 0) continue;
@@ -560,7 +624,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         /* TODO: Note that, it is both faster and more precise to restore the old
            value from memory, than re-computing it with a division. For now, we
            use the division here to be compatible with the old bpp */
-        snodes[i]->theta = snodes[i]->old_theta;
+        if (theta_method)
+          snodes[i]->theta = snodes[i]->old_theta;
       }
     }
     else
@@ -663,6 +728,14 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
     if (opt_migration)
     {
+      if (mig_method)
+        for (i = 0; i < opt_migration_count; ++i)
+        {
+          migspec_t * spec = opt_mig_specs+i;
+          if (!migration_valid(stree->nodes[spec->si], stree->nodes[spec->ti]))
+            continue;
+          opt_mig_specs[i].M = opt_mig_specs[i].old_M;
+        }
       #if 1
       stree_update_mig_subpops(stree, thread_index);
       #else

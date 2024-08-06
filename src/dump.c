@@ -536,7 +536,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 {
   unsigned int total_nodes;
   unsigned int hoffset;
-  long i,j;
+  long i,j,k;
   long ltheta_index;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
@@ -697,6 +697,12 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     }
   }
 
+  /* dump total coalescent time for locus at population i */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    DUMP(stree->nodes[i]->C2ji,opt_locus_count,fp);
+  }
+
   /* write migevent_count */
   if (opt_migration)
   {
@@ -712,9 +718,43 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
 
       for (j = 0; j < stree->inner_count; ++j)
+      {
         DUMP(stree->nodes[i]->migbuffer[j].mrsum,
              stree->nodes[i]->migbuffer[j].active_count,fp);
 
+        for (k = 0; k < stree->nodes[i]->migbuffer[j].donors_count; ++k)
+        {
+          DUMP(&(stree->nodes[i]->migbuffer[j].donors[k]->node_index),1,fp);
+        }
+
+      }
+    }
+
+    /* dump Wsji */
+    assert(stree->Wsji);
+    for (i = 0; i < total_nodes; ++i)
+    {
+      /* allocate row only if migration rate W_{i->j} exists */
+      if (!opt_est_geneflow)
+      {
+        for (j = 0; j < total_nodes; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            break;
+        if (j == total_nodes)
+          continue;
+      }
+      if (i == stree->root->node_index) continue;
+
+      for (j = 0; j < total_nodes; ++j)
+      {
+        if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+          continue;
+        if (j == i || j == stree->root->node_index) continue;
+
+        /* write */
+        assert(stree->Wsji[i][j]);
+        DUMP(stree->Wsji[i][j],opt_locus_count,fp);
+      }
     }
   }
 }

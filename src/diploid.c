@@ -486,7 +486,9 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
   for (i = 0; i < msa->length; ++i)
   {
     assert(sitehets[i] >= 0);
-    assert((size_t)sitehets[i] <= sizeof(long) * CHAR_BIT);
+
+    /* TODO: Perhaps we put some limit on the number of hets here */
+    //assert((size_t)sitehets[i] <= sizeof(long) * CHAR_BIT);
     if (sitehets[i])
     {
       size_t temp = patterns;   /* overflow check */
@@ -679,11 +681,20 @@ unsigned long ** diploid_resolve(stree_t * stree,
     else
       assert(0);
 
+        /* ziheng-2024.5.2 */
+    fprintf(stdout,
+            "diploid_resolve_locus %6ld: %9d%9d%9d",
+            i+1, msa_list[i]->count, msa_list[i]->original_length,
+            msa_list[i]->length);
+    fflush(stdout);
+
     resolution_count[i] = diploid_resolve_locus(msa_list[i],
                                                 (int)i,
                                                 weights[i],
                                                 cleandata+i,
                                                 map);
+                                                
+    printf(" -> %9d\n", msa_list[i]->length);
   }
 
   /* Updates list of list of dates with new labels */

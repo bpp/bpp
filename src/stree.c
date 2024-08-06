@@ -136,7 +136,7 @@ static double logPDFGamma(double x, double a, double b)
    */
    if (x <= 0 || a <= 0 || b <= 0) {
       printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("x a b outside range in logPDFGamma()");
+      fatal("[stree] x a b outside range in logPDFGamma()");
    }
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
@@ -547,17 +547,9 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
       clone->old_C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
     memcpy(clone->old_C2ji, snode->old_C2ji, opt_locus_count * sizeof(double));
 
-    if (!clone->old_Wsj)
-      clone->old_Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-    memcpy(clone->old_Wsj, snode->old_Wsj, opt_locus_count * sizeof(double));
-
     if (!clone->C2ji)
       clone->C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
     memcpy(clone->C2ji, snode->C2ji, opt_locus_count * sizeof(double));
-
-    if (!clone->Wsj)
-      clone->Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-    memcpy(clone->Wsj, snode->Wsj, opt_locus_count * sizeof(double));
   }
 
   if (opt_migration)
@@ -575,6 +567,14 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
       memcpy(clone->migbuffer[i].mrsum,
              snode->migbuffer[i].mrsum,
              snode->migbuffer[i].active_count * sizeof(double));
+      long j;
+      for (j = 0; j < snode->migbuffer[i].donors_count; ++j)
+      {
+        long node_index = snode->migbuffer[i].donors[j]->node_index;
+        snode_t * cnode = clone_stree->nodes[node_index];
+        clone->migbuffer[i].donors[j] = cnode;
+      }
+      clone->migbuffer[i].donors_count = snode->migbuffer[i].donors_count;
     }
   }
 
@@ -671,7 +671,7 @@ static void gnode_clone(gnode_t * gnode,
 
 static void stree_clone(stree_t * stree, stree_t * clone)
 {
-  unsigned int i;
+  unsigned int i,j;
   unsigned nodes_count = stree->tip_count + stree->inner_count;
 
   assert(!opt_msci);
@@ -697,6 +697,52 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->locusrate_mubar = stree->locusrate_mubar;
   clone->locusrate_nubar = stree->locusrate_nubar;
   clone->nui_sum = stree->nui_sum;
+
+  if (opt_migration)
+  {
+    /* Wsji */
+    for (i = 0; i < nodes_count; ++i)
+    {
+      if (!opt_est_geneflow)
+      {
+        for (j = 0; j < nodes_count; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            break;
+        if (j == nodes_count)
+        {
+          stree->Wsji[i] = NULL;
+          stree->old_Wsji[i] = NULL;
+          continue;
+        }
+      }
+      if (i == stree->root->node_index)
+      {
+        clone->Wsji[i] = NULL;
+        clone->old_Wsji[i] = NULL;
+        continue;
+      }
+
+      for (j = 0; j < nodes_count; ++j)
+      {
+        if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+        {
+          stree->Wsji[i][j] = NULL;
+          stree->old_Wsji[i][j] = NULL;
+          continue;
+        }
+        if (j == i || j == stree->root->node_index)
+        {
+          clone->Wsji[i][j] = NULL;
+          continue;
+        }
+
+        memcpy(clone->Wsji[i][j],
+               stree->Wsji[i][j],
+               opt_locus_count*sizeof(double));
+      }
+    }
+    //debug_print_wsji(clone,3);
+  }
   
   if (opt_migration)
   {
@@ -705,12 +751,82 @@ static void stree_clone(stree_t * stree, stree_t * clone)
              stree->migcount_sum[i],
              nodes_count*sizeof(long));
   }
-  if (opt_datefile)  {
-	if (clone->u_constraint)
-		memcpy(clone->u_constraint, stree->u_constraint, stree->inner_count * sizeof(double));
-	memcpy(clone->l_constraint, stree->l_constraint, stree->inner_count * sizeof(double));
+  if (opt_datefile)
+  {
+    if (clone->u_constraint)
+      memcpy(clone->u_constraint,
+             stree->u_constraint,
+             stree->inner_count * sizeof(double));
+    memcpy(clone->l_constraint,
+           stree->l_constraint,
+           stree->inner_count * sizeof(double));
   }
 }
+
+static void stree_alloc_wsji_matrices(stree_t * stree)
+{
+  unsigned int i,j;
+  unsigned int nodes_count = stree->tip_count+stree->inner_count;
+
+  assert(opt_migration);
+  assert(stree->hybrid_count == 0);
+  assert(stree->Wsji == NULL);
+  assert(stree->old_Wsji == NULL);
+
+  /* Create Wsji matrix as NxN matrix where row corrsponding is empty (NULL)
+     and row corresponding to self or root is also NULL */
+  stree->Wsji = (double ***)xmalloc((size_t)nodes_count*sizeof(double **));
+  stree->old_Wsji = (double ***)xmalloc((size_t)nodes_count*sizeof(double **));
+  for (i = 0; i < nodes_count; ++i)
+  {
+    /* allocate row only if migration rate W_{i->j} exists */
+    if (!opt_est_geneflow)
+    {
+      for (j = 0; j < nodes_count; ++j)
+        if (opt_mig_bitmatrix[i][j])
+          break;
+      if (j == nodes_count)
+      {
+        stree->Wsji[i] = NULL;
+        stree->old_Wsji[i] = NULL;
+        continue;
+      }
+    }
+
+    /* the above loop covers this case only when rates are not inferred */
+    if (i == stree->root->node_index)
+    {
+      stree->Wsji[i] = NULL;
+      stree->old_Wsji[i] = NULL;
+      continue;
+    }
+
+    stree->Wsji[i] = (double **)xmalloc((size_t)nodes_count*sizeof(double *));
+    stree->old_Wsji[i] = (double**)xmalloc((size_t)nodes_count*sizeof(double*));
+    for (j = 0; j < nodes_count; ++j)
+    {
+      if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+      {
+        stree->Wsji[i][j] = NULL;
+        stree->old_Wsji[i][j] = NULL;
+        continue;
+      }
+
+      if (j == i || j == stree->root->node_index)
+      {
+        stree->Wsji[i][j] = NULL;
+        stree->old_Wsji[i][j] = NULL;
+        continue;
+      }
+
+      stree->Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count *
+                                            sizeof(double));
+      stree->old_Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count *
+                                                sizeof(double));
+    }
+  }
+}
+
 
 stree_t * stree_clone_init(stree_t * stree)
 {
@@ -746,8 +862,13 @@ stree_t * stree_clone_init(stree_t * stree)
       x->migbuffer = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
                                             sizeof(migbuffer_t));
       size_t allocsize = stree->nodes[i]->mb_mrsum_isarray ? opt_locus_count : 1;
+      size_t dcount = 2*stree->tip_count - 3;
       for (j = 0; j < stree->inner_count; ++j)
+      {
         x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
+        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
+        x->migbuffer[j].donors_count = 0;
+      }
 
       x->mb_count = 0;
 
@@ -766,20 +887,10 @@ stree_t * stree_clone_init(stree_t * stree)
       else
         x->old_C2ji = NULL;
 
-      if (snode->old_Wsj)
-        x->old_Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-      else
-        x->old_Wsj = NULL;
-
       if (snode->C2ji)
         x->C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
       else
         x->C2ji = NULL;
-
-      if (snode->Wsj)
-        x->Wsj = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-      else
-        x->Wsj = NULL;
     }
   }
 
@@ -796,6 +907,8 @@ stree_t * stree_clone_init(stree_t * stree)
 
   clone->mi_tbuffer = NULL;
   clone->migcount_sum = NULL;
+  clone->Wsji = NULL;
+  clone->old_Wsji = NULL;
   if (opt_migration)
   {
     void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
@@ -812,6 +925,10 @@ stree_t * stree_clone_init(stree_t * stree)
 
     clone->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
+    
+    /* Create Wsji matrix as NxN matrix where row corrsponding is empty (NULL)
+       and row corresponding to self or root is also NULL */
+    stree_alloc_wsji_matrices(clone);
   }
 
   return clone;
@@ -1844,6 +1961,7 @@ static void init_theta_stepsize(stree_t * stree)
     for (i = 0; i < total_nodes; ++i)
       stree->nodes[i]->theta_step_index = 0;
     opt_finetune_theta_count = 1;
+    opt_finetune_theta_mode = 1;
   }
   else
   {
@@ -2642,6 +2760,8 @@ void stree_init(stree_t * stree,
 
   stree->mi_tbuffer = NULL;
   stree->migcount_sum = NULL;
+  stree->Wsji = NULL;
+  stree->old_Wsji = NULL;
   if (opt_migration)
   {
     /* reset the number of migration events associated with each population */
@@ -2655,8 +2775,13 @@ void stree_init(stree_t * stree,
       x->migbuffer  = (migbuffer_t *)xcalloc((size_t)(stree->inner_count),
                                              sizeof(migbuffer_t));
       size_t allocsize = x->mb_mrsum_isarray ? opt_locus_count : 1;
+      size_t dcount = 2*stree->tip_count - 3;
       for (j = 0; j < stree->inner_count; ++j)
+      {
         x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
+        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
+        x->migbuffer[j].donors_count = 0;
+      }
         
       x->mig_source = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                           sizeof(dlist_t *));
@@ -2670,7 +2795,11 @@ void stree_init(stree_t * stree,
     }
     stree->mi_tbuffer = (miginfo_t **)xcalloc((size_t)opt_threads,
                                               sizeof(miginfo_t *));
-
+    /* Create Wsji matrix as NxN matrix where row corrsponding is empty (NULL)
+       and row corresponding to self or root is also NULL */
+    stree->Wsji = NULL;
+    stree->old_Wsji = NULL;
+    stree_alloc_wsji_matrices(stree);
 
     void * mem = xmalloc((size_t)(nodes_count*nodes_count)*sizeof(long) +
                          (size_t)nodes_count*sizeof(long *));
@@ -2686,17 +2815,17 @@ void stree_init(stree_t * stree,
     stree->migcount_sum = migcount_sum;
   }
 
-  if (opt_datefile) {
-
-    for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i) {
+  if (opt_datefile)
+  {
+    for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
+    {
       stree->nodes[i]->epoch_count = (int *)xcalloc((size_t)opt_locus_count,
-                                                        sizeof(int));
+                                                    sizeof(int));
       stree->nodes[i]->tip_date= (double **)xcalloc((size_t)opt_locus_count,
-                                                        sizeof(double *));
+                                                    sizeof(double *));
       stree->nodes[i]->date_count= (int **)xcalloc((size_t)opt_locus_count,
-                                                        sizeof(int *));
+                                                   sizeof(int *));
     }
-	  
   } 
 
   /* TODO: Perhaps move the hx allocations into wraptree. The problem is that
@@ -2735,9 +2864,7 @@ void stree_init(stree_t * stree,
       snode->coalevent[j] = dlist_create();
 
     snode->old_C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
-    snode->old_Wsj  = (double *)xcalloc((size_t)msa_count, sizeof(double));
     snode->C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
-    snode->Wsj  = (double *)xcalloc((size_t)msa_count, sizeof(double));
   }
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -2869,6 +2996,22 @@ int get_gamma_conditional_approx(double a, double b, long k, double T,
   double dl, ddl, m, v, a1k = a - 1 - k, mmv;
   double coeff[4] = { 1 }, x0, x1;
 
+  if (T == 0)
+  {
+    
+    if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+    {
+      *a1 = a;
+      *b1 = b;
+    }
+    else
+    {
+      *a1 = a+2;
+      *b1 = a*(a+1)/b;
+    }
+    return 0;
+  }
+
   assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
   m = (a1k + sqrt(a1k * a1k + 4 * b * T)) / (2 * b);  /* m is the mode of the posterior */
   dl = a1k - b * m + T / m;
@@ -2899,13 +3042,14 @@ int get_gamma_conditional_approx(double a, double b, long k, double T,
 }
 
 
+#if 0
 static int propose_theta_gibbs_im(stree_t* stree,
                                   gtree_t** gtree,
                                   locus_t** locus,
                                   snode_t* snode,
                                   long thread_index)
 {
-  unsigned int i, j, k, n;
+  unsigned int i,j;
   unsigned int si;
   unsigned int ti = snode->node_index;
   long lcount = 0;
@@ -2914,118 +3058,16 @@ static int propose_theta_gibbs_im(stree_t* stree,
   long migcount_sum = 0;
   double heredity;
   double C2h_sum = 0;
-  double Wsj = 0;
   double a1, b1;
-  size_t alloc_required;
-  dlist_item_t* coalevent;
-  dlist_item_t* li;
-  migbuffer_t* migbuffer;
 
   long total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
-
-  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
-  {
-    /* make sure migbuffer is large enough */
-    alloc_required = snode->migevent_count[msa_index] +
-      snode->coal_count[msa_index] +
-      stree->inner_count + 1;
-    migbuffer_check_and_realloc(thread_index, alloc_required);
-    migbuffer = global_migbuffer_r[thread_index];
-
-    heredity = locus[msa_index]->heredity[0];
-
-    coal_sum += snode->coal_count[msa_index];
-    for (j = 0; j < total_nodes; ++j)
-    {
-      if (stree->nodes[j] == snode) continue;
-
-      si = stree->nodes[j]->node_index;
-      migcount_sum += gtree[msa_index]->migcount[si][ti];
-    }
-
-    /* add taus and coalescence times in sortbuffer */
-    migbuffer[0].time = snode->tau;
-    migbuffer[0].type = EVENT_TAU;
-    j = 1;
-    for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
-    {
-      gnode_t* gnode = (gnode_t*)(coalevent->data);
-      migbuffer[j].time = gnode->time;
-      migbuffer[j++].type = EVENT_COAL;
-    }
-
-    for (li = snode->mig_source[msa_index]->head; li; li = li->next)
-    {
-      migevent_t* me = (migevent_t*)(li->data);
-      migbuffer[j].time = me->time;
-      migbuffer[j++].type = EVENT_MIG_SOURCE;
-    }
-    for (li = snode->mig_target[msa_index]->head; li; li = li->next)
-    {
-      migevent_t* me = (migevent_t*)(li->data);
-      migbuffer[j].time = me->time;
-      migbuffer[j++].type = EVENT_MIG_TARGET;
-    }
-
-    /* add splitting of populations */
-    for (k = 0; k < snode->mb_count; ++k)
-    {
-      migbuffer[j++] = snode->migbuffer[k];
-    }
-
-    if (snode->parent && !snode->mb_count)
-    {
-      printf("\nError when processing node %s\n", snode->label);
-    }
-    long epoch = 0;
-    double mrsum = 0;
-    assert(!snode->parent || snode->mb_count);
-    if (snode->mb_count)
-    {
-      long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
-      mrsum = snode->migbuffer[epoch].mrsum[idx];
-    }
-
-    /* TODO: Probably split the following qsort case into two:
-       in case snode->parent then sort j-2 elements, otherwise
-       j-1 elements.
-    */
-
-    /* if there was at least one coalescent event, sort */
-    if (j > 1)
-      qsort(migbuffer + 1, j - 1, sizeof(migbuffer_t), cb_migbuf_asctime);
-
-    for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k)
-    {
-      double t = migbuffer[k].time - migbuffer[k - 1].time;
-      C2h_sum += n * (n - 1) * t / heredity;
-      if (n > 0 && snode->parent)  /* no need to count migration for stree root. */
-        Wsj += n * mrsum * t;
-
-      if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
-        --n;
-      else if (migbuffer[k].type == EVENT_MIG_TARGET)
-        ++n;
-      else if (migbuffer[k].type == EVENT_TAU && epoch < snode->mb_count - 1)
-      {
-        ++epoch;
-        long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
-        mrsum = snode->migbuffer[epoch].mrsum[idx];
-      }
-    }
-  }
 
   /* ziheng-2024.1.31 */
   if (debug_gibbs)
     debug_gibbs_times++;
-  //a1 = opt_theta_alpha + coal_sum + migcount_sum;
-  #if 1
-    /* TODO: 21.3.2024 - update coal_count_sum in code */
-    snode->coal_count_sum = 0;
-    long ii;
-    for (ii = 0; ii < opt_locus_count; ++ii)
-      snode->coal_count_sum += snode->coal_count[ii];
-  #endif
+
+
+
   assert(coal_sum == snode->coal_count_sum);
   a1 = opt_theta_alpha + coal_sum;  /* ziheng-2024.1.31: this count should not include migration events */
   b1 = opt_theta_beta + C2h_sum;
@@ -3133,8 +3175,6 @@ static int propose_theta_gibbs_im(stree_t* stree,
 
         if (x->C2ji)
           x->C2ji[i] = x->old_C2ji[i];
-        if (x->Wsj)
-          x->Wsj[i] = x->old_Wsj[i];
       }
     }
     return 0;
@@ -3142,6 +3182,7 @@ static int propose_theta_gibbs_im(stree_t* stree,
   assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA);
   return 1;
 }
+#endif
 
 static double rndCauchy(long thread_index)
 {
@@ -3189,86 +3230,51 @@ static int propose_theta_gibbs(stree_t * stree,
                                snode_t * snode,
                                long thread_index)
 {
-  unsigned int j, k, n;
+  unsigned int j;
   long i;
   long lcount = 0;
   long msa_index;
   long coal_sum = 0;
   double C2h_sum = 0;
   double a1, b1;
-  double heredity;
   double oldtheta,newtheta;
-  double * sortbuffer = global_sortbuffer_r[thread_index];
-  dlist_item_t * coalevent;
-  int nextDateInd = -1;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   /* TODO: For migration we'll need to account for incoming/outgoing lineages
      as in the gene tree density function */
-  assert(!opt_migration);
+  //assert(!opt_migration);
 
   /* TODO: Speed this up by using coal_event_sum variable as in NoTheta */
   /* TODO: We can store C2h in the gtree_update_logprob_contrib function */
-  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  if (opt_linkedtheta)
   {
-    heredity = locus[msa_index]->heredity[0];
+    size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    for (j = 0; j < totnodes; ++j)
+    {
+      if (stree->nodes[j]->linked_theta != snode && stree->nodes[j] != snode) continue;
 
-    coal_sum += snode->coal_count[msa_index];
-
-    sortbuffer[0] = snode->tau;
-    j = 1;
-
-    if (opt_datefile && (!snode->left || opt_seqAncestral)) {
-      if (snode->epoch_count[msa_index])
-        nextDateInd = 0;
-      for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++) {
-        sortbuffer[j] = snode->tip_date[msa_index][k];
+      for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+      {
+        C2h_sum += stree->nodes[j]->C2ji[msa_index];
+        coal_sum += stree->nodes[j]->coal_count[msa_index];
       }
     }
-
-    for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
+  }
+  else
+  {
+    for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
     {
-      gnode_t* gnode = (gnode_t*)(coalevent->data);
-      sortbuffer[j++] = gnode->time;
-    }
-    if (snode->parent)
-      sortbuffer[j++] = snode->parent->tau;
-
-    /* if there was at least one coalescent event, sort */
-    if (j > 1)
-      qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
-
-    /* skip the last step in case the last value of n was supposed to be 1 */
-    if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1) --j;
-    for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
-    {
-      C2h_sum += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]) / heredity;
-
-      if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
-        n += 1 + snode->date_count[msa_index][nextDateInd];
-        if (nextDateInd + 1 < snode->epoch_count[msa_index])
-          nextDateInd++;
-        else
-          nextDateInd = -1;
-     }
+      coal_sum += snode->coal_count[msa_index];
+      C2h_sum += snode->C2ji[msa_index];
     }
   }
-
 
   /* ziheng-2024.1.31 */
   if (debug_gibbs)
     debug_gibbs_times++;
 
-  #if 1
-    /* todo: 21.3.2024 - update coal_count_sum in code */
-    snode->coal_count_sum = 0;
-    long ii;
-    for (ii = 0; ii < opt_locus_count; ++ii)
-      snode->coal_count_sum += snode->coal_count[ii];
-  #endif
   /* MSC and MSC-I models */
-  assert(coal_sum == snode->coal_count_sum);
   a1 = opt_theta_alpha + coal_sum;
   b1 = opt_theta_beta + C2h_sum;
   if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
@@ -3307,7 +3313,18 @@ static int propose_theta_gibbs(stree_t * stree,
       snode_t * x = stree->td[j];
 
       gtree[i]->logpr -= x->logpr_contrib[i];
-      gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
+      #if 0
+      if (!opt_migration)
+        gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
+      else
+        gtree_update_logprob_contrib_mig(x, stree, gtree[i], locus[i]->heredity[0],i,thread_index);
+      #else
+      x->old_logpr_contrib[i] = x->logpr_contrib[i];
+      x->logpr_contrib[i] += x->C2ji[i]/oldtheta;
+      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*oldtheta));
+      x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
+      #endif
       gtree[i]->logpr += x->logpr_contrib[i];
     }
     lnacceptance += gtree[i]->logpr;
@@ -3322,16 +3339,18 @@ static int propose_theta_gibbs(stree_t * stree,
 
     /* proposal ratio */
     if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
-      lnacceptance += (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
+      lnacceptance += (a1-1)*log(oldtheta/newtheta) - b1*(oldtheta-newtheta);
     else if (opt_theta_prop & BPP_THETA_PROP_MG_INVG)
-      lnacceptance += (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
+      lnacceptance += (-a1 - 1)*log(oldtheta/newtheta) -
+                      b1*(1/oldtheta - 1/newtheta);
 
     /* ziheng-2024.1.31 */
     /* gibbs move rejected. */
     if (debug_gibbs) {
       long k = coal_sum;
       double a = opt_theta_alpha, b = opt_theta_beta, C2 = C2h_sum, lnacc;
-      if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
+      if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA)
+      {
         /* proposal ratio & posterior ratio */
         lnacc = (a1 - 1) * log(oldtheta / newtheta) - b1 * (oldtheta - newtheta);
         lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
@@ -3339,7 +3358,8 @@ static int propose_theta_gibbs(stree_t * stree,
           (debug_gibbs_times - 1) / 3, (debug_gibbs_times - 1) % 3, snode->label, k, C2, a1, b1, a / b, C2 / k, a1 / b1,
           oldtheta, newtheta, lnacceptance, lnacc);
       }
-      else {
+      else
+      {
         /* proposal ratio & posterior ratio */
         lnacc = (-a1 - 1) * log(oldtheta / newtheta) - b1 * (1 / oldtheta - 1 / newtheta);
         lnacc += (a - 1 - k) * log(newtheta / oldtheta) - b * (newtheta - oldtheta) - C2 * (1 / newtheta - 1 / oldtheta);
@@ -3367,10 +3387,10 @@ static int propose_theta_gibbs(stree_t * stree,
         gtree[i]->logpr += x->old_logpr_contrib[i];
         x->logpr_contrib[i] = x->old_logpr_contrib[i];
 
+        #if 0
         if (x->C2ji)
           x->C2ji[i] = x->old_C2ji[i];
-        if (x->Wsj)
-          x->Wsj[i] = x->old_Wsj[i];
+        #endif
       }
     }
     return 0;
@@ -3453,6 +3473,7 @@ static int propose_theta_slide(stree_t * stree,
       snode_t * x = stree->td[j];
 
       gtree[i]->logpr -= x->logpr_contrib[i];
+      #if 0
       if (opt_migration)
         gtree_update_logprob_contrib_mig(x,
                                          stree,
@@ -3462,6 +3483,13 @@ static int propose_theta_slide(stree_t * stree,
                                          thread_index);
       else
         gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
+      #else
+      x->old_logpr_contrib[i] = x->logpr_contrib[i];
+      x->logpr_contrib[i] += x->C2ji[i]/thetaold;
+      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*thetaold));
+      x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
+      #endif
       gtree[i]->logpr += x->logpr_contrib[i];
     }
 
@@ -3494,10 +3522,10 @@ static int propose_theta_slide(stree_t * stree,
     for (i = 0; i < opt_locus_count; ++i)
     {
       x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      #if 0
       if (x->C2ji)
         x->C2ji[i] = x->old_C2ji[i];
-      if (x->Wsj)
-        x->Wsj[i] = x->old_Wsj[i];
+      #endif
     }
   }
 
@@ -3553,18 +3581,11 @@ void stree_propose_theta(gtree_t ** gtree,
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_GIBBS;
         av = acceptvec_gibbs;
-        if (opt_migration)
-          av[snode->theta_step_index] += propose_theta_gibbs_im(stree,
-                                                                gtree,
-                                                                locus,
-                                                                snode,
-                                                                thread_index);
-        else
-          av[snode->theta_step_index] += propose_theta_gibbs(stree,
-                                                             gtree,
-                                                             locus,
-                                                             snode,
-                                                             thread_index);
+        av[snode->theta_step_index] += propose_theta_gibbs(stree,
+                                                           gtree,
+                                                           locus,
+                                                           snode,
+                                                           thread_index);
         if (i < stree->tip_count)
           gibbs_tip_count++;
         else
@@ -3677,6 +3698,7 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
         xm[x->mb_count].type  = EVENT_TAU;
         xm[x->mb_count].mrsum[0] = 0;
         xm[x->mb_count].active_count = 1;
+        xm[x->mb_count].donors_count = 0;
         x->mb_count++;
         z->mark[thread_index] = 1;
       }
@@ -3693,6 +3715,7 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
     for (k = 0; k < x->mb_count; ++k)
     {
       tend = x->migbuffer[k].time;
+      long dcount = 0;
       for (j = 0; j < total_nodes-1; ++j)
       {
         snode_t * y = epoch[j];
@@ -3734,9 +3757,12 @@ void stree_update_mig_subpops(stree_t * stree, long thread_index)
               for (m = 0; m < xm[k].active_count; ++m)
                 xm[k].mrsum[m] += opt_mig_specs[mindex].M;
           }
-        }
 
+          /* add pop y into the list of donors */
+          xm[k].donors[dcount++] = y;
+        }
       }
+      xm[k].donors_count = dcount;
       tstart = tend;
     }
   }
@@ -4282,7 +4308,7 @@ static long update_migs(gtree_t * gtree,
       if (x->mi->me[j].time < minage || x->mi->me[j].time > maxage) continue;
 
       for (k = 0; k < paffected_count; ++k)
-        if (x->mi->me[j].source == affected[k] || x->mi->me[j].target == affected[k])
+        if (affected[k]->flag & SN_AFFECT && (x->mi->me[j].source == affected[k] || x->mi->me[j].target == affected[k]))
           break;
 
       if (k == paffected_count) continue;
@@ -4290,9 +4316,15 @@ static long update_migs(gtree_t * gtree,
       x->mi->me[j].old_time = x->mi->me[j].time;
 
       /* mark populations to update logpr */
+      #if 0
       assert(x->mi->me[j].source->mark[thread_index]);
+      #else
+      for (k = 0; k < paffected_count; ++k)
+        if (x->mi->me[j].source == affected[k]) break;
+      assert(k < paffected_count);
+      #endif
 
-      if (x->mi->me[j].time >= oldage && snode != stree->root)
+      if (x->mi->me[j].time >= oldage)
       {
         x->mi->me[j].time = maxage + maxfactor*(x->mi->me[j].time - maxage);
         locus_count_above++;
@@ -4345,7 +4377,6 @@ static long update_migs(gtree_t * gtree,
   return 1;
 }
 
-
 void propose_tau_update_gtrees_mig(locus_t ** loci,
                                    gtree_t ** gtree,
                                    stree_t * stree,
@@ -4380,6 +4411,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   if (!opt_est_theta)
     fatal("Integrating out thetas not yet implemented for IM model");
 
+  unsigned int original_count = paffected_count;
   if (opt_exp_imrb)
   {
     /* this holds for both old and new version of improved rubberband 
@@ -4396,10 +4428,27 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   {
     if (opt_exp_imrb)
     {
+      #if 0
+      /* XXX: The below is old code and is wrong */
       /* new rubberband */
       affected = gtree[i]->rb_linked;
       paffected_count = gtree[i]->rb_lcount;
       assert(paffected_count >= 3);
+      #else
+      paffected_count = original_count;
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+        stree->nodes[j]->mark[thread_index] = 0;
+        //stree->nodes[j]->mark[thread_index] = (j < original_count) ? 1 : 0;
+      for (j = 0; j < paffected_count; ++j)
+        affected[j]->mark[thread_index] = 1;
+        
+
+      for (j = 0; j < gtree[i]->rb_lcount; ++j)
+        if (!gtree[i]->rb_linked[j]->mark[thread_index])
+          affected[paffected_count++] = gtree[i]->rb_linked[j];
+      /* TODO: 2024-07-01 Debugging check, does the pafffected_count ever get an increase? */
+      assert(paffected_count == original_count); // does this hold?
+      #endif
     }
 
     /* reset marks for updating population msc density contribution */
@@ -4408,8 +4457,11 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
 
     /* mark affected populations with more than one sequences for updating their
        density contribution */
+    #if 0
+    /* XXX: 2024-06-19 Not sure whether to keep it or not */
     for (j = 0; j < paffected_count; ++j)
     {
+      /* TODO: 2024-06-19 TF: Is this needed? */
       /* TODO:
         I think the below for loop can be made to detect overlaps between populations
         and thus detect which ones really need to update */
@@ -4419,6 +4471,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
         if (opt_mig_bitmatrix[k][affected[j]->node_index] || opt_mig_bitmatrix[affected[j]->node_index][k])
           stree->nodes[k]->mark[thread_index] = 1;
     }
+    #endif
 
     k = 0;
     locus_count_above = locus_count_below = 0;
@@ -4434,7 +4487,11 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
        and how many are below. Finally, update the gene tree probabilities */
     for (j = 0; j < paffected_count; ++j)
     {
+      
       /* process events for current population */
+
+      if (affected[j]->flag & SN_AFFECT)
+      {
         dlist_item_t * event;
         for (event = affected[j]->coalevent[i]->head; event; event = event->next)
         {
@@ -4445,7 +4502,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
           node->mark = FLAG_PARTIAL_UPDATE | FLAG_BRANCH_UPDATE;
           node->old_time = node->time;
 
-          if (node->time >= oldage && snode != stree->root)
+          if (node->time >= oldage)
           {
             node->time = maxage + maxfactor*(node->time - maxage);
             locus_count_above++;
@@ -4456,6 +4513,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
             locus_count_below++;
           }
         }
+      }
     }
     if (!update_migs(gtree[i],
                      stree,
@@ -4476,6 +4534,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
       *ret_mig_reject = 1;
       return;
     }
+    #if 0
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
     {
       if (stree->nodes[j]->mark[thread_index])
@@ -4496,6 +4555,47 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
         stree->nodes[j]->mark[thread_index] = 0;
       }
     }
+    #else
+    for (j = 0; j < paffected_count; ++j)
+      affected[j]->mark[thread_index] = 1;
+    unsigned int new_affected_count = paffected_count;
+    for (j = 0; j < paffected_count; ++j)
+    {
+      unsigned int kk;
+      for (kk = 0; kk < stree->tip_count+stree->inner_count; ++kk)
+      {
+        if (stree->nodes[kk]->mark[thread_index]) continue;
+
+        if (opt_mig_bitmatrix[kk][affected[j]->node_index] || opt_mig_bitmatrix[affected[j]->node_index][kk])
+        {
+          affected[new_affected_count++] = stree->nodes[kk];
+        }
+      }
+    }
+    /* TODO: 2024-07-01 Debugging check, does the pafffected_count ever get an increase? */
+    //assert(paffected_count == new_affected_count); // does this hold?
+    
+
+    paffected_count = new_affected_count;
+    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+      stree->nodes[j]->mark[thread_index] = 0;
+
+    for (j = 0; j < paffected_count; ++j)
+    {
+      if (opt_est_theta)
+        logpr -= affected[j]->logpr_contrib[i];
+
+      double xtmp = gtree_update_logprob_contrib_mig(affected[j],
+                                                     stree,
+                                                     gtree[i],
+                                                     loci[i]->heredity[0],
+                                                     i,
+                                                     thread_index);
+      if (opt_est_theta)
+        logpr += xtmp;
+
+    }
+    #endif
 
     /* entry i of __mark_count holds the number of marked nodes for locus i */
     __mark_count[i] = k;
@@ -4643,13 +4743,14 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_count_above = count_above;
   *ret_count_below = count_below;
 }
+
 static double logPDFInvG(double x, double a, double b)
 {
    /* inverse gamma density: mean=a/b; var=a/b^2
    */
    if (x <= 0 || a <= 0 || b <= 0) {
       printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("x a b outside range in logPDFInvG()");
+      fatal("[stree] x a b outside range in logPDFInvG()");
    }
    return a * log(b) - lgamma(a) + (-a - 1) * log(x) - b / x;
 }
@@ -4661,6 +4762,238 @@ static double logPDFRatioGamma(double xnew, double x, double a, double b)
 static double logPDFRatioInvG(double xnew, double x, double a, double b)
 {
   return (-a-1)*log(xnew/x) - b*(1/xnew-1/x);
+}
+
+static double partial_C2j(snode_t * snode,
+                          double heredity,
+                          double oldage,
+                          double minage,
+                          double maxage,
+                          double minfactor,
+                          double maxfactor,
+                          long msa_index,
+                          long thread_index)
+{
+  unsigned int j, k, n;
+  double C2j = 0;
+  dlist_item_t* coalevent;
+  int nextDateInd = -1; 
+  double* sortbuffer = global_sortbuffer_r[thread_index];
+
+  sortbuffer[0] = snode->tau;
+  j = 1;
+  if (opt_datefile && (!snode->left || opt_seqAncestral))
+  {
+    if (snode->epoch_count[msa_index])
+      nextDateInd = 0;
+    for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ )
+      sortbuffer[j] = snode->tip_date[msa_index][k];
+  }
+
+  /* Events are coalescent events. This is a list of coalescent events in a
+   a population. Note that is all within a population */
+  for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
+  {
+    gnode_t* gnode = (gnode_t*)(coalevent->data);
+
+    double t = gnode->time;
+
+    if (t >= minage && t <= maxage)
+    {
+      t = (t >= oldage) ?
+            maxage+maxfactor*(t-maxage) : minage+minfactor*(t-minage);
+    }
+
+    sortbuffer[j++] = t;
+  }
+
+  if (snode->parent)
+    sortbuffer[j++] = snode->parent->tau;
+
+  /* if there was at least one coalescent event, sort */
+  /* We don't need to sort the first or last elements since they are the speciation times
+   and the coalescent times are inbetween the speciation times */
+  if (j > 1)
+    qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
+
+  /* skip the last step in case the last value of n was supposed to be 1 */
+
+  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
+  double prev = sortbuffer[0];
+  for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
+  {
+    double t = sortbuffer[k];
+
+    C2j += n*(n-1) * (t-prev);
+
+    prev = t;
+
+     if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
+       n += 1 + snode->date_count[msa_index][nextDateInd];
+       if (nextDateInd + 1 < snode->epoch_count[msa_index])
+         nextDateInd++;
+       else
+         nextDateInd = -1;
+     }
+  }
+
+  return C2j / heredity;
+}
+
+static double partial_C2j_and_Wsj(stree_t * stree,
+                                  snode_t * snode,
+                                  double heredity,
+                                  double oldtau,
+                                  double minage,
+                                  double maxage,
+                                  double minfactor,
+                                  double maxfactor,
+                                  double * wsji_sum,
+                                  long msa_index,
+                                  long thread_index)
+{
+  //long i,j,k,n;
+  long i,j,k,n;
+
+  double C2j = 0;
+  size_t alloc_required;
+  dlist_item_t * event;
+  dlist_item_t * li;
+  migbuffer_t * migbuffer;
+
+  double Wsji = 0;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+  
+  /* indicator: 1 if migration from si to ti is possible at time segment k */
+  if (!ts_indicator)
+    ts_indicator = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+
+
+  alloc_required = snode->migevent_count[msa_index] +
+                   snode->coal_count[msa_index] +
+                   stree->inner_count+1;
+  migbuffer_check_and_realloc(thread_index,alloc_required);
+  migbuffer = global_migbuffer_r[thread_index];
+
+  /* add taus and coalescence times in sortbuffer */
+  migbuffer[0].time = snode->tau;
+  migbuffer[0].type = EVENT_TAU;
+  j = 1;
+  for (event = snode->coalevent[msa_index]->head; event; event = event->next)
+  {
+    gnode_t* gnode = (gnode_t*)(event->data);
+    migbuffer[j].time   = gnode->time;
+    migbuffer[j++].type = EVENT_COAL;
+  }
+
+  for (li = snode->mig_source[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me     = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_SOURCE;
+  }
+  for (li = snode->mig_target[msa_index]->head; li; li = li->next)
+  {
+    migevent_t * me     = (migevent_t *)(li->data);
+    migbuffer[j].time   = me->time;
+    migbuffer[j++].type = EVENT_MIG_TARGET;
+  }
+
+  /* add splitting of populations */
+  for (k = 0; k < snode->mb_count; ++k)
+  {
+    migbuffer[j++] = snode->migbuffer[k];
+  }
+
+  if (snode->parent && !snode->mb_count)
+    fatal("\nError when processing node %s", snode->label);
+  /* TODO: Probably split the following qsort case into two:
+     in case tgt->parent then sort j-2 elements, otherwise
+     j-1 elements.
+  */
+
+  /* if there was at least one coalescent event, sort */
+  if (j > 1)
+    qsort(migbuffer + 1, j - 1, sizeof(migbuffer_t), cb_migbuf_asctime);
+
+  long epoch = 0;
+  #if 0
+  /* backup and reset old Wsji */
+  if (snode->flag & SN_MIG_UPDATE)
+  {
+    for (n = 0; n < snode->mb_count; ++n)
+    {
+      for (k = 0; k < snode->migbuffer[n].donors_count;  ++k)
+      {
+        unsigned int si = snode->migbuffer[n].donors[k]->node_index;
+        stree->old_Wsji[si][ti][msa_index] = stree->Wsji[si][ti][msa_index];
+        stree->Wsji[si][ti][msa_index] = 0;
+      }
+    }
+  }
+  #endif
+
+  /* calculate C2j */
+  double tprev = migbuffer[0].time;
+  for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k)
+  {
+    double t = migbuffer[k].time;
+    if (t >= minage && t <= maxage && migbuffer[k].type != EVENT_TAU)
+      t = (t >= oldtau) ?
+              maxage+maxfactor*(t-maxage) : minage+minfactor*(t-minage);
+
+    C2j += n*(n-1) * (t-tprev);
+    if (n > 0 && snode->parent)
+      Wsji += n*(t-tprev);
+      /* TODO: Add a flag to check its a target population to avoid some calculations */
+
+    tprev = t;
+
+    if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
+      --n;
+    else if (migbuffer[k].type == EVENT_MIG_TARGET)
+      ++n;
+    else if (migbuffer[k].type == EVENT_TAU)
+    {
+      if (snode->flag & SN_MIG_UPDATE)
+      {
+        for (i = 0; i < snode->migbuffer[epoch].donors_count; ++i)
+        {
+          unsigned int si = snode->migbuffer[epoch].donors[i]->node_index;
+          //stree->Wsji[si][ti][msa_index] += Wsji;
+          wsji_sum[si] += Wsji;
+        }
+      }
+
+      Wsji = 0;
+
+      if (epoch < snode->mb_count-1)
+      {
+        ++epoch;
+      }
+    }
+  }
+
+  #if 0
+  /* TODO: */
+  /* calculate Bsj */
+  for (k = 1, n = tgt->seqin_count[msa_index]; k < j; ++k)
+  {
+    double t = migbuffer[k].time - migbuffer[k-1].time;
+    if (n > 0 && tgt->parent)
+      bsj += n*ind*t;
+
+    if (migbuffer[k].type == EVENT_COAL || migbuffer[k].type == EVENT_MIG_SOURCE)
+      --n;
+    else if (migbuffer[k].type == EVENT_MIG_TARGET)
+      ++n;
+    else if (migbuffer[k].type == EVENT_TAU && epoch < tgt->mb_count-1)
+      ind = ts_indicator[++epoch];
+  }
+  #endif
+
+  return C2j/heredity;
 }
 
 static long propose_tau(locus_t ** loci,
@@ -4679,8 +5012,7 @@ static long propose_tau(locus_t ** loci,
   double oldage, newage;
   double minage = 0, maxage = 999;
   double lnacceptance = 0;
-  double minfactor, maxfactor, thetafactor;
-  //double oldtheta = 0;
+  double minfactor, maxfactor;
   double logpr = 0;
   double logpr_diff = 0;
   double logl_diff = 0;
@@ -4694,6 +5026,8 @@ static long propose_tau(locus_t ** loci,
   snode_t ** theta_list = NULL;
 
   oldage = snode->tau;
+
+  theta_method = opt_rb_theta_update;
 
   /* compute minage and maxage bounds */
   if (opt_msci && snode->hybrid)
@@ -4987,12 +5321,16 @@ static long propose_tau(locus_t ** loci,
 
   theta_count = paffected_count;
   theta_list = affected;
-  if (opt_est_theta && theta_method == 3)
+
+  for (j = 0; j < paffected_count; ++j)
+    affected[j]->flag |= SN_AFFECT;
+
+  if (opt_est_theta && theta_method)
   {
     size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
     snode_t ** snodes = stree->nodes;
 
-    /* repopulate theta_list if linked theta model */
+    /* repopulate theta_list with primary theta pops if linked theta model */
     if (opt_linkedtheta)
     {
       theta_count = 0;
@@ -5009,13 +5347,17 @@ static long propose_tau(locus_t ** loci,
         }
       }
 
+      /* reset marks */
       for (j = 0; j < totnodes; ++j)
         marks[j] = 0;
     }
 
     for (j = 0; j < theta_count; ++j)
     {
-      double C2j = 0;
+      double C2j_new = 0;
+      double C2j_old = 0;
+      double C2j_new_debug = 0;
+      double mfactor = 0;
       long coal_count_sum = 0;
       long ii,jj;
 
@@ -5028,39 +5370,71 @@ static long propose_tau(locus_t ** loci,
       for (jj = 0; jj < totnodes; ++jj)
       {
         if (snodes[jj]->linked_theta != x && snodes[jj] != x) continue;
+
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          C2j += snodes[jj]->C2ji[ii];
+          C2j_old += snodes[jj]->C2ji[ii];
+
+          #if 0
+          double dbg_shortC2j = 0;
+          double dbg_fullC2j = 0;
+
+          long dbg_shortcut = 0;
+
+          if (snodes[jj] != snode) 
+          {
+            snode_t * sibling = snode->left == snodes[jj] ? snode->right : snode->left;
+            if (snodes[jj]->tau > sibling->tau)
+              dbg_shortcut = 1;
+          }
+          else
+          {
+            dbg_shortcut = 1;
+          }
+
+          mfactor = 1;
+          if (snodes[jj]->flag & SN_AFFECT)
+            mfactor =  (snodes[jj]->tau >= snode->tau) ? maxfactor: minfactor;
+          dbg_shortC2j = snodes[jj]->C2ji[ii]*mfactor;
+
+          C2j_new += dbg_shortC2j;
+          #endif
+
+          if (snodes[jj]->flag & SN_AFFECT)
+            C2j_new += partial_C2j(snodes[jj],
+                                   loci[ii]->heredity[0],
+                                   oldage,
+                                   minage,
+                                   maxage,
+                                   minfactor,
+                                   maxfactor,
+                                   ii,
+                                   thread_index);
+          else
+            C2j_new += snodes[jj]->C2ji[ii];
         }
       }
 
-      double mfactor = 0;
-      #if 0
-      mfactor = ((!x->parent) || x->parent == snode) ? minfactor : maxfactor;
-      #else
-      mfactor = (x->parent == snode) ? minfactor : maxfactor;
-      #endif
-
       double a1 = opt_theta_alpha + coal_count_sum;
-      double b1 = opt_theta_beta + C2j*mfactor;
+      double b1 = opt_theta_beta + C2j_new;
 
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
                                      coal_count_sum,
-                                     C2j*mfactor,
+                                     C2j_new,
                                      &a1,
                                      &b1);
 
       double a1_old, b1_old;
       a1_old = a1;
-      b1_old = opt_theta_beta + C2j;
+      b1_old = opt_theta_beta + C2j_old;
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
                                      coal_count_sum,
-                                     C2j,
+                                     C2j_old,
                                      &a1_old,
                                      &b1_old);
 
@@ -5092,8 +5466,8 @@ static long propose_tau(locus_t ** loci,
         lnacceptance += logPDFInvG(x->old_theta, a1_old, b1_old) -
                         logPDFInvG(x->theta, a1, b1);
       if (opt_debug_tau)
-        printf("%-3s k C2h: %ld %9.6f a1 b1: %9.6f %9.6f -> %9.6f %9.6f theta: %9.5e %9.5e lna = %6.2f\n", 
-          x->label, coal_count_sum, C2j, a1_old, b1_old, a1, b1, x->old_theta, x->theta, lnacceptance);
+        printf("%-3s k C2h_new: %ld %9.6f a1 b1: %9.6f %9.6f -> %9.6f %9.6f theta: %9.5e %9.5e lna = %7.4f\n", 
+          x->label, coal_count_sum, C2j_new, a1_old, b1_old, a1, b1, x->old_theta, x->theta, lnacceptance);
 
       /* prior ratio */
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
@@ -5105,13 +5479,17 @@ static long propose_tau(locus_t ** loci,
     }
 
     /* create list of nodes for updating gene tree density contributions */
+    #if 1
+    for (j = 0; j < paffected_count; ++j)
+      affected[j]->flag |= SN_AFFECT;
+    #endif
+
     if (opt_linkedtheta)
     {
       theta_count = 0;
       for (j = 0; j < paffected_count; ++j)
       {
         theta_list[theta_count++] = affected[j];
-        affected[j]->flag |= SN_AFFECT;
         marks[affected[j]->node_index] = 1;
       }
 
@@ -5137,6 +5515,21 @@ static long propose_tau(locus_t ** loci,
           }
         }
       }
+      long new_theta_count = theta_count;
+      for (j = 0; j < theta_count; ++j)
+      {
+        long jj;
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * x = snodes[jj];
+          if (x->linked_theta == theta_list[j] && marks[x->node_index] == 0)
+          {
+            theta_list[new_theta_count++] = x;
+            marks[x->node_index] = 1;
+          }
+        }
+      }
+      theta_count = new_theta_count;
     }
   }
 
@@ -5207,13 +5600,18 @@ static long propose_tau(locus_t ** loci,
       assert(logpr_diff == 0);
     #endif
 
-    if (opt_linkedtheta)
+    /* TODO: the next line never happens (opt_est_theta inside !opt_est_theta)
+       but double check that theta_list gets deallocated */
+    if (opt_linkedtheta && opt_est_theta)
       free(theta_list);
 
     logpr_diff += logpr - stree->notheta_logpr;
     stree->notheta_old_logpr = stree->notheta_logpr;
     stree->notheta_logpr = logpr;
   }
+  #if 0
+  debug_consistency(stree,gtree,"tau");
+  #endif
 
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
@@ -5277,9 +5675,9 @@ static long propose_tau(locus_t ** loci,
         }
       }
       #endif
-      for (j = 0; j < paffected_count; ++j)
+      for (j = 0; j < theta_count; ++j)
       {
-        snode_t * x = affected[j];
+        snode_t * x = theta_list[j];
 
         if (x->theta == -1) continue;
 
@@ -5304,19 +5702,19 @@ static long propose_tau(locus_t ** loci,
       /* restore logpr contributions */
       if (opt_est_theta)
       {
-        for (j = 0; j < paffected_count; ++j)
+        for (j = 0; j < theta_count; ++j)
         {
-          if (affected[j]->seqin_count[i] > 1 || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
+          if (theta_list[j]->seqin_count[i] > 1 || (theta_list[j]->epoch_count && theta_list[j]->epoch_count[i]))
           {
             if (opt_migration)
-              gtree_update_logprob_contrib_mig(affected[j],
+              gtree_update_logprob_contrib_mig(theta_list[j],
                                                stree,
                                                gtree[i],
                                                loci[i]->heredity[0],
                                                i,
                                                thread_index);
             else
-              gtree_update_logprob_contrib(affected[j],
+              gtree_update_logprob_contrib(theta_list[j],
                                            loci[i]->heredity[0],
                                            i,
                                            thread_index);
@@ -5325,9 +5723,9 @@ static long propose_tau(locus_t ** loci,
       }
       else
       {
-        for (j = 0; j < paffected_count; ++j)
-          if (affected[j]->seqin_count[i] > 1 || (affected[j]->epoch_count && affected[j]->epoch_count[i]))
-            logprob_revert_notheta(affected[j], i);
+        for (j = 0; j < theta_count; ++j)
+          if (theta_list[j]->seqin_count[i] > 1 || (theta_list[j]->epoch_count && theta_list[j]->epoch_count[i]))
+            logprob_revert_notheta(theta_list[j], i);
       }
 
       /* get the list of nodes for which CLVs must be reverted, i.e. all marked
@@ -5404,18 +5802,26 @@ static long propose_tau(locus_t ** loci,
     }
     if (!opt_est_theta)
     {
-      for (j = 0; j < paffected_count; ++j)
-        affected[j]->notheta_logpr_contrib = old_logpr_contrib[j];
+      for (j = 0; j < theta_count; ++j)
+        theta_list[j]->notheta_logpr_contrib = old_logpr_contrib[j];
 
       stree->notheta_logpr = stree->notheta_old_logpr;
     }
   }
 
-  if (opt_linkedtheta)
+  for (i = 0; i < theta_count; ++i)
+    theta_list[i]->flag = 0;
+
+  if (opt_linkedtheta && theta_method)
   {
     free(marks);
-    free(theta_list);
+    if (opt_est_theta)
+      free(theta_list);
   }
+
+  for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+    stree->nodes[i]->flag = 0;
+  
   return accepted;
 }
 
@@ -5665,28 +6071,35 @@ static long propose_tau_mig(locus_t ** loci,
   unsigned int i, j, k;
 
   int theta_method = 3;   /* how we change theta */
+  int mig_method = 1;
   long accepted = 0;
   long mig_reject;        /* reject move due to conflict in gene tree ages */
   double oldage, newage;
   double minage = 0, maxage = 999;
   double lnacceptance = 0;
   double minfactor, maxfactor, thetafactor;
-  double oldtheta = 0;
   double logpr = 0;
   double logpr_diff = 0;
   double logl_diff = 0;
   snode_t ** affected;
   snode_t * affected3[3];
+  double * old_logpr_contrib;
 
   unsigned int count_above = 0;
   unsigned int count_below = 0;
   unsigned int paffected_count;        /* number of affected populations */
-
-  /* TODO: Implement a generic version */
-  if (opt_linkedtheta)
-    theta_method = 0;
+  unsigned int theta_count = 0;
+  long * marks = NULL;
+  snode_t ** theta_list = NULL;
 
   oldage = snode->tau;
+
+  theta_method = opt_rb_theta_update;
+  if (opt_theta_slide_prob == 1)
+    theta_method = 0;
+  mig_method = opt_rb_w_update;
+  if (opt_mig_vrates_exist)
+    mig_method = 0;
 
   /* compute minage and maxage bounds */
   if (snode->left)
@@ -5695,15 +6108,15 @@ static long propose_tau_mig(locus_t ** loci,
   if (snode->parent)
     maxage = snode->parent->tau;
 
-  if (opt_datefile) {
-
-	  int index = snode->node_index - stree->tip_count;
-	  //Check constraints
-	  if (stree->l_constraint[index] != 0) 
-		minage = MAX(minage, stree->l_constraint[index]);
+  if (opt_datefile)
+  {
+    int index = snode->node_index - stree->tip_count;
+    //Check constraints
+    if (stree->l_constraint[index] != 0) 
+      minage = MAX(minage, stree->l_constraint[index]);
 	  	
-	  if (stree->u_constraint && stree->u_constraint[index] != 0) 
-		maxage = MIN(maxage, stree->u_constraint[index]);
+    if (stree->u_constraint && stree->u_constraint[index] != 0) 
+      maxage = MIN(maxage, stree->u_constraint[index]);
   }
 
   if (opt_exp_imrb)
@@ -5781,47 +6194,176 @@ static long propose_tau_mig(locus_t ** loci,
   }
   #endif
 
+  theta_count = paffected_count;
+  theta_list = affected;
 
-  if (opt_est_theta && theta_method == 3)
+  for (j = 0; j < paffected_count; ++j)
+    affected[j]->flag |= SN_AFFECT;
+
+  /* change migration rates first */
+  if (mig_method)
   {
-    for (j = 0; j < paffected_count; ++j)
+    long kk;
+    for (kk = 0; kk < opt_migration_count; ++kk)
     {
-      snode_t * x = affected[j];
-      double C2j = 0;
+      migspec_t * spec = opt_mig_specs+kk;
+
+      snode_t * src = stree->nodes[spec->si];
+      snode_t * dst = stree->nodes[spec->ti];
+
+      if (!((src->flag & SN_AFFECT && !(src->flag & SN_MIG_UPDATE)) ||
+            (dst->flag & SN_AFFECT && !(dst->flag & SN_MIG_UPDATE)))) continue;
+
+
+      for (j = 0; j < opt_locus_count; ++j)
+        if (gtree[j]->migcount[spec->si][spec->ti])
+         break;
+
+      if (j == opt_locus_count) continue;
+      
+      /* TODO: this is too general -- even if they are affected, it could be that the migration part is outside
+         the bounds */
+      if (src->flag & SN_AFFECT)
+        src->flag |= SN_MIG_UPDATE;
+      if (dst->flag & SN_AFFECT)
+        dst->flag |= SN_MIG_UPDATE;
+    }
+  }
+
+  if (opt_est_theta && theta_method)
+  {
+    size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    snode_t ** snodes = stree->nodes;
+
+    double * wsji_sum = (double *)xmalloc(totnodes*sizeof(double));
+
+    /* repopulate theta_list with primary theta pops if linked theta model */
+    if (opt_linkedtheta)
+    {
+      theta_count = 0;
+      marks = (long *)xcalloc(totnodes,sizeof(long));
+      theta_list = (snode_t **)xmalloc(totnodes*sizeof(snode_t *));
+      for (j = 0; j < paffected_count; ++j)
+      {
+        snode_t * x = affected[j]->linked_theta ?
+                        affected[j]->linked_theta : affected[j];
+        if (!marks[x->node_index])
+        {
+          theta_list[theta_count++] = x;
+          marks[x->node_index] = 1;
+        }
+      }
+
+      /* reset marks */
+      for (j = 0; j < totnodes; ++j)
+        marks[j] = 0;
+    }
+
+    for (j = 0; j < theta_count; ++j)
+    {
+      double C2j_new = 0;
+      double C2j_old = 0;
+      long coal_count_sum = 0;
+      long ii,jj;
+
+      /* primary theta */
+      snode_t * x = theta_list[j];
 
       if (x->theta == -1)
         continue;
-      /* todo: 21.3.2024 - update coal_count_sum in code */
-      x->coal_count_sum = 0;
-      long ii;
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        x->coal_count_sum += x->coal_count[ii];
 
-      for (ii = 0; ii < opt_locus_count; ++ii)
-        C2j += x->C2ji[ii];
+      for (jj = 0; jj < totnodes; ++jj)
+      {
+        if (snodes[jj]->linked_theta != x && snodes[jj] != x) continue;
 
-      double mfactor = 0;
-      mfactor = ((!x->parent) || x->parent == snode) ? minfactor : maxfactor;
+        for (ii = 0; ii < totnodes; ++ii)
+          wsji_sum[ii] = 0;
 
-      double a1 = opt_theta_alpha + x->coal_count_sum;
-      double b1 = opt_theta_beta + C2j*mfactor;
+        for (ii = 0; ii < opt_locus_count; ++ii)
+        {
+          coal_count_sum += snodes[jj]->coal_count[ii];
+          C2j_old += snodes[jj]->C2ji[ii];
+
+          if (snodes[jj]->flag & SN_AFFECT)
+          {
+            C2j_new += partial_C2j_and_Wsj(stree,
+                                           snodes[jj],
+                                           loci[ii]->heredity[0],
+                                           oldage,
+                                           minage,
+                                           maxage,
+                                           minfactor,
+                                           maxfactor,
+                                           wsji_sum,
+                                           ii,
+                                           thread_index);
+          }
+          else
+            C2j_new += snodes[jj]->C2ji[ii];
+        }
+
+        /* change migration rate */
+        if (snodes[jj]->flag & SN_MIG_UPDATE)
+        {
+          for (ii = 0; ii < totnodes; ++ii)
+          {
+            if (wsji_sum[ii])
+            {
+              /* update migration */
+              long mindex = opt_migration_matrix[ii][snodes[jj]->node_index];
+              assert(mindex >= 0);
+              migspec_t * spec = opt_mig_specs+mindex;
+
+              long kk;
+              long asj = 0;
+              double bsj_old = 0;
+              for (kk = 0; kk < opt_locus_count; ++kk)
+              {
+                asj     += gtree[kk]->migcount[spec->si][spec->ti];
+                bsj_old += stree->Wsji[spec->si][spec->ti][kk];
+              }
+
+              double a1 = spec->alpha + asj;
+              double b1 = spec->beta + wsji_sum[ii];
+              double old_w = spec->M;
+              spec->old_M = spec->M;
+              spec->M = legacy_rndgamma(thread_index,a1)/b1;
+              double new_w = spec->M;
+              assert(spec->mark == 0);
+              spec->mark = 1;
+
+              /* prior ratio */
+              lnacceptance += logPDFRatioGamma(new_w, old_w, spec->alpha, spec->beta);
+              
+              /* proposal ratio */
+              lnacceptance += logPDFGamma(old_w, a1, spec->beta+bsj_old) - logPDFGamma(new_w,a1,b1);
+
+            }
+          }
+        }
+      }
+
+      stree_update_mig_subpops(stree,thread_index);
+
+      double a1 = opt_theta_alpha + coal_count_sum;
+      double b1 = opt_theta_beta + C2j_new;
 
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     x->coal_count_sum,
-                                     C2j*mfactor,
+                                     coal_count_sum,
+                                     C2j_new,
                                      &a1,
                                      &b1);
 
       double a1_old, b1_old;
       a1_old = a1;
-      b1_old = opt_theta_beta + C2j;
+      b1_old = opt_theta_beta + C2j_old;
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
         get_gamma_conditional_approx(opt_theta_alpha,
                                      opt_theta_beta,
-                                     x->coal_count_sum,
-                                     C2j,
+                                     coal_count_sum,
+                                     C2j_old,
                                      &a1_old,
                                      &b1_old);
 
@@ -5830,6 +6372,20 @@ static long propose_tau_mig(locus_t ** loci,
       if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop == BPP_THETA_PROP_MG_INVG))
         x->theta = 1 / x->theta;
 
+      /* update thetas for linked populations */
+      if (opt_linkedtheta)
+      {
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * y = stree->nodes[jj];
+          
+          if (y->theta >= 0 && y->has_theta && y->linked_theta == x)
+          {
+            y->old_theta = y->theta;
+            y->theta = x->theta;
+          }
+        }
+      }
 
       /* proposal ratio */
       if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
@@ -5838,17 +6394,83 @@ static long propose_tau_mig(locus_t ** loci,
       else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
         lnacceptance += logPDFInvG(x->old_theta, a1_old, b1_old) -
                         logPDFInvG(x->theta, a1, b1);
+      if (opt_debug_tau)
+        printf("%-3s k C2h_new: %ld %9.6f a1 b1: %9.6f %9.6f -> %9.6f %9.6f theta: %9.5e %9.5e lna = %7.4f\n", 
+          x->label, coal_count_sum, C2j_new, a1_old, b1_old, a1, b1, x->old_theta, x->theta, lnacceptance);
 
       /* prior ratio */
       if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+        lnacceptance += logPDFRatioGamma(x->theta, x->old_theta,
+                                         opt_theta_alpha, opt_theta_beta);
       else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta, opt_theta_alpha, opt_theta_beta);
+        lnacceptance += logPDFRatioInvG(x->theta, x->old_theta,
+                                        opt_theta_alpha, opt_theta_beta);
     }
+
+    /* create list of nodes for updating gene tree density contributions */
+    #if 1
+    for (j = 0; j < paffected_count; ++j)
+    {
+      affected[j]->flag |= SN_AFFECT;
+    }
+    #endif
+
+    if (opt_linkedtheta)
+    {
+      theta_count = 0;
+      for (j = 0; j < paffected_count; ++j)
+      {
+        theta_list[theta_count++] = affected[j];
+        marks[affected[j]->node_index] = 1;
+      }
+
+      for (j = 0; j < paffected_count; ++j)
+      {
+        long jj;
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * x = snodes[jj];
+
+          if (x->linked_theta == affected[j] && !marks[x->node_index])
+          {
+            theta_list[theta_count++] = x;
+            marks[x->node_index] = 1;
+          }
+          else if (!x->linked_theta && affected[j]->linked_theta == x)
+          {
+            if (!marks[x->node_index])
+            {
+              theta_list[theta_count++] = x;
+              marks[x->node_index] = 1;
+            }
+          }
+        }
+      }
+      long new_theta_count = theta_count;
+      for (j = 0; j < theta_count; ++j)
+      {
+        long jj;
+        for (jj = 0; jj < totnodes; ++jj)
+        {
+          snode_t * x = snodes[jj];
+          if (x->linked_theta == theta_list[j] && marks[x->node_index] == 0)
+          {
+            theta_list[new_theta_count++] = x;
+            marks[x->node_index] = 1;
+          }
+        }
+      }
+      theta_count = new_theta_count;
+    }
+    free(wsji_sum);
   }
 
   if (!opt_est_theta)
   {
+    old_logpr_contrib = (double *)xmalloc((size_t)paffected_count*sizeof(double));
+    for (i = 0; i < paffected_count; ++i)
+      old_logpr_contrib[i] = affected[i]->notheta_logpr_contrib;
+
     logpr = stree->notheta_logpr;
     for (j = 0; j < paffected_count; ++j)
       logpr -= affected[j]->notheta_logpr_contrib;
@@ -5868,8 +6490,8 @@ static long propose_tau_mig(locus_t ** loci,
     tp.maxage = maxage;
     tp.minfactor = minfactor;
     tp.maxfactor = maxfactor;
-    tp.affected = affected;
-    tp.paffected_count = paffected_count;
+    tp.affected = theta_list;
+    tp.paffected_count = theta_count;
     tp.logl_diff = logl_diff;
     tp.logpr_diff = logpr_diff;
     threads_wakeup(THREAD_WORK_TAU_MIG,&tp);
@@ -5892,8 +6514,8 @@ static long propose_tau_mig(locus_t ** loci,
                                   maxfactor,
                                   0,
                                   stree->locus_count,
-                                  affected,
-                                  paffected_count,
+                                  theta_list,
+                                  theta_count,
                                   &mig_reject,
                                   &count_above,
                                   &count_below,
@@ -5921,6 +6543,8 @@ static long propose_tau_mig(locus_t ** loci,
     stree->notheta_old_logpr = stree->notheta_logpr;
     stree->notheta_logpr = logpr;
   }
+  if (opt_debug)
+    debug_consistency(stree,gtree,"tau_mig");
 
   if (opt_exp_imrb)
     free(affected);
@@ -6087,6 +6711,35 @@ static long propose_tau_mig(locus_t ** loci,
     }
   }
 
+  if (mig_method)
+  {
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      migspec_t * spec = opt_mig_specs+i;
+      if (spec->mark && !accepted)
+        spec->M = spec->old_M;
+      
+      spec->mark = 0;
+    }
+  }
+
+  #if 0
+  for (i = 0; i < theta_count; ++i)
+    theta_list[i]->flag = 0;
+  #endif
+
+  if (opt_linkedtheta && theta_method)
+  {
+    free(marks);
+    if (opt_est_theta)
+      free(theta_list);
+  }
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    stree->nodes[i]->flag = 0;
+
+  //if (accepted) printf("ACCEPTED!!!!!\n"); else printf("REJECTED\n");
+
   return accepted;
 }
 
@@ -6164,6 +6817,8 @@ double stree_propose_tau_mig(stree_t ** streeptr,
         gtree_clone(original_gtree[j], gtree[j], stree);
       events_clone(original_stree, stree, gtree);
       
+      if (opt_debug)
+        debug_validate_logpg(stree, gtree, loci, "TAU");
       rc = propose_tau_mig(loci,
                            stree->nodes[i],
                            gtree,
@@ -9763,7 +10418,7 @@ long snl_expand_and_shrink(stree_t * stree,
       *lnacceptance += gtree_list[i]->logl - gtree_list[i]->old_logl;
   }
   #if 0
-  debug_consistency(stree, gtree_list);
+  debug_consistency(stree, gtree_list, "snl");
   #endif
 
   double r = legacy_rndu(thread_index);
@@ -10059,29 +10714,30 @@ double migrate_gibbs(stree_t * stree,
                      unsigned int si,
                      unsigned int ti)
 {
-  long i,j,k,n;
+  long i;
   long asj = 0;
   long msa_index;
   double a1,b1;
   double bsj = 0;
-  double heredity;
+
+  static const long thread_index = 0;
+
+  #if 0
+  long i,j,k,n;
   double tstart,tend;
+  double heredity;
   size_t alloc_required;
   dlist_item_t * event;
   dlist_item_t * li;
   migbuffer_t * migbuffer;
-
   snode_t * src = stree->nodes[si];
   snode_t * tgt = stree->nodes[ti];
-
-  static const long thread_index = 0;
 
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   /* indicator: 1 if migration from si to ti is possible at time segment k */
   if (!ts_indicator)
     ts_indicator = (long *)xcalloc((size_t)total_nodes, sizeof(long));
-
 
   for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
   {
@@ -10165,34 +10821,87 @@ double migrate_gibbs(stree_t * stree,
         ind = ts_indicator[++epoch];
     }
   }
+  #else
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    asj += gtree[msa_index]->migcount[si][ti];
+    bsj += stree->Wsji[si][ti][msa_index];
+  }
+  #endif
+
+  #if 0
+  /* TODO: Calculate wsji */
+  double bsj_debug = 0;
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    bsj_debug += stree->Wsji[si][ti][msa_index];
+  }
+  assert(fabs(bsj_debug - bsj) < 1e-15);
+  #endif
 
   /* we have the new distribution */
   long mindex = opt_migration_matrix[si][ti];
   assert(mindex >= 0);
   migspec_t * spec = opt_mig_specs+mindex;
 
-  assert(asj == stree->migcount_sum[si][ti]);
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
+  double old_w = spec->M;
   if (opt_mig_specs[mindex].am)
     assert(0);  /* TODO: Go through all loci and propose Mi? */
   else
     opt_mig_specs[mindex].M = legacy_rndgamma(thread_index,a1) / b1;
+  double new_w = spec->M;
 
+  snode_t * srcnode = stree->nodes[si];
+  snode_t * tgtnode = stree->nodes[ti];
+  #if 0
   stree_update_mig_subpops(stree,thread_index);
+  #else
+  stree_update_mig_subpops_single(tgtnode, srcnode, old_w);
+  #endif
 
   /* update gene tree density */
   /* TODO: Update only necessary populations to improve computational speed */
+  #if 0
+  double logpr_diff;
+  double logpr_diff_total = 0;
   for (i = 0; i < opt_locus_count; ++i)
   {
-    gtree[i]->logpr = gtree_logprob_mig(stree,
-                                        gtree[i],
-                                        locus[i]->heredity[0],
-                                        i,
-                                        thread_index);
+    /* target contribution */ 
+    logpr_diff = (opt_est_theta) ? -stree->nodes[ti]->logpr_contrib[i] :
+                                   -stree->nodes[ti]->notheta_logpr_contrib;
+    logpr_diff += gtree_update_logprob_contrib_mig(stree->nodes[ti],
+                                                   stree,
+                                                   gtree[i],
+                                                   locus[i]->heredity[0],
+                                                   i,
+                                                   thread_index);
+
+    gtree[i]->logpr  += logpr_diff;
+    logpr_diff_total += logpr_diff;
+  }
+  #else
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    long ** mc = gtree[i]->migcount;
+
+    double new_logpr_contrib = tgtnode->logpr_contrib[i];
+
+    new_logpr_contrib -= mc[si][ti] * log(old_w);
+    new_logpr_contrib += mc[si][ti] * log(new_w);
+
+    new_logpr_contrib += stree->Wsji[si][ti][i]*old_w;
+    new_logpr_contrib -= stree->Wsji[si][ti][i]*new_w;
+
+    gtree[i]->logpr -= tgtnode->logpr_contrib[i];
+    gtree[i]->logpr += new_logpr_contrib;
+    tgtnode->logpr_contrib[i] = new_logpr_contrib;
+
   }
 
+  #endif
   return 1;
 }
 
@@ -10214,6 +10923,7 @@ static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** 
     }
   }
 
+  return 1;
 
   return accepted / (double)total;
 
@@ -10368,9 +11078,6 @@ static double prop_migrates_slide(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
           if (stree->nodes[j]->C2ji)
             stree->nodes[j]->C2ji[k] = stree->nodes[j]->old_C2ji[k];
-          if (stree->nodes[j]->Wsj)
-            stree->nodes[j]->Wsj[k] = stree->nodes[j]->old_Wsj[k];
-
         }
       }
     }
@@ -10498,7 +11205,7 @@ double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 
 double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
-  if (opt_mrate_move == BPP_MRATE_GIBBS)
+  if (opt_mrate_move == BPP_MRATE_GIBBS && !opt_mig_vrates_exist)
     return prop_migrates_gibbs(stree,gtree,locus);
 
   return prop_migrates_slide(stree,gtree,locus);
@@ -10611,7 +11318,7 @@ static void migspec_append(stree_t * stree, snode_t * x, snode_t * y)
   spec->pseudo_b = opt_pseudo_beta;
 
   /*** Ziheng $$$ ***/
-#if 1
+  #if 1
   spec->M        = legacy_rndgamma(thread_index,dbg_prop_a) / dbg_prop_b;
   #else
   spec->M        = spec->alpha / spec->beta;
@@ -11893,7 +12600,7 @@ static double simulate_coalescent_mig_from_point(stree_t * stree,
       }
       /* rate */
       long idx = snode->migbuffer[epoch].active_count == 1 ? 0 : msa_index;
-      mrate = snode->parent ? 4*snode->migbuffer[epoch].mrsum[idx]/snode->theta : 0;
+      mrate = snode->parent ? snode->migbuffer[epoch].mrsum[idx] : 0;
 
       crate = 2*lineages / snode->theta;
       rate = mrate + crate;
@@ -11948,9 +12655,9 @@ static double simulate_coalescent_mig_from_point(stree_t * stree,
         assert(opt_mig_bitmatrix[migsource[j]->node_index][snode->node_index]);
         long mindex = opt_migration_matrix[migsource[j]->node_index][snode->node_index];
         if (opt_mig_specs[mindex].am)
-          sum += 4*opt_mig_specs[mindex].Mi[msa_index] / snode->theta;
+          sum += opt_mig_specs[mindex].Mi[msa_index];
         else
-          sum += 4*opt_mig_specs[mindex].M / snode->theta;
+          sum += opt_mig_specs[mindex].M;
         if (r < sum) break;
       }
 

@@ -410,19 +410,18 @@ void stree_destroy(stree_t * tree,
       if (node->migbuffer)
       {
         for (j = 0; j < tree->inner_count; ++j)
+        {
           free(node->migbuffer[j].mrsum);
+          free(node->migbuffer[j].donors);
+        }
         free(node->migbuffer);
       }
 
     }
     if (node->old_C2ji)
       free(node->old_C2ji);
-    if (node->old_Wsj)
-      free(node->old_Wsj);
     if (node->C2ji)
       free(node->C2ji);
-    if (node->Wsj)
-      free(node->Wsj);
 
     free(node);
   }
@@ -459,6 +458,34 @@ void stree_destroy(stree_t * tree,
   }
   if (tree->migcount_sum)
     free(tree->migcount_sum);
+  if (tree->Wsji)
+  {
+    for (i = 0; i < tree->tip_count+tree->inner_count; ++i)
+    {
+      if (tree->Wsji[i])
+      {
+        for (j = 0; j < tree->tip_count+tree->inner_count; ++j)
+          if (tree->Wsji[i][j])
+            free(tree->Wsji[i][j]);
+        free(tree->Wsji[i]);
+      }
+    }
+    free(tree->Wsji);
+  }
+  if (tree->old_Wsji)
+  {
+    for (i = 0; i < tree->tip_count+tree->inner_count; ++i)
+    {
+      if (tree->old_Wsji[i])
+      {
+        for (j = 0; j < tree->tip_count+tree->inner_count; ++j)
+          if (tree->old_Wsji[i][j])
+            free(tree->old_Wsji[i][j]);
+        free(tree->old_Wsji[i]);
+      }
+    }
+    free(tree->old_Wsji);
+  }
 
   if (tree->u_constraint)
   	free(tree->u_constraint);

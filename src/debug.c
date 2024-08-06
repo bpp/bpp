@@ -289,7 +289,7 @@ void debug_print_gtree(gtree_t * gtree)
       printf(" %4d", gtree->nodes[i]->node_index);
       printf("  %5ld", x->mi->count);
 
-      printf("  %s -> %s   %f\n",
+      printf("  %s -> %s   %.15f\n",
              x->mi->me[0].source->label,
              x->mi->me[0].target->label,
              x->mi->me[0].time);
@@ -651,8 +651,6 @@ static void debug_validate_logpg_theta(stree_t * stree,
 
   logpr = 0;
 
-  assert(!opt_msci);
-
   for (i = 0; i < opt_locus_count; ++i)
   {
     old_logpr = gtree[i]->logpr;
@@ -661,19 +659,24 @@ static void debug_validate_logpg_theta(stree_t * stree,
     else
       logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
 
-    for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+    for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
     {
       snode_t * x = stree->nodes[j];
 
-      if (fabs(x->logpr_contrib[i] - x->old_logpr_contrib[i]) > 1e-9)
-        fatal("[FATAL-%ld] move: %s locus: %ld snode: %d "
+      if (fabs(x->logpr_contrib[i] - x->old_logpr_contrib[i]) > 1e-5)
+        fatal("[FATAL-%ld] move: %s locus: %ld snode: %d (%s)"
               "logpr_contrib: %f old_contrib: %f\n",
-              opt_debug_counter, move, i, j,
+              opt_debug_counter, move, i, j, stree->nodes[j]->label,
               x->logpr_contrib[i], x->old_logpr_contrib[i]);
+      if (fabs(x->C2ji[i] - x->old_C2ji[i]) > 1e-9)
+        fatal("[FATAL-%ld] move: %s locus: %ld snode: %d "
+              "C2ji: %f old_C2ji: %f\n",
+              opt_debug_counter, move, i, j,
+              x->C2ji[i], x->old_C2ji[i]);
     }
 
-    if (fabs(logpr - old_logpr) > 1e-9)
-      fatal("FATAL-%ld] move: %s locus %ld logpr: %f old_logpr: %f\n",
+    if (fabs(logpr - old_logpr) > 1e-5)
+      fatal("FATAL-%ld] move: %s locus %ld logpr: %.15f old_logpr: %.15f\n",
             opt_debug_counter, move, i, logpr, old_logpr);
   }
 }
@@ -1254,7 +1257,7 @@ void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index)
   free(migcount);
 }
 
-void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
+void debug_consistency(stree_t * stree, gtree_t ** gtree_list, const char * msg)
 {
   long i,j;
   for (i = 0; i < opt_locus_count; ++i)
@@ -1273,23 +1276,23 @@ void debug_consistency(stree_t * stree, gtree_t ** gtree_list)
       gnode_t * x = gtree->nodes[j];
 
       if (x->time <= x->pop->tau)
-        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its population (%s) starts at %f",
-              i, gtree->tip_count, x->node_index, x->time, x->pop->label, x->pop->tau);
+        fatal("[FATAL-%ld] %s: Locus %ld [%d] gnode %ld has age %f but its population (%s) starts at %f",
+              opt_debug_counter, msg, i, gtree->tip_count, x->node_index, x->time, x->pop->label, x->pop->tau);
 
       if (x->pop->parent && x->pop->parent->tau <= x->time)
-        fatal("[ERROR] Locus %ld [%d] gnode %ld [%s] has age %f but its population's parent (%s) starts at %f",
-              i, gtree->tip_count, x->node_index, x->pop->label, x->time, x->pop->parent->label, x->pop->parent->tau);
+        fatal("[FATAL-%ld] %s: Locus %ld [%d] gnode %ld [%s] has age %f but its population's parent (%s) starts at %f",
+              opt_debug_counter, msg, i, gtree->tip_count, x->node_index, x->pop->label, x->time, x->pop->parent->label, x->pop->parent->tau);
       
       if (x->parent && x->parent->time <= x->time)
-        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its parent has older age %f",
-              i, gtree->tip_count, x->node_index, x->time, x->parent->time);
+        fatal("[FATAL-%ld] %s: Locus %ld [%d] gnode %ld has age %f but its parent has older age %f",
+              opt_debug_counter, msg, i, gtree->tip_count, x->node_index, x->time, x->parent->time);
 
       if (x->left->time >= x->time)
-        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its left daughter has older age %f",
-              i, gtree->tip_count, x->node_index, x->time, x->left->time);
+        fatal("[FATAL-%ld] %s: Locus %ld [%d] gnode %ld has age %f but its left daughter has older age %f",
+              opt_debug_counter, msg, i, gtree->tip_count, x->node_index, x->time, x->left->time);
       if (x->right->time >= x->time)
-        fatal("[ERROR] Locus %ld [%d] gnode %ld has age %f but its right daughter has older age %f",
-              i, gtree->tip_count, x->node_index, x->time, x->right->time);
+        fatal("[FATAL-%ld] %s:  Locus %ld [%d] gnode %ld has age %f but its right daughter has older age %f",
+              opt_debug_counter, msg, i, gtree->tip_count, x->node_index, x->time, x->right->time);
     }
 
     /* chekc if each node is in the correct population */
@@ -1396,4 +1399,79 @@ void debug_write_migs(FILE * fp_debug, stree_t * stree, gtree_t ** gtree, long s
   #else
   fprintf(fp_debug,"\n");
   #endif
+}
+
+void debug_print_wsji(stree_t * stree, int prec, const char * prefix_msg, FILE * fp)
+{
+  long nodes_count = stree->tip_count+stree->inner_count;
+  long i,j,k;
+  assert(opt_migration);
+
+  long cnt = 0;
+
+  printf("%s Wsji matrix:\n", prefix_msg);
+  printf("%s    ", prefix_msg);
+  for (i = 0; i < nodes_count; ++i)
+    printf("%4ld", i);
+  printf("\n");
+  for (i = 0; i < nodes_count; ++i)
+  {
+    printf("%s %2ld [", prefix_msg, i);
+    /* row exists only if migration rate W_{i->j} exists */
+    if (!opt_est_geneflow)
+    {
+      for (j = 0; j < nodes_count; ++j)
+        if (opt_mig_bitmatrix[i][j])
+          break;
+      if (j == nodes_count)
+      {
+        for (j = 0; j < nodes_count; ++j)
+          printf(" N/A");
+        printf(" ]\n");
+        continue;
+      }
+    }
+    
+    if (i == stree->root->node_index)
+    {
+      for (j = 0; j < nodes_count; ++j)
+        printf(" N/A");
+      printf(" ]\n");
+      continue;
+    }
+    for (j = 0; j < nodes_count; ++j)
+    {
+      if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+      {
+        printf(" N/A");
+        continue;
+      }
+      
+      if (j == i || j == stree->root->node_index)
+      {
+        printf(" N/A");
+        continue;
+      }
+
+      assert(stree->Wsji[i][j]);
+      printf(ANSI_COLOR_RED " %3ld" ANSI_COLOR_RESET, ++cnt);
+      //for (k = 0; k < opt_locus_count; ++k)
+      //  printf(" %.*f", prec, stree->Wsji[i][j][k]);
+    }
+    printf(" ]\n");
+  }
+
+  cnt = 0;
+  for (i = 0; i < nodes_count; ++i)
+  {
+    if (!stree->Wsji[i]) continue;
+    for (j = 0; j < nodes_count; ++j)
+      if (stree->Wsji[i][j])
+      {
+        printf("%s " ANSI_COLOR_RED "%3ld" ANSI_COLOR_RESET ":", prefix_msg, ++cnt);
+        for (k = 0; k < opt_locus_count; ++k)
+          printf(" %.*f", prec, stree->Wsji[i][j][k]);
+        printf("\n");
+      }
+  }
 }

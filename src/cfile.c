@@ -85,6 +85,33 @@ static void reallocline(size_t newmaxsize)
   line_maxsize = newmaxsize;
 }
 
+static void print_migprior_wprior_help()
+{
+  fprintf(stdout,
+          "*TLDR*\n"
+          "\n"
+          "Option 'migprior' has been replaced by 'wprior', which introduces a different\n"
+          "parameterization for the migration rate.\n"
+          "\n"
+          "*Details*\n"
+          "\n"
+          "As of BPP v4.8.0, the option 'migprior' has been replaced by 'wprior'. BPP now \n"
+          "uses the mutation-scaled migration rate w, defined as:\n"
+          "                              w_{XY} = m_{XY}/mu\n"
+          "where m_{XY} is the proportion of immigrants in the recipient population Y from\n"
+          "the donor population X every generation.\n"
+          "Flouri et al, PNAS 120(44):e2310708120 (2023) used the population migration rate\n"
+          "M_{XY} = m_{XY}*N_{Y}, which represents the expected number of migrants from X \n"
+          "to Y per generation. This parameterization was controlled by the 'migprior' \n"
+          "keyword in BPP versions 4.7.x.\n"
+          "\n"
+          "The new parameterization simplifies the algorithms. You can convert between the \n"
+          "parameterizations using the formulas:\n"
+          "                          w_{XY} = 4*M_{XY}/theta_{Y}\n"
+          "and\n"
+          "                          M_{XY} = theta_{Y}*w_{XY}/4.\n");
+}
+
 static char * getnextline(FILE * fp)
 {
   size_t len = 0;
@@ -963,7 +990,7 @@ static long parse_locusrate(const char * line)
 
     p += count;
 
-    opt_locusrate_prior == MUTRATE_ONLY;
+    opt_locusrate_prior = MUTRATE_ONLY;
 
   } else
     goto l_unwind;
@@ -1621,7 +1648,7 @@ l_unwind:
   return ret;
 }
 
-static long parse_migprior(const char * line)
+static long parse_wprior(const char * line)
 {
   long ret = 0;
   char * s = xstrdup(line);
@@ -2060,7 +2087,6 @@ long parse_printlocus(const char * line, long * lcount)
   long ret = 0;
   char * s = xstrdup(line);
   char * p = s;
-  long alloc_size = 1;
 
   long count;
 
@@ -2810,6 +2836,12 @@ void load_cfile()
                  line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"wprior",6))
+      {
+        if (!parse_wprior(value))
+          fatal("Option 'wprior' expects two doubles (line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 7)
     {
@@ -2922,9 +2954,8 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"migprior",8))
       {
-        if (!parse_migprior(value))
-          fatal("Option 'migprior' expects two doubles (line %ld)", line_count);
-        valid = 1;
+        print_migprior_wprior_help();
+        fatal("Aborting execution...");
       }
       else if (!strncasecmp(token,"geneflow",8))
       {

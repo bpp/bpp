@@ -307,25 +307,42 @@ static void hpd_interval(double * x,
 static char * cb_attributes(const snode_t * node)
 {
   char * s = NULL;
+  double theta;
 
   /* inner node */
   if (node->left)
   {
     nodepinfo_t * info = (nodepinfo_t *)(node->data);
+    if (node->linked_theta)
+    {
+      nodepinfo_t * linfo = (nodepinfo_t *)(node->linked_theta->data);
+      theta = linfo->theta;
+    }
+    else
+      theta = info->theta;
+      
     if (node->parent)
     {
       nodepinfo_t * pinfo = (nodepinfo_t *)(node->parent->data);
       if (opt_est_theta)
-        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f", node->label, info->lo, info->hi, info->theta, pinfo->age - info->age);
+        xasprintf(&s,
+                  "%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]: %f",
+                  node->label, info->lo, info->hi, theta, pinfo->age-info->age);
       else
-        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}]: %f", node->label, info->lo, info->hi, pinfo->age - info->age);
+        xasprintf(&s,
+                  "%s[&height_95%%_HPD={%.8f, %.8f}]: %f",
+                  node->label, info->lo, info->hi, pinfo->age-info->age);
     }
     else
     {
       if (opt_est_theta)
-        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]", node->label, info->lo, info->hi, info->theta);
+        xasprintf(&s,
+                  "%s[&height_95%%_HPD={%.8f, %.8f}, theta=%.7f]",
+                  node->label, info->lo, info->hi, theta);
       else
-        xasprintf(&s,"%s[&height_95%%_HPD={%.8f, %.8f}]", node->label, info->lo, info->hi);
+        xasprintf(&s,
+                  "%s[&height_95%%_HPD={%.8f, %.8f}]",
+                  node->label, info->lo, info->hi);
     }
   }
   else

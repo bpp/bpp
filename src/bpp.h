@@ -155,7 +155,7 @@
 
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 7
+#define VERSION_MINOR 8
 #define VERSION_PATCH 0
 
 /* checkpoint version */
@@ -413,6 +413,7 @@ extern const char * global_freqs_strings[28];
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_WHITE   "\x1b[1;37m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
 #define BPP_ERROR  "[" ANSI_COLOR_RED "ERROR" ANSI_COLOR_RESET "]"
@@ -451,7 +452,10 @@ typedef struct migspec_s
   long params;
 
   double M;
+  double old_M;
   double * Mi;
+
+  int mark;             /* used in rubberband to mark entry as affected */
 
   char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
@@ -462,8 +466,9 @@ typedef struct migbuffer_s
   long type;
   double * mrsum; /* per locus total migration rate (variable mig rates) */
   long active_count; /* number of active elements (1 or nloci) */
+  struct snode_s ** donors;
+  long donors_count;
 } migbuffer_t;
-
 
 typedef struct snode_s
 {
@@ -562,9 +567,7 @@ typedef struct snode_s
 
   /* additional book-keeping for speeding up theta proposal */
   double * old_C2ji;
-  double * old_Wsj;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
-  double * Wsj;   /* total mig wait time for s->j mig in pop j summed over time segments, lineages and loci */
 
   long flag;
 } snode_t;
@@ -621,6 +624,8 @@ typedef struct stree_s
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
+  double *** Wsji;
+  double *** old_Wsji;
 
   double * u_constraint;
   double * l_constraint;
@@ -1043,8 +1048,12 @@ typedef struct thread_info_s
 #define FLAG_RED_RIGHT                512
 #define FLAG_SIMULATE                1024
 
-#define SN_AFFECT                       1
-
+#define SN_AFFECT                       (1 << 0)
+#define BPP_SN_AFFECT_A7                (1 << 0)
+#define BPP_SN_AFFECT_A8                <1 << 1)
+#define BPP_SN_UPDATE_KC2               (1 << 2)
+#define BPP_SN_UPDATE_PG                (1 << 3)
+#define SN_MIG_UPDATE                   (1 << 4)
 
 /* options */
 
@@ -1114,6 +1123,8 @@ extern long opt_method;
 extern long opt_migration;
 extern long opt_migration_count;
 extern long opt_mig_vrates_exist;
+extern long opt_mix_theta_update;
+extern long opt_mix_w_update;
 extern long opt_model;
 extern long opt_mrate_move;
 extern long opt_msci;
@@ -1131,6 +1142,8 @@ extern long opt_pseudop_exist;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rate_prior;
+extern long opt_rb_w_update;
+extern long opt_rb_theta_update;
 extern long opt_revolutionary_spr_method;
 extern long opt_revolutionary_spr_debug;
 extern long opt_rev_gspr;
@@ -2861,6 +2874,10 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_print_wsji(stree_t * stree,
+                      int prec,
+                      const char * prefix_msg,
+                      FILE * fp);
 void debug_print_migmatrix(stree_t * stree);
 void debug_print_migrations(stree_t * stree);
 void debug_print_bitmatrix(stree_t * stree);
@@ -2893,7 +2910,7 @@ void debug_bruce(stree_t * stree,
                  long iter,
                  FILE * fp_out);
 void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index);
-void debug_consistency(stree_t * stree, gtree_t ** gtree_list);
+void debug_consistency(stree_t * stree, gtree_t ** gtree_list, const char * msg);
 
 /* functions in miginfo.c */
 miginfo_t * miginfo_create(size_t alloc_size, int alloc_dlist);

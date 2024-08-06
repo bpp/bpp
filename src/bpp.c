@@ -103,6 +103,8 @@ long opt_method;
 long opt_migration;
 long opt_migration_count;
 long opt_mig_vrates_exist;
+long opt_mix_theta_update;
+long opt_mix_w_update;
 long opt_model;
 long opt_mrate_move;
 long opt_msci;
@@ -120,6 +122,8 @@ long opt_pseudop_exist;
 long opt_qrates_fixed;
 long opt_quiet;
 long opt_rate_prior;
+long opt_rb_w_update;
+long opt_rb_theta_update;
 long opt_revolutionary_spr_method;
 long opt_revolutionary_spr_debug;
 long opt_rev_gspr;
@@ -266,52 +270,56 @@ double g_pj_rj;
 
 static struct option long_options[] =
 {
-  {"help",             no_argument,       0, 0 },  /*  0 */
-  {"version",          no_argument,       0, 0 },  /*  1 */
-  {"quiet",            no_argument,       0, 0 },  /*  2 */
-  {"cfile",            required_argument, 0, 0 },  /*  3 */
-  {"arch",             required_argument, 0, 0 },  /*  4 */
-  {"exp_method",       required_argument, 0, 0 },  /*  5 */
-  {"exp_debug",        no_argument,       0, 0 },  /*  6 */
-  {"resume",           required_argument, 0, 0 },  /*  7 */
-  {"simulate",         required_argument, 0, 0 },  /*  8 */
-  {"exp_random",       no_argument,       0, 0 },  /*  9 */
-  {"rev_gspr",         no_argument,       0, 0 },  /* 10 */
-  {"debugrates",       no_argument,       0, 0 },  /* 11 */
-  {"msci-create",      required_argument, 0, 0 },  /* 12 */
-  {"comply",           no_argument,       0, 0 },  /* 13 */
-  {"tree",             required_argument, 0, 0 },  /* 14 */
-  {"constraint",       required_argument, 0, 0 },  /* 15 */
-  {"full",             no_argument,       0, 0 },  /* 16 */
-  {"debug",            optional_argument, 0, 0 },  /* 17 */
-  {"debug_gage",       optional_argument, 0, 0 },  /* 18 */
-  {"debug_gspr",       optional_argument, 0, 0 },  /* 19 */
-  {"debug_mui",        optional_argument, 0, 0 },  /* 20 */
-  {"debug_hs",         optional_argument, 0, 0 },  /* 21 */
-  {"debug_mix",        optional_argument, 0, 0 },  /* 22 */
-  {"debug_rj",         optional_argument, 0, 0 },  /* 23 */
-  {"debug_theta",      optional_argument, 0, 0 },  /* 24 */
-  {"debug_tau",        optional_argument, 0, 0 },  /* 25 */
-  {"debug_sspr",       optional_argument, 0, 0 },  /* 26 */
-  {"debug_br",         optional_argument, 0, 0 },  /* 27 */
-  {"debug_snl",        optional_argument, 0, 0 },  /* 28 */
-  {"debug_parser",     optional_argument, 0, 0 },  /* 29 */
-  {"debug_start",      required_argument, 0, 0 },  /* 30 */
-  {"debug_end",        required_argument, 0, 0 },  /* 31 */
-  {"debug_abort",      required_argument, 0, 0 },  /* 32 */
-  {"exp_theta",        no_argument,       0, 0 },  /* 33 */
-  {"debug_bruce",      no_argument,       0, 0 },  /* 34 */
-  {"exp_sim",          no_argument,       0, 0 },  /* 35 */
-  {"summary",          required_argument, 0, 0 },  /* 36 */
-  {"exp_imrb",         no_argument,       0, 0 },  /* 37 */
-  {"bfdriver",         required_argument, 0, 0 },  /* 38 */
-  {"points",           required_argument, 0, 0 },  /* 39 */
-  {"mrate-move",       required_argument, 0, 0 },  /* 40 */
-  {"theta-slide-prob", required_argument, 0, 0 },  /* 41 */
-  {"theta_mode",       required_argument, 0, 0 },  /* 42 */
-  {"no-pin",           no_argument,       0, 0 },  /* 43 */
-  {"theta-showeps",    no_argument,       0, 0 },  /* 44 */
-  {"theta-prop",       required_argument, 0, 0 },  /* 45 */
+  {"help",                 no_argument,       0, 0 },  /*  0 */
+  {"version",              no_argument,       0, 0 },  /*  1 */
+  {"quiet",                no_argument,       0, 0 },  /*  2 */
+  {"cfile",                required_argument, 0, 0 },  /*  3 */
+  {"arch",                 required_argument, 0, 0 },  /*  4 */
+  {"exp_method",           required_argument, 0, 0 },  /*  5 */
+  {"exp_debug",            no_argument,       0, 0 },  /*  6 */
+  {"resume",               required_argument, 0, 0 },  /*  7 */
+  {"simulate",             required_argument, 0, 0 },  /*  8 */
+  {"exp_random",           no_argument,       0, 0 },  /*  9 */
+  {"rev_gspr",             no_argument,       0, 0 },  /* 10 */
+  {"debugrates",           no_argument,       0, 0 },  /* 11 */
+  {"msci-create",          required_argument, 0, 0 },  /* 12 */
+  {"comply",               no_argument,       0, 0 },  /* 13 */
+  {"tree",                 required_argument, 0, 0 },  /* 14 */
+  {"constraint",           required_argument, 0, 0 },  /* 15 */
+  {"full",                 no_argument,       0, 0 },  /* 16 */
+  {"debug",                optional_argument, 0, 0 },  /* 17 */
+  {"debug_gage",           optional_argument, 0, 0 },  /* 18 */
+  {"debug_gspr",           optional_argument, 0, 0 },  /* 19 */
+  {"debug_mui",            optional_argument, 0, 0 },  /* 20 */
+  {"debug_hs",             optional_argument, 0, 0 },  /* 21 */
+  {"debug_mix",            optional_argument, 0, 0 },  /* 22 */
+  {"debug_rj",             optional_argument, 0, 0 },  /* 23 */
+  {"debug_theta",          optional_argument, 0, 0 },  /* 24 */
+  {"debug_tau",            optional_argument, 0, 0 },  /* 25 */
+  {"debug_sspr",           optional_argument, 0, 0 },  /* 26 */
+  {"debug_br",             optional_argument, 0, 0 },  /* 27 */
+  {"debug_snl",            optional_argument, 0, 0 },  /* 28 */
+  {"debug_parser",         optional_argument, 0, 0 },  /* 29 */
+  {"debug_start",          required_argument, 0, 0 },  /* 30 */
+  {"debug_end",            required_argument, 0, 0 },  /* 31 */
+  {"debug_abort",          required_argument, 0, 0 },  /* 32 */
+  {"exp_theta",            no_argument,       0, 0 },  /* 33 */
+  {"debug_bruce",          no_argument,       0, 0 },  /* 34 */
+  {"exp_sim",              no_argument,       0, 0 },  /* 35 */
+  {"summary",              required_argument, 0, 0 },  /* 36 */
+  {"exp_imrb",             no_argument,       0, 0 },  /* 37 */
+  {"bfdriver",             required_argument, 0, 0 },  /* 38 */
+  {"points",               required_argument, 0, 0 },  /* 39 */
+  {"mrate-move",           required_argument, 0, 0 },  /* 40 */
+  {"theta-slide-prob",     required_argument, 0, 0 },  /* 41 */
+  {"theta_mode",           required_argument, 0, 0 },  /* 42 */
+  {"no-pin",               no_argument,       0, 0 },  /* 43 */
+  {"theta-showeps",        no_argument,       0, 0 },  /* 44 */
+  {"theta-prop",           required_argument, 0, 0 },  /* 45 */
+  {"no-rb-theta-update",   no_argument,       0, 0 },  /* 46 */
+  {"no-rb-w-update",       no_argument,       0, 0 },  /* 47 */
+  {"no-mix-theta-update",  no_argument,       0, 0 },  /* 48 */
+  {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
   { 0, 0, 0, 0 }
 };
 
@@ -535,6 +543,8 @@ void args_init(int argc, char ** argv)
   opt_mig_beta = 0;
   opt_mig_specs = NULL;
   opt_mig_vrates_exist = 0;
+  opt_mix_theta_update = 1;
+  opt_mix_w_update = 1;
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_mrate_move = BPP_MRATE_GIBBS;
@@ -565,6 +575,8 @@ void args_init(int argc, char ** argv)
   opt_qrates_params = NULL;
   opt_quiet = 0;
   opt_rate_prior = BPP_BRATE_PRIOR_GAMMA;
+  opt_rb_w_update = 1;
+  opt_rb_theta_update = 1;
   opt_resume = NULL;
   opt_rev_gspr = 0;
   opt_rjmcmc_alpha = -1;
@@ -593,7 +605,6 @@ void args_init(int argc, char ** argv)
   opt_tau_dist = BPP_TAU_PRIOR_INVGAMMA;
   opt_theta_alpha = 0;
   opt_theta_beta = 0;
-
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_prop = -1;
   opt_theta_gibbs_showall_eps = 0;
@@ -866,6 +877,22 @@ void args_init(int argc, char ** argv)
           fatal("Invalid theta prop (%s)", optarg);
         break;
 
+      case 46:
+        opt_rb_theta_update = 0;
+        break;
+
+      case 47:
+        opt_rb_w_update = 0;
+        break;
+
+      case 48:
+        opt_mix_theta_update = 0;
+        break;
+
+      case 49:
+        opt_mix_w_update = 0;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1028,11 +1055,10 @@ void show_header()
 int main (int argc, char * argv[])
 {
   fillheader();
+  show_header();
   getentirecommandline(argc, argv);
 
   args_init(argc, argv);
-
-  show_header();
 
   cpu_features_detect();
   cpu_features_show();

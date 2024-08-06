@@ -429,7 +429,7 @@ static void print_mcmc_headerline(FILE * fp,
       long k = mean_mrate_col[i];
 
       fprintf(fp,
-              "    M%ld: mean migration rate %s -> %s\n",
+              "    W%ld: mean migration rate %s -> %s\n",
               i+1,
               stree->nodes[j]->label,
               stree->nodes[k]->label);
@@ -662,7 +662,7 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, " ");                       linewidth += 1;
     for (i = 0; i < mean_mrate_count; ++i)
     {
-      fprintf(fp,"     M%ld", i+1);         linewidth += 7;
+      fprintf(fp,"     W%ld", i+1);         linewidth += 7;
     }
   }
 
@@ -1419,7 +1419,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
           if (opt_mig_bitmatrix[i][j])
             fprintf(fp,
-                    "\tM_%s->%s",
+                    "\tW_%s->%s",
                     stree->nodes[i]->label,
                     stree->nodes[j]->label);
     }
@@ -1468,7 +1468,7 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
         if (!opt_mig_specs[j].Mi) continue;
 
         fprintf(fp_locus[i],
-                "%sMi_%s->%s",
+                "%sWi_%s->%s",
                 tab_required ? "\t" : "",
                 opt_mig_specs[j].source, opt_mig_specs[j].target);
         tab_required = 1;
@@ -1825,13 +1825,10 @@ static void mcmc_logsample(FILE * fp,
   {
     /* first print thetas for tips */
     for (i = 0; i < stree->tip_count; ++i)
-      if (stree->nodes[i]->theta >= 0)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
         fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
-  }
 
-  /* then for inner nodes */
-  if (opt_est_theta)
-  {
+    /* then for inner nodes */
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
@@ -1839,7 +1836,7 @@ static void mcmc_logsample(FILE * fp,
   }
 
   /* 2. Print taus for inner nodes */
-  if ( opt_datefile )
+  if (opt_datefile)
     prec = 10;
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->tau)
@@ -1918,7 +1915,7 @@ static void mcmc_logsample(FILE * fp,
       for (i = 0; i < opt_migration_count; ++i)
       {
         fprintf(fp,
-                "\tM_%s->%s=%.6f",
+                "\tW_%s->%s=%.6f",
                 stree->nodes[opt_mig_specs[i].si]->label,
                 stree->nodes[opt_mig_specs[i].ti]->label,
                 opt_mig_specs[i].M);
@@ -1954,7 +1951,7 @@ static void print_header_migcount(FILE ** fp, stree_t * stree)
       snode_t * s = stree->nodes[spec->si];
       snode_t * t = stree->nodes[spec->ti];
 
-      fprintf(fp[i], "%sM_%s->%s", tab_required ? "\t" : "", s->label, t->label);
+      fprintf(fp[i], "%sW_%s->%s", tab_required ? "\t" : "", s->label, t->label);
       tab_required = 1;
     }
     if (tab_required)
@@ -2228,8 +2225,14 @@ static void create_mig_bitmatrix(stree_t * stree)
     /* set migration rate to prior mean */
     spec->M = spec->alpha / spec->beta;
     #else
+
+    /* 2024-07-31 -- Decided that setting W to 1 is best */
+    /*
     spec->M = spec->alpha / spec->beta *
                           (0.9 + 0.2*legacy_rndu(thread_index_zero));
+    */
+
+    spec->M = 1;
     #endif
 
     /* if rate variation across loci then allocate array */
@@ -3036,7 +3039,7 @@ static FILE * init(stree_t ** ptr_stree,
     	fp_mig = (FILE **)xmalloc((size_t)opt_locus_count*sizeof(FILE *));
     	for (i = 0; i < opt_locus_count; ++i)
     	{
-          if (!printLocusIndex || (printLocusIndex)[i]) {
+          if (printLocusIndex[i]) {
     	    char * s = NULL;
     	    xasprintf(&s, "%s.mig.L%d", opt_outfile, msa_list[i]->original_index+1);
     	    fp_mig[i] = xopen(s,"w");
@@ -3063,7 +3066,7 @@ static FILE * init(stree_t ** ptr_stree,
       if (!printLocusIndex || (printLocusIndex)[i]) {
         char * s = NULL;
         xasprintf(&s, template_ratesfile, msa_list[i]->original_index+1);
-        if (!(fp_locus[i] = fopen(s, "w"))) 
+        if (!(fp_locus[i] = fopen(s, "w")))
           fatal("Cannot open file %s for appending...", s);
         free(s);
       } else {
@@ -3544,7 +3547,6 @@ static FILE * init(stree_t ** ptr_stree,
     for (j = 0; j < opt_locus_count; ++j)
     {
       stree->nodes[i]->old_C2ji[j] = stree->nodes[i]->C2ji[j];
-      stree->nodes[i]->old_Wsj[j] = stree->nodes[i]->Wsj[j];
     }
 
 
@@ -4185,6 +4187,15 @@ void cmd_run()
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
+    #if 0
+    if (opt_debug_counter == 0)
+    {
+      debug_print_wsji(stree,
+                       3,
+                       ANSI_COLOR_YELLOW "[INFO]" ANSI_COLOR_RESET,
+                       stdout);
+    }
+    #endif
     long print_newline = 0;
     #if 0
     /* update progress bar */
@@ -4403,7 +4414,7 @@ void cmd_run()
     {
 
       if (opt_migration) 
-	      ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
+        ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
       else
         ratio = stree_propose_tau(gtree,stree,locus);
       g_pj_tau = (g_pj_tau*(ft_round-1)+ratio) / (double)ft_round;
@@ -4598,7 +4609,7 @@ void cmd_run()
     }
 
     
-    
+
     if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile) {
 	    if (stree->tip_count > 1) {
 		    if (opt_migration)
@@ -4612,7 +4623,7 @@ void cmd_run()
 
         g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
                                        (double)ft_round;
-    } 
+    }
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
@@ -4660,7 +4671,7 @@ void cmd_run()
        fflush(NULL);
     if (i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      mcmc_logsample(fp_mcmc,i+1,stree,gtree,dparam_count,ndspecies, printLocusIndex);
+      mcmc_logsample(fp_mcmc, i+1, stree, gtree, dparam_count, ndspecies, printLocusIndex);
 
       /* log migcount */
       if (opt_migration && opt_debug_migration)

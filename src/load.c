@@ -1417,6 +1417,16 @@ void load_chk_section_2(FILE * fp)
   }
   free(buffer);
 
+  for (i = 0; i < total_nodes; ++i)
+  {
+    snode_t * x = stree->nodes[i];
+    x->C2ji = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+    x->old_C2ji = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+    if (!LOAD(stree->nodes[i]->C2ji,opt_locus_count,fp))
+      fatal("Cannot read C2 for population %ld\n", i);
+  }
+
+
   if (opt_migration)
   {
     for (i = 0; i < total_nodes; ++i)
@@ -1459,6 +1469,67 @@ void load_chk_section_2(FILE * fp)
 
         if (!LOAD(x->migbuffer[j].mrsum, x->migbuffer[j].active_count, fp))
           fatal("Cannot load mrsum for node with index %ld", i);
+
+        size_t dcount = 2*stree->tip_count - 3;
+        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
+
+        for (k = 0; k < x->migbuffer[j].donors_count; ++k)
+        {
+          unsigned int node_index = 0;
+          if (!LOAD(&node_index,1,fp))
+            fatal("Cannot read migbuffer donors list");
+          x->migbuffer[j].donors[k] = stree->nodes[node_index];
+        }
+      }
+    }
+
+    /* create and load Wsji matrix */
+    stree->Wsji = (double ***)xmalloc((size_t)total_nodes*sizeof(double **));
+    stree->old_Wsji = (double ***)xmalloc((size_t)total_nodes*sizeof(double **));
+    for (i = 0; i < total_nodes; ++i)
+    {
+      /* allocate row only if migration rate W_{i->j} exists */
+      if (!opt_est_geneflow)
+      {
+        for (j = 0; j < total_nodes; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            break;
+        if (j == total_nodes)
+        {
+          stree->Wsji[i] = NULL;
+          stree->old_Wsji[i] = NULL;
+          continue;
+        }
+      }
+      if (i == stree->root->node_index)
+      {
+        stree->Wsji[i] = NULL;
+        stree->old_Wsji[i] = NULL;
+        continue;
+      }
+
+      stree->Wsji[i] = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+      stree->old_Wsji[i] = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+      for (j = 0; j < total_nodes; ++j)
+      {
+        if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+        {
+          stree->Wsji[i][j] = NULL;
+          stree->old_Wsji[i][j] = NULL;
+          continue;
+        }
+        if (j == i || j == stree->root->node_index)
+        {
+          stree->Wsji[i][j] = NULL;
+          stree->old_Wsji[i][j] = NULL;
+          continue;
+        }
+
+        stree->Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+        stree->old_Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+
+        if (!LOAD(stree->Wsji[i][j],opt_locus_count,fp))
+          fatal("Cannot load Wsji matrix");
       }
     }
   }
