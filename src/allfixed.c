@@ -773,14 +773,21 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   int index_digits = (int)(floor(log10(snodes_total+1)+1));
 
   /* print I T L */
-  printf("%*s", index_digits, "I");
-  printf("  T  L");
+  fprintf(stdout, "%*s", index_digits, "I");
+  fprintf(fp_out, "%*s", index_digits, "I");
+  fprintf(stdout, "  T  L");
+  fprintf(fp_out, "  T  L");
 
-  printf("   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
+  fprintf(stdout, "   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
+  fprintf(fp_out, "   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
   long linewidth = index_digits+6;
   for (j = 0; j < linewidth; ++j)
-    printf("-");
-  printf("\n");
+  {
+    fprintf(stdout,"-");
+    fprintf(fp_out,"-");
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
     
   for (i = 0; i < snodes_total; ++i)
   {
@@ -795,13 +802,22 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       ntype = 'I';
 
     if (strchr(stree->nodes[i]->label,','))
-      printf("%*ld  %c  MRCA( %s )\n",
-             index_digits,i+1,ntype, stree->nodes[i]->label);
+    {
+      fprintf(stdout, "%*ld  %c  MRCA( %s )\n",
+              index_digits,i+1,ntype, stree->nodes[i]->label);
+      fprintf(fp_out, "%*ld  %c  MRCA( %s )\n",
+              index_digits,i+1,ntype, stree->nodes[i]->label);
+    }
     else
-      printf("%*ld  %c  %s\n",
-             index_digits,i+1,ntype, stree->nodes[i]->label);
+    {
+      fprintf(stdout, "%*ld  %c  %s\n",
+              index_digits,i+1,ntype, stree->nodes[i]->label);
+      fprintf(fp_out, "%*ld  %c  %s\n",
+              index_digits,i+1,ntype, stree->nodes[i]->label);
+    }
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   fp = xopen(opt_mcmcfile,"r");
   /* skip line containing header */
@@ -1067,39 +1083,55 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   /* print centered header */
   int linesize = pname_size;
   char * s = center("param", pname_size);
-  printf("%s",s);
+  fprintf(stdout, "%s",s);
+  fprintf(fp_out, "%s",s);
   free(s);
 
 
   for (i = 0; i < label_count; ++i)
   {
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
     s = center(label[i],label_size[i]);
-    printf("%s", s);
+    fprintf(stdout, "%s", s);
+    fprintf(fp_out, "%s", s);
     free(s);
 
     linesize += 2 + label_size[i];
   }
-  printf("\n");
-  for (i = 0; i < linesize; ++i) printf("-");
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
+  for (i = 0; i < linesize; ++i)
+  {
+    fprintf(stdout, "-");
+    fprintf(fp_out, "-");
+  }
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   /* print each row */
   for (i = 0; i < col_count; ++i)
   {
     if (!strcmp(tokens[i],"lnL") && i == col_count-1)
-      printf("\n");
+    {
+      fprintf(stdout, "\n");
+      fprintf(fp_out, "\n");
+    }
 
-    printf("%*s", pname_size,tokens[i]);
+    fprintf(stdout, "%*s", pname_size,tokens[i]);
+    fprintf(fp_out, "%*s", pname_size,tokens[i]);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* mean */
     xasprintf(&s, "%.*f", prec, mean[i]);
-    printf("%*s", label_size[0], s);
+    fprintf(stdout, "%*s", label_size[0], s);
+    fprintf(fp_out, "%*s", label_size[0], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* median */
     long median_line = opt_samples / 2;
@@ -1110,76 +1142,97 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       median /= 2;
     }
     xasprintf(&s, "%.*f", prec, median);
-    printf("%*s", label_size[1], s);
+    fprintf(stdout, "%*s", label_size[1], s);
+    fprintf(fp_out, "%*s", label_size[1], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* S.D */
     xasprintf(&s, "%.*f", prec, stdev[i]);
-    printf("%*s", label_size[2], s);
+    fprintf(stdout, "%*s", label_size[2], s);
+    fprintf(fp_out, "%*s", label_size[2], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* min */
     xasprintf(&s, "%.*f", prec, matrix[i][0]);
-    printf("%*s", label_size[3], s);
+    fprintf(stdout, "%*s", label_size[3], s);
+    fprintf(fp_out, "%*s", label_size[3], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* max */
     xasprintf(&s, "%.*f", prec, matrix[i][opt_samples-1]);
-    printf("%*s", label_size[4], s);
+    fprintf(stdout, "%*s", label_size[4], s);
+    fprintf(fp_out, "%*s", label_size[4], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* 2.5% */
     xasprintf(&s, "%.*f", prec, matrix[i][(long)(opt_samples*.025)]);
-    printf("%*s", label_size[5], s);
+    fprintf(stdout, "%*s", label_size[5], s);
+    fprintf(fp_out, "%*s", label_size[5], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* 97.5% */
     xasprintf(&s, "%.*f", prec, matrix[i][(long)(opt_samples*.975)]);
-    printf("%*s", label_size[6], s);
+    fprintf(stdout, "%*s", label_size[6], s);
+    fprintf(fp_out, "%*s", label_size[6], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* 2.5% HPD */
     xasprintf(&s, "%.*f", prec, hpd025[i]);
-    printf("%*s", label_size[7], s);
+    fprintf(stdout, "%*s", label_size[7], s);
+    fprintf(fp_out, "%*s", label_size[7], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* 97.5% HPD */
     xasprintf(&s, "%.*f", prec, hpd975[i]);
-    printf("%*s", label_size[8], s);
+    fprintf(stdout, "%*s", label_size[8], s);
+    fprintf(fp_out, "%*s", label_size[8], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* ESS */
     xasprintf(&s, "%.*f", prec, opt_samples/tint[i]);
-    printf("%*s", label_size[9], s);
+    fprintf(stdout, "%*s", label_size[9], s);
+    fprintf(fp_out, "%*s", label_size[9], s);
     free(s);
 
-    printf("  ");
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
 
     /* Eff */
     xasprintf(&s, "%.*f", prec, 1/tint[i]);
-    printf("%*s", label_size[10], s);
+    fprintf(stdout, "%*s", label_size[10], s);
+    fprintf(fp_out, "%*s", label_size[10], s);
     free(s);
 
-    printf("\n");
+    fprintf(stdout, "\n");
+    fprintf(fp_out, "\n");
 
   }
-  printf("\n");
+  fprintf(stdout, "\n");
+  fprintf(fp_out, "\n");
 
   free(label_size);
 
