@@ -651,9 +651,115 @@ static void write_figtree(FILE * fp_out,
   return;
 }
 
+static long tokens_count(const char * hdr)
+{
+  size_t tokenlen;
+  char * p = xstrdup(hdr);
+  char * s = p;
+  long tokens = 0;
+
+  while (*s)
+  {
+    /* skip spaces */
+    tokenlen = strspn(s," \t\r\n");
+    s += tokenlen;
+
+    tokenlen = strcspn(s," \t\r\n");
+    if (tokenlen)
+      ++tokens;
+    s += tokenlen;
+  }
+
+  free(p);
+  return tokens;
+}
+
+static char ** header_explode(const char * hdr, long * count)
+{
+  long tcount = 0;
+  size_t tokenlen;
+  char * p = xstrdup(hdr);
+  char * s = p;
+  char ** tokens;
+
+  tcount = tokens_count(hdr);
+  assert(tcount>1);
+  --tcount;
+
+  tokens = (char **)xmalloc((size_t)tcount*sizeof(char *));
+
+  assert(hdr[0] == 'G');
+  assert(hdr[1] == 'e');
+  assert(hdr[2] == 'n');
+  assert(hdr[3] == '\t');
+
+  s += 3;
+
+  tcount = 0;
+  while (*s)
+  {
+    /* skip spaces */
+    tokenlen = strspn(s," \t\r\n");
+    s += tokenlen;
+
+    tokenlen = strcspn(s," \t\r\n");
+
+    tokens[tcount++] = xstrndup(s,tokenlen);
+
+    s += tokenlen;
+  }
+
+  free(p);
+
+  *count = tcount;
+  return tokens;
+}
+
+static void header_tokens_shorten(char ** tokens, long count)
+{
+  long i;
+
+  for (i = 0; i < count; ++i)
+  {
+    char * start = tokens[i];
+    char * p = strchr(start,':');
+    if (p)
+    {
+      p = strchr(p+1,':');
+      if (p)
+      {
+        char * tmp = xstrndup(tokens[i],p-start);
+        free(tokens[i]);
+        tokens[i] = tmp;
+      }
+    }
+  }
+}
+
+static double xfloor1(double x)
+{
+  double r = floor(x);
+  if (r < 1) r = 1;
+  return r;
+}
+
+static char * center(const char * s, int space)
+{
+  char * r;
+  int len = (int)strlen(s);
+  int left,right;
+
+  left  = (space-len)/2;
+  right = space-len-left;
+
+  xasprintf(&r, "%*s%s%*s", left, "", s, right, "");
+
+  return r;
+}
 
 void allfixed_summary(FILE * fp_out, stree_t * stree)
 {
+  int prec;
   long i, j, count;
   long sample_num;
   long rc = 0;
@@ -664,12 +770,48 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     snodes_total += stree->hybrid_count;
 
   /* TODO: pretty-fy output */
+  int index_digits = (int)(floor(log10(snodes_total+1)+1));
+
+  /* print I T L */
+  printf("%*s", index_digits, "I");
+  printf("  T  L");
+
+  printf("   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
+  long linewidth = index_digits+6;
+  for (j = 0; j < linewidth; ++j)
+    printf("-");
+  printf("\n");
+    
+  for (i = 0; i < snodes_total; ++i)
+  {
+    char ntype;
+    if (i < stree->tip_count)
+      ntype = 'T';
+    else if (stree->nodes[i] == stree->root)
+      ntype = 'R';
+    else if (stree->nodes[i]->hybrid)
+      ntype = 'H';
+    else
+      ntype = 'I';
+
+    if (strchr(stree->nodes[i]->label,','))
+      printf("%*ld  %c  MRCA( %s )\n",
+             index_digits,i+1,ntype, stree->nodes[i]->label);
+    else
+      printf("%*ld  %c  %s\n",
+             index_digits,i+1,ntype, stree->nodes[i]->label);
+  }
+  printf("\n");
 
   fp = xopen(opt_mcmcfile,"r");
   /* skip line containing header */
   getnextline(fp);
   assert(strlen(line) > 4);
   char * header = xstrdup(line);
+
+  long token_count;
+  char ** tokens = header_explode(header,&token_count);
+  header_tokens_shorten(tokens,token_count);
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -806,174 +948,250 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       lswitch(stree, header, matrix, col_count, fp_out);
   }
 
-  fprintf(stdout, "          %s\n", header+4);
-  fprintf(fp_out, "          %s\n", header+4);
+  char * label[] =
+  {
+    "mean",       /*  0 */
+    "median",     /*  1 */
+    "S.D",        /*  2 */
+    "min",        /*  3 */
+    "max",        /*  4 */
+    "2.5%",      /*  5 */
+    "97.5%",     /*  6 */
+    "2.5%HPD",   /*  7 */
+    "97.5%HPD",  /*  8 */
+    "ESS*",       /*  9 */
+    "Eff*"        /* 10 */
+  };
 
-  free(header);
-
-  /* compute means */
-  int prec = 6;
+  long label_count = sizeof(label) / sizeof(label[0]);
+  int * label_size = (int *)xcalloc((size_t)label_count,sizeof(int));
+  int pname_size = 5;  /* param */
+  prec = 6;
   if (opt_datefile || opt_print_locus)
     prec = 12;
 
-  fprintf(stdout, "mean    ");
-  fprintf(fp_out, "mean    ");
+  for (i = 0; i < label_count; ++i)
+    label_size[i] = MAX(prec, strlen(label[i]));
+
+
   for (i = 0; i < col_count; ++i)
   {
+    long median_line = opt_samples / 2;
+    int digits;
+
+    /* mean */
     double sum = 0;
     for (j = 0; j < opt_samples; ++j)
       sum += matrix[i][j];
-
     mean[i] = sum/opt_samples;
-    fprintf(stdout, "  %.*f", prec, mean[i]);
-    fprintf(fp_out, "  %.*f", prec, mean[i]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
 
-  /* compute standard deviation */
-  for (i = 0; i < col_count; ++i)
-  {
+    digits = (int)floor(log10(xfloor1(mean[i]))+1);
+    digits += prec+1;
+    label_size[0] = MAX(label_size[0],digits);
+
+    /* standard deviation */
     double sd = 0;
     for (j = 0; j < opt_samples; ++j)
       sd += (matrix[i][j]-mean[i]) * (matrix[i][j]-mean[i]);
-
     stdev[i] = sqrt(sd/(opt_samples-1));
-  }
-  
-  /* compute tint */
-  for (i = 0; i < col_count; ++i)
+
+    digits = (int)floor(log10(xfloor1(stdev[i]))+1);
+    digits += prec+1;
+    label_size[2] = MAX(label_size[2],digits);
+
+    /* tint */
     tint[i] = eff_ict(matrix[i],opt_samples,mean[i],stdev[i]);
 
-  /* compute and print medians */
-  fprintf(stdout, "median  ");
-  fprintf(fp_out, "median  ");
-  long median_line = opt_samples / 2;
-
-  for (i = 0; i < col_count; ++i)
-  {
+    /* qsort */
     qsort(matrix[i], opt_samples, sizeof(double), cb_cmp_double);
 
+    /* median */
     double median = matrix[i][median_line];
     if ((opt_samples & 1) == 0)
     {
       median += matrix[i][median_line-1];
       median /= 2;
     }
+    digits = (int)floor(log10(xfloor1(median))+1);
+    digits += prec+1;
+    label_size[1] = MAX(label_size[1],digits);
 
-    fprintf(stdout, "  %.*f", prec, median);
-    fprintf(fp_out, "  %.*f", prec, median);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* min */
+    digits = (int)floor(log10(xfloor1(matrix[i][0]))+1);
+    digits += prec+1;
+    label_size[3] = MAX(label_size[3],digits);
 
-  /* print standard deviation */
-  fprintf(stdout, "S.D     ");
-  fprintf(fp_out, "S.D     ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, stdev[i]);
-    fprintf(fp_out, "  %.*f", prec, stdev[i]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* max */
+    digits = (int)floor(log10(xfloor1(matrix[i][opt_samples-1]))+1);
+    digits += prec+1;
+    label_size[4] = MAX(label_size[4],digits);
 
-  /* print minimum values */
-  fprintf(stdout, "min     ");
-  fprintf(fp_out, "min     ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, matrix[i][0]);
-    fprintf(fp_out, "  %.*f", prec, matrix[i][0]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* 2.5% */
+    digits = (int)floor(log10(xfloor1(matrix[i][(long)(opt_samples*.025)]))+1);
+    digits += prec+1;
+    label_size[5] = MAX(label_size[5],digits);
 
-  /* print maximum values */
-  fprintf(stdout, "max     ");
-  fprintf(fp_out, "max     ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, matrix[i][opt_samples-1]);
-    fprintf(fp_out, "  %.*f", prec, matrix[i][opt_samples-1]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* 97.5% */
+    digits = (int)floor(log10(xfloor1(matrix[i][(long)(opt_samples*.975)]))+1);
+    digits += prec+1;
+    label_size[6] = MAX(label_size[6],digits);
 
-  /* print line at 2.5% of matrix */
-  fprintf(stdout, "2.5%%    ");
-  fprintf(fp_out, "2.5%%    ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, matrix[i][(long)(opt_samples*.025)]);
-    fprintf(fp_out, "  %.*f", prec, matrix[i][(long)(opt_samples*.025)]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
-
-  /* print line at 97.5% of matrix */
-  fprintf(stdout, "97.5%%   ");
-  fprintf(fp_out, "97.5%%   ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, matrix[i][(long)(opt_samples*.975)]);
-    fprintf(fp_out, "  %.*f", prec, matrix[i][(long)(opt_samples*.975)]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
-
-  /* compute and print HPD 2.5% and 97.5% */
-  for (i = 0; i < col_count; ++i)
+    /* fill 95% HPD arrays */
     hpd_interval(matrix[i],opt_samples,hpd025+i,hpd975+i,0.05);
 
-  /* print 2.5% HPD */
-  fprintf(stdout, "2.5%%HPD ");
-  fprintf(fp_out, "2.5%%HPD ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, hpd025[i]);
-    fprintf(fp_out, "  %.*f", prec, hpd025[i]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* 2.5% HPD */
+    digits = (int)floor(log10(xfloor1(hpd025[i]))+1);
+    digits += prec+1;
+    label_size[7] = MAX(label_size[7],digits);
 
-  /* print 97.5% HPD */
-  fprintf(stdout, "97.5%%HPD");
-  fprintf(fp_out, "97.5%%HPD");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %.*f", prec, hpd975[i]);
-    fprintf(fp_out, "  %.*f", prec, hpd975[i]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+    /* 97.5% HPD */
+    digits = (int)floor(log10(xfloor1(hpd975[i]))+1);
+    digits += prec+1;
+    label_size[8] = MAX(label_size[8],digits);
 
-  /* print ESS */
-  fprintf(stdout, "ESS*    ");
-  fprintf(fp_out, "ESS*    ");
+    /* ESS */
+    digits = (int)floor(log10(xfloor1(opt_samples/tint[i]))+1);
+    digits += prec+1;
+    label_size[9] = MAX(label_size[9],digits);
+
+    /* Eff */
+    digits = (int)floor(log10(xfloor1(1/tint[i]))+1);
+    digits += prec+1;
+    label_size[10] = MAX(label_size[10],digits);
+
+    /* get column name */
+    pname_size = MAX(pname_size,strlen(tokens[i]));
+
+  }
+
+  /* print centered header */
+  int linesize = pname_size;
+  char * s = center("param", pname_size);
+  printf("%s",s);
+  free(s);
+
+
+  for (i = 0; i < label_count; ++i)
+  {
+    printf("  ");
+    s = center(label[i],label_size[i]);
+    printf("%s", s);
+    free(s);
+
+    linesize += 2 + label_size[i];
+  }
+  printf("\n");
+  for (i = 0; i < linesize; ++i) printf("-");
+  printf("\n");
+
+  /* print each row */
   for (i = 0; i < col_count; ++i)
   {
-    fprintf(stdout, "  %f", opt_samples/tint[i]);
-    fprintf(fp_out, "  %f", opt_samples/tint[i]);
+    if (!strcmp(tokens[i],"lnL") && i == col_count-1)
+      printf("\n");
+
+    printf("%*s", pname_size,tokens[i]);
+
+    printf("  ");
+
+    /* mean */
+    xasprintf(&s, "%.*f", prec, mean[i]);
+    printf("%*s", label_size[0], s);
+    free(s);
+
+    printf("  ");
+
+    /* median */
+    long median_line = opt_samples / 2;
+    double median = matrix[i][median_line];
+    if ((opt_samples & 1) == 0)
+    {
+      median += matrix[i][median_line-1];
+      median /= 2;
+    }
+    xasprintf(&s, "%.*f", prec, median);
+    printf("%*s", label_size[1], s);
+    free(s);
+
+    printf("  ");
+
+    /* S.D */
+    xasprintf(&s, "%.*f", prec, stdev[i]);
+    printf("%*s", label_size[2], s);
+    free(s);
+
+    printf("  ");
+
+    /* min */
+    xasprintf(&s, "%.*f", prec, matrix[i][0]);
+    printf("%*s", label_size[3], s);
+    free(s);
+
+    printf("  ");
+
+    /* max */
+    xasprintf(&s, "%.*f", prec, matrix[i][opt_samples-1]);
+    printf("%*s", label_size[4], s);
+    free(s);
+
+    printf("  ");
+
+    /* 2.5% */
+    xasprintf(&s, "%.*f", prec, matrix[i][(long)(opt_samples*.025)]);
+    printf("%*s", label_size[5], s);
+    free(s);
+
+    printf("  ");
+
+    /* 97.5% */
+    xasprintf(&s, "%.*f", prec, matrix[i][(long)(opt_samples*.975)]);
+    printf("%*s", label_size[6], s);
+    free(s);
+
+    printf("  ");
+
+    /* 2.5% HPD */
+    xasprintf(&s, "%.*f", prec, hpd025[i]);
+    printf("%*s", label_size[7], s);
+    free(s);
+
+    printf("  ");
+
+    /* 97.5% HPD */
+    xasprintf(&s, "%.*f", prec, hpd975[i]);
+    printf("%*s", label_size[8], s);
+    free(s);
+
+    printf("  ");
+
+    /* ESS */
+    xasprintf(&s, "%.*f", prec, opt_samples/tint[i]);
+    printf("%*s", label_size[9], s);
+    free(s);
+
+    printf("  ");
+
+    /* Eff */
+    xasprintf(&s, "%.*f", prec, 1/tint[i]);
+    printf("%*s", label_size[10], s);
+    free(s);
+
+    printf("\n");
+
   }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
-    
-  /* print Eff */
-  fprintf(stdout, "Eff*    ");
-  fprintf(fp_out, "Eff*    ");
-  for (i = 0; i < col_count; ++i)
-  {
-    fprintf(stdout, "  %f", 1/tint[i]);
-    fprintf(fp_out, "  %f", 1/tint[i]);
-  }
-  fprintf(stdout, "\n");
-  fprintf(fp_out, "\n");
+  printf("\n");
+
+  free(label_size);
 
   /* success */
   rc = 1;
 
 l_unwind:
+  for (i = 0; i < token_count; ++i)
+    free(tokens[i]);
+  free(tokens);
+  free(header);
+
   for (i = 0; i < col_count; ++i)
     free(matrix[i]);
   free(matrix);

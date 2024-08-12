@@ -1323,9 +1323,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
       {
         if (print_labels)
-          fprintf(fp, "\ttheta_%d%s", i+1, stree->nodes[i]->label);
+          fprintf(fp, "\ttheta:%d:%s", i+1, stree->nodes[i]->label);
         else
-          fprintf(fp, "\ttheta_%d", i+1);
+          fprintf(fp, "\ttheta:%d", i+1);
       }
     }
   }
@@ -1336,9 +1336,9 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     if (stree->nodes[i]->tau)
     {
       if (print_labels)
-        fprintf(fp, "\ttau_%d%s", i+1, stree->nodes[i]->label);
+        fprintf(fp, "\ttau:%d:%s", i+1, stree->nodes[i]->label);
       else
-        fprintf(fp, "\ttau_%d", i+1);
+        fprintf(fp, "\ttau:%d", i+1);
     }
   }
 
@@ -1375,7 +1375,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       if (!tmpnode->has_phi)
         tmpnode = tmpnode->hybrid;
       fprintf(fp,
-              "\tphi_%s<-%s",
+              "\tphi:%s<-%s",
               tmpnode->label,
               tmpnode->parent->label);
       #endif
@@ -1389,18 +1389,18 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
      opt_datefile ))
     	fprintf(fp, "\tmu_bar");
 
-  if (opt_datefile && opt_est_locusrate == MUTRATE_ONLY) {
-
-  for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
+  if (opt_datefile && opt_est_locusrate == MUTRATE_ONLY)
   {
-    if (stree->nodes[i]->tau)
+    for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
-      if (print_labels)
-        fprintf(fp, "\tr_tau_%d%s", i+1, stree->nodes[i]->label);
-      else
-        fprintf(fp, "\tr_tau_%d", i+1);
+      if (stree->nodes[i]->tau)
+      {
+        if (print_labels)
+          fprintf(fp, "\tr_tau:%d:%s", i+1, stree->nodes[i]->label);
+        else
+          fprintf(fp, "\tr_tau:%d", i+1);
+      }
     }
-  }
   }
     
   if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -1419,7 +1419,7 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
           if (opt_mig_bitmatrix[i][j])
             fprintf(fp,
-                    "\tW_%s->%s",
+                    "\tW:%s->%s",
                     stree->nodes[i]->label,
                     stree->nodes[j]->label);
     }

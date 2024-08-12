@@ -1060,7 +1060,7 @@ static void stree_label_recursive(snode_t * node)
   else
     fatal("Specified species tree is not binary");
 
-  if (opt_migration && node->label)
+  if (node->label)
   {
     assert(!opt_est_stree);
     return;
@@ -1069,12 +1069,14 @@ static void stree_label_recursive(snode_t * node)
   if (node->label)
     free(node->label);
 
+  /* +2 = comma + endl */
   node->label = (char *)xmalloc(strlen(node->left->label) +
-                                strlen(node->right->label) + 1);
+                                strlen(node->right->label) + 2);
 
   /* concatenate species labels */
   node->label[0] = 0;
   strcat(node->label, node->left->label);
+  strcat(node->label, ",");
   strcat(node->label, node->right->label);
 }
 
@@ -1113,16 +1115,21 @@ static void stree_label_network_recursive(snode_t * node)
   /* keep node has a label, keep it */
   if (!node->label)
   {
-    size_t len = 0;
+    size_t len = 1;  /* end line */
     if (node->left)
       len += strlen(node->left->label);
     if (node->right)
       len += strlen(node->right->label);
+    if (node->left && node->right)
+      ++len;  /* comma */
 
-    node->label = (char *)xmalloc((len+1)*sizeof(char));
+
+    node->label = (char *)xmalloc(len*sizeof(char));
     node->label[0] = 0;
     if (node->left)
       strcat(node->label, node->left->label);
+    if (node->left && node->right)
+      strcat(node->label, ",");
     if (node->right)
       strcat(node->label, node->right->label);
   }
