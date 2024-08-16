@@ -14668,7 +14668,6 @@ long stree_migration_rj(gtree_t *** gtreeptr,
   dbg_prop_b = opt_mig_beta;
   
   #if(DBG_TF)
-  printf("HERE!\n");
   debug_print_migrations(stree);
   debug_print_migmatrix(stree);
   #endif

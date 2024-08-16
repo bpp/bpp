@@ -26,20 +26,6 @@ static char * line = NULL;
 static size_t line_size = 0;
 static size_t line_maxsize = 0;
 
-/* used for creating FigTree.tre */
-typedef struct nodepinfo_s 
-{
-  /* 95% HPD CI */
-  double lo;
-  double hi;
-
-  /* mean age */
-  double age;
-
-  /* mean theta */
-  double theta;
-} nodepinfo_t; 
-
 static void reallocline(size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
@@ -185,7 +171,7 @@ static int cb_cmp_double(const void * a, const void * b)
 }
 
 #if 1
-static double eff_ict(double * y, long n, double mean, double stdev)
+static double eff_ict(double * y, long n, double mean, double stdev, double * rho1)
 {
   /* This calculates Efficiency or Tint using Geyer's (1992) initial positive
      sequence method */
@@ -219,6 +205,8 @@ static double eff_ict(double * y, long n, double mean, double stdev)
 
       tint += rho*2;
       rho0 = rho;
+      if (i == 1)
+        *rho1 = rho;
     }
   }
 
@@ -645,8 +633,8 @@ static void write_figtree(FILE * fp_out,
   free(newick);
   fclose(fp_tree);
 
-  for (i = 0; i < snodes_total; ++i)
-    free(stree->nodes[i]->data);
+  //for (i = 0; i < snodes_total; ++i)
+  //  free(stree->nodes[i]->data);
 
   return;
 }
@@ -769,18 +757,20 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_msci)
     snodes_total += stree->hybrid_count;
 
+  char * hdr[] = {"Node-Index", "Node-Type", "Node-Label"};
+  char * ntypes[] = {"Tip", "Root", "Hybrid", "Inner"};
+
   /* TODO: pretty-fy output */
-  int index_digits = (int)(floor(log10(snodes_total+1)+1));
+  int index_digits = MAX((int)strlen(hdr[0]),(int)(floor(log10(snodes_total+1)+1)));
 
   /* print I T L */
-  fprintf(stdout, "%*s", index_digits, "I");
-  fprintf(fp_out, "%*s", index_digits, "I");
-  fprintf(stdout, "  T  L");
-  fprintf(fp_out, "  T  L");
+  fprintf(stdout, "%*s", index_digits, hdr[0]);
+  fprintf(fp_out, "%*s", index_digits, hdr[0]);
+  fprintf(stdout, "  %s  %s\n", hdr[1], hdr[2]);
+  fprintf(fp_out, "  %s  %s\n", hdr[1], hdr[2]);
 
-  fprintf(stdout, "   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
-  fprintf(fp_out, "   [ I=Node index, T=Node type (Tip,Hybrid,Inner,Root), L=Node label ]\n");
-  long linewidth = index_digits+6;
+
+  long linewidth = index_digits+4+(long)strlen(hdr[1])+(long)strlen(hdr[2]);
   for (j = 0; j < linewidth; ++j)
   {
     fprintf(stdout,"-");
@@ -789,31 +779,32 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
     
+
   for (i = 0; i < snodes_total; ++i)
   {
-    char ntype;
+    char * ntype;
     if (i < stree->tip_count)
-      ntype = 'T';
+      ntype = ntypes[0];
     else if (stree->nodes[i] == stree->root)
-      ntype = 'R';
+      ntype = ntypes[1];
     else if (stree->nodes[i]->hybrid)
-      ntype = 'H';
+      ntype = ntypes[2];
     else
-      ntype = 'I';
+      ntype = ntypes[3];
 
     if (strchr(stree->nodes[i]->label,','))
     {
-      fprintf(stdout, "%*ld  %c  MRCA( %s )\n",
-              index_digits,i+1,ntype, stree->nodes[i]->label);
-      fprintf(fp_out, "%*ld  %c  MRCA( %s )\n",
-              index_digits,i+1,ntype, stree->nodes[i]->label);
+      fprintf(stdout, "%-*ld  %-*s  MRCA( %s )\n",
+              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+      fprintf(fp_out, "%-*ld  %-*s  MRCA( %s )\n",
+              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
     }
     else
     {
-      fprintf(stdout, "%*ld  %c  %s\n",
-              index_digits,i+1,ntype, stree->nodes[i]->label);
-      fprintf(fp_out, "%*ld  %c  %s\n",
-              index_digits,i+1,ntype, stree->nodes[i]->label);
+      fprintf(stdout, "%-*ld  %-*s  %s\n",
+              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+      fprintf(fp_out, "%-*ld  %-*s  %s\n",
+              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
     }
   }
   fprintf(stdout, "\n");
@@ -883,6 +874,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   double * hpd025 = (double *)xmalloc((size_t)col_count * sizeof(double));
   double * hpd975 = (double *)xmalloc((size_t)col_count * sizeof(double));
   double * tint = (double *)xmalloc((size_t)col_count * sizeof(double));
+  double * rho1 = (double *)xmalloc((size_t)col_count * sizeof(double));
   double * stdev = (double *)xmalloc((size_t)col_count * sizeof(double));
 
   long line_count = 0;
@@ -971,12 +963,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     "S.D",        /*  2 */
     "min",        /*  3 */
     "max",        /*  4 */
-    "2.5%",      /*  5 */
-    "97.5%",     /*  6 */
-    "2.5%HPD",   /*  7 */
-    "97.5%HPD",  /*  8 */
+    "2.5%",       /*  5 */
+    "97.5%",      /*  6 */
+    "2.5%HPD",    /*  7 */
+    "97.5%HPD",   /*  8 */
     "ESS*",       /*  9 */
-    "Eff*"        /* 10 */
+    "Eff*",        /* 10 */
+    "rho1"        /* 11 */
   };
 
   long label_count = sizeof(label) / sizeof(label[0]);
@@ -1016,7 +1009,9 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     label_size[2] = MAX(label_size[2],digits);
 
     /* tint */
-    tint[i] = eff_ict(matrix[i],opt_samples,mean[i],stdev[i]);
+    double _rho1 = 0;
+    tint[i] = eff_ict(matrix[i],opt_samples,mean[i],stdev[i], &_rho1);
+    rho1[i] = _rho1;
 
     /* qsort */
     qsort(matrix[i], opt_samples, sizeof(double), cb_cmp_double);
@@ -1074,6 +1069,11 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     digits = (int)floor(log10(xfloor1(1/tint[i]))+1);
     digits += prec+1;
     label_size[10] = MAX(label_size[10],digits);
+
+    /* rho1 */
+    digits = (int)floor(log10(xfloor1(rho1[i]))+1);
+    digits += prec+1;
+    label_size[11] = MAX(label_size[11],digits);
 
     /* get column name */
     pname_size = MAX(pname_size,strlen(tokens[i]));
@@ -1227,6 +1227,15 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     fprintf(fp_out, "%*s", label_size[10], s);
     free(s);
 
+    fprintf(stdout, "  ");
+    fprintf(fp_out, "  ");
+
+    /* rho1 */
+    xasprintf(&s, "%.*f", prec, rho1[i]);
+    fprintf(stdout, "%*s", label_size[11], s);
+    fprintf(fp_out, "%*s", label_size[11], s);
+    free(s);
+
     fprintf(stdout, "\n");
     fprintf(fp_out, "\n");
 
@@ -1263,6 +1272,7 @@ l_unwind:
   free(hpd025);
   free(hpd975);
   free(tint);
+  free(rho1);
   free(stdev);
   fclose(fp);
 

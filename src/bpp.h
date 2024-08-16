@@ -272,6 +272,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PROP_MG_INVG          1
 #define BPP_THETA_PROP_MG_GAMMA         2
 
+#define BPP_THETA_MOVE_NONE            -1
 #define BPP_THETA_MOVE_MIN              0
 #define BPP_THETA_MOVE_SLIDE            0
 #define BPP_THETA_MOVE_GIBBS            1
@@ -769,6 +770,21 @@ typedef struct msa_s
   int original_index;
 
 } msa_t;
+
+/* used for creating FigTree.tre */
+typedef struct nodepinfo_s 
+{
+  /* 95% HPD CI */
+  double lo;
+  double hi;
+
+  /* mean age */
+  double age;
+
+  /* mean theta */
+  double theta;
+} nodepinfo_t; 
+
 
 typedef struct partition_s
 {

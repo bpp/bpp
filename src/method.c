@@ -1375,7 +1375,8 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       if (!tmpnode->has_phi)
         tmpnode = tmpnode->hybrid;
       fprintf(fp,
-              "\tphi:%s<-%s",
+              "\tphi:%d<-%d:%s<-%s",
+              tmpnode->node_index+1,tmpnode->parent->node_index+1,
               tmpnode->label,
               tmpnode->parent->label);
       #endif
@@ -1419,7 +1420,8 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
           if (opt_mig_bitmatrix[i][j])
             fprintf(fp,
-                    "\tW:%s->%s",
+                    "\tW:%d->%d:%s->%s",
+                    i+1,j+1,
                     stree->nodes[i]->label,
                     stree->nodes[j]->label);
     }
@@ -4457,10 +4459,13 @@ void cmd_run()
         for (j = 0; j < opt_finetune_theta_count; ++j)
           if (theta_av_movetype[j] == BPP_THETA_MOVE_SLIDE)
             g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
+          else if (theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS)
+          {
+            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+          }
           else
           {
-            assert(theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS);
-            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+            assert(theta_av_movetype[j] == BPP_THETA_MOVE_NONE);
           }
       }
       #ifdef CHECK_LOGL
@@ -5382,7 +5387,15 @@ void cmd_run()
   gtree_fini();
 
   if (opt_method == METHOD_00)
+  {
     allfixed_summary(fp_out,stree);
+    /* stree_export_pdf(stree); */
+    for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
+    {
+      if (stree->nodes[i]->data)
+        free(stree->nodes[i]->data);
+    }
+  }
 
   /* TODO: Perhaps we do not need 'species_count' as it should be equivalent
      to 'ndspecies' for the A01 method */
