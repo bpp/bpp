@@ -1060,7 +1060,7 @@ static void stree_label_recursive(snode_t * node)
   else
     fatal("Specified species tree is not binary");
 
-  if (node->label)
+  if (opt_migration && node->label)
   {
     assert(!opt_est_stree);
     return;
