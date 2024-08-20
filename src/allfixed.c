@@ -488,7 +488,7 @@ static void write_figtree(FILE * fp_out,
   fp_tree = xopen(opt_msci ? "FakeTree.tre" : "FigTree.tre", "w");
 
   for (i = 0; i < snodes_total; ++i)
-    stree->nodes[i]->data = (void *)xmalloc(sizeof(nodepinfo_t));
+    stree->nodes[i]->data = (void *)xcalloc(sizeof(nodepinfo_t),1);
 
   /* copy theta */
   if (opt_est_theta)
@@ -795,16 +795,34 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     if (strchr(stree->nodes[i]->label,','))
     {
       fprintf(stdout, "%-*ld  %-*s  MRCA( %s )\n",
-              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+              index_digits,i+1,
+              (int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
       fprintf(fp_out, "%-*ld  %-*s  MRCA( %s )\n",
-              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+              index_digits,i+1,
+              (int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
     }
     else
     {
-      fprintf(stdout, "%-*ld  %-*s  %s\n",
-              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
-      fprintf(fp_out, "%-*ld  %-*s  %s\n",
-              index_digits,i+1,(int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+      if (opt_msci && stree->nodes[i]->hybrid)
+      {
+        fprintf(stdout, "%-*ld  %-*s  %s (parental node index %d)\n",
+                index_digits,i+1,
+                (int)strlen(hdr[1]),ntype,stree->nodes[i]->label,
+                stree->nodes[i]->parent->node_index+1);
+        fprintf(fp_out, "%-*ld  %-*s  %s (parental node index: %d)\n",
+                index_digits,i+1,(
+                int)strlen(hdr[1]),ntype,stree->nodes[i]->label,
+                stree->nodes[i]->parent->node_index+1);
+      }
+      else
+      {
+        fprintf(stdout, "%-*ld  %-*s  %s\n",
+                index_digits,i+1,
+                (int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+        fprintf(fp_out, "%-*ld  %-*s  %s\n",
+                index_digits,i+1,
+                (int)strlen(hdr[1]),ntype,stree->nodes[i]->label);
+      }
     }
   }
   fprintf(stdout, "\n");
@@ -863,19 +881,21 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   if (opt_clock != BPP_CLOCK_GLOBAL)
     ++col_count;
 
-
+  /* number of columns including converted Ms (from Ws) */
+  long cols = opt_migration ?
+                           col_count+opt_migration_count : col_count;
   /* allocate storage matrix */
-  double ** matrix = (double **)xmalloc((size_t)col_count * sizeof(double *));
-  for (i = 0; i < col_count; ++i)
+  double ** matrix = (double **)xmalloc((size_t)cols * sizeof(double *));
+  for (i = 0; i < cols; ++i)
     matrix[i] = (double *)xmalloc((size_t)opt_samples * sizeof(double));
 
-  double * mean = (double *)xmalloc((size_t)col_count * sizeof(double));
+  double * mean = (double *)xmalloc((size_t)cols * sizeof(double));
 
-  double * hpd025 = (double *)xmalloc((size_t)col_count * sizeof(double));
-  double * hpd975 = (double *)xmalloc((size_t)col_count * sizeof(double));
-  double * tint = (double *)xmalloc((size_t)col_count * sizeof(double));
-  double * rho1 = (double *)xmalloc((size_t)col_count * sizeof(double));
-  double * stdev = (double *)xmalloc((size_t)col_count * sizeof(double));
+  double * hpd025 = (double *)xmalloc((size_t)cols * sizeof(double));
+  double * hpd975 = (double *)xmalloc((size_t)cols * sizeof(double));
+  double * tint = (double *)xmalloc((size_t)cols * sizeof(double));
+  double * rho1 = (double *)xmalloc((size_t)cols * sizeof(double));
+  double * stdev = (double *)xmalloc((size_t)cols * sizeof(double));
 
   long line_count = 0;
   long bad_count = 0;
@@ -981,6 +1001,82 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
   for (i = 0; i < label_count; ++i)
     label_size[i] = MAX(prec, strlen(label[i]));
+
+
+  /* now created additional columns for M */
+  if (opt_migration)
+  {
+    char ** new_tokens = NULL;
+    new_tokens = (char **)xmalloc((size_t)cols * sizeof(char *));
+
+    /* copy tokens */
+    for (i = 0; i < col_count; ++i)
+      new_tokens[i] = tokens[i];
+    free(tokens);
+    tokens = new_tokens;
+
+    /* move lnL to the end */
+    long start = col_count;
+    if (!strcmp(tokens[col_count-1],"lnL"))
+    {
+      tokens[cols-1] = tokens[col_count-1];
+      for (i = 0; i < opt_samples; ++i)
+        matrix[cols-1][i] = matrix[col_count-1][i];
+      start = col_count-1;
+    }
+
+    /* get column indices of Ws and corresponding thetas */
+    long * w_indices;
+    long * theta_indices;
+    w_indices = (long *)xmalloc((size_t)opt_migration_count*sizeof(long));
+    theta_indices = (long *)xmalloc((size_t)opt_migration_count*sizeof(long));
+
+    long w_count = 0;
+    long theta_count = 0;
+    for (i = 0; i < col_count; ++i)
+    {
+      if (strlen(tokens[i]) > 2 && tokens[i][0] == 'W' && tokens[i][1] == ':')
+      {
+        w_indices[w_count++] = i;
+        char * tgt_index = strchr(tokens[i],'>');
+        assert(tgt_index);
+        assert(tgt_index[1]);
+
+        char * nodestr;
+        xasprintf(&nodestr, "theta:%s", tgt_index+1);
+        for (j = 0; j < col_count; ++j)
+        {
+          if (!strcmp(tokens[j],nodestr))
+          {
+            theta_indices[theta_count++] = j;
+            break;
+          }
+        }
+        assert(j < col_count);
+        free(nodestr);
+      }
+    }
+    assert(w_count == opt_migration_count);
+    assert(theta_count == w_count);
+
+    /* go through Ws and calculate Ms */
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      for (j = 0; j < opt_samples; ++j)
+      {
+        matrix[start+i][j] = matrix[w_indices[i]][j] *
+                             matrix[theta_indices[i]][j]/4.;
+      }
+      tokens[start+i] = xstrdup(tokens[w_indices[i]]);
+      tokens[start+i][0] = 'M';
+    }
+    free(w_indices);
+    free(theta_indices);
+
+    /* update number of columns and number of tokens (headers) */
+    col_count = cols;
+    token_count += opt_migration_count;
+  }
 
 
   for (i = 0; i < col_count; ++i)
