@@ -1014,6 +1014,13 @@ typedef struct thread_info_s
 
 } thread_info_t;
 
+typedef struct rng_state_s
+{
+  uint32_t state;
+  /* pad to cache line size to avoid false sharing */
+  uint8_t padding[60];
+} rng_state_t;
+
 
 /* macros */
 
@@ -1705,12 +1712,12 @@ void legacy_init(void);
 void legacy_fini(void);
 double legacy_rndbeta(long index, double p, double q);
 double legacy_rndgamma(long index, double a);
-unsigned int get_legacy_rndu_status(long index);
-void set_legacy_rndu_status(long index, unsigned int x);
+uint32_t get_legacy_rndu_status(long index);
+void set_legacy_rndu_status(long index, uint32_t x);
 void legacy_rnddirichlet(long index, double * output, double * alpha, long k);
 long legacy_rndpoisson(long index, double m);
-unsigned int * get_legacy_rndu_array(void);
-void set_legacy_rndu_array(unsigned int * x);
+rng_state_t * get_legacy_rndu_array(void);
+void set_legacy_rndu_array(rng_state_t * x);
 double rndNormal(long index);
 int MultiNomialAlias(long index, int n, int ncat, double* F, int* L, int* nobs);
 int MultiNomialAliasSetTable(int ncat, double* prob, double* F, int* L);
