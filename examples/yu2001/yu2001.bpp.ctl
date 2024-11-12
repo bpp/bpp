@@ -1,8 +1,7 @@
  seed =  -1
 
  seqfile = yu2001.txt
- outfile = out.txt
- mcmcfile = mcmc.txt
+ jobname = out
 
  # fixed species delimitation and species tree
  speciesdelimitation = 0 

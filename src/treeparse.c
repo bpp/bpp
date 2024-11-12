@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -387,12 +387,6 @@ void stree_destroy(stree_t * tree,
     if (node->gene_leaves)
       free(node->gene_leaves);
 
-    if (node->t2h)
-      free(node->t2h);
-
-    if (node->old_t2h)
-      free(node->old_t2h);
-
     if (node->hx)
       free(node->hx);
 
@@ -401,6 +395,15 @@ void stree_destroy(stree_t * tree,
 
     if (node->mark)
       free(node->mark);
+
+    if (opt_msci && !opt_est_theta)
+    {
+      if (node->notheta_old_phi_contrib)
+        free(node->notheta_old_phi_contrib);
+
+      if (node->notheta_phi_contrib)
+        free(node->notheta_phi_contrib);
+    }
 
     if (opt_migration)
     {

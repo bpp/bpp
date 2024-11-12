@@ -2,6 +2,36 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.8.0] - 2024-11-12
+### Changed
+ - Re-parameterization of the MSC-M model (M to w)
+ - Summary statistics output format (transposed, aligned, parameters enumerated)
+ - Summary for both w and M (MSC-M model)
+ - Prior for HKY and K80
+ - Only summarize unique theta parameters
+ - Removed unnecessary sorting in several proposals
+ - Replaced outfile and mcmcfile with a single jobname option
+ - All output filenames now begin with string defined in jobname option
+ - SeedUsed no longer created when invoking BPP without parameters
+### Added
+ - Gibbs move for sampling theta from conditional distribution
+ - Gibbs move for sampling phi from conditional distribution
+ - Gibbs move for sampling w from conditional distribution
+ - Linked theta model for MSC-M
+ - PDF visualization of species tree (MSC and MSC-M models)
+ - Posterior summaries for parameters whose conditionals are tractable or can
+   be approximated
+ - Ported likelihood calculations for aarch64 neon instructions (apple silicon)
+ - Option --extend to extend runs by additional MCMC steps
+ - Options --phi-slide-prob and --theta-slide-prob to control the frequency of
+   phi and theta sliding window moves
+### Fixed
+ - Option of integrating out thetas with linked theta models
+ - Theta model "linked-msci" when a branch is broken into three or more segments
+ - Illegal memory accesses when constructing faketree under linked theta models
+ - Fixed efficiency calculation routine, added rho1 in output
+
+
 ## [4.7.0] - 2023-11-04
 ### Changed
  - Example data

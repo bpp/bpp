@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -83,6 +83,29 @@ static void reallocline(size_t newmaxsize)
   }
   line = temp;
   line_maxsize = newmaxsize;
+}
+
+static void print_mcmcfile_help()
+{
+  fprintf(stdout,
+          "*TLDR*\n"
+          "\n"
+          "The 'mcmcfile' and 'outfile' options are now obsolete. Only the new 'jobname'\n"
+          "option needs to be specified, and all output files, including the MCMC sample\n"
+          "file, will use this prefix.\n"
+          "\n"
+          "Details:\n"
+          "-------\n\n"
+          "Starting with BPP v4.8.0, the 'mcmcfile' and 'outfile' options have been removed.\n"
+          "Now, only the new 'jobname' option needs to be specified, serving as the prefix\n"
+          "for filenames, including the main output file and the MCMC sample file.\n\n"
+          "Example:\n"
+          "--------\n"
+          "  jobname = out\n\n"
+          "produces at minimum the following three files:\n\n"
+          "out.txt               : output file\n"
+          "out.mcmc.txt          : MCMC file\n"
+          "out.SeedUsed          : used seed\n\n");
 }
 
 static void print_migprior_wprior_help()
@@ -1395,6 +1418,8 @@ static long parse_thetamodel(const char * line)
     opt_linkedtheta = BPP_LINKEDTHETA_INNER;
   else if (!strcasecmp(model, "linked-msci"))
     opt_linkedtheta = BPP_LINKEDTHETA_MSCI;
+  else if (!strcasecmp(model, "linked-mscm"))
+     opt_linkedtheta = BPP_LINKEDTHETA_MSCM;
   else
     goto l_unwind;
 
@@ -2465,11 +2490,8 @@ static void check_validity()
   if (!opt_streenewick)
     fatal("Initial species tree newick format is required in 'species&tree'");
 
-  if (!opt_outfile)
-    fatal("Option 'outfile' is required");
-
-  if (!opt_mcmcfile)
-    fatal("Option 'mcmcfile' is required");
+  if (!opt_jobname)
+    fatal("Option 'jobname' is required");
 
   if (opt_method < 0 || opt_method > 3)
     fatal("Invalid method");
@@ -2858,8 +2880,16 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"outfile",7))
       {
-        if (!get_string(value, &opt_outfile))
+        print_mcmcfile_help();
+        fatal("Aborting execution...");
+      }
+      else if (!strncasecmp(token,"jobname",7))
+      {
+        if (!get_string(value, &opt_jobname))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+
+        xasprintf(&opt_mcmcfile, "%s.mcmc.txt", opt_jobname);
+        xasprintf(&opt_a1b1file, "%s.conditional_a1b1.txt", opt_jobname);
         valid = 1;
       }
       else if (!strncasecmp(token,"usedata",7))
@@ -2906,16 +2936,16 @@ void load_cfile()
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }
-      else if (!strncasecmp(token,"datefile",8)) {
+      else if (!strncasecmp(token,"datefile",8))
+      {
         if (!get_string(value, &opt_datefile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
         valid = 1;
       }
       else if (!strncasecmp(token,"mcmcfile",8))
       {
-        if (!get_string(value,&opt_mcmcfile))
-          fatal("Option %s expects a string (line %ld)", token, line_count);
-        valid = 1;
+        print_mcmcfile_help();
+        fatal("Aborting execution...");
       }
       else if (!strncasecmp(token,"tauprior",8))
       {
@@ -3020,7 +3050,7 @@ void load_cfile()
         if (!parse_thetamodel(value))
           fatal("Erroneous format of 'thetamodel' (line %ld)\n"
                 "Possible options:\n"
-                " linked-none\n linked-all\n linked-inner\n linked-msci",
+                " linked-none\n linked-all\n linked-inner\n linked-msci\n linked-mscm",
                 line_count);
         valid = 1;
       }
@@ -3028,8 +3058,7 @@ void load_cfile()
       {
         if (!parse_printlocus(value,&opt_print_locus))
           fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
-	valid = 1;	
-
+        valid = 1;
       }
     }
     else if (token_len == 11)
@@ -3176,7 +3205,6 @@ void load_cfile()
       fatal("Invalid syntax when parsing file %s on line %ld",
             opt_cfile, line_count);
   }
-
   fclose(fp);
 
   /* set method */

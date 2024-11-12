@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -2239,8 +2239,9 @@ void migrateTipDate(pop_t * pop, int i, int j, int k, int * maxSeqIndex) {
 
 
 
-gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index, mappingDate_t ** tipDateArray,
-                         int tipDateArrayLen, int tau_ctl)
+gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
+                         mappingDate_t ** tipDateArray, int tipDateArrayLen,
+                         int tau_ctl)
 {
   int lineage_count = 0;
   int scaler_index = 0;
@@ -3376,11 +3377,44 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
+void logprob_revert_C2j(snode_t * snode, long msa_index)
+{
+  snode->t2h_sum -= snode->C2ji[msa_index];
+  snode->C2ji[msa_index] = snode->old_C2ji[msa_index];
+  snode->t2h_sum += snode->C2ji[msa_index];
+
+  if (opt_msci && !opt_est_theta && snode->hybrid)
+  {
+    snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+    if (snode->linked_theta)
+      snode->linked_theta->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+
+
+    snode->notheta_phi_contrib[msa_index] = snode->notheta_old_phi_contrib[msa_index];
+    snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
+    if (snode->linked_theta)
+      snode->linked_theta->hphi_sum += snode->notheta_phi_contrib[msa_index];
+
+
+  }
+}
+
+/* XXX: Important: When snode is a linked node, the function does not revert
+   the contribution for the primary node. The caller function must do that */
+void logprob_revert_contribs(snode_t * snode)
+{
+  if (!snode->linked_theta)
+  {
+    snode->notheta_logpr_contrib = snode->notheta_old_logpr_contrib;
+  }
+}
+
+#if 0
 void logprob_revert_notheta(snode_t* snode, long msa_index)
 {
-  snode->t2h_sum -= snode->t2h[msa_index];
-  snode->t2h[msa_index] = snode->old_t2h[msa_index];
-  snode->t2h_sum += snode->t2h[msa_index];
+  snode->t2h_sum -= snode->C2ji[msa_index];
+  snode->C2ji[msa_index] = snode->old_C2ji[msa_index];
+  snode->t2h_sum += snode->C2ji[msa_index];
   snode->notheta_logpr_contrib = snode->notheta_old_logpr_contrib;
   if (opt_msci && !opt_est_theta && snode->hybrid)
   {
@@ -3389,6 +3423,7 @@ void logprob_revert_notheta(snode_t* snode, long msa_index)
     snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
   }
 }
+#endif
 
 int cb_migbuf_asctime(const void * x, const void * y)
 {
@@ -3640,11 +3675,193 @@ double gtree_update_logprob_contrib_mig(snode_t * snode,
   return logpr;
 }
 
-double gtree_update_logprob_contrib(snode_t* snode,
+void gtree_update_C2j(snode_t * snode,
+                      double heredity,
+                      long msa_index,
+                      long thread_index)
+{
+  unsigned int j, k, n;
+  double T2h = 0;
+  dlist_item_t * coal;
+  int nextDateInd = -1; 
+  double* sortbuffer = global_sortbuffer_r[thread_index];
+
+  assert(!opt_est_theta);
+
+  sortbuffer[0] = snode->tau;
+  j = 1;
+
+  if (opt_datefile && (!snode->left || opt_seqAncestral))
+  {
+    if (snode->epoch_count[msa_index])
+      nextDateInd = 0;
+
+    for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++)
+      sortbuffer[j] = snode->tip_date[msa_index][k];
+  }	
+
+  /* Events are coalescent events. This is a list of coalescent events in a
+   a population. Note that is all within a population */
+  for (coal = snode->coalevent[msa_index]->head; coal; coal = coal->next)
+  {
+    gnode_t* gnode = (gnode_t*)(coal->data);
+    sortbuffer[j++] = gnode->time;
+  }
+
+  if (snode->parent)
+    sortbuffer[j++] = snode->parent->tau;
+
+  /* TODO: Probably split the following qsort case into two:
+     in case snode->parent then sort j-2 elements, otherwise
+     j-1 elements.
+  */
+
+  /* if there was at least one coalescent event, sort */
+  /* We don't need to sort the first or last elements since they are the speciation times
+   and the coalescent times are inbetween the speciation times */
+  if (j > 1)
+    qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
+
+  /* skip the last step in case the last value of n was supposed to be 1 */
+
+  if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
+  for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
+  {
+    T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]);
+
+    if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k])
+    {
+      n += 1 + snode->date_count[msa_index][nextDateInd];
+      if (nextDateInd + 1 < snode->epoch_count[msa_index])
+        nextDateInd++;
+      else
+        nextDateInd = -1;
+    }
+  }
+
+  snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
+  snode->C2ji[msa_index] = T2h;
+
+  /* XXX: non-reentrant part */
+  if (!opt_est_theta)
+  {
+    /* check that it's always thread 0 */
+    assert(thread_index == 0);
+
+    /* not possible to parallelize the below as it leads to race conditions */
+    snode->t2h_sum -= snode->old_C2ji[msa_index];
+    snode->t2h_sum += snode->C2ji[msa_index];
+
+  }
+
+  if (!opt_est_theta)
+  {
+    /* phi contributions */
+    if (opt_msci && snode->hybrid)
+    {
+      double tmp = 0;
+      snode->notheta_old_phi_contrib[msa_index] = snode->notheta_phi_contrib[msa_index];
+      snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+      if (snode->linked_theta)
+        snode->linked_theta->hphi_sum -= snode->notheta_phi_contrib[msa_index];
+      if (node_is_bidirection(snode) && !node_is_mirror(snode))
+        tmp = (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
+      else
+        tmp = snode->seqin_count[msa_index] * log(snode->hphi);
+      snode->notheta_phi_contrib[msa_index] = tmp;
+      snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
+      if (snode->linked_theta)
+        snode->linked_theta->hphi_sum += snode->notheta_phi_contrib[msa_index];
+
+    }
+  }
+}
+
+double update_logpg_contrib(stree_t * stree, snode_t * snode)
+{
+  unsigned int j;
+  assert(!opt_est_theta);
+  double hphi_sum = 0;
+
+  double logpr = 0;
+
+  if (opt_msci && snode->hybrid)
+  {
+    logpr += snode->hphi_sum;
+  }
+
+  
+  /* no theta option */
+  
+  long coal_count_sum = snode->coal_count_sum;
+  double c2j_sum = snode->t2h_sum;
+
+  if (opt_linkedtheta)
+  {
+    if (snode->linked_theta)
+    {
+      assert(0);
+      if (!isinf(snode->notheta_logpr_contrib))
+      {
+        printf("FATAL: %f\n", snode->notheta_logpr_contrib);
+      }
+      assert(isinf(snode->notheta_logpr_contrib));
+      if (snode->hybrid)
+        return logpr;
+
+      /* XXX: We could have returned 0, but this is just for error checking */
+      return INFINITY;
+    }
+    for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+      if (x->linked_theta == snode)
+      {
+        coal_count_sum += x->coal_count_sum;
+        /* TODO: Make sure x->t2h_sum is up-to-date */
+        c2j_sum  += x->t2h_sum;
+
+        if (x->hybrid)
+          hphi_sum += x->hphi_sum;
+      }
+    }
+  }
+
+  if (coal_count_sum)
+    logpr += opt_theta_alpha*log(opt_theta_beta) - lgamma(opt_theta_alpha) -
+    (opt_theta_alpha + coal_count_sum)*log(opt_theta_beta + c2j_sum) +
+    lgamma(opt_theta_alpha + coal_count_sum);
+  else
+    logpr -= opt_theta_alpha * log(1 + c2j_sum / opt_theta_beta);
+
+  /* TODO: this always updates the 'notheta_old_logpr_contrib'. Sometimes we
+     do not want to this update because there could be multiple changes on
+     the 'notheta_logpr_contrib' before deciding whether to accept or reject
+     the proposal, e.g. by proposing new values on multiple loci. This leads
+     to the problem that the 'notheta_old_logpr_contrib' is no longer the
+     old value before any of the proposals started.  Currently this is fixed
+     in the caller functions by storing the 'notheta_old_logpr_contrib' in
+     some array allocated at the caller, but I should change this to only
+     update the value through a flag passed to this function */
+  snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
+  snode->notheta_logpr_contrib = logpr;
+  if (opt_msci && opt_linkedtheta)
+  {
+    logpr += hphi_sum;
+    if (!snode->hybrid)
+      snode->hphi_sum = hphi_sum;
+    snode->notheta_logpr_contrib = logpr;
+  }
+
+  return logpr;
+}
+
+double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index,
                                     long thread_index)
 {
+  assert(opt_est_theta);
   unsigned int j, k, n;
   double logpr = 0;
   double T2h = 0;
@@ -3654,12 +3871,14 @@ double gtree_update_logprob_contrib(snode_t* snode,
 
   sortbuffer[0] = snode->tau;
   j = 1;
-  if (opt_datefile && (!snode->left || opt_seqAncestral)) {
-	  if (snode->epoch_count[msa_index])
-		nextDateInd = 0;
-  	for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++ ) {
-		sortbuffer[j] = snode->tip_date[msa_index][k];
-  	}
+
+  if (opt_datefile && (!snode->left || opt_seqAncestral))
+  {
+    if (snode->epoch_count[msa_index])
+      nextDateInd = 0;
+
+    for (int k = 0; k < snode->epoch_count[msa_index]; k++, j++)
+      sortbuffer[j] = snode->tip_date[msa_index][k];
   }	
 
   /* Events are coalescent events. This is a list of coalescent events in a
@@ -3686,25 +3905,6 @@ double gtree_update_logprob_contrib(snode_t* snode,
   if (j > 1)
     qsort(sortbuffer + 1, j - 1, sizeof(double), cb_cmp_double_asc);
 
-#if 0
-  printf("Population: %s tau: %f theta: %f events: %d seqin_count: %d\n",
-    snode->label, snode->tau, snode->theta,
-    snode->coal_count[msa_index], snode->seqin_count[msa_index]);
-
-  if (snode->parent)
-    n = j - 1;
-  else
-    n = j;
-
-  for (k = 1; k < n; ++k)
-  {
-    printf("\t t = %f\n", sortbuffer[k]);
-  }
-  if (snode->parent)
-    printf("\t tau = %f\n", sortbuffer[k]);
-  printf("\n");
-#endif
-
   /* skip the last step in case the last value of n was supposed to be 1 */
 
   if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
@@ -3712,37 +3912,22 @@ double gtree_update_logprob_contrib(snode_t* snode,
   {
     T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]);
 
-     if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k]) {
-     	n += 1 + snode->date_count[msa_index][nextDateInd];
-     	if (nextDateInd + 1 < snode->epoch_count[msa_index])
-      	 	nextDateInd++;
-    	else
-    		nextDateInd = -1;
-     }
+    if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k])
+    {
+      n += 1 + snode->date_count[msa_index][nextDateInd];
+      if (nextDateInd + 1 < snode->epoch_count[msa_index])
+        nextDateInd++;
+      else
+        nextDateInd = -1;
+    }
   }
 
   if (opt_msci && snode->hybrid)
   {
-    if (opt_est_theta)
-    {
-      if (node_is_bidirection(snode) && !node_is_mirror(snode))
-        logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
-      else
-        logpr += snode->seqin_count[msa_index] * log(snode->hphi);
-    }
+    if (node_is_bidirection(snode) && !node_is_mirror(snode))
+      logpr += (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
     else
-    {
-      double tmp = 0;
-      snode->notheta_old_phi_contrib[msa_index] = snode->notheta_phi_contrib[msa_index];
-      snode->hphi_sum -= snode->notheta_phi_contrib[msa_index];
-      if (node_is_bidirection(snode) && !node_is_mirror(snode))
-        tmp = (snode->seqin_count[msa_index] - snode->right->seqin_count[msa_index]) * log(snode->hphi);
-      else
-        tmp = snode->seqin_count[msa_index] * log(snode->hphi);
-      snode->notheta_phi_contrib[msa_index] = tmp;
-      snode->hphi_sum += snode->notheta_phi_contrib[msa_index];
-      logpr += snode->hphi_sum;
-    }
+      logpr += snode->seqin_count[msa_index] * log(snode->hphi);
   }
 
   /* now distinguish between estimating theta and analytical computation */
@@ -3765,36 +3950,6 @@ double gtree_update_logprob_contrib(snode_t* snode,
     snode->old_logpr_contrib[msa_index] = snode->logpr_contrib[msa_index];
     snode->logpr_contrib[msa_index] = logpr;
   }
-  else
-  {
-    snode->old_t2h[msa_index] = snode->t2h[msa_index];
-
-    snode->t2h[msa_index] = T2h / heredity;
-
-    snode->t2h_sum -= snode->old_t2h[msa_index];
-    snode->t2h_sum += snode->t2h[msa_index];
-
-
-    if (snode->coal_count_sum)
-      logpr += opt_theta_alpha * log(opt_theta_beta) - lgamma(opt_theta_alpha) -
-      (opt_theta_alpha + snode->coal_count_sum) *
-      log(opt_theta_beta + snode->t2h_sum) +
-      lgamma(opt_theta_alpha + snode->coal_count_sum);
-    else
-      logpr -= opt_theta_alpha * log(1 + snode->t2h_sum / opt_theta_beta);
-
-    /* TODO: this always updates the 'notheta_old_logpr_contrib'. Sometimes we
-       do not want to this update because there could be multiple changes on
-       the 'notheta_logpr_contrib' before deciding whether to accept or reject
-       the proposal, e.g. by proposing new values on multiple loci. This leads
-       to the problem that the 'notheta_old_logpr_contrib' is no longer the
-       old value before any of the proposals started.  Currently this is fixed
-       in the caller functions by storing the 'notheta_old_logpr_contrib' in
-       some array allocated at the caller, but I should change this to only
-       update the value through a flag passed to this function */
-    snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
-    snode->notheta_logpr_contrib = logpr;
-  }
 
   return logpr;
 }
@@ -3802,11 +3957,24 @@ double gtree_update_logprob_contrib(snode_t* snode,
 double gtree_logprob(stree_t * stree, double heredity, long msa_index, long thread_index)
 {
   unsigned int i;
+  unsigned int total_nodes;
 
   double logpr = 0;
+  double logpr_contrib = 0;
 
-  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
-    logpr += gtree_update_logprob_contrib(stree->nodes[i],heredity,msa_index, thread_index);
+  total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
+  assert(opt_est_theta);
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    logpr_contrib = gtree_update_logprob_contrib(stree->nodes[i],
+                                                 heredity,
+                                                 msa_index,
+                                                 thread_index);
+
+    logpr += logpr_contrib;
+
+  }
 
   return logpr;
 }
@@ -4422,6 +4590,7 @@ static long propose_ages(locus_t * locus,
 {
   unsigned int i,j;
   long n,k;
+  long td_count = 0;   /* used for no-theta */
   unsigned int stree_total_nodes;
   long accepted = 0;
   double lnacceptance;
@@ -4733,6 +4902,19 @@ static long propose_ages(locus_t * locus,
       node->pop->hx[thread_index] = -1;
     }
 
+    #if 0
+    /* XXX: Check that snode marks are not used. Delete after checking this */
+    if (!opt_est_theta)
+    {
+      assert(thread_index == 0);
+
+      for (j=0; j < stree_total_nodes; ++j)
+      {
+        assert(stree->nodes[j]->mark[thread_index] == 0);
+      }
+    }
+    #endif
+
     /* quick recomputation  of logpr */
     /* IMPORTANT NOTE:
        In the normal runs, DEBUG_LOGPROB is not defined, and *only* the gene
@@ -4747,6 +4929,8 @@ static long propose_ages(locus_t * locus,
     else
       logpr = stree->notheta_logpr;
 
+    k = 0;  /* used for the no theta option */
+
     if (oldpop == node->pop)
     {
       /*TODO: BUG: separate to network and non-network case */
@@ -4757,9 +4941,15 @@ static long propose_ages(locus_t * locus,
         else
         {
           if (opt_est_theta)
+          {
             logpr -= node->pop->logpr_contrib[msa_index];
+          }
           else
-            logpr -= node->pop->notheta_logpr_contrib;
+          {
+            snode_t * master = node->pop->linked_theta ?
+                                 node->pop->linked_theta : node->pop;
+            logpr -= master->notheta_logpr_contrib;
+          }
 
           if (opt_migration)
             logpr += gtree_update_logprob_contrib_mig(node->pop,
@@ -4769,13 +4959,25 @@ static long propose_ages(locus_t * locus,
                                                       msa_index,
                                                       thread_index);
           else
-            logpr += gtree_update_logprob_contrib(node->pop,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+          {
+            if (opt_est_theta)
+            {
+              logpr += gtree_update_logprob_contrib(node->pop,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
+            else
+            {
+              gtree_update_C2j(node->pop,locus->heredity[0],msa_index,thread_index);
+              snode_t * master = node->pop->linked_theta ?
+                                   node->pop->linked_theta : node->pop;
+              logpr += update_logpg_contrib(stree,master);
+            }
+          }
         }
       }
-      else
+      else   /* MSCI */
       {
         /* have a separate loop for hybrid mirror nodes to correct the problem
            of detecting populations that need MSC recomputation for
@@ -4796,17 +4998,60 @@ static long propose_ages(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
             else
-              logpr -= x->notheta_logpr_contrib;
+            {
+              if (!x->linked_theta)
+              {
+                /* subtract both hphi and theta contribution */
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else /* linked *AND* hybrid */
+              {
+                /* subtract phi contribution from node */
+                #if 0
+                /* TF: 2024-10-09 */
+                logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-09 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(x != master);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
+
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx[thread_index] = -1;
+              x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
@@ -4821,18 +5066,98 @@ static long propose_ages(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
-            else
-              logpr -= x->notheta_logpr_contrib;
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
+            else if (!x->mark[thread_index])
+            {
+              /* !opt_est_theta and not marked */
+              if (!x->linked_theta)
+              {
+                /* subtract both hphi and theta contribution */
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else
+              {
+                #if 0
+                /* TF: 2024-10-09 */
+                if (x->hybrid)
+                  logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-09 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(master != x);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
           }
         }
-      }
-    }
+
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+               c) stree->td[j] is a hybrid node
+            */
+            #if 0
+            /* TF: 2024/10/01 */
+            if (!stree->td[j]->linked_theta || stree->td[j]->hybrid)
+            #else
+            if (!stree->td[j]->linked_theta)
+            #endif
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+
+          }
+        }
+      } /* end of opt_msci */
+    } /* end of oldpop == node->pop */
     else
     {
       snode_t * start;
@@ -4870,17 +5195,57 @@ static long propose_ages(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
             else
-              logpr -= x->notheta_logpr_contrib;
+            {
+              if (!x->linked_theta)
+                logpr -= x->notheta_logpr_contrib;
+              else      /* linked *AND* hybrid */
+              {
+                /* subtract phi contribution from node */
+                #if 0
+                /* TF: 2024-10-09 */
+                logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-09 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(x != master);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
+
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx[thread_index] = -1;
+              x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
@@ -4894,17 +5259,94 @@ static long propose_ages(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
-            else
-              logpr -= x->notheta_logpr_contrib;
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
+            else if (!x->mark[thread_index])
+            {
+              /* !opt_est_theta and not marked */
+              if (!x->linked_theta)
+              {
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else
+              {
+                #if 0
+                /* TF: 2024-10-09 */
+                if (x->hybrid)
+                  logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-09 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(master != x);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
           }
         }
-      }
+
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+               c) stree->td[j] is a hybrid node
+            */
+            #if 0
+            /* TF: 2024/10/03 */
+            if (!stree->td[j]->linked_theta || stree->td[j]->hybrid)
+            #else
+            if (!stree->td[j]->linked_theta)
+            #endif
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+          }
+        }
+      } /* end of MSCI */
       else
       {
         if (opt_migration && !opt_est_theta)
@@ -4913,25 +5355,72 @@ static long propose_ages(locus_t * locus,
         for (pop = start; pop != end; pop = pop->parent)
         {
           if (opt_est_theta)
+          {
             logpr -= pop->logpr_contrib[msa_index];
+            if (opt_migration)
+              logpr += gtree_update_logprob_contrib_mig(pop,
+                                                        stree,
+                                                        gtree,
+                                                        locus->heredity[0],
+                                                        msa_index,
+                                                        thread_index);
+            else
+              logpr += gtree_update_logprob_contrib(pop,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+          }
           else
-            logpr -= pop->notheta_logpr_contrib;
+          {
+            /* !opt_est_theta */
+            if (!pop->linked_theta)
+              logpr -= pop->notheta_logpr_contrib;
 
-          if (opt_migration)
-            logpr += gtree_update_logprob_contrib_mig(pop,
-                                                      stree,
-                                                      gtree,
-                                                      locus->heredity[0],
-                                                      msa_index,
-                                                      thread_index);
-          else
-            logpr += gtree_update_logprob_contrib(pop,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+            pop->mark[thread_index] = 1;
+            gtree_update_C2j(pop,locus->heredity[0],msa_index,thread_index);
+            stree->td[k++] = pop;
+          }
+        }
+
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+            */
+            if (!stree->td[j]->linked_theta)
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+
+          }
         }
       }
     }
+
+    if (!opt_est_theta)
+    {
+      td_count = k;
+      for (j=0; j < stree_total_nodes; ++j)
+        stree->nodes[j]->mark[thread_index] = 0;
+    }
+
     #else
       assert(!opt_msci);
       assert(!opt_migration);
@@ -4992,7 +5481,18 @@ static long propose_ages(locus_t * locus,
       lnacceptance += logpr - stree->notheta_logpr + logl - gtree->logl;
 
     if (opt_debug_gage)
-      printf("[Debug] (gtage) lnacceptance = %f\n", lnacceptance);
+    {
+      long dbg = 0;
+      for (dbg = 0; dbg < stree->tip_count+stree->inner_count+stree->hybrid_count; ++dbg)
+      {
+        printf("%ld: -> %f %f\n", dbg, stree->nodes[dbg]->notheta_logpr_contrib, stree->nodes[dbg]->hphi_sum);
+      }
+      snode_t * hbd = stree->nodes[stree->tip_count+stree->inner_count];
+      printf("[Debug %ld] (gtage) lnacc: %f tauR: %f tauX: %f tnew: %f told: %f logpr: %f oldlogpr: %f flag: %d phi: %f\n", opt_debug_counter, lnacceptance, stree->root->tau, stree->nodes[0]->parent->tau,tnew, oldage, logpr, stree->notheta_logpr, gtree->nodes[1]->hpath[0], stree->nodes[5]->hphi);
+      //printf("[Debug] (gtage) lnacceptance = %f\n", lnacceptance);
+      debug_print_gtree(gtree);
+
+    }
 
     if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     {
@@ -5077,8 +5577,15 @@ static long propose_ages(locus_t * locus,
                   x->C2ji[msa_index] = x->old_C2ji[msa_index];
               }
               else
-                logprob_revert_notheta(x,msa_index);
+              {
+                logprob_revert_C2j(x,msa_index);
+              }
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
         else
@@ -5090,7 +5597,12 @@ static long propose_ages(locus_t * locus,
               node->pop->C2ji[msa_index] = node->pop->old_C2ji[msa_index];
           }
           else
-            logprob_revert_notheta(node->pop,msa_index);
+          {
+            logprob_revert_C2j(node->pop,msa_index);
+            snode_t * master = node->pop->linked_theta ?
+                                 node->pop->linked_theta : node->pop;
+            logprob_revert_contribs(master);
+          }
 
           if (opt_migration)
           {
@@ -5195,8 +5707,13 @@ static long propose_ages(locus_t * locus,
                   x->C2ji[msa_index] = x->old_C2ji[msa_index];
               }
               else
-                logprob_revert_notheta(x,msa_index);
+                logprob_revert_C2j(x,msa_index);
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
         else
@@ -5210,7 +5727,7 @@ static long propose_ages(locus_t * locus,
                 pop->C2ji[msa_index] = pop->old_C2ji[msa_index];
             }
             else
-              logprob_revert_notheta(pop,msa_index);
+              logprob_revert_C2j(pop,msa_index);
 
             if (opt_migration)
             {
@@ -5226,6 +5743,11 @@ static long propose_ages(locus_t * locus,
                 }
               }
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
       }
@@ -5342,8 +5864,12 @@ static long propose_migevent_ages(locus_t * locus,
         }
         else
         {
+          assert(0);
+
+          #if 0
           logprob_revert_notheta(mi->me[j].source,msa_index);
           logprob_revert_notheta(mi->me[j].target,msa_index);
+          #endif
         }
 
         /* restore wsji for source */
@@ -6012,6 +6538,7 @@ static long propose_spr(locus_t * locus,
   unsigned int source_count, target_count;
   unsigned int stree_total_nodes;
   long accepted = 0;
+  long td_count = 0;
   gnode_t * curnode;
   gnode_t * sibling;
   gnode_t * father;
@@ -6459,6 +6986,7 @@ static long propose_spr(locus_t * locus,
     else
       logpr = stree->notheta_logpr;
 
+    k = 0;
     if (oldpop == father->pop)
     {
       if (opt_msci)
@@ -6482,17 +7010,61 @@ static long propose_spr(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
             else
-              logpr -= x->notheta_logpr_contrib;
+            {
+              if (!x->linked_theta)
+              {
+                /* subtract both hphi and theta contribution */
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else  /* linked *AND* hybrid */
+              {
+                /* subtract phi contribution from node */
+                #if 0
+                /* TF: 2024-10-10 */
+                logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-10 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(x != master);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
+
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
-                x->parent->hx[thread_index] = -1;
+              x->parent->hx[thread_index] = -1;
           }
         }
         for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
@@ -6506,17 +7078,96 @@ static long propose_spr(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
-            else
-              logpr -= x->notheta_logpr_contrib;
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
+            else if (!x->mark[thread_index])
+            {
+              /* !opt_est_theta and not marked */
+              if (!x->linked_theta)
+              {
+                /* subtract both hphi and theta contribution */
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else 
+              {
+                #if 0
+                /* TF: 2024-10-10 */
+                if (x->hybrid)
+                  logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-10 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(master != x);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
           }
         }
-      }
+
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+               c) stree->td[j] is a hybrid node
+            */
+            #if 0
+            /* TF: 2024/10/03 */
+            if (!stree->td[j]->linked_theta || stree->td[j]->hybrid)
+            #else
+            if (!stree->td[j]->linked_theta)
+            #endif
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+          }
+        }
+      } /* end of opt_msci */
       else
       {
         if (opt_migration && !opt_est_theta)
@@ -6525,7 +7176,11 @@ static long propose_spr(locus_t * locus,
         if (opt_est_theta)
           logpr -= father->pop->logpr_contrib[msa_index];
         else
-          logpr -= father->pop->notheta_logpr_contrib;
+        {
+          snode_t * master = father->pop->linked_theta ?
+                               father->pop->linked_theta : father->pop;
+          logpr -= master->notheta_logpr_contrib;
+        }
 
         if (opt_migration)
           logpr += gtree_update_logprob_contrib_mig(father->pop,
@@ -6535,12 +7190,31 @@ static long propose_spr(locus_t * locus,
                                                     msa_index,
                                                     thread_index);
         else
+        {
+          #if 0
           logpr += gtree_update_logprob_contrib(father->pop,
                                                 locus->heredity[0],
                                                 msa_index,
                                                 thread_index);
+          #else
+          if (opt_est_theta)
+          {
+            logpr += gtree_update_logprob_contrib(father->pop,
+                                                  locus->heredity[0],
+                                                  msa_index,
+                                                  thread_index);
+          }
+          else
+          {
+            gtree_update_C2j(father->pop,locus->heredity[0],msa_index,thread_index);
+            snode_t * master = father->pop->linked_theta ?
+                                 father->pop->linked_theta : father->pop;
+            logpr += update_logpg_contrib(stree,master);
+          }
+          #endif
+        }
       }
-    }
+    }  /* end of oldpop == father->pop */
     else
     {
       snode_t * start;
@@ -6580,14 +7254,55 @@ static long propose_spr(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
             else
-              logpr -= x->notheta_logpr_contrib;
+            {
+              if (!x->linked_theta)
+                logpr -= x->notheta_logpr_contrib;
+              else      /* linked *AND* hybrid */
+              {
+                /* subtract phi contribution from node */
+                #if 0
+                /* TF: 2024-10-10 */
+                logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-10 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(x != master);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
+
             /* correct for bidirectional introgression non-mirror nodes */
             if (node_is_bidirection(x))
                 x->parent->hx[thread_index] = -1;
@@ -6604,17 +7319,95 @@ static long propose_spr(locus_t * locus,
           {
             x->hx[thread_index] = 1;  /* MSC density has changed */
             if (opt_est_theta)
+            {
               logpr -= x->logpr_contrib[msa_index];
-            else
-              logpr -= x->notheta_logpr_contrib;
+              logpr += gtree_update_logprob_contrib(x,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
+            }
+            else if (!x->mark[thread_index])
+            {
+              /* !opt_est_theta and not marked */
+              if (!x->linked_theta)
+              {
+                logpr -= x->notheta_logpr_contrib;
+              }
+              else
+              {
+                #if 0
+                /* TF: 2024-10-10 */
+                if (x->hybrid)
+                  logpr -= x->hphi_sum;
+                #endif
 
-            logpr += gtree_update_logprob_contrib(x,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+                snode_t * master = x->linked_theta;
+
+                /* subtract only the theta contribution from primary node */
+                /* master->hphi_sum should be 0 as master cannot be hybrid */
+                if (!master->mark[thread_index])
+                {
+                  #if 0
+                  /* TF: 2024-10-10 */
+                  logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+                  #else
+                  logpr -= master->notheta_logpr_contrib;
+                  #endif
+                  assert(master != x);
+                  if (master != x)
+                  {
+                    /* mark primary node, add it to list and update its C2j */
+                    master->mark[thread_index] = 1;
+                    gtree_update_C2j(master,locus->heredity[0],msa_index,thread_index);
+                    stree->td[k++] = master;
+
+                    /* additional check: a primary node cannot be hybrid */
+                    assert(!master->hybrid);
+                  }
+                }
+              }
+              x->mark[thread_index] = 1;
+              gtree_update_C2j(x,locus->heredity[0],msa_index,thread_index);
+              stree->td[k++] = x;
+            }
           }
         }
-      }
+
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+               c) stree->td[j] is a hybrid node
+            */
+            #if 0
+            /* TF: 2024/10/03 */
+            if (!stree->td[j]->linked_theta || stree->td[j]->hybrid)
+            #else
+            if (!stree->td[j]->linked_theta)
+            #endif
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+          }
+        }
+      } /* end of msci */
       else
       {
         if (opt_migration && !opt_est_theta)
@@ -6623,24 +7416,69 @@ static long propose_spr(locus_t * locus,
         for (pop = start; pop != end; pop = pop->parent)
         {
           if (opt_est_theta)
+          {
             logpr -= pop->logpr_contrib[msa_index];
-          else
-            logpr -= pop->notheta_logpr_contrib;
+            if (opt_migration)
+              logpr += gtree_update_logprob_contrib_mig(pop,
+                                                        stree,
+                                                        gtree,
+                                                        locus->heredity[0],
+                                                        msa_index,
+                                                        thread_index);
+            else
+              logpr += gtree_update_logprob_contrib(pop,
+                                                    locus->heredity[0],
+                                                    msa_index,
+                                                    thread_index);
 
-          if (opt_migration)
-            logpr += gtree_update_logprob_contrib_mig(pop,
-                                                      stree,
-                                                      gtree,
-                                                      locus->heredity[0],
-                                                      msa_index,
-                                                      thread_index);
+          }
           else
-            logpr += gtree_update_logprob_contrib(pop,
-                                                  locus->heredity[0],
-                                                  msa_index,
-                                                  thread_index);
+          {
+            /* !opt_est_theta */
+            if (!pop->linked_theta)
+              logpr -= pop->notheta_logpr_contrib;
+
+            pop->mark[thread_index] = 1;
+            gtree_update_C2j(pop,locus->heredity[0],msa_index,thread_index);
+            stree->td[k++] = pop;
+          }
         }
-      }
+        /* now do the second step when integrating out thetas */
+        if (!opt_est_theta)
+        {
+          /* add primary nodes in case of linked thetas */
+          if (opt_linkedtheta)
+          {
+            n = k;
+            for (j = 0; j < n; ++j)
+            {
+              if (stree->td[j]->linked_theta &&
+                  !stree->td[j]->linked_theta->mark[thread_index])
+              {
+                stree->td[j]->linked_theta->mark[thread_index] = 1;
+                stree->td[k++] = stree->td[j]->linked_theta;
+              }
+            }
+          }
+
+          for (j = 0; j < k; ++j)
+          {
+            /* only add the contribution if either holds:
+               a) no linked theta model
+               b) linked theta, but stree->td[j] is the primary node
+            */
+            if (!stree->td[j]->linked_theta)
+              logpr += update_logpg_contrib(stree,stree->td[j]);
+          }
+        }
+      } /* end of msc / mscm */
+    }
+
+    if (!opt_est_theta)
+    {
+      td_count = k;
+      for (j=0; j < stree_total_nodes; ++j)
+        stree->nodes[j]->mark[thread_index] = 0;
     }
 
     k = 0;
@@ -6878,8 +7716,19 @@ static long propose_spr(locus_t * locus,
                   x->C2ji[msa_index] = x->old_C2ji[msa_index];
               }
               else
+              {
+                #if 0
                 logprob_revert_notheta(x,msa_index);
+                #else
+                logprob_revert_C2j(x,msa_index);
+                #endif
+              }
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
         else
@@ -6893,11 +7742,18 @@ static long propose_spr(locus_t * locus,
           }
           else
           {
+            #if 0
             /* TODO: The below code is the same as calling logprob_revert_notheta(father->pop,msa_index) */
-            father->pop->t2h_sum -= father->pop->t2h[msa_index];
-            father->pop->t2h[msa_index] = father->pop->old_t2h[msa_index];
-            father->pop->t2h_sum += father->pop->t2h[msa_index];
+            father->pop->t2h_sum -= father->pop->C2ji[msa_index];
+            father->pop->C2ji[msa_index] = father->pop->old_C2ji[msa_index];
+            father->pop->t2h_sum += father->pop->C2ji[msa_index];
             father->pop->notheta_logpr_contrib= father->pop->notheta_old_logpr_contrib;
+            #else
+            logprob_revert_C2j(father->pop,msa_index);
+            snode_t * master = father->pop->linked_theta ?
+                                 father->pop->linked_theta : father->pop;
+            logprob_revert_contribs(master);
+            #endif
           }
           if (opt_migration)
           {
@@ -6996,8 +7852,13 @@ static long propose_spr(locus_t * locus,
                   x->C2ji[msa_index] = x->old_C2ji[msa_index];
               }
               else
-                logprob_revert_notheta(x,msa_index);
+                logprob_revert_C2j(x,msa_index);
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
         else
@@ -7011,7 +7872,7 @@ static long propose_spr(locus_t * locus,
                 pop->C2ji[msa_index] = pop->old_C2ji[msa_index];
             }
             else
-              logprob_revert_notheta(pop,msa_index);
+              logprob_revert_C2j(pop,msa_index);
 
             if (opt_migration)
             {
@@ -7027,6 +7888,11 @@ static long propose_spr(locus_t * locus,
                 }
               }
             }
+          }
+          if (!opt_est_theta)
+          {
+            for (j = 0; j < td_count; ++j)
+              logprob_revert_contribs(stree->td[j]);
           }
         }
       }
@@ -7379,8 +8245,14 @@ static long prop_heredity(gtree_t ** gtree,
 
       for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
       {
+        #if 0
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
         logpr += gtree_update_logprob_contrib(stree->nodes[j],locus[i]->heredity[0],i,thread_index);
+        #else
+        snode_t * x = stree->nodes[j];
+        if (!x->linked_theta)
+          logpr -= x->notheta_logpr_contrib;
+        #endif
       }
     }
 
@@ -7430,7 +8302,14 @@ static long prop_heredity(gtree_t ** gtree,
         if (opt_est_theta)
           stree->nodes[j]->logpr_contrib[i] = stree->nodes[j]->old_logpr_contrib[i];
         else
+        {
+          #if 0
           logprob_revert_notheta(stree->nodes[j],i);
+          #else
+          logprob_revert_C2j(stree->nodes[j],i);
+          logprob_revert_contribs(stree->nodes[j]);
+          #endif
+        }
       }
     }
   }
@@ -8204,7 +9083,8 @@ static long propose_spr_sim(locus_t * locus,
                             long thread_index)
 {
   
-  long i,j,k;
+  long i,j,k,n;
+  long td_count = 0;
   long accepted = 0;
   long old_mi_count = 0;
   double tnew,told;
@@ -8223,6 +9103,8 @@ static long propose_spr_sim(locus_t * locus,
   snode_t * pop;
   snode_t * start;
   snode_t * end;
+  
+  long stree_total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   gnode_t ** travbuffer = gtree->travbuffer;
 
@@ -8382,7 +9264,11 @@ static long propose_spr_sim(locus_t * locus,
         if (opt_est_theta)
           logpr -= pop->logpr_contrib[msa_index];
         else
+        {
+          /* not implemented */
+          assert(0);
           logpr -= pop->notheta_logpr_contrib;
+        }
 
         logpr += gtree_update_logprob_contrib_mig(pop,
                                                   stree,
@@ -8397,15 +9283,75 @@ static long propose_spr_sim(locus_t * locus,
       for (pop = start; pop != end; pop = pop->parent)
       {
         if (opt_est_theta)
+        {
           logpr -= pop->logpr_contrib[msa_index];
+        }
         else
-          logpr -= pop->notheta_logpr_contrib;
+        {
+          if (!pop->linked_theta)
+            logpr -= pop->notheta_logpr_contrib;
+          else
+          {
+            if (pop->hybrid)
+              logpr -= pop->hphi_sum;
 
-        logpr += gtree_update_logprob_contrib(pop,
-                                              locus->heredity[0],
-                                              msa_index,
-                                              thread_index);
+            snode_t * master = pop->linked_theta ?
+                                 pop->linked_theta : pop;
+
+            /* subtract only the theta contribution from primary node */
+            logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+          }
+        }
+
+        if (opt_est_theta)
+        {
+          logpr += gtree_update_logprob_contrib(pop,
+                                                locus->heredity[0],
+                                                msa_index,
+                                                thread_index);
+        }
+        else
+        {
+          pop->mark[thread_index] = 1;
+          gtree_update_C2j(pop,locus->heredity[0],msa_index,thread_index);
+          stree->td[k++] = pop;
+        }
       }
+      /* now do the second step when integrating out thetas */
+      if (!opt_est_theta)
+      {
+        /* add primary nodes in case of linked thetas */
+        if (opt_linkedtheta)
+        {
+          n = k;
+          for (j = 0; j < n; ++j)
+          {
+            if (stree->td[j]->linked_theta &&
+                !stree->td[j]->linked_theta->mark[thread_index])
+            {
+              stree->td[j]->linked_theta->mark[thread_index] = 1;
+              stree->td[k++] = stree->td[j]->linked_theta;
+            }
+          }
+        }
+
+        for (j = 0; j < k; ++j)
+        {
+          /* only add the contribution if either holds:
+             a) no linked theta model
+             b) linked theta, but stree->td[j] is the primary node
+          */
+          if (!stree->td[j]->linked_theta)
+            logpr += update_logpg_contrib(stree,stree->td[j]);
+
+        }
+      }
+    }
+    if (!opt_est_theta)
+    {
+      td_count = k;
+      for (j=0; j < stree_total_nodes; ++j)
+        stree->nodes[j]->mark[thread_index] = 0;
     }
 
     lnacceptance = logl - gtree->logl;
@@ -8476,7 +9422,10 @@ static long propose_spr_sim(locus_t * locus,
           if (opt_est_theta)
             pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
           else
-            logprob_revert_notheta(pop,msa_index);
+          {
+            assert(0);
+            /* logprob_revert_notheta(pop,msa_index); */
+          }
 
           logpr += gtree_update_logprob_contrib_mig(pop,
                                                     stree,
@@ -8496,12 +9445,18 @@ static long propose_spr_sim(locus_t * locus,
           if (opt_est_theta)
             pop->logpr_contrib[msa_index] = pop->old_logpr_contrib[msa_index];
           else
-            logprob_revert_notheta(pop,msa_index);
+          {
+            logprob_revert_C2j(pop,msa_index);
+          }
+        }
+        if (!opt_est_theta)
+        {
+          for (j = 0; j < td_count; ++j)
+            logprob_revert_contribs(stree->td[j]);
         }
       }
     }
   }
-  
   return accepted;
 }
 

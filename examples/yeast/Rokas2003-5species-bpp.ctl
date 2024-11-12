@@ -2,8 +2,7 @@
 
        seqfile = Rokas2003-5species.phy
       Imapfile = Rokas2003-5species-Imap.txt
-       outfile = out.txt
-      mcmcfile = mcmc.txt
+       jobname = out
 
 *   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * speciesdelimitation algorithm0 and finetune(e)

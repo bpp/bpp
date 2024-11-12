@@ -1,9 +1,8 @@
-seed =  -1
+    seed =  -1
 
-seqfile = frogs.txt
+seqfile  = frogs.txt
 Imapfile = frogs.Imap.txt
-outfile = out.txt
-mcmcfile = mcmc.txt
+jobname  = out
 
 # fixed number of species/populations 
 speciesdelimitation = 0

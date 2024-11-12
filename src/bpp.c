@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -110,6 +110,7 @@ long opt_mrate_move;
 long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
+long opt_print_a1b1;
 long opt_print_genetrees;
 long opt_print_locus;
 long opt_print_hscalars;
@@ -177,6 +178,7 @@ double opt_prob_snl;
 double opt_prob_snl_shrink;
 double opt_phi_alpha;
 double opt_phi_beta;
+double opt_phi_slide_prob;
 double opt_pseudo_alpha;
 double opt_pseudo_beta;
 double opt_rjmcmc_alpha;
@@ -198,25 +200,26 @@ double opt_vbar_alpha;
 double opt_vbar_beta;
 double opt_vi_alpha;
 long * opt_diploid;
-long * opt_sp_seqcount;
 long * opt_print_locus_num;
+long * opt_sp_seqcount;
+char * opt_a1b1file;
 char * opt_bfdriver;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constraintfile;
+char * opt_datefile;
 char * opt_heredity_filename;
+char * opt_jobname;
 char * opt_locusrate_filename;
 char * opt_mapfile;
-char * opt_datefile;
-char * opt_seqDates;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_msafile;
 char * opt_mscifile;
-char * opt_outfile;
 char * opt_partition_file;
 char * opt_reorder;
 char * opt_resume;
+char * opt_seqDates;
 char * opt_simulate;
 char * opt_streenewick;
 char * opt_treefile;
@@ -251,7 +254,8 @@ double g_pj_gspr;
 double g_pj_tau;
 double g_pj_mix;
 double g_pj_lrht;
-double g_pj_phi;
+double g_pj_phi_gibbs;
+double g_pj_phi_slide;
 double g_pj_freqs;
 double g_pj_qmat;
 double g_pj_alpha;
@@ -322,6 +326,7 @@ static struct option long_options[] =
   {"no-mix-theta-update",  no_argument,       0, 0 },  /* 48 */
   {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
   {"extend",               required_argument, 0, 0 },  /* 50 */
+  {"phi-slide-prob",       required_argument, 0, 0 },  /* 51 */
   { 0, 0, 0, 0 }
 };
 
@@ -437,6 +442,7 @@ void args_init(int argc, char ** argv)
   opt_vbar_beta = -1;
   opt_vi_alpha = -1;
   opt_burnin = 100;
+  opt_a1b1file = NULL; /* assigned at load_cfile() */
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
   opt_clock_vbar = 0;
@@ -554,12 +560,14 @@ void args_init(int argc, char ** argv)
   opt_msci = 0;
   opt_mscifile = NULL;
   opt_onlysummary = 0;
-  opt_outfile = NULL;
+  opt_jobname = NULL;
   opt_partition_count = 0;
   opt_partition_file = NULL;
   opt_partition_list = NULL;
   opt_phi_alpha = 0;
   opt_phi_beta = 0;
+  opt_phi_slide_prob = 0.2;
+  opt_print_a1b1 = 1;  /* the default is to print into conditional_a1b1.txt */
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
   opt_print_locusfile = 0;
@@ -625,7 +633,8 @@ void args_init(int argc, char ** argv)
   g_pj_tau = 0;
   g_pj_mix = 0;
   g_pj_lrht = 0;
-  g_pj_phi = 0;
+  g_pj_phi_gibbs = 0;
+  g_pj_phi_slide = 0;
   g_pj_freqs = 0;
   g_pj_qmat = 0;
   g_pj_alpha = 0;
@@ -900,6 +909,10 @@ void args_init(int argc, char ** argv)
         opt_extend = atol(optarg);
         break;
 
+      case 51:
+        opt_phi_slide_prob = atof(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -980,12 +993,13 @@ static void dealloc_switches()
   if (opt_mcmcfile) free(opt_mcmcfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);
-  if (opt_outfile) free(opt_outfile);
+  if (opt_jobname) free(opt_jobname);
   if (opt_reorder) free(opt_reorder);
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
   if (opt_bfdriver) free(opt_bfdriver);
   if (opt_print_locus_num) free(opt_print_locus_num);
+  if (opt_a1b1file) free(opt_a1b1file);
 
   /* mccoal switches */
   if (opt_basefreqs_params) free(opt_basefreqs_params);
@@ -1021,6 +1035,8 @@ void cmd_help()
           "  --theta-prop STRING      proposal distribution for theta gibbs move\n"
           "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
           "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.2)\n"
+          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.2)\n"
+          "  --mrate-move STRING      'gibbs' or 'slide' sampling of migration rate W\n"
           "\n"
          );
 

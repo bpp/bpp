@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+# Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -48,10 +48,15 @@ OBJ_BPP = \
 	bfdriver.obj \
 	bpp.obj \
 	cfile.obj \
+	cfile_sim.obj \
 	compress.obj \
+	constraint.obj \
+	debug.obj \
 	delimit.obj \
+	diploid.obj \
 	dlist.obj \
 	dump.obj \
+	gamma.obj \
 	gtree.obj \
 	hash.obj \
 	list.obj \
@@ -59,33 +64,31 @@ OBJ_BPP = \
 	mapping.obj \
 	maps.obj \
 	method.obj \
+	miginfo.obj \
+	ming2.obj \
 	msa.obj \
-	output.obj \
+	msci_gen.obj \
 	load.obj \
+	lswitch.obj \
+	output.obj \
+	parsemap.obj \
+	pdfgen.obj \
 	phylip.obj \
+	prop_gamma.obj \
 	prop_mixing.obj \
 	prop_rj.obj \
 	random.obj \
+	revolutionary.obj \
 	rtree.obj \
 	stree.obj \
 	summary.obj \
-	util.obj \
-	revolutionary.obj \
-	diploid.obj \
 	summary11.obj \
 	simulate.obj \
-	cfile_sim.obj \
-	gamma.obj \
-	prop_gamma.obj \
 	threads.obj \
 	treeparse.obj \
-	parsemap.obj \
-	msci_gen.obj \
-	constraint.obj \
-	debug.obj \
-	lswitch.obj \
-	miginfo.obj \
-	ming2.obj
+	util.obj \
+	visual.obj \
+	a1b1.obj \
 
 all: $(PROG)
 

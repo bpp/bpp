@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -56,8 +56,10 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                long locus_count,
                                double c,
                                long thread_index,
-                               double * ret_lnacceptance,
+                               double * ret_lnacceptance)
+#if 0
                                double * ret_logpr)
+#endif
 {
   long i;
   unsigned int j,k;
@@ -139,13 +141,36 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                   thread_index);
       }
       else
+      {
+        #if 0
         logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
+        #else
+        logpr = 0;
+        for (j = 0; j < nodes_count; ++j)
+        {
+          snode_t * x = stree->nodes[j];
+          x->old_C2ji[i] = x->C2ji[i];
+          x->C2ji[i] *= c;
+          x->old_logpr_contrib[i] = x->logpr_contrib[i];
+          if (x->old_C2ji[i] > 0 && x->old_theta > 0)
+            x->logpr_contrib[i] += (x->old_C2ji[i]/x->old_theta - x->C2ji[i]/x->theta) /
+                                   locus[i]->heredity[0];
+          if (x->coal_count[i])
+          {
+            x->logpr_contrib[i] += x->coal_count[i]*log(x->old_theta*locus[i]->heredity[0]);
+            x->logpr_contrib[i] -= x->coal_count[i]*log(x->theta*locus[i]->heredity[0]);
+          }
+          logpr += x->logpr_contrib[i];
+        }
+        #endif
+      }
     }
     else
     {
       if (opt_migration)
         fatal("Integrating out thetas for IM model not implemented yet");
 
+      #if 0
       for (j = 0; j < nodes_count; ++j)
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
@@ -154,6 +179,20 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                               i,
                                               thread_index);
       }
+      #else
+      #if 0
+      for (j = 0; j < nodes_count; ++j)
+        gtree_update_C2j(stree->nodes[j],locus[i]->heredity[0],i,thread_index);
+      #else
+      for (j = 0; j < nodes_count; ++j)
+      {
+        snode_t * x = stree->nodes[j];
+        x->old_C2ji[i] = x->C2ji[i]; 
+        x->C2ji[i] *= c;
+      }
+      
+      #endif
+      #endif
     }
 
     if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
@@ -188,8 +227,28 @@ void prop_mixing_update_gtrees(locus_t ** locus,
   }
   /* return values */
   *ret_lnacceptance = lnacceptance;
+
+  #if 0
   if (!opt_est_theta)
+  {
+    for 
+    assert(logpr == 0);
+    for (j = 0; j < nodes_count; ++j)
+    {
+      #if 0
+      /* TF: 2024/10/03 */
+      if (!stree->nodes[j]->linked_theta || stree->nodes[j]->hybrid)
+      #else
+      if (!stree->nodes[j]->linked_theta)
+      #endif
+      {
+        logpr -= stree->nodes[j]->notheta_logpr_contrib;
+        logpr += update_logpg_contrib(stree,stree->nodes[j]);
+      }
+    }
     *ret_logpr = logpr;
+  }
+  #endif
 }
 
 static double logPDFGamma(double x, double a, double b)
@@ -245,18 +304,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
   const long thread_index = 0;
 
-  double * notheta_old_logpr = NULL;
-
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
 
-
-  if (!opt_est_theta)
-  {
-    notheta_old_logpr = (double *)xmalloc(nodes_count * sizeof(double));
-    for (i = 0; i < nodes_count; ++i)
-      notheta_old_logpr[i] = stree->nodes[i]->notheta_logpr_contrib;
-  }
-  
   /* TODO: Account for method 11 / rj-MCMC */
   if (opt_est_theta && theta_method)
   {
@@ -539,11 +588,17 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
   /* update gene trees with either parallel or serial code. Note, for thetas
      integrated out we use the serial version */
+  #if 0
   if (opt_est_theta && opt_threads > 1)
+  #else
+  if (opt_threads > 1)
+  #endif
   {
     /* TODO: It seems logpr_change is not used with multiple threads and 
        integrated out thetas. This must be fixed. */
+    #if 0
     assert(opt_est_theta);
+    #endif
 
     thread_data_t td;
     td.locus = locus; td.gtree = gtree; td.stree = stree;
@@ -554,7 +609,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   else
   {
     double lnacc_contrib = 0;
-    double logpr_change = 0;
+    //double logpr_change = 0;
     prop_mixing_update_gtrees(locus,
                               gtree,
                               stree,
@@ -562,12 +617,39 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
                               stree->locus_count,
                               c,
                               0,
-                              &lnacc_contrib,
+                              &lnacc_contrib);
+                              #if 0
                               &logpr_change);
+                              #endif
     lnacceptance += lnacc_contrib;
+    #if 0
     if (!opt_est_theta)
       logpr += logpr_change;
+    #endif
                               
+  }
+  if (!opt_est_theta)
+  {
+    for (j = 0; j < nodes_count; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+      x->t2h_sum = 0;
+      for (i = 0; i < opt_locus_count; ++i)
+        x->t2h_sum += stree->nodes[j]->C2ji[i];
+    }
+    for (j = 0; j < nodes_count; ++j)
+    {
+      #if 0
+      /* TF: 2024/10/03 */
+      if (!stree->nodes[j]->linked_theta || stree->nodes[j]->hybrid)
+      #else
+      if (!stree->nodes[j]->linked_theta)
+      #endif
+      {
+        logpr -= stree->nodes[j]->notheta_logpr_contrib;
+        logpr += update_logpg_contrib(stree,stree->nodes[j]);
+      }
+    }
   }
 
   #if 0
@@ -632,9 +714,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     {
       for (i = 0; i < nodes_count; ++i)
       {
+        #if 0
         for (j = 0; j < opt_locus_count; ++j)
-          logprob_revert_notheta(stree->nodes[i],j);
-        stree->nodes[i]->notheta_logpr_contrib = notheta_old_logpr[i];
+          logprob_revert_C2j(stree->nodes[i],j);
+        #else
+        stree->nodes[i]->t2h_sum = 0;
+        for (j = 0; j < opt_locus_count; ++j)
+        {
+          stree->nodes[i]->C2ji[j] = stree->nodes[i]->old_C2ji[j];
+          stree->nodes[i]->t2h_sum += stree->nodes[i]->C2ji[j];
+        }
+        #endif
+        logprob_revert_contribs(stree->nodes[i]);
       }
     }
 
@@ -754,9 +845,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     }
   }
   free(snodes);
-
-  if (!opt_est_theta)
-    free(notheta_old_logpr);
 
   return accepted;
 

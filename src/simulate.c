@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -2665,12 +2665,12 @@ void cmd_simulate()
     snode->logpr_contrib = (double*)xcalloc(opt_locus_count, sizeof(double));
     snode->old_logpr_contrib = (double *)xcalloc(opt_locus_count, sizeof(double));
 
-    snode->t2h = NULL;
-    snode->old_t2h = NULL;
+    snode->C2ji = NULL;
+    snode->old_C2ji = NULL;
     if (!opt_est_theta)
     {
-      snode->t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
-      snode->old_t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
+      snode->C2ji = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
+      snode->old_C2ji = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
       snode->t2h_sum = 0;
       snode->coal_count_sum = 0;
     }

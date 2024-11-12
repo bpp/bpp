@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -35,6 +35,8 @@ void legacy_init()
 {
    int seed = (int)opt_seed;
    long i;
+   char * seedfile;
+   FILE * fseed;
 
    /* z_rndu = (unsigned int)opt_seed; */
    if (sizeof(int) != 4)
@@ -52,11 +54,16 @@ void legacy_init()
          seed = abs(1234 * (int)time(NULL) + 1);
       }
 
-      FILE *fseed;
-      fseed = fopen("SeedUsed", "w");
-      if (fseed == NULL) fatal("can't open file SeedUsed.");
-      fprintf(fseed, "%d\n", seed);
-      fclose(fseed);
+      if (opt_jobname)
+      {
+        xasprintf(&seedfile, "%s.SeedUsed", opt_jobname);
+        fseed = fopen(seedfile, "w");
+        if (fseed == NULL)
+          fatal("can't open file %s.SeedUsed.", opt_jobname);
+        fprintf(fseed, "%d\n", seed);
+        fclose(fseed);
+        free(seedfile);
+      }
    }
 
    assert(opt_threads >= 1);

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -1517,7 +1517,9 @@ extern long opt_msci_faketree_binarize;
 static char* msci_export_newick_recursive(const snode_t* root,
                                           char* (*cb_serialize)(const snode_t*))
 {
-  char* newick;
+  char * newick;
+  char * tmplabel;
+  size_t i;
   int size_alloced;
   assert(root != NULL);
 
@@ -1744,6 +1746,14 @@ static char* msci_export_newick_recursive(const snode_t* root,
       }
       else
       {
+        tmplabel = NULL;
+        if (root->label)
+        {
+          tmplabel = xstrdup(root->label);
+          for (i = 0; i < strlen(tmplabel); ++i)
+            if (tmplabel[i] == ',')
+              tmplabel[i] = '|';
+        }
         if (show_branches)
           size_alloced = xasprintf(&newick,
                                    "(%s,%s)%s:%f",
@@ -1757,6 +1767,8 @@ static char* msci_export_newick_recursive(const snode_t* root,
                                    subtree1,
                                    subtree2,
                                    root->label ? root->label : "");
+        if (tmplabel)
+          free(tmplabel);
       }
       free(subtree1);
       free(subtree2);
@@ -1772,8 +1784,11 @@ static char* msci_export_newick_recursive(const snode_t* root,
 char * msci_export_newick(const snode_t * root,
                           char * (*cb_serialize)(const snode_t *))
 {
+  size_t i;
   char * newick;
   int size_alloced;
+  char * tmplabel;
+
   if (!root) return NULL;
 
   if (!(root->left) || !(root->right))
@@ -1814,19 +1829,31 @@ char * msci_export_newick(const snode_t * root,
     }
     else
     {
+      tmplabel = NULL;
+      if (root->label)
+      {
+        tmplabel = xstrdup(root->label);
+        for (i = 0; i < strlen(tmplabel); ++i)
+          if (tmplabel[i] == ',')
+            tmplabel[i] = '|';
+      }
+
       if (show_branches)
         size_alloced = xasprintf(&newick,
                                  "(%s, %s)%s:%f;",
                                  subtree1,
                                  subtree2,
-                                 root->label ? root->label : "",
+                                 tmplabel ? tmplabel : "",
                                  root->length);
       else
         size_alloced = xasprintf(&newick,
                                  "(%s, %s)%s;",
                                  subtree1,
                                  subtree2,
-                                 root->label ? root->label : "");
+                                 tmplabel ? tmplabel : "");
+      
+      if (tmplabel)
+        free(tmplabel);
     }
     free(subtree1);
     free(subtree2);

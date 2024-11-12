@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -101,7 +101,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += strlen(opt_msafile)+1;              /* msa filename */
   if (opt_mapfile)
     size_section += strlen(opt_mapfile)+1;            /* imap filename */
-  size_section += strlen(opt_outfile)+1;              /* output filename */
+  size_section += strlen(opt_jobname)+1;              /* output filename */
   size_section += strlen(opt_mcmcfile)+1;             /* mcmc filename */
   
   size_section += 2*sizeof(long) + 2*sizeof(double);  /* speciesdelimitation */
@@ -177,6 +177,7 @@ static void dump_chk_section_1(FILE * fp,
                                long ndspecies,
                                long mcmc_offset,
                                long out_offset,
+                               long a1b1_offset,
                                long * gtree_offset,
 			       long * mig_offset,
                                long * rates_offset,
@@ -231,7 +232,12 @@ static void dump_chk_section_1(FILE * fp,
     DUMP(opt_mapfile,strlen(opt_mapfile)+1,fp);
 
   /* write outfile */
-  DUMP(opt_outfile,strlen(opt_outfile)+1,fp);
+  DUMP(opt_jobname,strlen(opt_jobname)+1,fp);
+
+  /* write a1b1 file */
+  DUMP(&opt_print_a1b1,1,fp);
+  if (opt_print_a1b1)
+    DUMP(opt_a1b1file,strlen(opt_a1b1file)+1,fp);
 
   /* write mcmcfile */
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
@@ -322,6 +328,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_prop, 1, fp);
   DUMP(&opt_theta_gibbs_showall_eps,1,fp);
   DUMP(&opt_theta_slide_prob,1,fp);
+  DUMP(&opt_phi_slide_prob,1,fp);
 
   /* write tau prior */
   DUMP(&opt_tau_dist,1,fp);
@@ -428,7 +435,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
-  DUMP(&g_pj_phi, 1, fp);
+  DUMP(&g_pj_phi_slide, 1, fp);
+  DUMP(&g_pj_phi_gibbs, 1, fp);
   DUMP(&g_pj_freqs, 1, fp);
   DUMP(&g_pj_qmat, 1, fp);
   DUMP(&g_pj_alpha, 1, fp);
@@ -445,6 +453,9 @@ static void dump_chk_section_1(FILE * fp,
 
   /* write output file offset */
   DUMP(&out_offset,1,fp);
+
+  /* write a1b1 file offset */
+  DUMP(&a1b1_offset,1,fp);
 
   /* write bfbeta */
   DUMP(&opt_bfbeta,1,fp);
@@ -673,7 +684,6 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&(stree->notheta_sfactor),1,fp);
     for (i = 0; i < total_nodes; ++i)
     {
-      DUMP(stree->nodes[i]->t2h,opt_locus_count,fp);
       DUMP(&(stree->nodes[i]->t2h_sum),1,fp);
       DUMP(&(stree->nodes[i]->coal_count_sum),1,fp);
       DUMP(&(stree->nodes[i]->notheta_logpr_contrib),1,fp);
@@ -1003,6 +1013,7 @@ int checkpoint_dump(stree_t * stree,
                     long ndspecies,
                     long mcmc_offset,
                     long out_offset,
+                    long a1b1_offset,
                     long * gtree_offset,
                     long * mig_offset,
                     long * rates_offset,
@@ -1033,7 +1044,7 @@ int checkpoint_dump(stree_t * stree,
   FILE * fp;
   char * s = NULL;
 
-  xasprintf(&s, "%s.%ld.chk", opt_outfile, ++opt_checkpoint_current);
+  xasprintf(&s, "%s.%ld.chk", opt_jobname, ++opt_checkpoint_current);
 
   fprintf(stdout,"\n\nWriting checkpoint file %s\n\n",s);
 
@@ -1057,6 +1068,7 @@ int checkpoint_dump(stree_t * stree,
                      ndspecies,
                      mcmc_offset,
                      out_offset,
+                     a1b1_offset,
                      gtree_offset,
                      mig_offset,
                      rates_offset,

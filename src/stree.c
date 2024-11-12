@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -525,31 +525,21 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
          snode->old_logpr_contrib,
          msa_count * sizeof(double));
 
+
+  if (!clone->old_C2ji)
+    clone->old_C2ji = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
+  memcpy(clone->old_C2ji, snode->old_C2ji, opt_locus_count*sizeof(double));
+
+  if (!clone->C2ji)
+    clone->C2ji = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
+  memcpy(clone->C2ji, snode->C2ji, opt_locus_count*sizeof(double));
+
   if (!opt_est_theta)
   {
     clone->t2h_sum = snode->t2h_sum;
     clone->coal_count_sum = snode->coal_count_sum;
     clone->notheta_logpr_contrib = snode->notheta_logpr_contrib;
     clone->notheta_old_logpr_contrib = snode->notheta_old_logpr_contrib;
-
-    if (!clone->t2h)
-      clone->t2h = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
-    memcpy(clone->t2h, snode->t2h, opt_locus_count * sizeof(double));
-
-    if (!clone->old_t2h)
-      clone->old_t2h = (double*)xmalloc((size_t)opt_locus_count*sizeof(double));
-    memcpy(clone->old_t2h, snode->old_t2h, opt_locus_count * sizeof(double));
-
-  }
-  else
-  {
-    if (!clone->old_C2ji)
-      clone->old_C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-    memcpy(clone->old_C2ji, snode->old_C2ji, opt_locus_count * sizeof(double));
-
-    if (!clone->C2ji)
-      clone->C2ji = (double *)xcalloc((size_t)opt_locus_count, sizeof(double));
-    memcpy(clone->C2ji, snode->C2ji, opt_locus_count * sizeof(double));
   }
 
   if (opt_migration)
@@ -1066,6 +1056,9 @@ static void stree_label_recursive(snode_t * node)
     return;
   }
 
+  if (node->label && !opt_est_stree)
+    return;
+
   if (node->label)
     free(node->label);
 
@@ -1578,10 +1571,212 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
    }
 }
 
-static int propose_phi(stree_t * stree,
-                       gtree_t ** gtree,
-                       snode_t * snode,
-                       long thread_index)
+static int propose_phi_gibbs(stree_t * stree,
+                             gtree_t ** gtree,
+                             snode_t * snode,
+                             double * a1ptr,
+                             double * b1ptr,
+                             long thread_index)
+{
+  long i;
+  int p,q;
+  int sequp_count;
+  double lnphiratio, lnphiratio1;
+  double aratio, bratio;
+  double phinew;
+  double phiold;
+
+  p = q = 0;
+  /* get k and n */
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    /* For bidirectional introgression we need to subtract the lineages
+       coming from right. See issue #97 */
+    p += snode->seqin_count[i];
+    if (node_is_bidirection(snode))
+      p -= snode->right->seqin_count[i];
+
+    q += snode->hybrid->seqin_count[i];
+  }
+
+  snode_t * pnode = snode->has_phi ? snode : snode->hybrid;
+  assert(pnode->has_phi);
+
+  if (snode != pnode)
+  {
+    p ^= q;
+    q ^= p;
+    p ^= q;
+  }
+
+  double a1 = opt_phi_alpha + p;
+  double b1 = opt_phi_beta + q;
+
+  *a1ptr = a1;
+  *b1ptr = b1;
+
+  phiold = pnode->hphi;
+  /* sample new phi and update nodes */
+  phinew = pnode->hphi = legacy_rndbeta(thread_index,a1,b1);
+  pnode->hybrid->hphi = 1 - pnode->hphi;
+
+  if (snode == pnode)
+  {
+    aratio = lnphiratio = log(phinew / phiold);
+    bratio = lnphiratio1 = log((1-phinew) / (1-phiold));
+  }
+  else
+  {
+    aratio = lnphiratio1 = log(phinew / phiold);
+    bratio = lnphiratio  = log((1-phinew) / (1-phiold));
+  }
+
+  /* update logpr */
+  if (opt_est_theta)
+  {
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      /* subtract from gene tree log-density the old MSCi contributions */
+      gtree[i]->logpr -= snode->logpr_contrib[i] + 
+                         snode->hybrid->logpr_contrib[i];
+
+      /* For bidirectional introgression we need to subtract the lineages
+         coming from right. See issue #97 */
+      sequp_count = snode->seqin_count[i];
+      if (node_is_bidirection(snode))
+        sequp_count -= snode->right->seqin_count[i];
+
+      /* update log-density contributions for the two populations */
+      snode->logpr_contrib[i] += sequp_count*lnphiratio;
+      snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] *
+                                         lnphiratio1;
+
+      /* add to the gene tree log-density the new phi contributions */
+      gtree[i]->logpr += snode->logpr_contrib[i] +
+                         snode->hybrid->logpr_contrib[i];
+    }
+  }
+  else
+  {
+    snode_t * master1 = NULL;
+    snode_t * master2 = NULL;
+    /* subtract from total density (sum of densities of all gene trees) the
+       old phi contributions from the two populations */
+    if (!snode->linked_theta)
+    {
+      #if 0
+      /* TF: 2024-10-16 */
+      stree->notheta_logpr -= snode->notheta_logpr_contrib;
+      snode->notheta_logpr_contrib = 0;
+      #else
+      stree->notheta_logpr -= snode->hphi_sum;
+      snode->notheta_logpr_contrib -= snode->hphi_sum;
+      #endif
+    }
+    else
+    {
+      stree->notheta_logpr -= snode->hphi_sum;
+      master1 = snode->linked_theta;
+      assert(!master1->linked_theta);
+      stree->notheta_logpr -= (master1->notheta_logpr_contrib-master1->hphi_sum);
+      master1->notheta_logpr_contrib -= snode->hphi_sum;
+      master1->hphi_sum -= snode->hphi_sum;
+    }
+
+    if (!snode->hybrid->linked_theta)
+    {
+      #if 0
+      /* TF: 2024-10-16 */
+      stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
+      snode->hybrid->notheta_logpr_contrib = 0;
+      #else
+      stree->notheta_logpr -= snode->hybrid->hphi_sum;
+      snode->hybrid->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
+      #endif
+    }
+    else
+    {
+      stree->notheta_logpr -= snode->hybrid->hphi_sum;
+      master2 = snode->hybrid->linked_theta;
+      assert(!master2->linked_theta);
+
+      /* Important: subtract only if we haven't already subtracted */
+      if (master1 != master2)
+      {
+        stree->notheta_logpr -= (master2->notheta_logpr_contrib-master2->hphi_sum);
+      }
+      master2->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
+      master2->hphi_sum -= snode->hybrid->hphi_sum;
+    }
+    //if (master1)
+    //  master1->hphi_sum -= snode->hphi_sum;
+    //if (master2)
+    //  master2->hphi_sum -= snode->hybrid->hphi_sum;
+
+    /* compute new contributions */
+    for (i = 0; i < stree->locus_count; ++i)
+    {
+      /* For bidirectional introgression we need to subtract the lineages
+         coming from right. See issue #97 */
+      sequp_count = snode->seqin_count[i];
+      if (node_is_bidirection(snode))
+        sequp_count -= snode->right->seqin_count[i];
+
+      snode->hphi_sum -= snode->notheta_phi_contrib[i];
+      snode->hybrid->hphi_sum -= snode->hybrid->notheta_phi_contrib[i];
+
+      snode->notheta_phi_contrib[i] += sequp_count*lnphiratio;
+      snode->hybrid->notheta_phi_contrib[i] += snode->hybrid->seqin_count[i] *
+                                              lnphiratio1;
+
+      snode->hphi_sum += snode->notheta_phi_contrib[i];
+      snode->hybrid->hphi_sum += snode->hybrid->notheta_phi_contrib[i];
+    }
+    /* add new contributions to total log-density */
+    if (snode->linked_theta)
+    {
+      master1->notheta_logpr_contrib += snode->hphi_sum;
+      master1->hphi_sum += snode->hphi_sum;
+      stree->notheta_logpr += snode->hphi_sum;
+      stree->notheta_logpr += (master1->notheta_logpr_contrib-master1->hphi_sum);
+    }
+    else
+    {
+      snode->notheta_logpr_contrib += snode->hphi_sum;
+      #if 0
+      /* TF: 2024-10-16 */
+      stree->notheta_logpr += snode->notheta_logpr_contrib;
+      #else
+      stree->notheta_logpr += snode->hphi_sum;
+      #endif
+    }
+    
+    if (snode->hybrid->linked_theta)
+    {
+      master2->notheta_logpr_contrib += snode->hybrid->hphi_sum;
+      master2->hphi_sum += snode->hybrid->hphi_sum;
+      stree->notheta_logpr += snode->hybrid->hphi_sum;
+      if (master1 != master2)
+        stree->notheta_logpr += (master2->notheta_logpr_contrib-master2->hphi_sum);
+    }
+    else
+    {
+      snode->hybrid->notheta_logpr_contrib += snode->hybrid->hphi_sum;
+      #if 0
+      /* TF: 2024-10-16 */
+      stree->notheta_logpr += snode->hybrid->notheta_logpr_contrib;
+      #else
+      stree->notheta_logpr += snode->hybrid->hphi_sum;
+      #endif
+    }
+  }
+  return 1;
+}
+
+static int propose_phi_slide(stree_t * stree,
+                             gtree_t ** gtree,
+                             snode_t * snode,
+                             long thread_index)
 {
   int accepted;
   int sequp_count;
@@ -1676,6 +1871,9 @@ static int propose_phi(stree_t * stree,
   lnacceptance = (opt_phi_alpha-1) * aratio +
                  (opt_phi_beta-1) * bratio +
                  new_logpr - old_logpr;
+  
+  if (opt_debug)
+    printf("[Debug] (phi) lnacceptance: %f\n", lnacceptance);
 
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
@@ -1720,13 +1918,61 @@ static int propose_phi(stree_t * stree,
     }
     else
     {
+      snode_t * master1 = NULL;
+      snode_t * master2 = NULL;
       /* subtract from total density (sum of densities of all gene trees) the
          old phi contributions from the two populations */
-      stree->notheta_logpr -= snode->notheta_logpr_contrib;
-      stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
+      if (!snode->linked_theta)
+      {
+        #if 0
+        /* TF: 2024-10-16 */
+        stree->notheta_logpr -= snode->notheta_logpr_contrib;
+        snode->notheta_logpr_contrib = 0;
+        #else
+        stree->notheta_logpr -= snode->hphi_sum;
+        snode->notheta_logpr_contrib -= snode->hphi_sum;
+        #endif
+      }
+      else
+      {
+        stree->notheta_logpr -= snode->hphi_sum;
+        master1 = snode->linked_theta;
+        assert(!master1->linked_theta);
+        stree->notheta_logpr -= (master1->notheta_logpr_contrib-master1->hphi_sum);
+        master1->notheta_logpr_contrib -= snode->hphi_sum;
+        master1->hphi_sum -= snode->hphi_sum;
+      }
 
-      snode->notheta_logpr_contrib -= snode->hphi_sum;
-      snode->hybrid->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
+      if (!snode->hybrid->linked_theta)
+      {
+        #if 0
+        /* TF: 2024-10-16 */
+        stree->notheta_logpr -= snode->hybrid->notheta_logpr_contrib;
+        snode->hybrid->notheta_logpr_contrib = 0;
+        #else
+        stree->notheta_logpr -= snode->hybrid->hphi_sum;
+        snode->hybrid->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
+        #endif
+      }
+      else
+      {
+        stree->notheta_logpr -= snode->hybrid->hphi_sum;
+        master2 = snode->hybrid->linked_theta;
+        assert(!master2->linked_theta);
+
+        /* Important: subtract only if we haven't already subtracted */
+        if (master1 != master2)
+        {
+          stree->notheta_logpr -= (master2->notheta_logpr_contrib-master2->hphi_sum);
+        }
+        master2->notheta_logpr_contrib -= snode->hybrid->hphi_sum;
+        master2->hphi_sum -= snode->hybrid->hphi_sum;
+      }
+      //if (master1)
+      //  master1->hphi_sum -= snode->hphi_sum;
+      //if (master2)
+      //  master2->hphi_sum -= snode->hybrid->hphi_sum;
+
       /* compute new contributions */
       for (i = 0; i < stree->locus_count; ++i)
       {
@@ -1746,12 +1992,43 @@ static int propose_phi(stree_t * stree,
         snode->hphi_sum += snode->notheta_phi_contrib[i];
         snode->hybrid->hphi_sum += snode->hybrid->notheta_phi_contrib[i];
       }
-      snode->notheta_logpr_contrib += snode->hphi_sum;
-      snode->hybrid->notheta_logpr_contrib += snode->hybrid->hphi_sum;
-
       /* add new contributions to total log-density */
-      stree->notheta_logpr += snode->notheta_logpr_contrib;
-      stree->notheta_logpr += snode->hybrid->notheta_logpr_contrib;
+      if (snode->linked_theta)
+      {
+        master1->notheta_logpr_contrib += snode->hphi_sum;
+        master1->hphi_sum += snode->hphi_sum;
+        stree->notheta_logpr += snode->hphi_sum;
+        stree->notheta_logpr += (master1->notheta_logpr_contrib-master1->hphi_sum);
+      }
+      else
+      {
+        snode->notheta_logpr_contrib += snode->hphi_sum;
+        #if 0
+        /* TF: 2024-10-16 */
+        stree->notheta_logpr += snode->notheta_logpr_contrib;
+        #else
+        stree->notheta_logpr += snode->hphi_sum;
+        #endif
+      }
+      
+      if (snode->hybrid->linked_theta)
+      {
+        master2->notheta_logpr_contrib += snode->hybrid->hphi_sum;
+        master2->hphi_sum += snode->hybrid->hphi_sum;
+        stree->notheta_logpr += snode->hybrid->hphi_sum;
+        if (master1 != master2)
+          stree->notheta_logpr += (master2->notheta_logpr_contrib-master2->hphi_sum);
+      }
+      else
+      {
+        snode->hybrid->notheta_logpr_contrib += snode->hybrid->hphi_sum;
+        #if 0
+        /* TF: 2024-10-16 */
+        stree->notheta_logpr += snode->hybrid->notheta_logpr_contrib;
+        #else
+        stree->notheta_logpr += snode->hybrid->hphi_sum;
+        #endif
+      }
     }
   }
   else
@@ -1762,24 +2039,55 @@ static int propose_phi(stree_t * stree,
   return accepted;
 }
 
-double stree_propose_phi(stree_t * stree, gtree_t ** gtree)
+void stree_propose_phi(stree_t * stree,
+                       gtree_t ** gtree,
+                       long * acceptvec,
+                       long * movecount,
+                       long mcmc_step,
+                       FILE * fp_a1b1)
 {
   long i;
   long accepted = 0;
-
   long thread_index = 0;
+  double a1,b1;
 
   /* offset to start of hybridization nodes */
   long offset = stree->tip_count + stree->inner_count;
 
+  /* reset counts */
+  acceptvec[BPP_PHI_MOVE_SLIDE] = 0;
+  acceptvec[BPP_PHI_MOVE_GIBBS] = 0;
+  movecount[BPP_PHI_MOVE_SLIDE] = 0;
+  movecount[BPP_PHI_MOVE_GIBBS] = 0;
+
   /* go through hybridization nodes */
   for (i = 0; i < stree->hybrid_count; ++i)
-    accepted += propose_phi(stree,
-                            gtree,
-                            stree->nodes[offset+i]->hybrid,
-                            thread_index);
-
-  return ((double)accepted / stree->hybrid_count);
+  {
+    if (opt_phi_slide_prob>0 && legacy_rndu(thread_index)<opt_phi_slide_prob)
+    {
+      accepted = propose_phi_slide(stree,
+                                   gtree,
+                                   stree->nodes[offset+i]->hybrid,
+                                   thread_index);
+      acceptvec[BPP_PHI_MOVE_SLIDE] += accepted;
+      movecount[BPP_PHI_MOVE_SLIDE]++;
+      if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
+        fprintf(fp_a1b1, "\t-\t-");
+    }
+    else
+    {
+      accepted = propose_phi_gibbs(stree,
+                                   gtree,
+                                   stree->nodes[offset+i]->hybrid,
+                                   &a1,
+                                   &b1,
+                                   thread_index);
+      acceptvec[BPP_PHI_MOVE_GIBBS] += accepted;
+      movecount[BPP_PHI_MOVE_GIBBS]++;
+      if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
+        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+    }
+  }
 }
 
 static void stree_init_phi(stree_t * stree)
@@ -1849,47 +2157,18 @@ static void stree_init_phi(stree_t * stree)
   }
 }
 
-static void msci_link_thetas_bfs(stree_t * stree)
+
+/*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
+/* In msci_link_thetas(), i delleted head, tail, queue & hybrid.
+*/
+static void msci_link_thetas(stree_t * stree)
 {
   long i,j = 0;
   long head,tail;
   long total_nodes;
-  snode_t * sibling;
-  snode_t ** queue;
-  snode_t ** hybrid;
+  snode_t* sibling;
 
   total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
-  queue = (snode_t **)xcalloc((size_t)(total_nodes+1),sizeof(snode_t *));
-  hybrid = (snode_t **)xcalloc((size_t)(stree->hybrid_count),sizeof(snode_t *));
-
-  /* order nodes using BFS */
-  head = tail = 0;
-  queue[tail++] = stree->root;
-  while (queue[head])
-  {
-    snode_t * x = queue[head++];
-
-    if (x->left)
-      queue[tail++] = x->left;
-
-    if (x->right)
-      queue[tail++] = x->right;
-
-    if (x->hybrid && x->node_index < stree->tip_count+stree->inner_count)
-      hybrid[j++] = x;
-
-    printf(" %s", x->label);
-  }
-  printf("\n");
-  free(queue);
-
-  printf("Hybrid nodes: %ld\n", j);
-  assert(j == stree->hybrid_count);
-
-  /* now get list of hybrid nodes in bfs order */
-  for (i = 0; i < j; ++i)
-    printf(" %s", hybrid[i]->label);
-  printf("\n");
 
   /*** ziheng-2024.3.30 ***/
   /* edited code to link theta to (youngest) daughter for linked_msci */
@@ -1942,7 +2221,56 @@ static void msci_link_thetas_bfs(stree_t * stree)
     while ((x = x->linked_theta))
       snode->linked_theta = x;
   }
+
+  printf("Linked thetas:\n");
+  for (i = 0; i < total_nodes; ++i)
+  {
+    snode_t * x = stree->nodes[i];
+    if (x->linked_theta)
+      printf("%s -> %s\n", x->label, x->linked_theta->label);
+  }
 }
+
+/*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
+static void mscm_link_thetas(stree_t* stree)
+{
+  long i, i1, i2, total_nodes = stree->tip_count + stree->inner_count;
+
+  /* check every tip with no data to see whether it is a ghost  */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    if (opt_sp_seqcount[i]) continue;
+    snode_t* pparent = stree->nodes[i]->parent;
+    long inode = i, parent = pparent->node_index, sib = pparent->left->node_index;
+    if (sib == i) sib = pparent->right->node_index;
+    /* check to see whether parent or sib is involved in gene flow (either donor or recipient) */
+    long ghost = 0;
+    for (i1 = 0; i1 < total_nodes; i1++) {
+      for (i2 = 0; i2 < total_nodes; i2++) {
+        if (opt_mig_bitmatrix[i1][i2] <= 0) continue;
+        if (parent == i1 || parent == i2 || sib == i1 || sib == i2) {
+          ghost = 1; break;
+        }
+      }
+      if (ghost) break;
+    }
+    if (ghost) {
+      printf("\nfind a ghost: node %s: %s linked to %s\n", stree->nodes[i]->label, pparent->label, stree->nodes[sib]->label);
+      pparent->linked_theta = stree->nodes[sib];
+    }
+  }
+
+  /* reset linked_theta to the youngest daughter */
+  for (i = 0; i < total_nodes; i++)
+  {
+    snode_t* snode = stree->nodes[i];
+    snode_t* x = snode->linked_theta;
+    if (!x) continue;
+    while ((x = x->linked_theta))
+      snode->linked_theta = x;
+  }
+}
+
 
 static void init_theta_stepsize(stree_t * stree)
 {
@@ -2043,7 +2371,17 @@ static void init_theta_linkage(stree_t * stree)
   }
   else if (opt_linkedtheta == BPP_LINKEDTHETA_MSCI)
   {
-    msci_link_thetas_bfs(stree);
+    /*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
+    if (!opt_msci)
+      fatal("theta-model = linked-msci works with MSC-I only");
+    msci_link_thetas(stree);
+  }
+  else if (opt_linkedtheta == BPP_LINKEDTHETA_MSCM) /*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
+  {
+    /*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
+    if (!opt_migration)
+      fatal("theta-model = linked-mscm works with MSC-M only");
+    mscm_link_thetas(stree);
   }
 }
 
@@ -2757,7 +3095,7 @@ void stree_init(stree_t * stree,
   /*stree->nodes[4]->tau = .1; 
   stree->nodes[3]->tau = .016;
   stree->nodes[4]->tau = .008; */
-  
+
   nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   stree->td = (snode_t **)xmalloc((size_t)nodes_count * sizeof(snode_t *));
@@ -2857,12 +3195,8 @@ void stree_init(stree_t * stree,
     snode->logpr_contrib = (double*)xcalloc(msa_count, sizeof(double));
     snode->old_logpr_contrib = (double *)xcalloc(msa_count, sizeof(double));
 
-    snode->t2h = NULL;
-    snode->old_t2h = NULL;
     if (!opt_est_theta)
     {
-      snode->t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
-      snode->old_t2h = (double*)xcalloc((size_t)msa_count, sizeof(double));
       snode->t2h_sum = 0;
       snode->coal_count_sum = 0;
     }
@@ -3235,6 +3569,8 @@ static int propose_theta_gibbs(stree_t * stree,
                                gtree_t ** gtree,
                                locus_t ** locus,
                                snode_t * snode,
+                               double * a1ptr,
+                               double * b1ptr,
                                long thread_index)
 {
   unsigned int j;
@@ -3294,6 +3630,9 @@ static int propose_theta_gibbs(stree_t * stree,
     newtheta = snode->theta = 1 / (legacy_rndgamma(thread_index, a1) / b1);
   else
     newtheta = snode->theta = legacy_rndgamma(thread_index, a1) / b1;
+
+  *a1ptr = a1;
+  *b1ptr = b1;
 
   lcount = 1;
   stree->td[0] = snode;
@@ -3544,7 +3883,9 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype)
+                         long * acceptvec_movetype,
+                         long mcmc_step,
+                         FILE * fp_a1b1)
 {
   unsigned int i;
   long slide_tip_count = 0;
@@ -3552,6 +3893,7 @@ void stree_propose_theta(gtree_t ** gtree,
   long slide_inner_count = 0;
   long gibbs_inner_count = 0;
   double * av = NULL;
+  double a1,b1;
   snode_t * snode;
 
   long thread_index = 0;
@@ -3583,6 +3925,9 @@ void stree_propose_theta(gtree_t ** gtree,
           slide_tip_count++;
         else
           slide_inner_count++;
+
+        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
+          fprintf(fp_a1b1, "\t-\t-");
       }   
       else                                                  /* gibbs */
       {
@@ -3592,11 +3937,15 @@ void stree_propose_theta(gtree_t ** gtree,
                                                            gtree,
                                                            locus,
                                                            snode,
+                                                           &a1,
+                                                           &b1,
                                                            thread_index);
         if (i < stree->tip_count)
           gibbs_tip_count++;
         else
           gibbs_inner_count++;
+        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
+          fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
       }
     }
   }
@@ -3947,22 +4296,38 @@ void propose_tau_update_gtrees(locus_t ** loci,
         if (opt_est_theta)
           logpr -= affected[j]->logpr_contrib[i];
 
-        double xtmp;
         if (opt_migration)
-          xtmp = gtree_update_logprob_contrib_mig(affected[j],
-                                                  stree,
-                                                  gtree[i],
+          logpr += gtree_update_logprob_contrib_mig(affected[j],
+                                                    stree,
+                                                    gtree[i],
+                                                    loci[i]->heredity[0],
+                                                    i,
+                                                    thread_index);
+        else
+        {
+          if (!opt_est_theta)
+          {
+            gtree_update_C2j(affected[j],loci[i]->heredity[0],i,thread_index);
+            #if 0
+            if (affected[j]->linked_theta && affected[j]->hybrid)
+              
+            snode_t * master = affected[j]->linked_theta ?
+                                 affected[j]->linked_theta : affected[j];
+            xtmp = gtree_update_logprob_contrib(master,
+                                                stree,
+                                                loci[i]->heredity[0],
+                                                i,
+                                                thread_index);
+            #endif
+          }
+          else
+          {
+            logpr += gtree_update_logprob_contrib(affected[j],
                                                   loci[i]->heredity[0],
                                                   i,
                                                   thread_index);
-        else
-          xtmp = gtree_update_logprob_contrib(affected[j],
-                                              loci[i]->heredity[0],
-                                              i,
-                                              thread_index);
-
-        if (opt_est_theta)
-          logpr += xtmp;
+          }
+        }
       }
     }
 
@@ -4608,10 +4973,8 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     __mark_count[i] = k;
 
     if (opt_est_theta)
-      logpr_diff += logpr - gtree[i]->logpr;
-
-    if (opt_est_theta)
     {
+      logpr_diff += logpr - gtree[i]->logpr;
       gtree[i]->old_logpr = gtree[i]->logpr;
       gtree[i]->logpr = logpr;
     }
@@ -5003,6 +5366,26 @@ static double partial_C2j_and_Wsj(stree_t * stree,
   return C2j/heredity;
 }
 
+#if 0
+/* TODO: Delete, it's wrong */
+static snode_t * return_ltheta_master(stree_t * stree, snode_t * snode)
+{
+  long i;
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  if (!snode->linked_theta)
+    return snode;
+
+  for (i = 0; i < total_nodes; ++i)
+    if (snode->linked_theta == stree->nodes[i])
+      break;
+
+  assert(i != total_nodes);
+
+  return stree->nodes[i];
+}
+#endif
+
 static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
@@ -5023,6 +5406,7 @@ static long propose_tau(locus_t ** loci,
   double logpr = 0;
   double logpr_diff = 0;
   double logl_diff = 0;
+  size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
   unsigned int count_above = 0;
   unsigned int count_below = 0;
@@ -5128,6 +5512,7 @@ static long propose_tau(locus_t ** loci,
   newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
   newage = reflect(newage, minage, maxage, thread_index);
   snode->tau = newage;
+
 
   if (opt_msci && snode->hybrid)
   {
@@ -5334,7 +5719,6 @@ static long propose_tau(locus_t ** loci,
 
   if (opt_est_theta && theta_method)
   {
-    size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
     snode_t ** snodes = stree->nodes;
 
     /* repopulate theta_list with primary theta pops if linked theta model */
@@ -5542,12 +5926,75 @@ static long propose_tau(locus_t ** loci,
 
   if (!opt_est_theta)
   {
-    for (i = 0; i < paffected_count; ++i)
-      old_logpr_contrib[i] = affected[i]->notheta_logpr_contrib;
+    /* Note: theta_list and affected is the same thing for !opt_est_theta */
+    
+    marks = (long *)xcalloc(totnodes,sizeof(long));
 
     logpr = stree->notheta_logpr;
-    for (j = 0; j < paffected_count; ++j)
-      logpr -= affected[j]->notheta_logpr_contrib;
+
+    /* TODO: phi doesn't change, following code can be simplified further */
+    #if 0
+    if (opt_linkedtheta)
+    {
+      for (i = 0; i < paffected_count; ++i)
+      {
+        snode_t * master = affected[i]->linked_theta ?
+                             affected[i]->linked_theta : affected[i];
+        if (!marks[master->node_index])
+        {
+          master->notheta_old_logpr_contrib = master->notheta_logpr_contrib;
+          marks[master->node_index] = 1;
+          logpr -= master->notheta_logpr_contrib;
+        }
+      }
+    }
+    else
+    {
+      for (i = 0; i < paffected_count; ++i)
+      {
+        affected[i]->notheta_old_logpr_contrib = affected[i]->notheta_logpr_contrib;
+        logpr -= affected[i]->notheta_logpr_contrib;
+      }
+    }
+    #else
+    for (i = 0; i < paffected_count; ++i)
+    {
+      snode_t * x = affected[i];
+
+      if (!x->linked_theta)
+      {
+        if (marks[x->node_index]) continue;
+        logpr -= x->notheta_logpr_contrib;  
+        marks[x->node_index] = 1;
+      }
+      else
+      {
+        snode_t * master = x->linked_theta;
+
+        if (marks[master->node_index]) continue;
+
+        logpr -= master->notheta_logpr_contrib;
+        marks[master->node_index] = 1;
+      }
+
+      #if 0
+      if (x->hybrid)
+        logpr -= x->hphi_sum;
+
+      snode_t * master = x->linked_theta ? x->linked_theta : x;
+
+      /* master->hphi_sum should be 0 as master cannot be hybrid */
+
+      if (!marks[master->node_index]) 
+      {
+        logpr -= (master->notheta_logpr_contrib-master->hphi_sum);
+        marks[master->node_index] = 1;
+      }
+      #endif
+    }
+    for (i = 0; i < totnodes; ++i)
+      marks[i] = 0;
+    #endif
   }
   /* Note: we use the serial version when thetas are integrated out */
   if (opt_est_theta && opt_threads > 1)
@@ -5595,10 +6042,25 @@ static long propose_tau(locus_t ** loci,
                               &logpr_diff,
                               0);
 
+  #if 0
   if (!opt_est_theta)
   {
-    for (j = 0; j < paffected_count; ++j)
-      logpr += affected[j]->notheta_logpr_contrib;
+    if (opt_linkedtheta)
+    {
+      for (i = 0; i < paffected_count; ++i)
+      {
+        snode_t * master = affected[i]->linked_theta ?
+                             affected[i]->linked_theta : affected[i];
+        logpr += master->notheta_logpr_contrib;
+      }
+    }
+    else
+    {
+      for (i = 0; i < paffected_count; ++i)
+      {
+        logpr += affected[i]->notheta_logpr_contrib;
+      }
+    }
 
     /* Note: At this point logpr_diff must be 0 unless
        we have a correlated clock with LN */
@@ -5607,15 +6069,78 @@ static long propose_tau(locus_t ** loci,
       assert(logpr_diff == 0);
     #endif
 
-    /* TODO: the next line never happens (opt_est_theta inside !opt_est_theta)
-       but double check that theta_list gets deallocated */
-    if (opt_linkedtheta && opt_est_theta)
-      free(theta_list);
-
     logpr_diff += logpr - stree->notheta_logpr;
     stree->notheta_old_logpr = stree->notheta_logpr;
     stree->notheta_logpr = logpr;
   }
+  #else
+  if (!opt_est_theta)
+  {
+    /* TODO: phi doesn't change, following code can be simplified further */
+    for (i = 0; i < paffected_count; ++i)
+    {
+      snode_t * x = affected[i];
+
+      #if 0
+      /* TF: 2024-10-7 decided to remove this and use the full
+         update_logpg_contrib (without subtracting hphi) when accounting
+         for master */
+      if (marks[x->node_index])
+      {
+        /* a node is already marked if it's a primary theta and its theta
+           contribution was already accounted for, so only use phi contrib */
+        assert(!x->linked_theta);
+        if (x->hybrid)
+          logpr += x->hphi_sum;
+        continue;
+      }
+      #else
+      if (marks[x->node_index])
+        continue;
+      #endif
+
+      /* update contributions */
+      if (!x->linked_theta)
+      {
+        logpr += update_logpg_contrib(stree,x);
+        marks[x->node_index] = 1;
+      }
+      else
+      {
+        snode_t * master = x->linked_theta;
+
+        if (marks[master->node_index]) continue;
+
+        logpr += update_logpg_contrib(stree,master);
+        marks[master->node_index] = 1;
+      }
+
+      #if 0
+      marks[x->node_index] = 1;
+
+      snode_t * master = x->linked_theta ? x->linked_theta : x;
+
+      if (!marks[master->node_index])
+      {
+        #if 0
+        logpr += (update_logpg_contrib(stree,master)-master->hphi_sum);
+        #else
+        /* TF: 2024-10-07 */
+        logpr += update_logpg_contrib(stree,master);
+        #endif
+        marks[master->node_index] = 1;
+      }
+      #endif
+    }
+    for (i = 0; i < totnodes; ++i)
+      marks[i] = 0;
+
+    stree->notheta_old_logpr = stree->notheta_logpr;
+    stree->notheta_logpr = logpr;
+    logpr_diff = logpr - stree->notheta_old_logpr;
+  }
+  #endif
+
   #if 0
   debug_consistency(stree,gtree,"tau");
   #endif
@@ -5730,9 +6255,17 @@ static long propose_tau(locus_t ** loci,
       }
       else
       {
+        #if 0
         for (j = 0; j < theta_count; ++j)
-          if (theta_list[j]->seqin_count[i] > 1 || (theta_list[j]->epoch_count && theta_list[j]->epoch_count[i]))
+          if (theta_list[j]->seqin_count[i] > 1 ||
+              (theta_list[j]->epoch_count && theta_list[j]->epoch_count[i]))
             logprob_revert_notheta(theta_list[j], i);
+        #else
+        for (j = 0; j < theta_count; ++j)
+          if (theta_list[j]->seqin_count[i] > 1 ||
+              (theta_list[j]->epoch_count && theta_list[j]->epoch_count[i]))
+            logprob_revert_C2j(theta_list[j], i);
+        #endif
       }
 
       /* get the list of nodes for which CLVs must be reverted, i.e. all marked
@@ -5809,8 +6342,24 @@ static long propose_tau(locus_t ** loci,
     }
     if (!opt_est_theta)
     {
+      for (j = 0; j < totnodes; ++j) marks[j] = 0;
+
       for (j = 0; j < theta_count; ++j)
-        theta_list[j]->notheta_logpr_contrib = old_logpr_contrib[j];
+      {
+        if (!marks[theta_list[j]->node_index])
+        {
+          logprob_revert_contribs(theta_list[j]);
+          marks[theta_list[j]->node_index] = 1;
+        }
+        
+        snode_t * master = theta_list[j]->linked_theta ?
+                             theta_list[j]->linked_theta : theta_list[j];
+        if (!marks[master->node_index])
+        {
+          logprob_revert_contribs(master);
+          marks[master->node_index] = 1;
+        }
+      }
 
       stree->notheta_logpr = stree->notheta_old_logpr;
     }
@@ -5819,7 +6368,7 @@ static long propose_tau(locus_t ** loci,
   for (i = 0; i < theta_count; ++i)
     theta_list[i]->flag = 0;
 
-  if (opt_linkedtheta && theta_method)
+  if (!opt_est_theta || (opt_linkedtheta && theta_method))
   {
     free(marks);
     if (opt_est_theta)
@@ -8111,32 +8660,66 @@ long stree_propose_spr(stree_t ** streeptr,
 
       /* now update the log-probability contributions for the affected, marked
          populations */
-      for (j = 0; j < snode_contrib_count[i]; ++j)
+      if (opt_est_theta)
       {
-        if (opt_est_theta)
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
           gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
-        else
-          logpr_notheta -= snode_contrib[j]->notheta_logpr_contrib;
+          if (opt_migration)
+            gtree_list[i]->logpr += gtree_update_logprob_contrib_mig(snode_contrib[j],
+                                                                     stree,
+                                                                     gtree_list[i],
+                                                                     loci[i]->heredity[0],
+                                                                     i,
+                                                                     thread_index);
+          else
+            gtree_list[i]->logpr += gtree_update_logprob_contrib(snode_contrib[j],
+                                                                 loci[i]->heredity[0],
+                                                                 i,
+                                                                 thread_index);
 
-        double xtmp;
+        }
+      }
+      else
+      {
+        /* !opt_est_theta */
+
+        long * marks = NULL;
+
+        marks = (long *)xcalloc((size_t)(stree->tip_count+stree->inner_count),
+                                sizeof(long));
+
+        /* first step */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          if (!marks[master->node_index])
+          {
+            logpr_notheta -= master->notheta_logpr_contrib;
+            marks[master->node_index] = 1;
+          }
+
+          gtree_update_C2j(snode_contrib[j],loci[i]->heredity[0],i,thread_index);
+        }
+
+        /* reset marks */
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+          marks[j] = 0;
         
-        if (opt_migration)
-          xtmp = gtree_update_logprob_contrib_mig(snode_contrib[j],
-                                                  stree,
-                                                  gtree_list[i],
-                                                  loci[i]->heredity[0],
-                                                  i,
-                                                  thread_index);
-        else
-          xtmp = gtree_update_logprob_contrib(snode_contrib[j],
-                                              loci[i]->heredity[0],
-                                              i,
-                                              thread_index);
-
-        if (opt_est_theta)
-          gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
-        else
-          logpr_notheta += xtmp;
+        /* second part */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          
+          if (!marks[master->node_index])
+          {
+            logpr_notheta += update_logpg_contrib(stree,master);
+            marks[master->node_index] = 1;
+          }
+        }
+        free(marks);
       }
     }
 
@@ -8966,14 +9549,25 @@ double prop_tipDate_muGtree(gtree_t ** gtree,
 
 			}
         	    	else
+                        #if 0
         	      		logprob_revert_notheta(pop,i);
+                        #else
+                          logprob_revert_C2j(pop,i);
+                        #endif
         	  }
+                #if 0
 		if (!opt_est_theta)
 			stree->notheta_logpr = stree->notheta_old_logpr;
+                #endif
 
 		gtree[i]->logpr = gtree[i]->old_logpr;
 		}
 	}
+        if (!opt_est_theta)
+        {
+          for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+            logprob_revert_contribs(stree->nodes[j]);
+        }
   }
 
   //free(gnodeptr);
@@ -10719,7 +11313,9 @@ double migrate_gibbs(stree_t * stree,
                      gtree_t ** gtree,
                      locus_t ** locus,
                      unsigned int si,
-                     unsigned int ti)
+                     unsigned int ti,
+                     double * a1ptr,
+                     double * b1ptr)
 {
   long i;
   long asj = 0;
@@ -10854,6 +11450,9 @@ double migrate_gibbs(stree_t * stree,
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
+  *a1ptr = a1;
+  *b1ptr = b1;
+
   double old_w = spec->M;
   if (opt_mig_specs[mindex].am)
     assert(0);  /* TODO: Go through all loci and propose Mi? */
@@ -10912,11 +11511,16 @@ double migrate_gibbs(stree_t * stree,
   return 1;
 }
 
-static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+static double prop_migrates_gibbs(stree_t * stree,
+                                  gtree_t ** gtree,
+                                  locus_t ** locus,
+                                  long mcmc_step,
+                                  FILE * fp_a1b1)
 {
   long i,j;
   long accepted = 0;
   long total = 0;
+  double a1,b1;
 
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
@@ -10926,7 +11530,10 @@ static double prop_migrates_gibbs(stree_t * stree, gtree_t ** gtree, locus_t ** 
 
       ++total;
 
-      accepted += migrate_gibbs(stree,gtree,locus,i,j);
+      accepted += migrate_gibbs(stree,gtree,locus,i,j,&a1,&b1);
+
+      if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
+        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
     }
   }
 
@@ -11210,10 +11817,10 @@ double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 }
 #endif
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long mcmc_step, FILE * fp_a1b1)
 {
   if (opt_mrate_move == BPP_MRATE_GIBBS && !opt_mig_vrates_exist)
-    return prop_migrates_gibbs(stree,gtree,locus);
+    return prop_migrates_gibbs(stree,gtree,locus,mcmc_step,fp_a1b1);
 
   return prop_migrates_slide(stree,gtree,locus);
 }

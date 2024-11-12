@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -233,7 +233,7 @@ static void print_filepaths()
           "Map file         : %s\n"
           "MCMC sample file : %s\n"
           "Output file      : %s\n\n",
-          opt_cfile, opt_msafile, opt_mapfile, opt_mcmcfile, opt_outfile);
+          opt_cfile, opt_msafile, opt_mapfile, opt_mcmcfile, opt_jobname);
 }
 
 static void load_chk_section_1(FILE * fp,
@@ -242,6 +242,7 @@ static void load_chk_section_1(FILE * fp,
                                long * ndspecies,
                                long * mcmc_offset,
                                long * out_offset,
+                               long * a1b1_offset,
                                long ** gtree_offset,
                                long ** mig_offset,
                                long ** rates_offset,
@@ -325,10 +326,22 @@ static void load_chk_section_1(FILE * fp,
   #endif
 
   /* read output filename */
-  if (!load_string(fp,&opt_outfile))
+  if (!load_string(fp,&opt_jobname))
     fatal("Cannot read name of output file");
 
-  /* read output filename */
+  if (!LOAD(&opt_print_a1b1,1,fp))
+    fatal("Cannot read print a1b1 flag");
+
+  if (opt_print_a1b1)
+  {
+    if (opt_a1b1file)
+      free(opt_a1b1file);
+    /* read a1b1 filename */
+    if (!load_string(fp,&opt_a1b1file))
+      fatal("Cannot read name of a1b1 file");
+  }
+
+  /* read mcmc filename */
   if (!load_string(fp,&opt_mcmcfile))
     fatal("Cannot read name of mcmc file");
 
@@ -530,6 +543,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read theta gibbs showall eps");
   if (!LOAD(&opt_theta_slide_prob,1,fp))
     fatal("Cannot read theta slide prob");
+  if (!LOAD(&opt_phi_slide_prob,1,fp))
+    fatal("Cannot read phi slide prob");
   #if 0
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
   #endif
@@ -751,8 +766,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_mix");
   if (!(LOAD(&g_pj_lrht, 1, fp)))
     fatal("Cannot read g_pj_lrht");
-  if (!(LOAD(&g_pj_phi, 1, fp)))
-    fatal("Cannot read g_pj_phi");
+  if (!(LOAD(&g_pj_phi_slide, 1, fp)))
+    fatal("Cannot read g_pj_phi_slide");
+  if (!(LOAD(&g_pj_phi_gibbs, 1, fp)))
+    fatal("Cannot read g_pj_phi_gibbs");
   if (!(LOAD(&g_pj_freqs, 1, fp)))
     fatal("Cannot read g_pj_freqs");
   if (!(LOAD(&g_pj_qmat, 1, fp)))
@@ -779,6 +796,9 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(out_offset,1,fp))
     fatal("Cannot read output file offset");
+
+  if (!LOAD(a1b1_offset,1,fp))
+    fatal("Cannot read a1b1 file offset");
 
   if (!LOAD(&opt_bfbeta,1,fp))
     fatal("Cannot read bfbeta");
@@ -1074,15 +1094,11 @@ static void load_chk_section_1(FILE * fp,
     node->coalevent = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                       sizeof(dlist_t *));
 
-    node->t2h = NULL;
-    node->old_t2h = NULL;
     node->hphi_sum = 0;
     node->notheta_phi_contrib = NULL;
     node->notheta_old_phi_contrib = NULL;
     if (!opt_est_theta)
     {
-      node->t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
-      node->old_t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
       node->t2h_sum = 0;
       node->coal_count_sum = 0;
     }
@@ -1359,9 +1375,6 @@ void load_chk_section_2(FILE * fp)
 
     for (i = 0; i < total_nodes; ++i)
     {
-      if (!LOAD(stree->nodes[i]->t2h,opt_locus_count,fp))
-        fatal("Cannot read per-locus t2h contributions");
-
       if (!LOAD(&(stree->nodes[i]->t2h_sum),1,fp))
         fatal("Cannot read t2h sum");
 
@@ -2005,6 +2018,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
+                    long * a1b1_offset,
                     long ** gtree_offset,
                     long ** mig_offset,
                     long ** rates_offset,
@@ -2058,6 +2072,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      ndspecies,
                      mcmc_offset,
                      out_offset,
+                     a1b1_offset,
                      gtree_offset,
                      mig_offset,
                      rates_offset,

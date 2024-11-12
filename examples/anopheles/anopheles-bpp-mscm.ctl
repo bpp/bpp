@@ -1,9 +1,8 @@
-          seed =  -1
+          seed = -1
 
        seqfile = loci_realign.txt
       Imapfile = Imap.txt
-       outfile = out-r1.txt
-      mcmcfile = mcmc-r1.txt
+       jobname = out
 
   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * species delimitation rjMCMC algorithm0 and finetune(e)
@@ -26,10 +25,10 @@
     thetaprior = gamma 2 100  # gamma(a, b) for theta
       tauprior = gamma 2 10   # gamma(a, b) for root tau
  
-       migprior = 2 20
+       wprior = 20 1
       migration = 2 
 	              A b
-	              R Q
+                      R Q
 
       finetune =  1: 3 0.003 0.002 0.00002 0.005 0.9 0.001 0.001 # finetune for GBtj, GBspr, theta, tau, mix
 

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -158,6 +158,8 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 0
 
+#define PVER_SHA1 "333cf0512b6ff30b4033a8e262def1850258185b"
+
 /* checkpoint version */
 #define VERSION_CHKP 1
 
@@ -278,13 +280,17 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_MOVE_GIBBS            1
 #define BPP_THETA_MOVE_MAX              1
 
+#define BPP_PHI_MOVE_SLIDE              0
+#define BPP_PHI_MOVE_GIBBS              1
+
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
 
 #define BPP_LINKEDTHETA_NONE            0
-#define BPP_LINKEDTHETA_ALL             1       /* model M0 */
-#define BPP_LINKEDTHETA_INNER           2       /* model M1 */
-#define BPP_LINKEDTHETA_MSCI            3       /* model M2 */
+#define BPP_LINKEDTHETA_ALL             1  /* model M0 */
+#define BPP_LINKEDTHETA_INNER           2  /* model M1 */
+#define BPP_LINKEDTHETA_MSCI            3  /* model M2 */
+#define BPP_LINKEDTHETA_MSCM            4  /* model M3 */
 
 
 #define BPP_LB_NONE                     0
@@ -526,8 +532,6 @@ typedef struct snode_s
   long has_theta;
 
   /* no theta related variables */
-  double * t2h;                     /* per-locus precomputed t2h */
-  double * old_t2h;                 /* storage space for rollback */
   double t2h_sum;                   /* t2h sum for all loci */
   double hphi_sum;                  /* hphi sum for all loci */
   long coal_count_sum;              /* sum of coalencent events count */
@@ -566,7 +570,7 @@ typedef struct snode_s
   /* independent theta step lengths */
   long theta_step_index;
 
-  /* additional book-keeping for speeding up theta proposal */
+  /* total coalescent waiting time for pop j at locus i */
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
@@ -1146,6 +1150,7 @@ extern long opt_mrate_move;
 extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_partition_count;
+extern long opt_print_a1b1;
 extern long opt_print_genetrees;
 extern long opt_print_locus;
 extern long opt_print_hscalars;
@@ -1212,6 +1217,7 @@ extern double opt_mubar_beta;
 extern double opt_mui_alpha;
 extern double opt_phi_alpha;
 extern double opt_phi_beta;
+extern double opt_phi_slide_prob;
 extern double opt_prob_snl;            /* probability for SNL move, with 1 - opt_prob_snl for SPR */
 extern double opt_prob_snl_shrink;
 extern double opt_pseudo_alpha;
@@ -1242,22 +1248,23 @@ extern long * opt_sp_seqcount;
 extern long * opt_print_locus_num;
 extern char * opt_bfdriver;
 extern char * cmdline;
+extern char * opt_a1b1file;
 extern char * opt_cfile;
 extern char * opt_concatfile;
 extern char * opt_constraintfile;
-extern char * opt_heredity_filename;
-extern char * opt_mapfile;
 extern char * opt_datefile;
-extern char * opt_seqDates;
+extern char * opt_heredity_filename;
+extern char * opt_jobname;
+extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_msafile;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
-extern char * opt_outfile;
 extern char * opt_partition_file;
 extern char * opt_reorder;
 extern char * opt_resume;
+extern char * opt_seqDates;
 extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
@@ -1348,7 +1355,8 @@ extern double g_pj_gspr;
 extern double g_pj_tau;
 extern double g_pj_mix;
 extern double g_pj_lrht;
-extern double g_pj_phi;
+extern double g_pj_phi_gibbs;
+extern double g_pj_phi_slide;
 extern double g_pj_freqs;
 extern double g_pj_qmat;
 extern double g_pj_alpha;
@@ -1454,7 +1462,9 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype);
+                         long * acceptvec_movetype,
+                         long mcmc_step,
+                         FILE * fp_a1b1);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -1465,7 +1475,12 @@ double stree_propose_tau_mig(stree_t ** streeptr,
                              gtree_t *** gcloneptr,
                              locus_t ** loci);
 
-double stree_propose_phi(stree_t * stree, gtree_t ** gtree);
+void stree_propose_phi(stree_t * stree,
+                       gtree_t ** gtree,
+                       long * acceptvec,
+                       long * movecount,
+                       long mcmc_step,
+                       FILE * fp_a1b1);
 
 void stree_fini(void);
 
@@ -1562,7 +1577,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus,long mcmc_step, FILE * fp_a1b1);
 
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
@@ -1803,8 +1818,13 @@ double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index,
                                     long thread_index);
-//double gtree_update_logprob_contrib_notheta(snode_t * snode, double heredity, long msa_index);
-void logprob_revert_notheta(snode_t * snode, long msa_index);
+void gtree_update_C2j(snode_t * snode,
+                      double heredity,
+                      long msa_index,
+                      long thread_index);
+double update_logpg_contrib(stree_t * stree, snode_t * snode);
+void logprob_revert_C2j(snode_t * snode, long msa_index);
+void logprob_revert_contribs(snode_t * snode);
 double gtree_propose_spr_serial(locus_t ** locus,
                                 gtree_t ** gtree,
                                 stree_t * stree);
@@ -1875,8 +1895,10 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                long locus_count,
                                double c,
                                long thread_index,
-                               double * ret_lnacceptance,
+                               double * ret_lnacceptance);
+                               #if 0
                                double * ret_logpr);
+                               #endif
 
 /* functions in prop_rj.c */
 
@@ -2015,6 +2037,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
 /* functions in allfixed.c */
 
 void allfixed_summary(FILE * fp_out, stree_t * stree);
+double eff_ict(double * y, long n, double mean, double stdev, double * rho1);
 
 /* functions in summary.c */
 
@@ -2065,6 +2088,7 @@ int checkpoint_dump(stree_t * stree,
                     long ndspecies,
                     long mcmc_offset,
                     long out_offset,
+                    long a1b1_offset,
                     long * gtree_offset,
                     long * mig_offset,
                     long * rates_offset,
@@ -2102,6 +2126,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
+                    long * a1b1_offset,
                     long ** gtree_offset,
                     long ** mig_offset,
                     long ** rates_offset,
@@ -2895,6 +2920,13 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_linked_notheta(stree_t * stree,
+                          gtree_t * gtree,
+                          double bpp_logPG,
+                          const char * move,
+                          int only_pg,
+                          long lmodel);
+void debug_linked_notheta3(stree_t * stree, gtree_t ** gtree, double bpp_logPG, const char * move, int only_pg, long lmodel);
 void debug_print_wsji(stree_t * stree,
                       int prec,
                       const char * prefix_msg,
@@ -2963,3 +2995,43 @@ int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
 
 /* functions in bfdriver.c */
 void cmd_bfdriver();
+
+/* functions in visual.c */
+void stree_export_pdf(const stree_t * stree);
+
+/* functions in a1b1.c */
+void conditional_to_marginal(double * ai,
+                             double * bi,
+                             long nsamples,
+                             long nbins,
+                             long cond_dist,
+                             double tail,
+                             double * out_mean,
+                             double * out_sd,
+                             double * out_et025,
+                             double * out_et975,
+                             double * out_hpd025,
+                             double * out_hpd975,
+                             double * out_c,
+                             double * out_effu,
+                             double * out_effy);
+
+void conditional_to_marginal_M(double * ai1,
+                               double * bi1,
+                               double * ai2,
+                               double * bi2,
+                               int nsamples,
+                               int nbins,
+                               int cond_dist1,
+                               double tail,
+                               double * out_wmean,
+                               double * out_wsd,
+                               double * out_mean,
+                               double * out_sd,
+                               double * out_et025,
+                               double * out_et975,
+                               double * out_hpd025,
+                               double * out_hpd975,
+                               double * out_c,
+                               double * out_effu,
+                               double * out_effy);
