@@ -2971,7 +2971,7 @@ void load_cfile()
       else if (!strncasecmp(token,"sampfreq",8))
       {
         if (!parse_long(value,&opt_samplefreq) || opt_samplefreq <= 0)
-          fatal("Option 'samplfreq' expects a positive integer (line %ld)",
+          fatal("Option 'sampfreq' expects a positive integer (line %ld)",
                 line_count);
         valid = 1;
       }

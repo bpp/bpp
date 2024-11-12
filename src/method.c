@@ -3234,7 +3234,7 @@ static FILE * init(stree_t ** ptr_stree,
   {
     int params_avail = 0;
 
-    if (opt_est_stree || opt_est_delimit || opt_samplefreq > 1) opt_print_a1b1 = 0;
+    if (opt_est_stree || opt_est_delimit) opt_print_a1b1 = 0;
 
     printf("opt_print_a1b1 = %ld\n", opt_print_a1b1);
     params_avail = ((opt_est_theta && opt_theta_slide_prob == 0)
@@ -3255,7 +3255,7 @@ static FILE * init(stree_t ** ptr_stree,
             "  * To use Gibbs sampler for thetas: use the switch --theta-slide-prob 0\n"
             "  * To use Gibbs sampler for phi (MSC-I model): use the switch --phi-slide-prob 0\n"
             "  * To use Gibbs sampler for migration rates (MSC-M model): use the switch --mrate-move gibbs\n"
-            "  * The option is available only for analysis A00 and for sampfreq=1...\n", opt_jobname);
+            "  * The option is available only for analysis A00...\n", opt_jobname);
       free(opt_a1b1file);
       opt_a1b1file = NULL;
     }
