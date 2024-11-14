@@ -3970,20 +3970,28 @@ void stree_propose_theta(gtree_t ** gtree,
       /* one step size for tip theta and one for inner theta */
       if (opt_theta_slide_prob == 1)
       {
-        acceptvec_slide[0] /= slide_tip_count;
-        acceptvec_slide[1] /= slide_inner_count;
+        if (slide_tip_count)
+          acceptvec_slide[0] /= slide_tip_count;
+        if (slide_inner_count)
+          acceptvec_slide[1] /= slide_inner_count;
       }
       else if (opt_theta_slide_prob == 0)
       {
-        acceptvec_gibbs[0] /= gibbs_tip_count;
-        acceptvec_gibbs[1] /= gibbs_inner_count;
+        if (gibbs_tip_count)
+          acceptvec_gibbs[0] /= gibbs_tip_count;
+        if (gibbs_inner_count)
+          acceptvec_gibbs[1] /= gibbs_inner_count;
       }
       else
       {
-        acceptvec_gibbs[0] /= gibbs_tip_count;
-        acceptvec_gibbs[1] /= gibbs_inner_count;
-        acceptvec_slide[0] /= slide_tip_count;
-        acceptvec_slide[1] /= slide_inner_count;
+        if (gibbs_tip_count)
+          acceptvec_gibbs[0] /= gibbs_tip_count;
+        if (gibbs_inner_count)
+          acceptvec_gibbs[1] /= gibbs_inner_count;
+        if (slide_tip_count)
+          acceptvec_slide[0] /= slide_tip_count;
+        if (slide_inner_count)
+          acceptvec_slide[1] /= slide_inner_count;
       }
       break;
 

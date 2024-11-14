@@ -307,7 +307,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
 
   /* TODO: Account for method 11 / rj-MCMC */
-  if (opt_est_theta && theta_method)
+  if (opt_est_theta)
   {
     /* TODO: Precompute how many theta parameters we have for A00 */
     for (i = 0; i < nodes_count; ++i)
@@ -339,7 +339,11 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   for (i=0,k=0; i < stree->locus_count; ++i)
     k += gtree[i]->inner_count; 
 
-  lnacceptance = (tau_count + k)*lnc;
+  if (theta_method)
+    lnacceptance = (tau_count + k)*lnc;
+  else
+    lnacceptance = (theta_count + tau_count + k)*lnc;
+    
 
   /* account for migration events */
   if (opt_migration)
@@ -446,6 +450,27 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         lnacceptance += logPDFRatioGamma(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
       else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += logPDFRatioInvG(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
+    }
+  }
+  else if (opt_est_theta)
+  {
+    for (i = 0; i < nodes_count; ++i)
+    {
+      if (snodes[i]->theta <= 0 || snodes[i]->linked_theta) continue;
+
+      snodes[i]->old_theta = snodes[i]->theta;
+      snodes[i]->theta *= c;
+
+      if (snodes[i]->linked_theta) continue;
+
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        lnacceptance += (-opt_theta_alpha-1)*lnc -
+                     opt_theta_beta*(1/snodes[i]->theta-1/snodes[i]->old_theta);
+      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        lnacceptance += (opt_theta_alpha-1)*lnc -
+                       opt_theta_beta*(snodes[i]->theta - snodes[i]->old_theta);
+      else
+        fatal("Invalid theta prior");
     }
   }
 
@@ -706,8 +731,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         /* TODO: Note that, it is both faster and more precise to restore the old
            value from memory, than re-computing it with a division. For now, we
            use the division here to be compatible with the old bpp */
-        if (theta_method)
-          snodes[i]->theta = snodes[i]->old_theta;
+        snodes[i]->theta = snodes[i]->old_theta;
       }
     }
     else
