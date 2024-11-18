@@ -3236,12 +3236,10 @@ static FILE * init(stree_t ** ptr_stree,
 
     if (opt_est_stree || opt_est_delimit) opt_print_a1b1 = 0;
 
-    printf("opt_print_a1b1 = %ld\n", opt_print_a1b1);
     params_avail = ((opt_est_theta && opt_theta_slide_prob == 0)
        || (opt_msci && opt_phi_slide_prob == 0) 
        || (opt_migration && opt_mrate_move == BPP_MRATE_GIBBS));
 
-    printf("opt_print_a1b1 = %ld\n", opt_print_a1b1);
     if(!params_avail) opt_print_a1b1 = 0;
 
     if (!opt_print_a1b1)
@@ -3791,13 +3789,17 @@ static FILE * init(stree_t ** ptr_stree,
 
     if (opt_a1b1file)
     {
+      assert(!opt_est_delimit && !opt_est_stree);
       fprintf(fp_a1b1,"Gen");
       if (opt_est_theta)
       {
         for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
         {
           snode_t * x = stree->nodes[i];
-          if (x->theta >= 0 && x->has_theta && !x->linked_theta)
+
+          if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
+
+          if (!x->linked_theta)
             fprintf(fp_a1b1,
                     "\ttheta:%d_a1\ttheta:%d_b1",
                     x->node_index+1,x->node_index+1);
@@ -4058,6 +4060,87 @@ static void pjump_reset()
   g_pj_sspr = 0;
   g_pj_ssnl = 0;
   g_pj_rj = 0;
+}
+
+static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcmc_step)
+{
+  long i,j;
+  long msa_index;
+  long coal_sum = 0;
+  double C2h_sum = 0;
+  double a1,b1;
+  snode_t * snode;
+
+  long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  /* theta */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    snode = stree->nodes[i];
+
+    /* no identifiable theta for tip pops with < 2 sequences */
+    if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
+
+    coal_sum = C2h_sum = 0;
+
+    if (opt_linkedtheta)
+    {
+      size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+      for (j = 0; j < totnodes; ++j)
+      {
+        if (stree->nodes[j]->linked_theta != snode && stree->nodes[j] != snode) continue;
+
+        for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+        {
+          C2h_sum += stree->nodes[j]->C2ji[msa_index];
+          coal_sum += stree->nodes[j]->coal_count[msa_index];
+        }
+      }
+    }
+    else
+    {
+      for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+      {
+        coal_sum += snode->coal_count[msa_index];
+        C2h_sum += snode->C2ji[msa_index];
+      }
+    }
+
+    /* MSC and MSC-I models */
+    a1 = opt_theta_alpha + coal_sum;
+    b1 = opt_theta_beta + C2h_sum;
+    if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+      get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
+       
+    fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+  }
+
+  /* W */
+  if (!opt_mig_vrates_exist)
+  {
+    if (opt_est_geneflow)
+      fatal("Not implemented [migration rates with a1b1 summary]");
+
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      unsigned int si = opt_mig_specs[i].si;
+      unsigned int ti = opt_mig_specs[i].ti;
+      assert(opt_mig_bitmatrix[si][ti]);
+      
+      if (!migration_valid(stree->nodes[si],stree->nodes[ti]))
+        fprintf(fp_a1b1, "\t-\t-");
+      else
+      {
+        a1 = b1 = 0;
+        for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+        {
+          a1 += gtree[msa_index]->migcount[si][ti];
+          b1 += stree->Wsji[si][ti][msa_index];
+        }
+        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+      }
+    }
+  }
 }
 
 void cmd_run()
@@ -4459,6 +4542,7 @@ void cmd_run()
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
     //if (opt_debug && opt_debug_counter==10) exit(0);
+    printf("opt_debug_counter = %ld\n", opt_debug_counter);
     #if 0
     if (opt_debug_counter == 0)
     {
@@ -4722,6 +4806,12 @@ void cmd_run()
         ratio = prop_mig_vrates(stree,gtree,locus);
         g_pj_migvr = (g_pj_migvr*(ft_round-1)+ratio) / (double)ft_round;
       }
+    }
+
+    
+    if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
+    {
+      log_a1b1(fp_a1b1, stree, gtree, i);
     }
     
 
