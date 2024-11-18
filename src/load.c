@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -233,7 +233,7 @@ static void print_filepaths()
           "Map file         : %s\n"
           "MCMC sample file : %s\n"
           "Output file      : %s\n\n",
-          opt_cfile, opt_msafile, opt_mapfile, opt_mcmcfile, opt_outfile);
+          opt_cfile, opt_msafile, opt_mapfile, opt_mcmcfile, opt_jobname);
 }
 
 static void load_chk_section_1(FILE * fp,
@@ -242,7 +242,9 @@ static void load_chk_section_1(FILE * fp,
                                long * ndspecies,
                                long * mcmc_offset,
                                long * out_offset,
+                               long * a1b1_offset,
                                long ** gtree_offset,
+                               long ** mig_offset,
                                long ** rates_offset,
                                long ** migcount_offset,
                                long * dparam_count,
@@ -264,7 +266,8 @@ static void load_chk_section_1(FILE * fp,
                                long * mean_theta_count,
                                long * mean_phi_count,
                                int * prec_logpg,
-                               int * prec_logl)
+                               int * prec_logl,
+		               int ** ptr_printLocusIndex)
 {
   long i;
   long total_nodes;
@@ -323,10 +326,22 @@ static void load_chk_section_1(FILE * fp,
   #endif
 
   /* read output filename */
-  if (!load_string(fp,&opt_outfile))
+  if (!load_string(fp,&opt_jobname))
     fatal("Cannot read name of output file");
 
-  /* read output filename */
+  if (!LOAD(&opt_print_a1b1,1,fp))
+    fatal("Cannot read print a1b1 flag");
+
+  if (opt_print_a1b1)
+  {
+    if (opt_a1b1file)
+      free(opt_a1b1file);
+    /* read a1b1 filename */
+    if (!load_string(fp,&opt_a1b1file))
+      fatal("Cannot read name of a1b1 file");
+  }
+
+  /* read mcmc filename */
   if (!load_string(fp,&opt_mcmcfile))
     fatal("Cannot read name of mcmc file");
 
@@ -482,6 +497,32 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read qmatrix flag");
   if (!LOAD(&opt_print_locusfile,1,fp))
     fatal("Cannot read locusfile flag");
+  
+
+  if (!LOAD(&opt_print_locus,1,fp))
+    fatal("Cannot read print locus flag");
+
+  *ptr_printLocusIndex = NULL;
+  int * printLocusIndex = NULL;
+
+  if (opt_print_locus) {
+    opt_print_locus_num = (long *) xmalloc(opt_print_locus * sizeof(long));
+    for (i = 0; i < opt_print_locus; i++) {
+      if (!LOAD(&opt_print_locus_num[i],1,fp))
+        fatal("Cannot read print locus num");
+    }
+
+    printLocusIndex = xmalloc(opt_locus_count * sizeof(int));
+    for (i = 0; i < opt_locus_count; i++) {
+      if (!LOAD(&printLocusIndex[i],1,fp))
+        fatal("Cannot read printLocusIndex");
+    }
+  } else {
+    opt_print_locus_num = NULL;
+  }
+
+  *ptr_printLocusIndex = printLocusIndex;
+
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
@@ -502,6 +543,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read theta gibbs showall eps");
   if (!LOAD(&opt_theta_slide_prob,1,fp))
     fatal("Cannot read theta slide prob");
+  if (!LOAD(&opt_phi_slide_prob,1,fp))
+    fatal("Cannot read phi slide prob");
   #if 0
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
   #endif
@@ -723,8 +766,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_mix");
   if (!(LOAD(&g_pj_lrht, 1, fp)))
     fatal("Cannot read g_pj_lrht");
-  if (!(LOAD(&g_pj_phi, 1, fp)))
-    fatal("Cannot read g_pj_phi");
+  if (!(LOAD(&g_pj_phi_slide, 1, fp)))
+    fatal("Cannot read g_pj_phi_slide");
+  if (!(LOAD(&g_pj_phi_gibbs, 1, fp)))
+    fatal("Cannot read g_pj_phi_gibbs");
   if (!(LOAD(&g_pj_freqs, 1, fp)))
     fatal("Cannot read g_pj_freqs");
   if (!(LOAD(&g_pj_qmat, 1, fp)))
@@ -752,6 +797,9 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(out_offset,1,fp))
     fatal("Cannot read output file offset");
 
+  if (!LOAD(a1b1_offset,1,fp))
+    fatal("Cannot read a1b1 file offset");
+
   if (!LOAD(&opt_bfbeta,1,fp))
     fatal("Cannot read bfbeta");
 
@@ -763,6 +811,13 @@ static void load_chk_section_1(FILE * fp,
     *gtree_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
     if (!LOAD(*gtree_offset,opt_locus_count,fp))
       fatal("Cannot read gtree file offsets");
+  }
+
+  if (opt_print_locus)
+  {
+    *mig_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
+    if (!LOAD(*mig_offset,opt_locus_count,fp))
+      fatal("Cannot read mig file offsets");
   }
 
   if (opt_print_locusfile)
@@ -1039,15 +1094,11 @@ static void load_chk_section_1(FILE * fp,
     node->coalevent = (dlist_t **)xmalloc((size_t)opt_locus_count *
                                       sizeof(dlist_t *));
 
-    node->t2h = NULL;
-    node->old_t2h = NULL;
     node->hphi_sum = 0;
     node->notheta_phi_contrib = NULL;
     node->notheta_old_phi_contrib = NULL;
     if (!opt_est_theta)
     {
-      node->t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
-      node->old_t2h = (double *)xcalloc((size_t)opt_locus_count,sizeof(double));
       node->t2h_sum = 0;
       node->coal_count_sum = 0;
     }
@@ -1324,9 +1375,6 @@ void load_chk_section_2(FILE * fp)
 
     for (i = 0; i < total_nodes; ++i)
     {
-      if (!LOAD(stree->nodes[i]->t2h,opt_locus_count,fp))
-        fatal("Cannot read per-locus t2h contributions");
-
       if (!LOAD(&(stree->nodes[i]->t2h_sum),1,fp))
         fatal("Cannot read t2h sum");
 
@@ -1417,6 +1465,16 @@ void load_chk_section_2(FILE * fp)
   }
   free(buffer);
 
+  for (i = 0; i < total_nodes; ++i)
+  {
+    snode_t * x = stree->nodes[i];
+    x->C2ji = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+    x->old_C2ji = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+    if (!LOAD(stree->nodes[i]->C2ji,opt_locus_count,fp))
+      fatal("Cannot read C2 for population %ld\n", i);
+  }
+
+
   if (opt_migration)
   {
     for (i = 0; i < total_nodes; ++i)
@@ -1459,6 +1517,67 @@ void load_chk_section_2(FILE * fp)
 
         if (!LOAD(x->migbuffer[j].mrsum, x->migbuffer[j].active_count, fp))
           fatal("Cannot load mrsum for node with index %ld", i);
+
+        size_t dcount = 2*stree->tip_count - 3;
+        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
+
+        for (k = 0; k < x->migbuffer[j].donors_count; ++k)
+        {
+          unsigned int node_index = 0;
+          if (!LOAD(&node_index,1,fp))
+            fatal("Cannot read migbuffer donors list");
+          x->migbuffer[j].donors[k] = stree->nodes[node_index];
+        }
+      }
+    }
+
+    /* create and load Wsji matrix */
+    stree->Wsji = (double ***)xmalloc((size_t)total_nodes*sizeof(double **));
+    stree->old_Wsji = (double ***)xmalloc((size_t)total_nodes*sizeof(double **));
+    for (i = 0; i < total_nodes; ++i)
+    {
+      /* allocate row only if migration rate W_{i->j} exists */
+      if (!opt_est_geneflow)
+      {
+        for (j = 0; j < total_nodes; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            break;
+        if (j == total_nodes)
+        {
+          stree->Wsji[i] = NULL;
+          stree->old_Wsji[i] = NULL;
+          continue;
+        }
+      }
+      if (i == stree->root->node_index)
+      {
+        stree->Wsji[i] = NULL;
+        stree->old_Wsji[i] = NULL;
+        continue;
+      }
+
+      stree->Wsji[i] = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+      stree->old_Wsji[i] = (double **)xmalloc((size_t)total_nodes*sizeof(double *));
+      for (j = 0; j < total_nodes; ++j)
+      {
+        if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+        {
+          stree->Wsji[i][j] = NULL;
+          stree->old_Wsji[i][j] = NULL;
+          continue;
+        }
+        if (j == i || j == stree->root->node_index)
+        {
+          stree->Wsji[i][j] = NULL;
+          stree->old_Wsji[i][j] = NULL;
+          continue;
+        }
+
+        stree->Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+        stree->old_Wsji[i][j] = (double *)xmalloc((size_t)opt_locus_count*sizeof(double));
+
+        if (!LOAD(stree->Wsji[i][j],opt_locus_count,fp))
+          fatal("Cannot load Wsji matrix");
       }
     }
   }
@@ -1899,7 +2018,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
+                    long * a1b1_offset,
                     long ** gtree_offset,
+                    long ** mig_offset,
                     long ** rates_offset,
                     long ** migcount_offset,
                     long * dparam_count,
@@ -1921,7 +2042,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_theta_count,
                     long * mean_phi_count,
                     int * prec_logpg,
-                    int * prec_logl)
+                    int * prec_logl, 
+		    int ** ptr_printLocusIndex)
 {
   long i,j,k;
   FILE * fp;
@@ -1950,7 +2072,9 @@ int checkpoint_load(gtree_t *** gtreep,
                      ndspecies,
                      mcmc_offset,
                      out_offset,
+                     a1b1_offset,
                      gtree_offset,
+                     mig_offset,
                      rates_offset,
                      migcount_offset,
                      dparam_count,
@@ -1972,7 +2096,8 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_theta_count,
                      mean_phi_count,
                      prec_logpg,
-                     prec_logl);
+                     prec_logl,
+		     ptr_printLocusIndex);
 
   /* load section 2 */
   load_chk_section_2(fp);

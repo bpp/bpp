@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -62,16 +62,14 @@ static char * cb_serialize_branch(const snode_t * node)
       {
         /* replacement to keep GCC warning from showing up when executing
            the following:
-           
+
            xasprintf(&s, "");
         */
 
         s = (char *)xmalloc(sizeof(char));
         *s = 0;
-
       }
     }
-      
   }
   else
   {
@@ -81,7 +79,6 @@ static char * cb_serialize_branch(const snode_t * node)
     else
       xasprintf(&s, "%s: %f", node->label, node->parent->tau - node->tau);
   }
-    
 
   return s;
 }
@@ -92,7 +89,6 @@ void mutation_dealloc(void * data)
   if (data)
   {
     mutation_t * mut = (mutation_t *)data;
-
     free(mut);
   }
 }
@@ -128,62 +124,6 @@ static void print_settings(stree_t * stree)
   }
 
   stree_show_pptable(stree, BPP_TRUE);
-}
-
-static int MultiNomialAliasSetTable(int ncat, double * prob, double * F, int * L)
-{
-   /* This sets up the tables F and L for the alias algorithm for generating samples from the
-      multinomial distribution MN(ncat, p) (Walker 1974; Kronmal & Peterson 1979).
-
-      F[i] has cutoff probabilities, L[i] has aliases.
-      I[i] is an indicator: -1 for F[i]<1; +1 for F[i]>=1; 0 if the cell is now empty.
-
-      Should perhaps check whether prob[] sums to 1.
-   */
-   signed char *I = (signed char *)xmalloc((size_t)ncat * sizeof(signed char));
-   int i, j, k, nsmall;
-
-   for (i = 0; i < ncat; i++)  L[i] = -9;
-   for (i = 0; i < ncat; i++)  F[i] = ncat*prob[i];
-   for (i = 0, nsmall = 0; i < ncat; i++) {
-      if (F[i] >= 1)  I[i] = 1;
-      else { I[i] = -1; nsmall++; }
-   }
-   for (i = 0; nsmall > 0; i++) {
-      for (j = 0; j < ncat; j++)  if (I[j] == -1) break;
-      for (k = 0; k < ncat; k++)  if (I[k] == 1)  break;
-      if (k == ncat)  break;
-
-      L[j] = k;
-      F[k] -= 1 - F[j];
-      if (F[k] < 1) { I[k] = -1; nsmall++; }
-      I[j] = 0;  nsmall--;
-   }
-
-   free(I);
-   return(0);
-}
-
-static int MultiNomialAlias(int n, int ncat, double * F, int * L, int * nobs)
-{
-   /* This generates multinomial samples using the F and L tables set up before,
-      using the alias algorithm (Walker 1974; Kronmal & Peterson 1979).
-
-      F[i] has cutoff probabilities, L[i] has aliases.
-      I[i] is an indicator: -1 for F[i]<1; +1 for F[i]>=1; 0 if the cell is now empty.
-   */
-   int i, k;
-   double r;
-
-   for (i = 0; i < ncat; i++)  nobs[i] = 0;
-   for (i = 0; i < n; i++) {
-      r = legacy_rndu(thread_index_zero)*ncat;
-      k = (int)r;
-      r -= k;
-      if (r <= F[k]) nobs[k]++;
-      else        nobs[L[k]]++;
-   }
-   return (0);
 }
 
 static void process_diploid(long species_count)
@@ -490,7 +430,7 @@ static double * rates4sites(double locus_siterate_alpha, int cdf)
 
     DiscreteGamma(freqK,rK,gamma_a,gamma_b,opt_siterate_cats,BPP_FALSE);
     MultiNomialAliasSetTable(opt_siterate_cats, freqK, Falias, Lalias);
-    MultiNomialAlias(opt_locus_simlen,opt_siterate_cats,Falias,Lalias,counts);
+    MultiNomialAlias(thread_index_zero,opt_locus_simlen,opt_siterate_cats,Falias,Lalias,counts);
 
     for (i = 0, k = 0; i < opt_siterate_cats; ++i)
       for (j = 0; j < counts[i]; ++j)
@@ -519,48 +459,35 @@ static double * rates4sites(double locus_siterate_alpha, int cdf)
   return rates;
 }
 
-void clear_marks (gtree_t * tree)
-{
-  unsigned int i;
-
-  for (i = 0; i < tree->inner_count + tree->tip_count; i++)
-    tree->nodes[i]->mark = 0;
+void clear_marks (gtree_t * tree) {
+	for (unsigned i = 0; i < tree->inner_count + tree->tip_count; i++)
+		tree->nodes[i]->mark = 0;
 }
 
-void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus)
-{
-  if (node->left)
-  {
-    mark_mutation(node->left, site, mutations, locus);
-    mark_mutation(node->right, site, mutations, locus);
-  } 
-  
-  list_t * mutNode = mutations + node->clv_index;
-  list_item_t * item = mutNode->head;
-  
-  while (item)
-  {
-    mutation_t * mut = (mutation_t *) item->data;
-  
-    if (mut->site == site)
-    {
-      node->mark = 1;
-  
-      if (!node->left || !node->left->mark || !node->right->mark)
-      {
-        printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n",
-               locus + 1, site + 1, mut->time, charmap_nt_tcag[(int)mut->state],
-               mut->pop->label);
-      }
-      break;
-  
-    }
-    item = item->next;
-  }
-}
+void mark_mutation(gnode_t * node, int site, list_t * mutations, long locus) {
+	if (node->left) {
+		mark_mutation(node->left, site, mutations, locus);
+		mark_mutation(node->right, site, mutations, locus);
 
-void print_mutation_information(gnode_t * node, int site) {
+	} 
 
+	list_t * mutNode = mutations + node->clv_index;
+	list_item_t * item = mutNode->head;
+
+	while (item) {
+		mutation_t * mut = (mutation_t *) item->data;
+
+		if (mut->site == site) {
+			node->mark = 1;
+
+			if (!node->left || !node->left->mark || !node->right->mark) {
+				printf("Locus: % ld, Site: %d,  time: %f,  base: %c, pop: %s \n", locus + 1, site + 1, mut->time, charmap_nt_tcag[mut->state], mut->pop->label);
+			}
+			break;
+
+		}
+		item = item->next;
+	}
 }
 
 static void evolve_mutation_recursive(gnode_t * node, double ** rates, list_t * mutList, int * mutPresent) {
@@ -1057,13 +984,168 @@ static void randomize_order(long * order, long n)
 static char * consensus(const char * x, const char * y, long n)
 {
   long i;
-
   char * cons = (char *)xmalloc((size_t)n * sizeof(char));
 
   for (i = 0; i < n; ++i)
     cons[i] = x[i] | y[i];
 
   return cons;
+}
+
+
+static char read_depth_model_beta = 1;  /* 1: beta; 0:gamma */
+static int read_depth_min = 2, read_depth_max = 100;
+static double read_depth_prob_prev = 0.9;
+static double** read_depth_AliasF;  /* multinomial sampling */
+int** read_depth_AliasL;
+
+/* gt_err[ispecies*2+0] for GT00 errors;
+         [ispecies*2+1] for GT01 errors.
+   gt_count[ispecies*2+0] for GT00 homozygotes;
+           [ispecies*2+1] for GT01 heterozygotes.
+   FL space for multinomial is arranged as follows:
+   read_depth_AliasF: Fn1-00 Fn1-01 Fn2-00 Fn2-F01 ...
+   read_depth_AliasL: Ln1-00 Ln1-01 Ln2-00 Ln2-F01 ...
+   read_depth_species[ispecies] has depthx for the beta model, and depth for gamma.
+   We assume that at most two alleles are called. 
+*/
+
+static void init_sequencing_machine(stree_t* stree, double** read_depth_species,
+  double** gt_err, double** gt_count)
+{
+  int i, j, depth, gt, offset;
+  double *prob, eps = opt_simulate_base_err, sump, *space, a = opt_simulate_a_samples;
+  size_t sizespace = stree->tip_count*5 + (read_depth_max+1) * (read_depth_max+2)*2;
+  
+  *read_depth_species = space = (double*)xmalloc(sizespace * sizeof(double));
+  memset(space, 0, sizespace * sizeof(double));
+  *gt_err = space + stree->tip_count;
+  *gt_count = space + stree->tip_count * 3;
+
+  /* binomial prob for 0 1 ... max */
+  prob = (double*)xmalloc((read_depth_max + 1) * sizeof(double));
+  memset(prob, 0, (read_depth_max + 1) * sizeof(double));
+  read_depth_AliasF = (double**)xmalloc(read_depth_max * 2 * sizeof(double*));
+  read_depth_AliasL = (int**)(read_depth_AliasF + read_depth_max);
+  space += stree->tip_count * 5;
+  for (depth = 1; depth <= read_depth_max; depth++) {
+    read_depth_AliasF[depth - 1] = space;  /* given depth, there are depth+1 categories */
+    read_depth_AliasL[depth - 1] = (int*)(space + (depth+1)*2);
+    space += (depth + 1) * 4;
+  }
+
+  printf("\nProbability distribution of reads given depth\n");
+  for (depth = 1; depth <= read_depth_max; depth++) {
+    for (gt = 0; gt <= 1; gt++) {  /* 0=00 for homozygotes; 1=01 for heterozygotes */
+      /* calculating binomial probabilities for read depth */
+      double p = (gt == 0 ? 1 - eps : 0.5);
+      offset = (gt == 0 ? 0 : depth + 1);
+      prob[depth] = pow(p, depth);
+      for (j = depth - 1; j >= 0; j--)
+        prob[j] = prob[j + 1] * (1 - p) * (j + 1.0) / (p * (depth - j));
+      if (gt == 0) {
+        printf("\nread depth %2d: ", depth);
+        for (j = 0; j <= depth; j++) printf(" %9.6f", prob[j]);
+      }
+      for (j = 0, sump = 0; j <= depth; j++) sump += prob[j];
+      if (fabs(sump - 1) > 1e-6) fatal("sump = %.6f != 1", sump);
+
+      MultiNomialAliasSetTable(depth + 1, prob, 
+        read_depth_AliasF[depth - 1] + offset, 
+        read_depth_AliasL[depth - 1] + offset);
+    }
+  }
+
+  if (read_depth_model_beta) {
+    assert(opt_simulate_read_depth >= read_depth_min && opt_simulate_read_depth < read_depth_max);
+    double xm = (opt_simulate_read_depth - read_depth_min)/(double)(read_depth_max - read_depth_min);
+    for (i = 0; i < stree->tip_count; ++i)
+      (*read_depth_species)[i] = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);
+  }
+  else {
+    for (i = 0; i < stree->tip_count; ++i)
+      (*read_depth_species)[i] = legacy_rndgamma(thread_index_zero, a)/a * opt_simulate_read_depth;
+  }
+
+  printf("\nGenome-wide average read depths:\n");
+  for (i = 0; i < stree->tip_count; ++i)
+    if (read_depth_model_beta)
+      printf("%-10s: %12.9f%6.0f\n", stree->nodes[i]->label, (*read_depth_species)[i],
+        read_depth_min + (*read_depth_species)[i] * (read_depth_max - read_depth_min));
+    else
+      printf("%-10s: %12.9f\n", stree->nodes[i]->label, (*read_depth_species)[i]);
+
+  free(prob);
+}
+
+static void sequencing_machine(stree_t* stree, msa_t* msa, 
+            double *read_depth_species, double *gt_err, double *gt_count)
+{
+  long iseq, isite, i, depth, k, ib;
+  double depthx=-1, xm, a = opt_simulate_a_sites;
+  double eps = opt_simulate_base_err, lne = log(eps), ln1e = log(1 - eps);
+  double lnL[3], p;
+  char dna[4] = "TCAG", bases[4] = {1,2,4,8}, alleles[2], nallele, nallele_called, gt;
+
+  int ispecies = 0, seq_count_species = 0;
+  for (iseq = 0; iseq < msa->count; iseq++) {
+    // printf("seq %-10s is from species %-10s\n", msa->label[iseq], stree->nodes[ispecies]->label);
+
+    for (isite = 0; isite < msa->length; isite++) {
+      /* generate depth for isite */
+      xm = read_depth_species[ispecies];
+      if (isite > 0)
+        xm = read_depth_prob_prev * depthx + (1 - read_depth_prob_prev) * xm;
+      if (read_depth_model_beta) {
+        depthx = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);  /* xm: mean of beta */
+        depth = (long)(read_depth_min + depthx * (read_depth_max - read_depth_min) + 0.5);
+      }
+      else {
+        depthx = legacy_rndgamma(thread_index_zero, a) / a * xm;
+        depth = (long)(depthx + 0.5);
+        if (depth < read_depth_min || depth > read_depth_max) fatal("bad depth");
+      }
+
+      /* true gt.  nallele = 1 for homozygote or 2 for heterozygote */
+      gt = msa->sequence[iseq][isite];
+      for (i = 0, nallele = 0; i < 4; i++)
+        if (gt & bases[i]) alleles[nallele++] = bases[i];
+      gt_count[ispecies * 2 + nallele - 1]++;
+
+#if(0)
+      p = (nallele == 1 ? 1 - eps : 0.5);
+      k = legacy_rndbinomial(thread_index_zero, depth, p);
+#else
+      int offset = (nallele == 1 ? 0 : depth + 1);  /* offset to FL for GT00 or 01 */
+      double r = legacy_rndu(thread_index_zero) * (depth + 1);
+      k = (int)r;
+      r -= k;
+      if (r > read_depth_AliasF[depth - 1][k + offset])
+        k = read_depth_AliasL[depth - 1][k + offset];
+#endif
+      lnL[0] = k * ln1e + (depth - k) * lne;
+      lnL[1] = -depth * log(2.0);
+      lnL[2] = (depth - k) * ln1e + k * lne;
+      if (lnL[1] > lnL[0] && lnL[1] > lnL[2]) {  /* called gt is heterozygote */
+        if (nallele == 1) {                      /* true gt is homozygote */
+          ib = (long)(3 * legacy_rndu(thread_index_zero));
+          if (bases[ib] >= alleles[0]) ib++;
+          msa->sequence[iseq][isite] |= bases[ib];
+          gt_err[ispecies * 2 + 0] ++;
+        }
+      }
+      else { /* called gt is homozygote.  Called homozygote is assumed to be true */
+        if (nallele == 2) {                      /* true gt is heterozygote */
+          msa->sequence[iseq][isite] = alleles[legacy_rndu(thread_index_zero) < 0.5];
+          gt_err[ispecies * 2 + 1] ++;
+        }
+      }
+    }
+    if (++seq_count_species == opt_sp_seqcount[ispecies] / 2) {
+      ispecies++;
+      seq_count_species = 0;
+    }
+  }
 }
 
 static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long hets_count)
@@ -1091,17 +1173,11 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
       for (j = 0; j < (long)strlen(seqname); ++j)
         seqname[j] = xtolower(seqname[j]);
 
-      #ifndef SIM_OLD_FORMAT
       long index = 0;
-      #endif
-      for (j = m; j < m+opt_sp_seqcount[i]; j += 2)
+      for (j = m; j < m + opt_sp_seqcount[i]; j += 2)
       {
-        #ifdef SIM_OLD_FORMAT
-        xasprintf(label+k, "%s^%s%ld_%ld", stree->nodes[i]->label, seqname, j-m+1, j-m+2);
-        #else
         xasprintf(label+k, "%s^%s%ld", stree->nodes[i]->label, seqname, ++index);
-//xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
-        #endif
+        //xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
         sequence[k] = consensus(msa->sequence[j],msa->sequence[j+1],msa->length);
 
         gtree->nodes[j]->data = sequence[k];
@@ -1215,11 +1291,10 @@ double msa_mean_heterozygosity(long seq_count, long site_count, msa_t* msa)
 
 static void write_seqs(FILE * fp, msa_t * msa, long species_count)
 {
-  long i,j;
+  long i,j,seq_sum = 0;
 
   fprintf(fp, "\n\n%d %ld \n\n", msa->count, opt_locus_simlen);
 
-  long seq_sum = 0;
   for (i = 0; i < species_count + opt_seqAncestral; ++i)
     seq_sum += opt_sp_seqcount[i] / (opt_diploid[i] ? 2 : 1);
   //assert(seq_sum == msa->count);
@@ -1267,10 +1342,9 @@ static void write_diploid_rand_seqs(FILE * fp_seqrand, stree_t * stree, msa_t * 
         memcpy(sequence[j],   msa->sequence[j],   msa->length * sizeof(char));
         memcpy(sequence[j+1], msa->sequence[j+1], msa->length * sizeof(char));
         for (k = 0; k < msa->length; ++k)
-
-        /* randomly resolve */
-        if (sequence[j][k] != sequence[j+1][k] && legacy_rndu(thread_index_zero)<0.5)
-          SWAP(sequence[j][k],sequence[j+1][k]);
+          /* randomly resolve */
+          if (sequence[j][k] != sequence[j+1][k] && legacy_rndu(thread_index_zero)<0.5)
+            SWAP(sequence[j][k],sequence[j+1][k]);
       }
     }
     else
@@ -1318,7 +1392,6 @@ static void set_migration_rates(stree_t * stree)
     opt_migration_events[i] = (double *)xcalloc(nodes_count,sizeof(double));
   }
 
-
   for (i = 0; i < opt_migration_count; ++i)
   {
     long s,t;
@@ -1327,9 +1400,9 @@ static void set_migration_rates(stree_t * stree)
     s = t = -1;
     for (j = 0; j < nodes_count; ++j)
     {
-      if (!spec->source || !spec->target) {
-              fatal("Check migration rates in control file. There are fewer than %d rates specified.", opt_migration);
-      }
+      if (!spec->source || !spec->target)
+        fatal("Check migration rates in control file. "
+              "There are fewer than %d rates specified.", opt_migration);
       if (s == -1 && !strcmp(spec->source, stree->nodes[j]->label))
         s = j;
 
@@ -1361,7 +1434,7 @@ static void set_migration_rates(stree_t * stree)
       fatal("Migration between %s and %s is not possible",
             stree->nodes[s]->label, stree->nodes[t]->label);
     }
-    
+
     opt_migration_matrix[s][t] = i;
     opt_mig_bitmatrix[s][t] = 1;
 
@@ -1390,8 +1463,9 @@ static void set_migration_rates(stree_t * stree)
   for (i = 0; i < nodes_count; ++i)
   {
     for (j = 0; j < nodes_count; ++j)
-      printf(" %f", opt_mig_bitmatrix[i][j] ? 
+      printf(" %f", opt_mig_bitmatrix[i][j] ?
                       opt_mig_specs[opt_migration_matrix[i][j]].M : 0);
+    printf("\n");
   }
 
   long needtheta;
@@ -1418,115 +1492,134 @@ static int cmp_tipDates(const void * a, const void * b){
  * Returns an array with mappingDate_t structs */
 /* This could probably be less redundant. Current it is
  * written to do most of the error checking first */
-mappingDate_t ** prepareTipDates(stree_t * stree, list_t** dateList, int *tipDateArrayLength) {
+mappingDate_t ** prepareTipDates(stree_t * stree, list_t ** dateList, int * tipDateArrayLength)
+{
 
-        *dateList = parse_date_mapfile(opt_datefile);
+  *dateList = parse_date_mapfile(opt_datefile);
 
-        int matchFound = 0;
-        long int* numSeqs = xcalloc(stree->tip_count + stree->inner_count, sizeof(long int));
-        long int totalSeqs = 0;
+  int matchFound = 0;
+  long int* numSeqs = xcalloc(stree->tip_count + stree->inner_count, sizeof(long int));
+  long int totalSeqs = 0;
 
-        /* Checks the number of tip dates match the number of sequences to 
-         * generate as specified by species&tree in the control file */
-        list_item_t* list = (*dateList)->head;
+  /* Checks the number of tip dates match the number of sequences to
+   * generate as specified by species&tree in the control file */
+  list_item_t* list = (*dateList)->head;
 
-        while (list) {
+  while (list)
+  {
+    /* Checks that the labels in the tip date file match the names of species */
+    for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++)
+    {
+      matchFound = !strcmp(stree->nodes[j]->label,
+                           ((mappingDate_t *)list->data)->individual);
+      if (matchFound)
+      {
+        numSeqs[j]++;
+        break;
+      }
+      if (j >= stree->tip_count && !opt_seqAncestral)
+        fatal("There are sequences from ancestral populations but the "
+              "species&tree line does not specify ancestral sampling");
+    }
 
-                /* Checks that the labels in the tip date file match the names of species */
-                for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++ ) {
-                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
-                        if (matchFound) {
-                                numSeqs[j]++;
-                                break;
-                        }
-                        if (j >= stree->tip_count && !opt_seqAncestral) {
-                                fatal("There are sequences from ancestral populations but the species&tree line does not specify ancestral sampling");
-                        }
-                }
+    if (!matchFound)
+      fatal("%s name in datefile not found as species name",
+            ((mappingDate_t *)list->data)->individual);
+    list = list->next;
+  }
 
-                if (! matchFound) {
-                        fatal("%s name in datefile not found as species name", ((mappingDate_t *)list->data)->individual);
-                }
-                list = list->next;
+  /* Checks the number of dates matches the number of sequences */
+  for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++)
+  {
+    if (opt_diploid[j])
+    {
+      totalSeqs = totalSeqs + 2 * numSeqs[j];
+      if (numSeqs[j] * 2 != opt_sp_seqcount[j])
+        fatal("There are %ld dates for species %s. This does not match "
+              "the number of loci given in the input file, which is %ld",
+              numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j] / 2);
+    }
+    else
+    {
+      totalSeqs = totalSeqs + numSeqs[j];
+      if (numSeqs[j] != opt_sp_seqcount[j])
+        fatal("There are %ld dates for species %s. This does not match "
+              "the number of loci given in the input file, which is %ld",
+              numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j]);
+    }
+  }
+
+  free(numSeqs);
+
+  mappingDate_t ** tipDateArray = xmalloc(totalSeqs*sizeof(mappingDate_t *));
+  *tipDateArrayLength = totalSeqs;
+  list = (*dateList)->head;
+
+  int i = 0;
+
+  /* Creates an array that points to the mappingDate structs from the list
+   * in order to sort the array.
+   * Note: For the sequences where phase = 1, two places in the array point
+   * to the same struct */
+  while (list)
+  {
+    tipDateArray[i] = (mappingDate_t *)list->data;
+
+    for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++)
+    {
+      matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)->individual);
+      if (matchFound)
+      {
+        if (opt_diploid[j])
+        {
+          i++;
+          tipDateArray[i] = (mappingDate_t *)list->data;
         }
+        break;
+      }
+    }
+    i++;
+    list = list->next;
+  }
+  assert(i == totalSeqs);
 
-       /* Checks the number of dates matches the number of sequences */
-       for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
-                if (opt_diploid[j]) {
-                        totalSeqs = totalSeqs + 2 * numSeqs[j];
-                        if ( numSeqs[j] * 2 != opt_sp_seqcount[j])
-                        fatal("There are %ld dates for species %s. This does not match the number of loci given in the input file, which is %ld", numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j] /2);
-                } else {
-                        totalSeqs = totalSeqs + numSeqs[j];
-                        if ( numSeqs[j] != opt_sp_seqcount[j])
-                        fatal("There are %ld dates for species %s. This does not match the number of loci given in the input file, which is %ld", numSeqs[j], stree->nodes[j]->label, opt_sp_seqcount[j]);
-                }
-        }
+  qsort(tipDateArray, totalSeqs, sizeof(mappingDate_t *), cmp_tipDates);
 
-        free(numSeqs);
+  /* Checks that the sequences were sampled in the population, after
+   * the species existed */
+  list = (*dateList)->head;
 
-        mappingDate_t ** tipDateArray = xmalloc(totalSeqs * sizeof(mappingDate_t *));
-        *tipDateArrayLength = totalSeqs;
-        list = (*dateList)->head;
+  while (list) {
+    int matchFound = 0;
 
-        int i = 0; 
+    for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++)
+    {
+      matchFound = !strcmp(stree->nodes[j]->label,
+                           ((mappingDate_t *)list->data)->individual);
 
-        /* Creates an array that points to the mappingDate structs from the list
-         * in order to sort the array. 
-         * Note: For the sequences where phase = 1, two places in the array point
-         * to the same struct */
-        while (list) {
-                tipDateArray[i] = (mappingDate_t *)list->data;
+      if (matchFound)
+      {
+        /* When sampling ancestral nodes, need to check daughter and parent ages */
+        if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau <= ((mappingDate_t *)list->data)->date)
+          fatal("Sequences were not sampled before speciation for %s. "
+                "Speciation time is %f and sample time is %f.\n",
+                stree->nodes[j]->label, stree->nodes[j]->parent->tau,
+                ((mappingDate_t *)list->data)->date);
 
-                for (unsigned int j = 0; j < stree->tip_count + opt_seqAncestral; j++ ) {
-                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
-                        if (matchFound) {
-                                if (opt_diploid[j]) {
-                                        i++;
-                                        tipDateArray[i] = (mappingDate_t *)list->data;
-                                }
-                                break;
-                        }
+        if (j >= stree->tip_count && stree->nodes[j]->tau >= ((mappingDate_t *)list->data)->date)
+          fatal("Sequences sampled before ancestral population %s existed. "
+                "Speciation time is %f and sample time is %f.\n",
+                stree->nodes[j]->label, stree->nodes[j]->tau,
+                ((mappingDate_t *)list->data)->date);
+        break;
+      }
+    }
 
-                }
-                
-                i++;
-                list = list->next;
-        }
-        assert(i == totalSeqs);
-
-        qsort(tipDateArray,totalSeqs, sizeof(mappingDate_t *), cmp_tipDates);
-
-        /* Checks that the sequences were sampled in the population, after
-         * the species existed */
-        list = (*dateList)->head;
-
-        while (list) {
-                int matchFound = 0;
-
-                for (unsigned int j = 0; j < stree->tip_count + stree->inner_count; j++ ) {
-                        matchFound = !strcmp(stree->nodes[j]->label, ((mappingDate_t *)list->data)-> individual);
-
-                        if (matchFound) {
-                                /* When sampling ancestral nodes, need to check daughter 
-                                 * and parent ages */
-                                if (stree->nodes[j]->parent && stree->nodes[j]->parent->tau <= ((mappingDate_t *) list->data)-> date) {
-                                        fatal("Sequences were not sampled before speciation for %s. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->parent->tau, ((mappingDate_t *) list->data)-> date);
-                                }
-
-                                if (j >= stree->tip_count && stree->nodes[j]->tau >= ((mappingDate_t *) list->data)-> date ) {
-                                        fatal("Sequences sampled before ancestral population %s existed. Speciation time is %f and sample time is %f.\n", stree->nodes[j]->label, stree->nodes[j]->tau, ((mappingDate_t *) list->data)-> date);
-                                }
-                                break;
-                        }
-                }
-
-                if (! matchFound) {
-                        fatal("%s name in datefile not found as species name", ((mappingDate_t *)list->data)->individual);
-                }
-                list = list->next;
-        }
-
+    if (!matchFound)
+      fatal("%s name in datefile not found as species name",
+            ((mappingDate_t *)list->data)->individual);
+    list = list->next;
+  }
 
   return tipDateArray;
 }
@@ -1545,10 +1638,12 @@ static void simulate(stree_t * stree)
   FILE * fp_tree = NULL;
   FILE * fp_param = NULL;
   FILE * fp_map = NULL;
+  FILE * fp_mig = NULL;
   FILE * fp_seqfull = NULL;
   FILE * fp_seqrand = NULL;
   FILE * fp_seqDates = NULL;
-  double ** rate = NULL; 
+  FILE * fp_seqerr = NULL;
+  double ** rate = NULL;
 
   double H = -1, md_full = -1, md_rand = -1;
   double mH = 0, meand_full = 0, meand_rand = 0;
@@ -1560,13 +1655,16 @@ static void simulate(stree_t * stree)
     fp_concat = xopen(opt_concatfile, "w");
   if (opt_treefile)
     fp_tree = xopen(opt_treefile, "w");
+  //ANNA fix this
+  if (opt_print_locus)
+     fp_mig = xopen("mig.txt", "w");
   if (opt_modelparafile)
     fp_param = xopen(opt_modelparafile, "w");
   assert(opt_mapfile);
   if (opt_mapfile)
     fp_map = xopen(opt_mapfile, "w");
   if (opt_seqDates)
-    fp_seqDates= xopen(opt_seqDates, "w");
+    fp_seqDates = xopen(opt_seqDates, "w");
 
   /* print list of output files */
   if (opt_msafile)
@@ -1616,10 +1714,9 @@ static void simulate(stree_t * stree)
       for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
         fprintf(fp_param, "\tr_%ld", i+1);
     }
-    
+
     fprintf(fp_param, "\n");
   }
-
 
   /* allocate MSA structures */
   msa_t ** msa = (msa_t **)xmalloc((size_t)opt_locus_count * sizeof(msa_t *));
@@ -1642,8 +1739,8 @@ static void simulate(stree_t * stree)
   if (opt_msafile)
     siteorder = (long *)xmalloc((size_t)opt_locus_simlen * sizeof(long));
 
-//  if (opt_siterate_fixed)
-//    locus_siterate_alpha = opt_siterate_alpha;
+  //  if (opt_siterate_fixed)
+  //    locus_siterate_alpha = opt_siterate_alpha;
 
   /* store number of sequences per locus (before collpasing diploid seqs) */
   locus_seqcount = 0;
@@ -1663,22 +1760,33 @@ static void simulate(stree_t * stree)
       xasprintf(&filename, "%s.rand", opt_msafile);
       fp_seqrand = xopen(filename,"w");
       free(filename);
+
+      if (opt_simulate_read_depth)
+      {
+        filename = NULL;
+        xasprintf(&filename, "%s.seqerr", opt_msafile);
+        fp_seqerr = xopen(filename, "w");
+        free(filename);
+      }
     }
   }
 
+  double * read_depth_species = NULL, * gt_err = NULL, *gt_count=NULL;
+  if (opt_simulate_read_depth)
+    init_sequencing_machine(stree, &read_depth_species, &gt_err, &gt_count);
 
   /* 1. create maplist (Imap) and 2. initialize two hashtables which are used
      when calling gtree_simulate for quick access to a sequence population */
   /*list_t * maplist = create_maplist(stree);
-  gtree_simulate_init(stree,maplist);
-  list_clear(maplist,map_dealloc);
-  free(maplist); */
+    gtree_simulate_init(stree,maplist);
+    list_clear(maplist,map_dealloc);
+    free(maplist); */
 
-  list_t* dateList = NULL;
+  list_t * dateList = NULL;
   mappingDate_t ** tipDateArray = NULL;
-  int tipDateArrayLen; 
+  int tipDateArrayLen = -1;
   if (opt_datefile)
-         tipDateArray = prepareTipDates(stree, &dateList, &tipDateArrayLen);
+    tipDateArray = prepareTipDates(stree, &dateList, &tipDateArrayLen);
 
   /* allocate eigendecomposition structures */
   if (opt_model == BPP_DNA_MODEL_GTR)
@@ -1745,33 +1853,33 @@ static void simulate(stree_t * stree)
     }
   }
 
-  int * printLocusIndex = NULL; 
-  if (opt_print_locus) {
-        printLocusIndex = xcalloc(opt_locus_count, sizeof(int));
-        for (i = 0; i < opt_print_locus; i++) {
-                if (opt_print_locus_num[i] >= opt_locus_count) 
-                        fatal("Locus index to print is larger than the number of loci");
-                printLocusIndex[opt_print_locus_num[i]] = 1; 
-        }
+  int * printLocusIndex = NULL;
+  if (opt_print_locus)
+  {
+    printLocusIndex = xcalloc(opt_locus_count, sizeof(int));
+    for (i = 0; i < opt_print_locus; i++)
+    {
+      if (opt_print_locus_num[i] >= opt_locus_count)
+        fatal("Locus index to print is larger than the number of loci");
+      printLocusIndex[opt_print_locus_num[i]] = 1;
+    }
   }
-  /* start generating */
+  /* loop over loci */
   for (i = 0; i < opt_locus_count; ++i)
   {
     if (opt_modelparafile)
       fprintf(fp_param, "%ld", i+1);
-
 
     if (opt_model == BPP_DNA_MODEL_GTR)
     {
       if (!opt_qrates_fixed)
       {
         legacy_rnddirichlet(thread_index_zero,qrates,opt_qrates_params,6);
-        #if 0
-
+#if 0
         /* last rate=1 */
         for (j = 0; j < 6; ++j)
           qrates[j] /= qrates[5];
-        #else
+#else
 
         /* rates sum to 1 */
         double qr_sum = 0;
@@ -1779,7 +1887,7 @@ static void simulate(stree_t * stree)
           qr_sum += qrates[j];
         for (j = 0; j < 6; ++j)
           qrates[j] /= qr_sum;
-        #endif
+#endif
       }
       else
         memcpy(qrates,opt_qrates_params,6*sizeof(double));
@@ -1819,8 +1927,8 @@ static void simulate(stree_t * stree)
 
     if (opt_msafile || opt_treefile)
     {
-      msa[i]->label    = (char**)xmalloc((size_t)locus_seqcount*sizeof(char *));
-      msa[i]->sequence = (char**)xmalloc((size_t)locus_seqcount*sizeof(char *));
+      msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
+      msa[i]->sequence = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
 
       /* create sequence labels and populate msa structure */
       for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
@@ -1829,22 +1937,22 @@ static void simulate(stree_t * stree)
           for (k = 0; k < opt_sp_seqcount[j]; ++k)
             xasprintf(msa[i]->label+m++,
                       "%s^%s%ld%c",
-                      stree->nodes[j]->label, 
+                      stree->nodes[j]->label,
                       stree->nodes[j]->label,
                       k / 2 + 1,
                       (char)('a' + k % 2));
-         else
-          for (k = 0; k < opt_sp_seqcount[j]; ++k) 
+        else
+          for (k = 0; k < opt_sp_seqcount[j]; ++k)
             xasprintf(msa[i]->label+m++,
                       "%s^%s%ld",
-                      stree->nodes[j]->label, 
-                      stree->nodes[j]->label, 
-                      k+1); 
+                      stree->nodes[j]->label,
+                      stree->nodes[j]->label,
+                      k+1);
             /*xasprintf(msa[i]->label+m++,
-                      "%s%ld^%s",
-                      stree->nodes[j]->label, 
-                      k+1,
-                      stree->nodes[j]->label); */
+                        "%s%ld^%s",
+                        stree->nodes[j]->label,
+                        k+1,
+                        stree->nodes[j]->label); */
 
         msa[i]->count += opt_sp_seqcount[j];
       }
@@ -1865,40 +1973,42 @@ static void simulate(stree_t * stree)
         /* print imap file */
         for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
         {
-          for (k = 0; k < opt_sp_seqcount[j]; ++k) {
-          char *c = strchr(msa[i]->label[l], '^') + 1; 
-          if (opt_diploid[j])
+          for (k = 0; k < opt_sp_seqcount[j]; ++k)
           {
-            fprintf(stdout,
-                    "%.*s\t%.*s\n",
-                    (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
-            fprintf(fp_map,
-                    "%.*s\t%.*s\n",
-                    (int)strlen(c)-1, c, (int)(c-(msa[i]->label[l])-1), msa[i]->label[l]);
+            char * c = strchr(msa[i]->label[l], '^') + 1;
+            if (opt_diploid[j])
+            {
+              fprintf(stdout,
+                      "%.*s\t%.*s\n",
+                      (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
+              fprintf(fp_map,
+                      "%.*s\t%.*s\n",
+                      (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
+              l++;
+              k++;
+            }
+            else
+            {
+              fprintf(stdout,
+                      "%s\t%.*s\n",
+                      c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
+              fprintf(fp_map,
+                      "%s\t%.*s\n",
+                      c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
+            }
             l++;
-            k++;
-          }
-           else
-           {
-             fprintf(stdout,
-                     "%s\t%.*s\n",
-                     c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
-             fprintf(fp_map,
-                     "%s\t%.*s\n",
-                     c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
-           }
-           l++;
           }
         }
       }
     }
 
-  if (i == 0 ) {
-        list_t * maplist = create_maplist_msa(stree, msa);
-        gtree_simulate_init(stree,maplist);
-        list_clear(maplist,map_dealloc);
-        free(maplist);
-  }
+    if (i == 0)
+    {
+      list_t * maplist = create_maplist_msa(stree, msa);
+      gtree_simulate_init(stree,maplist);
+      list_clear(maplist,map_dealloc);
+      free(maplist);
+    }
 
     for (j = 0; j < stree->tip_count; ++j)
       if (opt_sp_seqcount[j] > 1 && stree->nodes[j]->theta == 0)
@@ -1932,7 +2042,7 @@ static void simulate(stree_t * stree)
       gtree[i]->nodes[j]->length = gtree[i]->nodes[j]->parent->time -
                                    gtree[i]->nodes[j]->time;
     }
-      
+
     assert(locus_seqcount == gtree[i]->tip_count);
 
     /* TODO: Count 3S trees */
@@ -1971,9 +2081,15 @@ static void simulate(stree_t * stree)
       char * newick = gtree_export_newick(gtree[i]->root, NULL);
       fprintf(fp_tree, "%s [TH=%.6f, TL=%.6f]\n", newick, gtree[i]->root->time, tl);
       free(newick);
+
+      if (opt_print_locus && printLocusIndex[i]){
+      	char * mig = gtree_export_migration(gtree[i]->root);
+      	fprintf(fp_mig, "%s\n", mig);
+      	free(mig);
+      }
     }
 
-    if (opt_msafile )
+    if (opt_msafile)
     {
       /* calculate rates for each site */
       if (locus_siterate_alpha)
@@ -1981,7 +2097,7 @@ static void simulate(stree_t * stree)
                                 (opt_model == BPP_DNA_MODEL_JC69));
 
       /* allocate space for sequences and map each to a gene tree node */
-      char ** x = (char**)xmalloc((size_t)(gtree[i]->tip_count+gtree[i]->inner_count)*
+      char ** x = (char **)xmalloc((size_t)(gtree[i]->tip_count+gtree[i]->inner_count)*
                                   sizeof(char *));
       for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
       {
@@ -2001,47 +2117,45 @@ static void simulate(stree_t * stree)
       /* recursively generate ancestral sequences and tip sequences */
       if (opt_print_locus && printLocusIndex[i]) {
 
-        if (!rate) {
-                rate = xmalloc(4 * sizeof(double * ));
-                for (int k = 0; k < 4; k++) {
-                        rate[k] = xmalloc( 4 * sizeof(double));
-                }
+        if (!rate)
+        {
+          rate = xmalloc(4 * sizeof(double *));
+          for (k = 0; k < 4; k++)
+            rate[k] = xmalloc(4 * sizeof(double));
         }
-        
+
         rate[0][1] = freqs[1] * qrates[0];
         rate[0][2] = freqs[2] * qrates[1];
         rate[0][3] = freqs[3] * qrates[2];
-        
+
         rate[1][0] = freqs[0] * qrates[0];
         rate[1][2] = freqs[2] * qrates[3];
         rate[1][3] = freqs[3] * qrates[4];
-        
+
         rate[2][0] = freqs[0] * qrates[1];
         rate[2][1] = freqs[1] * qrates[3];
         rate[2][3] = freqs[3] * qrates[5];
-        
+
         rate[3][0] = freqs[0] * qrates[2];
         rate[3][1] = freqs[1] * qrates[4];
         rate[3][2] = freqs[2] * qrates[5];
-        
+
         rate[0][0] = -(rate[0][1] + rate[0][2] + rate[0][3]);
         rate[1][1] = -(rate[1][0] + rate[1][2] + rate[1][3]);
         rate[2][2] = -(rate[2][0] + rate[2][1] + rate[2][3]);
         rate[3][3] = -(rate[3][0] + rate[3][1] + rate[3][2]);
 
         double diag, weightSum = 0;
-        for (int i = 0; i < 4; i++) {
+        for (i = 0; i < 4; i++) {
           diag = -rate[i][i];
           weightSum = diag * freqs[i] + weightSum;
 
         }
 
         /* Rescales the instantaneous rate matrix so that the average substitution rate is equal to mu */
-        for (int i = 0; i < 4; i++) {
-          for (int j = 0; j < 4; j ++) {
+        for (i = 0; i < 4; i++)
+          for (j = 0; j < 4; j++)
             rate[i][j] = rate[i][j] / weightSum;
-          }
-        }
 
         int * mutPresent = xcalloc(opt_locus_simlen, sizeof(int));
         list_t * mutList = xcalloc(gtree[i]->inner_count+gtree[i]->tip_count, sizeof(list_t));
@@ -2050,24 +2164,23 @@ static void simulate(stree_t * stree)
         evolve_mutation_recursive(gtree[i]->root->right, rate, mutList, mutPresent);
 
         /* Identify mutations that are observed*/
-        for (int k = 0; k < opt_locus_simlen; k++) {
+        for (k = 0; k < opt_locus_simlen; k++) {
 
-                /* Mark nodes */
-                if (mutPresent[k])
-                        mark_mutation(gtree[i]->root, k, mutList, i);
+          /* Mark nodes */
+          if (mutPresent[k])
+            mark_mutation(gtree[i]->root, k, mutList, i);
 
-                clear_marks(gtree[i]);
+          clear_marks(gtree[i]);
         }
 
         /* Free memory */
-        for (int k = 0; k < gtree[i]->inner_count + gtree[i]->tip_count; k++) {
-                list_clear(mutList + k, mutation_dealloc);
-        }
+        for (k = 0; k < gtree[i]->inner_count + gtree[i]->tip_count; k++)
+          list_clear(mutList + k, mutation_dealloc);
         free(mutList);
         free(mutPresent);
 
 
-      } 
+      }
       else if (opt_model == BPP_DNA_MODEL_JC69)
       {
         evolve_jc69_recursive(gtree[i]->root->left, locus_siterate_alpha, siterates);
@@ -2088,7 +2201,7 @@ static void simulate(stree_t * stree)
         char * tmpseq = (char *)xmalloc((size_t)opt_locus_simlen * sizeof(char));
         for (j = 0; j < gtree[i]->tip_count + gtree[i]->inner_count; ++j)
         {
-          char * seq = (char *)(gtree[i]->nodes[j]->data);   
+          char * seq = (char *)(gtree[i]->nodes[j]->data);
           memcpy(tmpseq, seq, opt_locus_simlen * sizeof(char));
           for (k = 0; k < opt_locus_simlen; ++k)
             seq[k] = tmpseq[siteorder[k]];
@@ -2104,10 +2217,10 @@ static void simulate(stree_t * stree)
         {
           write_seqs(fp_seqfull, msa[i], stree->tip_count);
           if (stree->tip_count == 1)
-            md_full =  msa_mean_distance(msa[i]->count, opt_locus_simlen, msa[i]);
+            md_full = msa_mean_distance(msa[i]->count, opt_locus_simlen, msa[i]);
         }
         if (fp_seqrand)
-          write_diploid_rand_seqs(fp_seqrand,stree,msa[i], &md_rand);
+          write_diploid_rand_seqs(fp_seqrand,stree,msa[i],&md_rand);
 
         /* then collapse sequences */
         collapse_diploid(stree,gtree[i],msa[i],hets);
@@ -2116,6 +2229,12 @@ static void simulate(stree_t * stree)
       /* write sequences */
       write_seqs(fp_seq, msa[i], stree->tip_count);
       H = msa_mean_heterozygosity(msa[i]->count, opt_locus_simlen, msa[i]);
+      if (opt_simulate_read_depth)
+      {
+        assert(msa[i]->dtype == BPP_DATA_DNA);
+        sequencing_machine(stree, msa[i], read_depth_species, gt_err, gt_count);
+        write_seqs(fp_seqerr, msa[i], stree->tip_count);
+      }
 
       /* TODO: Instead of freeing and allocating, create siterates once and
          fill it with ones, and use rates4sites to alter it */
@@ -2131,15 +2250,14 @@ static void simulate(stree_t * stree)
     if ((i+1) % 1000 == 0 || (opt_locus_count > 1000 && i == opt_locus_count-1))
       printf("%10ld replicates done... mean tMRCA = %9.6f\n", i+1, tmrca/(i+1));
   }  /* end of locus loop */
-  
+
   free(printLocusIndex);
-  if (rate) {
-        for (int i = 0; i < 4; i++) {
-                free(rate[i]);
-        } 
-        free(rate);
+  if (rate)
+  {
+    for (i = 0; i < 4; i++)
+      free(rate[i]);
+    free(rate);
   }
-        
 
   if (stree->tip_count == 1)
   {
@@ -2150,7 +2268,6 @@ static void simulate(stree_t * stree)
   {
     fprintf(stdout, "Generating concatenated sequence alignment...\n");
     write_concat_seqs(fp_concat, msa);
-
   }
 
   if (opt_migration)
@@ -2170,21 +2287,45 @@ static void simulate(stree_t * stree)
     }
   }
 
-  if (opt_seqDates) {
-      for(int i = 0; i < gtree[0]->tip_count; i++) {
-              char * label = gtree[0]->nodes[i]->label;
-              int length = strlen(label);
-              if (label[length-1] == 'a') {
-                fprintf(fp_seqDates, "%.*s %.12f\n",length -1, label, gtree[0]->nodes[i]->time);
-                i++;
-              } else
-                fprintf(fp_seqDates, "%s %.12f\n", label, gtree[0]->nodes[i]->time);
+  if (opt_simulate_read_depth) {
+    printf("\nObserved genotype-calling error rates\n");
+    printf("\nSpecies   :    meanDP            GT00-error           GT-01 error\n");
+    if (read_depth_model_beta)
+      for (i = 0; i < stree->tip_count; i++)  /* change depthx -> depth for printing */
+        read_depth_species[i] = read_depth_min + read_depth_species[i] * (read_depth_max - read_depth_min);
 
+    for (i = 0; i < stree->tip_count; i++) {
+      assert(gt_count[i * 2 + 0] + gt_count[i * 2 + 1] ==
+        opt_locus_count * opt_sp_seqcount[i] / 2 * msa[0]->length);
+      gt_err[i * 2 + 0] /= gt_count[i * 2 + 0];
+      gt_err[i * 2 + 1] /= gt_count[i * 2 + 1];
+      printf("%-10s: %9.4f %12.7f (%8.0f) %12.7f (%8.0f)\n", stree->nodes[i]->label,
+        read_depth_species[i], gt_err[i * 2 + 0], gt_count[i * 2 + 0], gt_err[i * 2 + 1], gt_count[i * 2 + 1]);
+    }
+    free(read_depth_species);
+    free(read_depth_AliasF);
+  }
+
+  if (opt_seqDates)
+  {
+    for (i = 0; i < gtree[0]->tip_count; i++)
+    {
+      char * label = gtree[0]->nodes[i]->label;
+      int length = strlen(label);
+      if (label[length-1] == 'a')
+      {
+        fprintf(fp_seqDates, "%.*s %.12f\n",
+                length-1, label, gtree[0]->nodes[i]->time);
+        i++;
       }
+      else
+        fprintf(fp_seqDates, "%s %.12f\n", label, gtree[0]->nodes[i]->time);
 
-      list_clear(dateList,mapDate_dealloc);
-      free(dateList);
-      free(tipDateArray);
+    }
+
+    list_clear(dateList,mapDate_dealloc);
+    free(dateList);
+    free(tipDateArray);
   }
 
   if (mui_array)
@@ -2228,6 +2369,8 @@ static void simulate(stree_t * stree)
     fclose(fp_concat);
   if (opt_treefile)
     fclose(fp_tree);
+  if (opt_print_locus)
+    fclose(fp_mig);
   if (opt_modelparafile)
     fclose(fp_param);
   assert(opt_mapfile);
@@ -2240,6 +2383,8 @@ static void simulate(stree_t * stree)
     fclose(fp_seqfull);
   if (fp_seqrand)
     fclose(fp_seqrand);
+  if (fp_seqerr)
+    fclose(fp_seqerr);
 
   if (g_order)
     free(g_order);
@@ -2520,12 +2665,12 @@ void cmd_simulate()
     snode->logpr_contrib = (double*)xcalloc(opt_locus_count, sizeof(double));
     snode->old_logpr_contrib = (double *)xcalloc(opt_locus_count, sizeof(double));
 
-    snode->t2h = NULL;
-    snode->old_t2h = NULL;
+    snode->C2ji = NULL;
+    snode->old_C2ji = NULL;
     if (!opt_est_theta)
     {
-      snode->t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
-      snode->old_t2h = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
+      snode->C2ji = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
+      snode->old_C2ji = (double*)xcalloc((size_t)opt_locus_count, sizeof(double));
       snode->t2h_sum = 0;
       snode->coal_count_sum = 0;
     }

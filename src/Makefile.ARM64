@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+# Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -46,8 +46,9 @@ OBJS=bpp.o rtree.o util.o \
      output.o core_partials_sse.o dlist.o allfixed.o core_likelihood_sse.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
-     gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o \
-     constraint.o debug.o lswitch.o miginfo.o ming2.o bfdriver.o $(NEONOBJ)
+     gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o visual.o \
+     pdfgen.o constraint.o debug.o lswitch.o miginfo.o ming2.o a1b1.o \
+     bfdriver.o $(NEONOBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

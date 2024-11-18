@@ -2,8 +2,7 @@
 
        seqfile = Rokas2003-5species.phy
       Imapfile = Rokas2003-5species-Imap.txt
-       outfile = out.txt
-      mcmcfile = mcmc.txt
+       jobname = out
 
 *   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * speciesdelimitation algorithm0 and finetune(e)
@@ -34,8 +33,10 @@
        finetune = 1:  2.60867 0.00833 0.00327 0.00084 0.01261 0.11280 .01 .01 # auto (0 or 1): finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars Genetrees
-        burnin = 10000
+#        burnin = 10000
+        burnin = 1000
       sampfreq = 2
-       nsample = 100000
+       #nsample = 100000
+       nsample = 1000
 #       scaling = 1
 #       threads = 4

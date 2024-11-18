@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -101,7 +101,7 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += strlen(opt_msafile)+1;              /* msa filename */
   if (opt_mapfile)
     size_section += strlen(opt_mapfile)+1;            /* imap filename */
-  size_section += strlen(opt_outfile)+1;              /* output filename */
+  size_section += strlen(opt_jobname)+1;              /* output filename */
   size_section += strlen(opt_mcmcfile)+1;             /* mcmc filename */
   
   size_section += 2*sizeof(long) + 2*sizeof(double);  /* speciesdelimitation */
@@ -130,8 +130,14 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   size_section += sizeof(long);                       /* finetune round */
   size_section += sizeof(unsigned long);              /* MCMC file offset */
   size_section += sizeof(unsigned long);              /* output file offset */
+
   if (opt_print_genetrees)
      size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
+  /* ANNA note: I did not include the size of other 
+   * variables because the size counter is not 
+   * being used */
+  if (opt_print_locus)
+     size_section += opt_locus_count*sizeof(long);    /* mig file offsets */
   if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
      size_section += opt_locus_count*sizeof(long);
     
@@ -171,7 +177,9 @@ static void dump_chk_section_1(FILE * fp,
                                long ndspecies,
                                long mcmc_offset,
                                long out_offset,
+                               long a1b1_offset,
                                long * gtree_offset,
+			       long * mig_offset,
                                long * rates_offset,
                                long * migcount_offset,
                                long dparam_count,
@@ -194,7 +202,8 @@ static void dump_chk_section_1(FILE * fp,
                                long mean_theta_count,
                                long mean_phi_count,
                                int prec_logpg,
-                               int prec_logl)
+                               int prec_logl, 
+			       int * printLocusIndex)
 {
   size_t i;
   unsigned int hoffset = stree->tip_count+stree->inner_count;
@@ -223,7 +232,12 @@ static void dump_chk_section_1(FILE * fp,
     DUMP(opt_mapfile,strlen(opt_mapfile)+1,fp);
 
   /* write outfile */
-  DUMP(opt_outfile,strlen(opt_outfile)+1,fp);
+  DUMP(opt_jobname,strlen(opt_jobname)+1,fp);
+
+  /* write a1b1 file */
+  DUMP(&opt_print_a1b1,1,fp);
+  if (opt_print_a1b1)
+    DUMP(opt_a1b1file,strlen(opt_a1b1file)+1,fp);
 
   /* write mcmcfile */
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
@@ -295,6 +309,16 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_print_qmatrix,1,fp);
   DUMP(&opt_print_locusfile,1,fp);
 
+  DUMP(&opt_print_locus,1,fp);
+
+  if (opt_print_locus) {
+    for (i = 0; i < opt_print_locus; i++) 
+      DUMP(&opt_print_locus_num[i],1,fp);
+
+    for (i = 0; i < opt_locus_count; i++) 
+      DUMP(&printLocusIndex[i],1,fp);
+  }
+
   /* write theta prior */
   DUMP(&opt_theta_prior,1,fp);
   DUMP(&opt_theta_alpha,1,fp);
@@ -304,6 +328,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_prop, 1, fp);
   DUMP(&opt_theta_gibbs_showall_eps,1,fp);
   DUMP(&opt_theta_slide_prob,1,fp);
+  DUMP(&opt_phi_slide_prob,1,fp);
 
   /* write tau prior */
   DUMP(&opt_tau_dist,1,fp);
@@ -410,7 +435,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
-  DUMP(&g_pj_phi, 1, fp);
+  DUMP(&g_pj_phi_slide, 1, fp);
+  DUMP(&g_pj_phi_gibbs, 1, fp);
   DUMP(&g_pj_freqs, 1, fp);
   DUMP(&g_pj_qmat, 1, fp);
   DUMP(&g_pj_alpha, 1, fp);
@@ -428,6 +454,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write output file offset */
   DUMP(&out_offset,1,fp);
 
+  /* write a1b1 file offset */
+  DUMP(&a1b1_offset,1,fp);
+
   /* write bfbeta */
   DUMP(&opt_bfbeta,1,fp);
 
@@ -437,6 +466,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write gtree file offset if available*/
   if (opt_print_genetrees)
     DUMP(gtree_offset,opt_locus_count,fp);
+
+  if (opt_print_locus)
+    DUMP(mig_offset,opt_locus_count,fp);
 
   if (opt_print_locusfile)
     DUMP(rates_offset,opt_locus_count,fp);
@@ -536,7 +568,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 {
   unsigned int total_nodes;
   unsigned int hoffset;
-  long i,j;
+  long i,j,k;
   long ltheta_index;
 
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
@@ -652,7 +684,6 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     DUMP(&(stree->notheta_sfactor),1,fp);
     for (i = 0; i < total_nodes; ++i)
     {
-      DUMP(stree->nodes[i]->t2h,opt_locus_count,fp);
       DUMP(&(stree->nodes[i]->t2h_sum),1,fp);
       DUMP(&(stree->nodes[i]->coal_count_sum),1,fp);
       DUMP(&(stree->nodes[i]->notheta_logpr_contrib),1,fp);
@@ -697,6 +728,12 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
     }
   }
 
+  /* dump total coalescent time for locus at population i */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    DUMP(stree->nodes[i]->C2ji,opt_locus_count,fp);
+  }
+
   /* write migevent_count */
   if (opt_migration)
   {
@@ -712,9 +749,43 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
 
       for (j = 0; j < stree->inner_count; ++j)
+      {
         DUMP(stree->nodes[i]->migbuffer[j].mrsum,
              stree->nodes[i]->migbuffer[j].active_count,fp);
 
+        for (k = 0; k < stree->nodes[i]->migbuffer[j].donors_count; ++k)
+        {
+          DUMP(&(stree->nodes[i]->migbuffer[j].donors[k]->node_index),1,fp);
+        }
+
+      }
+    }
+
+    /* dump Wsji */
+    assert(stree->Wsji);
+    for (i = 0; i < total_nodes; ++i)
+    {
+      /* allocate row only if migration rate W_{i->j} exists */
+      if (!opt_est_geneflow)
+      {
+        for (j = 0; j < total_nodes; ++j)
+          if (opt_mig_bitmatrix[i][j])
+            break;
+        if (j == total_nodes)
+          continue;
+      }
+      if (i == stree->root->node_index) continue;
+
+      for (j = 0; j < total_nodes; ++j)
+      {
+        if (!opt_est_geneflow && !opt_mig_bitmatrix[i][j])
+          continue;
+        if (j == i || j == stree->root->node_index) continue;
+
+        /* write */
+        assert(stree->Wsji[i][j]);
+        DUMP(stree->Wsji[i][j],opt_locus_count,fp);
+      }
     }
   }
 }
@@ -942,7 +1013,9 @@ int checkpoint_dump(stree_t * stree,
                     long ndspecies,
                     long mcmc_offset,
                     long out_offset,
+                    long a1b1_offset,
                     long * gtree_offset,
+                    long * mig_offset,
                     long * rates_offset,
                     long * migcount_offset,
                     long dparam_count,
@@ -965,12 +1038,13 @@ int checkpoint_dump(stree_t * stree,
                     long mean_theta_count,
                     long mean_phi_count,
                     int prec_logpg,
-                    int prec_logl)
+                    int prec_logl, 
+		    int * printLocusIndex)
 {
   FILE * fp;
   char * s = NULL;
 
-  xasprintf(&s, "%s.%ld.chk", opt_outfile, ++opt_checkpoint_current);
+  xasprintf(&s, "%s.%ld.chk", opt_jobname, ++opt_checkpoint_current);
 
   fprintf(stdout,"\n\nWriting checkpoint file %s\n\n",s);
 
@@ -994,7 +1068,9 @@ int checkpoint_dump(stree_t * stree,
                      ndspecies,
                      mcmc_offset,
                      out_offset,
+                     a1b1_offset,
                      gtree_offset,
+                     mig_offset,
                      rates_offset,
                      migcount_offset,
                      dparam_count,
@@ -1017,7 +1093,8 @@ int checkpoint_dump(stree_t * stree,
                      mean_theta_count,
                      mean_phi_count,
                      prec_logpg,
-                     prec_logl);
+                     prec_logl, 
+		     printLocusIndex);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

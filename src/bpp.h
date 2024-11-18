@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -155,8 +155,10 @@
 
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 7
+#define VERSION_MINOR 8
 #define VERSION_PATCH 0
+
+#define PVER_SHA1 "a448e21d86fe595c1fc14574d4df606e31bdf6b6"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -274,18 +276,23 @@ extern const char * global_freqs_strings[28];
 #define BPP_THETA_PROP_MG_INVG          1
 #define BPP_THETA_PROP_MG_GAMMA         2
 
+#define BPP_THETA_MOVE_NONE            -1
 #define BPP_THETA_MOVE_MIN              0
 #define BPP_THETA_MOVE_SLIDE            0
 #define BPP_THETA_MOVE_GIBBS            1
 #define BPP_THETA_MOVE_MAX              1
 
+#define BPP_PHI_MOVE_SLIDE              0
+#define BPP_PHI_MOVE_GIBBS              1
+
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
 
 #define BPP_LINKEDTHETA_NONE            0
-#define BPP_LINKEDTHETA_ALL             1       /* model M0 */
-#define BPP_LINKEDTHETA_INNER           2       /* model M1 */
-#define BPP_LINKEDTHETA_MSCI            3       /* model M2 */
+#define BPP_LINKEDTHETA_ALL             1  /* model M0 */
+#define BPP_LINKEDTHETA_INNER           2  /* model M1 */
+#define BPP_LINKEDTHETA_MSCI            3  /* model M2 */
+#define BPP_LINKEDTHETA_MSCM            4  /* model M3 */
 
 
 #define BPP_LB_NONE                     0
@@ -415,6 +422,7 @@ extern const char * global_freqs_strings[28];
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_WHITE   "\x1b[1;37m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
 #define BPP_ERROR  "[" ANSI_COLOR_RED "ERROR" ANSI_COLOR_RESET "]"
@@ -453,7 +461,10 @@ typedef struct migspec_s
   long params;
 
   double M;
+  double old_M;
   double * Mi;
+
+  int mark;             /* used in rubberband to mark entry as affected */
 
   char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
@@ -464,6 +475,8 @@ typedef struct migbuffer_s
   long type;
   double * mrsum; /* per locus total migration rate (variable mig rates) */
   long active_count; /* number of active elements (1 or nloci) */
+  struct snode_s ** donors;
+  long donors_count;
 } migbuffer_t;
 
 typedef struct contrast_s
@@ -530,8 +543,6 @@ typedef struct snode_s
   long has_theta;
 
   /* no theta related variables */
-  double * t2h;                     /* per-locus precomputed t2h */
-  double * old_t2h;                 /* storage space for rollback */
   double t2h_sum;                   /* t2h sum for all loci */
   double hphi_sum;                  /* hphi sum for all loci */
   long coal_count_sum;              /* sum of coalencent events count */
@@ -569,9 +580,15 @@ typedef struct snode_s
 
   /* independent theta step lengths */
   long theta_step_index;
-  
+
+  /* total coalescent waiting time for pop j at locus i */
+  double * old_C2ji;
+  double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
+
   /* phylogenetic indepandent contrasts (per partition) */
   contrast_t ** pic;
+
+  long flag;
 } snode_t;
 
 typedef struct migevent_s
@@ -626,6 +643,8 @@ typedef struct stree_s
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
+  double *** Wsji;
+  double *** old_Wsji;
 
   double * u_constraint;
   double * l_constraint;
@@ -794,6 +813,21 @@ typedef struct msa_s
   int original_index;
 
 } msa_t;
+
+/* used for creating FigTree.tre */
+typedef struct nodepinfo_s 
+{
+  /* 95% HPD CI */
+  double lo;
+  double hi;
+
+  /* mean age */
+  double age;
+
+  /* mean theta */
+  double theta;
+} nodepinfo_t; 
+
 
 typedef struct partition_s
 {
@@ -1073,6 +1107,12 @@ typedef struct thread_info_s
 #define FLAG_RED_RIGHT                512
 #define FLAG_SIMULATE                1024
 
+#define SN_AFFECT                       (1 << 0)
+#define BPP_SN_AFFECT_A7                (1 << 0)
+#define BPP_SN_AFFECT_A8                <1 << 1)
+#define BPP_SN_UPDATE_KC2               (1 << 2)
+#define BPP_SN_UPDATE_PG                (1 << 3)
+#define SN_MIG_UPDATE                   (1 << 4)
 
 /* options */
 
@@ -1143,11 +1183,14 @@ extern long opt_method;
 extern long opt_migration;
 extern long opt_migration_count;
 extern long opt_mig_vrates_exist;
+extern long opt_mix_theta_update;
+extern long opt_mix_w_update;
 extern long opt_model;
 extern long opt_mrate_move;
 extern long opt_msci;
 extern long opt_onlysummary;
 extern long opt_partition_count;
+extern long opt_print_a1b1;
 extern long opt_print_genetrees;
 extern long opt_print_locus;
 extern long opt_print_hscalars;
@@ -1160,6 +1203,8 @@ extern long opt_pseudop_exist;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rate_prior;
+extern long opt_rb_w_update;
+extern long opt_rb_theta_update;
 extern long opt_revolutionary_spr_method;
 extern long opt_revolutionary_spr_debug;
 extern long opt_rev_gspr;
@@ -1168,6 +1213,7 @@ extern long opt_samplefreq;
 extern long opt_samples;
 extern long opt_scaling;
 extern long opt_seed;
+extern long  opt_simulate_read_depth;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
@@ -1179,6 +1225,7 @@ extern long opt_threads_start;
 extern long opt_threads_step;
 extern long opt_usedata;
 extern long opt_version;
+extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
 extern double opt_brate_alpha;
@@ -1213,6 +1260,7 @@ extern double opt_mubar_beta;
 extern double opt_mui_alpha;
 extern double opt_phi_alpha;
 extern double opt_phi_beta;
+extern double opt_phi_slide_prob;
 extern double opt_prob_snl;            /* probability for SNL move, with 1 - opt_prob_snl for SPR */
 extern double opt_prob_snl_shrink;
 extern double opt_pseudo_alpha;
@@ -1220,6 +1268,9 @@ extern double opt_pseudo_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
+extern double opt_simulate_base_err;
+extern double opt_simulate_a_samples;
+extern double opt_simulate_a_sites;
 extern double opt_siterate_alpha;
 extern double opt_siterate_beta;
 extern double opt_tau_alpha;
@@ -1240,13 +1291,14 @@ extern long * opt_sp_seqcount;
 extern long * opt_print_locus_num;
 extern char * opt_bfdriver;
 extern char * cmdline;
+extern char * opt_a1b1file;
 extern char * opt_cfile;
 extern char * opt_concatfile;
 extern char * opt_constraintfile;
-extern char * opt_heredity_filename;
-extern char * opt_mapfile;
 extern char * opt_datefile;
-extern char * opt_seqDates;
+extern char * opt_heredity_filename;
+extern char * opt_jobname;
+extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_traitfile;
@@ -1254,10 +1306,10 @@ extern char * opt_stdfile;
 extern char * opt_msafile;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
-extern char * opt_outfile;
 extern char * opt_partition_file;
 extern char * opt_reorder;
 extern char * opt_resume;
+extern char * opt_seqDates;
 extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
@@ -1348,7 +1400,8 @@ extern double g_pj_gspr;
 extern double g_pj_tau;
 extern double g_pj_mix;
 extern double g_pj_lrht;
-extern double g_pj_phi;
+extern double g_pj_phi_gibbs;
+extern double g_pj_phi_slide;
 extern double g_pj_freqs;
 extern double g_pj_qmat;
 extern double g_pj_alpha;
@@ -1469,7 +1522,9 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype);
+                         long * acceptvec_movetype,
+                         long mcmc_step,
+                         FILE * fp_a1b1);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -1480,7 +1535,12 @@ double stree_propose_tau_mig(stree_t ** streeptr,
                              gtree_t *** gcloneptr,
                              locus_t ** loci);
 
-double stree_propose_phi(stree_t * stree, gtree_t ** gtree);
+void stree_propose_phi(stree_t * stree,
+                       gtree_t ** gtree,
+                       long * acceptvec,
+                       long * movecount,
+                       long mcmc_step,
+                       FILE * fp_a1b1);
 
 void stree_fini(void);
 
@@ -1577,7 +1637,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus,long mcmc_step, FILE * fp_a1b1);
 
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
@@ -1621,6 +1681,8 @@ double find_maxMuGtree(stree_t * stree);
 double prop_mu_updateCoal(gtree_t * gtree, stree_t * stree, double rateMultiplier, double new_mui);
 void reset_mu_coal(gtree_t * gtree);
 
+int get_gamma_conditional_approx(double a, double b, long k, double T,
+                                 double * a1, double * b1);
 
 
 /* functions in arch.c */
@@ -1725,6 +1787,9 @@ long legacy_rndpoisson(long index, double m);
 unsigned int * get_legacy_rndu_array(void);
 void set_legacy_rndu_array(unsigned int * x);
 double rndNormal(long index);
+int MultiNomialAlias(long index, int n, int ncat, double* F, int* L, int* nobs);
+int MultiNomialAliasSetTable(int ncat, double* prob, double* F, int* L);
+long legacy_rndbinomial(long index, int n, double p);
 
 /* functions in gamma.c */
 
@@ -1813,8 +1878,13 @@ double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index,
                                     long thread_index);
-//double gtree_update_logprob_contrib_notheta(snode_t * snode, double heredity, long msa_index);
-void logprob_revert_notheta(snode_t * snode, long msa_index);
+void gtree_update_C2j(snode_t * snode,
+                      double heredity,
+                      long msa_index,
+                      long thread_index);
+double update_logpg_contrib(stree_t * stree, snode_t * snode);
+void logprob_revert_C2j(snode_t * snode, long msa_index);
+void logprob_revert_contribs(snode_t * snode);
 double gtree_propose_spr_serial(locus_t ** locus,
                                 gtree_t ** gtree,
                                 stree_t * stree);
@@ -1887,8 +1957,10 @@ void prop_mixing_update_gtrees(locus_t ** locus,
                                long locus_count,
                                double c,
                                long thread_index,
-                               double * ret_lnacceptance,
+                               double * ret_lnacceptance);
+                               #if 0
                                double * ret_logpr);
+                               #endif
 
 /* functions in prop_rj.c */
 
@@ -2027,6 +2099,7 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
 /* functions in allfixed.c */
 
 void allfixed_summary(FILE * fp_out, stree_t * stree);
+double eff_ict(double * y, long n, double mean, double stdev, double * rho1);
 
 /* functions in summary.c */
 
@@ -2077,7 +2150,9 @@ int checkpoint_dump(stree_t * stree,
                     long ndspecies,
                     long mcmc_offset,
                     long out_offset,
+                    long a1b1_offset,
                     long * gtree_offset,
+                    long * mig_offset,
                     long * rates_offset,
                     long * migcount_offset,
                     long dparam_count,
@@ -2100,7 +2175,8 @@ int checkpoint_dump(stree_t * stree,
                     long mean_theta_count,
                     long mean_phi_count,
                     int prec_logpg,
-                    int prec_logl);
+                    int prec_logl, 
+		    int * printLocusIndex);
 
 /* functions in load.c */
 
@@ -2112,7 +2188,9 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ndspecies,
                     long * mcmc_offset,
                     long * out_offset,
+                    long * a1b1_offset,
                     long ** gtree_offset,
+                    long ** mig_offset,
                     long ** rates_offset,
                     long ** migcount_offset,
                     long * dparam_count,
@@ -2134,7 +2212,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_theta_count,
                     long * mean_phi_count,
                     int * prec_logpg,
-                    int * prec_logl);
+                    int * prec_logl,
+		    int ** ptr_printLocusIndex);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
 
@@ -2903,6 +2982,17 @@ void parse_and_set_constraints(stree_t * stree, FILE * fp_out);
 void cmd_comply();
 
 /* functions in debug.c */
+void debug_linked_notheta(stree_t * stree,
+                          gtree_t * gtree,
+                          double bpp_logPG,
+                          const char * move,
+                          int only_pg,
+                          long lmodel);
+void debug_linked_notheta3(stree_t * stree, gtree_t ** gtree, double bpp_logPG, const char * move, int only_pg, long lmodel);
+void debug_print_wsji(stree_t * stree,
+                      int prec,
+                      const char * prefix_msg,
+                      FILE * fp);
 void debug_print_migmatrix(stree_t * stree);
 void debug_print_migrations(stree_t * stree);
 void debug_print_bitmatrix(stree_t * stree);
@@ -2935,7 +3025,7 @@ void debug_bruce(stree_t * stree,
                  long iter,
                  FILE * fp_out);
 void debug_migration_internals(stree_t * stree, gtree_t * gtree, long msa_index);
-void debug_consistency(stree_t * stree, gtree_t ** gtree_list);
+void debug_consistency(stree_t * stree, gtree_t ** gtree_list, const char * msg);
 
 /* functions in miginfo.c */
 miginfo_t * miginfo_create(size_t alloc_size, int alloc_dlist);
@@ -2967,3 +3057,43 @@ int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
 
 /* functions in bfdriver.c */
 void cmd_bfdriver();
+
+/* functions in visual.c */
+void stree_export_pdf(const stree_t * stree);
+
+/* functions in a1b1.c */
+void conditional_to_marginal(double * ai,
+                             double * bi,
+                             long nsamples,
+                             long nbins,
+                             long cond_dist,
+                             double tail,
+                             double * out_mean,
+                             double * out_sd,
+                             double * out_et025,
+                             double * out_et975,
+                             double * out_hpd025,
+                             double * out_hpd975,
+                             double * out_c,
+                             double * out_effu,
+                             double * out_effy);
+
+void conditional_to_marginal_M(double * ai1,
+                               double * bi1,
+                               double * ai2,
+                               double * bi2,
+                               int nsamples,
+                               int nbins,
+                               int cond_dist1,
+                               double tail,
+                               double * out_wmean,
+                               double * out_wsd,
+                               double * out_mean,
+                               double * out_sd,
+                               double * out_et025,
+                               double * out_et975,
+                               double * out_hpd025,
+                               double * out_hpd975,
+                               double * out_c,
+                               double * out_effu,
+                               double * out_effy);

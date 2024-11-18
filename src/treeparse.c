@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -298,7 +298,6 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
-    
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
@@ -388,12 +387,6 @@ void stree_destroy(stree_t * tree,
     if (node->gene_leaves)
       free(node->gene_leaves);
 
-    if (node->t2h)
-      free(node->t2h);
-
-    if (node->old_t2h)
-      free(node->old_t2h);
-
     if (node->hx)
       free(node->hx);
 
@@ -403,15 +396,35 @@ void stree_destroy(stree_t * tree,
     if (node->mark)
       free(node->mark);
 
-    if (opt_migration && node->migevent_count)
-      free(node->migevent_count);
-
-    if (opt_migration && node->migbuffer)
+    if (opt_msci && !opt_est_theta)
     {
-      for (j = 0; j < tree->inner_count; ++j)
-        free(node->migbuffer[j].mrsum);
-      free(node->migbuffer);
+      if (node->notheta_old_phi_contrib)
+        free(node->notheta_old_phi_contrib);
+
+      if (node->notheta_phi_contrib)
+        free(node->notheta_phi_contrib);
     }
+
+    if (opt_migration)
+    {
+      if (node->migevent_count)
+        free(node->migevent_count);
+
+      if (node->migbuffer)
+      {
+        for (j = 0; j < tree->inner_count; ++j)
+        {
+          free(node->migbuffer[j].mrsum);
+          free(node->migbuffer[j].donors);
+        }
+        free(node->migbuffer);
+      }
+
+    }
+    if (node->old_C2ji)
+      free(node->old_C2ji);
+    if (node->C2ji)
+      free(node->C2ji);
 
     free(node);
   }
@@ -448,6 +461,34 @@ void stree_destroy(stree_t * tree,
   }
   if (tree->migcount_sum)
     free(tree->migcount_sum);
+  if (tree->Wsji)
+  {
+    for (i = 0; i < tree->tip_count+tree->inner_count; ++i)
+    {
+      if (tree->Wsji[i])
+      {
+        for (j = 0; j < tree->tip_count+tree->inner_count; ++j)
+          if (tree->Wsji[i][j])
+            free(tree->Wsji[i][j]);
+        free(tree->Wsji[i]);
+      }
+    }
+    free(tree->Wsji);
+  }
+  if (tree->old_Wsji)
+  {
+    for (i = 0; i < tree->tip_count+tree->inner_count; ++i)
+    {
+      if (tree->old_Wsji[i])
+      {
+        for (j = 0; j < tree->tip_count+tree->inner_count; ++j)
+          if (tree->old_Wsji[i][j])
+            free(tree->old_Wsji[i][j]);
+        free(tree->old_Wsji[i]);
+      }
+    }
+    free(tree->old_Wsji);
+  }
 
   if (tree->u_constraint)
   	free(tree->u_constraint);

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -1233,6 +1233,20 @@ static void check_validity()
 
   /* Change to zero index */
   if (opt_print_locus) {
+    if (opt_model == BPP_DNA_MODEL_JC69) {
+	    opt_model = BPP_DNA_MODEL_GTR;
+  	    opt_basefreqs_params = (double *)xcalloc(DNA_STATES_COUNT,sizeof(double));
+
+  	    for (int i = 0; i < DNA_STATES_COUNT; ++i) {
+              opt_basefreqs_params[i] = 0.25;
+  	    }
+	    
+  	    opt_qrates_params = (double *)xcalloc(DNA_QRATES_COUNT,sizeof(double));
+
+  	    for (int i = 0; i < DNA_QRATES_COUNT; ++i) {
+	      opt_qrates_params[i] = 1;
+  	    }
+    }
     for (long i = 0; i < opt_print_locus; i++) {
       	opt_print_locus_num[i]--;
       if (opt_print_locus_num[i] >= opt_locus_count || opt_print_locus_num[i] < 0 ) {
@@ -1241,6 +1255,11 @@ static void check_validity()
     }
   }
 
+  if (opt_simulate_read_depth) 
+  {
+    if(!opt_msafile || !opt_diploid || !opt_diploid[0])
+      fatal("Simlation with seqerr available for diploid data only.");
+  }
 }
 
 void load_cfile_sim()
@@ -1272,7 +1291,7 @@ void load_cfile_sim()
 
     if (!token_len) continue;
     if (token_len < 0)
-      fatal("Invalid syntax when parsing file %s on line %ld",
+      fatal("Syntax error when parsing file %s on line %ld",
             opt_simulate, line_count);
     
     if (token_len == 4)
@@ -1287,7 +1306,7 @@ void load_cfile_sim()
       else if (!strncasecmp(token,"arch",4))
       {
         char * temp;
-        if (!get_string(value,&temp))
+        if (!get_string(value, &temp))
           fatal("Option %s expects a string (line %ld)", token, line_count);
 
         if (!strcmp(temp,"cpu"))
@@ -1343,6 +1362,16 @@ void load_cfile_sim()
         if (!parse_qrates(value))
           fatal("Option 'qrates' expects one switch and 6 values (line %ld)",
                 line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token, "seqerr", 6))
+      {
+        sscanf(value, "%ld%lf%lf%lf", &opt_simulate_read_depth, &opt_simulate_base_err,
+          &opt_simulate_a_samples, &opt_simulate_a_sites);
+        if (opt_simulate_base_err <= 0 || opt_simulate_base_err >= 1
+          || opt_simulate_read_depth < 1 || opt_simulate_read_depth > 300
+          || opt_simulate_a_samples<0.005 || opt_simulate_a_sites<0.005)
+          fatal("Option 'seqerr' expects 1 int & 3 doubles (line %ld)", line_count);
         valid = 1;
       }
     }
@@ -1418,8 +1447,7 @@ void load_cfile_sim()
       {
         if (!parse_printlocus(value,&opt_print_locus))
           fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
-	valid = 1;	
-
+        valid = 1;
       }
     }
     else if (token_len == 11)
@@ -1485,7 +1513,6 @@ void load_cfile_sim()
           else
           {
             /* no third line with species tree in the case of one species only */
-
             opt_streenewick = (char *)xmalloc((size_t)(strlen(opt_reorder)+2) *
                                               sizeof(char));
             strcpy(opt_streenewick, opt_reorder);

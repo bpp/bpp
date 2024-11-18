@@ -2,8 +2,7 @@
 
        seqfile = Rokas2003-5species.phy
       Imapfile = Rokas2003-5species-Imap.txt
-       outfile = out.txt
-      mcmcfile = mcmc.txt
+       jobname = out
 
 *   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * speciesdelimitation algorithm0 and finetune(e)
@@ -23,7 +22,7 @@
 
     thetaprior = gamma 2 100  # gamma(a, b) for theta
       tauprior = gamma 2 20   # gamma(a, b) for root tau & Dirichlet(a) for other tau's
-      migprior = 2 20
+        wprior = 20 2
      migration = 1
 	             Skud Sbay
 

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -773,16 +773,28 @@ long prop_split(gtree_t ** gtree,
       }
       else
       {
+        #if 0
         logprob_revert_notheta(node,i);
         logprob_revert_notheta(node->left,i);
         logprob_revert_notheta(node->right,i);
+        #else
+        logprob_revert_C2j(node,i);
+        logprob_revert_C2j(node->left,i);
+        logprob_revert_C2j(node->right,i);
+        #endif
       }
     }
     if (!opt_est_theta)
     {
-        node->notheta_logpr_contrib = tmpth;
-        node->left->notheta_logpr_contrib = tmpthl;
-        node->right->notheta_logpr_contrib = tmpthr;
+      #if 0
+      node->notheta_logpr_contrib = tmpth;
+      node->left->notheta_logpr_contrib = tmpthl;
+      node->right->notheta_logpr_contrib = tmpthr;
+      #else
+      logprob_revert_contribs(node);
+      logprob_revert_contribs(node->left);
+      logprob_revert_contribs(node->right);
+      #endif
     }
   }
 
@@ -1231,16 +1243,28 @@ long prop_join(gtree_t ** gtree,
       }
       else
       {
+        #if 0
         logprob_revert_notheta(node,i);
         logprob_revert_notheta(node->left,i);
         logprob_revert_notheta(node->right,i);
+        #else
+        logprob_revert_C2j(node,i);
+        logprob_revert_C2j(node->left,i);
+        logprob_revert_C2j(node->right,i);
+        #endif
       }
     }
     if (!opt_est_theta)
     {
+        #if 0
         node->notheta_logpr_contrib = tmpth;
         node->left->notheta_logpr_contrib = tmpthl;
         node->right->notheta_logpr_contrib = tmpthr;
+        #else
+        logprob_revert_contribs(node);
+        logprob_revert_contribs(node->left);
+        logprob_revert_contribs(node->right);
+        #endif
     }
   }
   for (i = 0; i < stree->locus_count; ++i)

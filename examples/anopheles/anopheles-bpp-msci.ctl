@@ -1,9 +1,8 @@
-          seed =  -1
+          seed = -1
 
        seqfile = loci_realign.txt
       Imapfile = Imap.txt
-       outfile = out.txt
-      mcmcfile = mcmc.txt
+       jobname = out
 
   speciesdelimitation = 0 * fixed species tree
 * speciesdelimitation = 1 0 2    * species delimitation rjMCMC algorithm0 and finetune(e)

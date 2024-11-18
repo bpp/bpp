@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -153,8 +153,10 @@ static void * threads_worker(void * vp)
                                     tip->locus_count,
                                     tip->td.c,
                                     t,
-                                    &tip->td.lnacceptance,
+                                    &tip->td.lnacceptance);
+                                    #if 0
                                     NULL);
+                                    #endif
           break;
         case THREAD_WORK_ALPHA:
           locus_propose_alpha_parallel(tip->td.stree,

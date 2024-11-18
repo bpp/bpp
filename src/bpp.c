@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -104,11 +104,14 @@ long opt_method;
 long opt_migration;
 long opt_migration_count;
 long opt_mig_vrates_exist;
+long opt_mix_theta_update;
+long opt_mix_w_update;
 long opt_model;
 long opt_mrate_move;
 long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
+long opt_print_a1b1;
 long opt_print_genetrees;
 long opt_print_locus;
 long opt_print_hscalars;
@@ -121,6 +124,8 @@ long opt_pseudop_exist;
 long opt_qrates_fixed;
 long opt_quiet;
 long opt_rate_prior;
+long opt_rb_w_update;
+long opt_rb_theta_update;
 long opt_revolutionary_spr_method;
 long opt_revolutionary_spr_debug;
 long opt_rev_gspr;
@@ -129,6 +134,7 @@ long opt_samplefreq;
 long opt_samples;
 long opt_scaling;
 long opt_seed;
+long opt_simulate_read_depth;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
@@ -140,6 +146,7 @@ long opt_threads_start;
 long opt_threads_step;
 long opt_usedata;
 long opt_version;
+long opt_extend;
 double opt_alpha_alpha;
 double opt_alpha_beta;
 double opt_brate_alpha;
@@ -175,11 +182,15 @@ double opt_prob_snl;
 double opt_prob_snl_shrink;
 double opt_phi_alpha;
 double opt_phi_beta;
+double opt_phi_slide_prob;
 double opt_pseudo_alpha;
 double opt_pseudo_beta;
 double opt_rjmcmc_alpha;
 double opt_rjmcmc_epsilon;
 double opt_rjmcmc_mean;
+double opt_simulate_base_err;
+double opt_simulate_a_samples;
+double opt_simulate_a_sites;
 double opt_siterate_alpha;
 double opt_siterate_beta;
 double opt_snl_lambda_expand;
@@ -193,27 +204,28 @@ double opt_vbar_alpha;
 double opt_vbar_beta;
 double opt_vi_alpha;
 long * opt_diploid;
-long * opt_sp_seqcount;
 long * opt_print_locus_num;
+long * opt_sp_seqcount;
+char * opt_a1b1file;
 char * opt_bfdriver;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constraintfile;
+char * opt_datefile;
 char * opt_heredity_filename;
+char * opt_jobname;
 char * opt_locusrate_filename;
 char * opt_mapfile;
-char * opt_datefile;
-char * opt_seqDates;
 char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_traitfile;
 char * opt_stdfile;
 char * opt_msafile;
 char * opt_mscifile;
-char * opt_outfile;
 char * opt_partition_file;
 char * opt_reorder;
 char * opt_resume;
+char * opt_seqDates;
 char * opt_simulate;
 char * opt_streenewick;
 char * opt_treefile;
@@ -248,7 +260,8 @@ double g_pj_gspr;
 double g_pj_tau;
 double g_pj_mix;
 double g_pj_lrht;
-double g_pj_phi;
+double g_pj_phi_gibbs;
+double g_pj_phi_slide;
 double g_pj_freqs;
 double g_pj_qmat;
 double g_pj_alpha;
@@ -269,52 +282,58 @@ double g_pj_rj;
 
 static struct option long_options[] =
 {
-  {"help",             no_argument,       0, 0 },  /*  0 */
-  {"version",          no_argument,       0, 0 },  /*  1 */
-  {"quiet",            no_argument,       0, 0 },  /*  2 */
-  {"cfile",            required_argument, 0, 0 },  /*  3 */
-  {"arch",             required_argument, 0, 0 },  /*  4 */
-  {"exp_method",       required_argument, 0, 0 },  /*  5 */
-  {"exp_debug",        no_argument,       0, 0 },  /*  6 */
-  {"resume",           required_argument, 0, 0 },  /*  7 */
-  {"simulate",         required_argument, 0, 0 },  /*  8 */
-  {"exp_random",       no_argument,       0, 0 },  /*  9 */
-  {"rev_gspr",         no_argument,       0, 0 },  /* 10 */
-  {"debugrates",       no_argument,       0, 0 },  /* 11 */
-  {"msci-create",      required_argument, 0, 0 },  /* 12 */
-  {"comply",           no_argument,       0, 0 },  /* 13 */
-  {"tree",             required_argument, 0, 0 },  /* 14 */
-  {"constraint",       required_argument, 0, 0 },  /* 15 */
-  {"full",             no_argument,       0, 0 },  /* 16 */
-  {"debug",            optional_argument, 0, 0 },  /* 17 */
-  {"debug_gage",       optional_argument, 0, 0 },  /* 18 */
-  {"debug_gspr",       optional_argument, 0, 0 },  /* 19 */
-  {"debug_mui",        optional_argument, 0, 0 },  /* 20 */
-  {"debug_hs",         optional_argument, 0, 0 },  /* 21 */
-  {"debug_mix",        optional_argument, 0, 0 },  /* 22 */
-  {"debug_rj",         optional_argument, 0, 0 },  /* 23 */
-  {"debug_theta",      optional_argument, 0, 0 },  /* 24 */
-  {"debug_tau",        optional_argument, 0, 0 },  /* 25 */
-  {"debug_sspr",       optional_argument, 0, 0 },  /* 26 */
-  {"debug_br",         optional_argument, 0, 0 },  /* 27 */
-  {"debug_snl",        optional_argument, 0, 0 },  /* 28 */
-  {"debug_parser",     optional_argument, 0, 0 },  /* 29 */
-  {"debug_start",      required_argument, 0, 0 },  /* 30 */
-  {"debug_end",        required_argument, 0, 0 },  /* 31 */
-  {"debug_abort",      required_argument, 0, 0 },  /* 32 */
-  {"exp_theta",        no_argument,       0, 0 },  /* 33 */
-  {"debug_bruce",      no_argument,       0, 0 },  /* 34 */
-  {"exp_sim",          no_argument,       0, 0 },  /* 35 */
-  {"summary",          required_argument, 0, 0 },  /* 36 */
-  {"exp_imrb",         no_argument,       0, 0 },  /* 37 */
-  {"bfdriver",         required_argument, 0, 0 },  /* 38 */
-  {"points",           required_argument, 0, 0 },  /* 39 */
-  {"mrate-move",       required_argument, 0, 0 },  /* 40 */
-  {"theta-slide-prob", required_argument, 0, 0 },  /* 41 */
-  {"theta_mode",       required_argument, 0, 0 },  /* 42 */
-  {"no-pin",           no_argument,       0, 0 },  /* 43 */
-  {"theta-showeps",    no_argument,       0, 0 },  /* 44 */
-  {"theta-prop",       required_argument, 0, 0 },  /* 45 */
+  {"help",                 no_argument,       0, 0 },  /*  0 */
+  {"version",              no_argument,       0, 0 },  /*  1 */
+  {"quiet",                no_argument,       0, 0 },  /*  2 */
+  {"cfile",                required_argument, 0, 0 },  /*  3 */
+  {"arch",                 required_argument, 0, 0 },  /*  4 */
+  {"exp_method",           required_argument, 0, 0 },  /*  5 */
+  {"exp_debug",            no_argument,       0, 0 },  /*  6 */
+  {"resume",               required_argument, 0, 0 },  /*  7 */
+  {"simulate",             required_argument, 0, 0 },  /*  8 */
+  {"exp_random",           no_argument,       0, 0 },  /*  9 */
+  {"rev_gspr",             no_argument,       0, 0 },  /* 10 */
+  {"debugrates",           no_argument,       0, 0 },  /* 11 */
+  {"msci-create",          required_argument, 0, 0 },  /* 12 */
+  {"comply",               no_argument,       0, 0 },  /* 13 */
+  {"tree",                 required_argument, 0, 0 },  /* 14 */
+  {"constraint",           required_argument, 0, 0 },  /* 15 */
+  {"full",                 no_argument,       0, 0 },  /* 16 */
+  {"debug",                optional_argument, 0, 0 },  /* 17 */
+  {"debug_gage",           optional_argument, 0, 0 },  /* 18 */
+  {"debug_gspr",           optional_argument, 0, 0 },  /* 19 */
+  {"debug_mui",            optional_argument, 0, 0 },  /* 20 */
+  {"debug_hs",             optional_argument, 0, 0 },  /* 21 */
+  {"debug_mix",            optional_argument, 0, 0 },  /* 22 */
+  {"debug_rj",             optional_argument, 0, 0 },  /* 23 */
+  {"debug_theta",          optional_argument, 0, 0 },  /* 24 */
+  {"debug_tau",            optional_argument, 0, 0 },  /* 25 */
+  {"debug_sspr",           optional_argument, 0, 0 },  /* 26 */
+  {"debug_br",             optional_argument, 0, 0 },  /* 27 */
+  {"debug_snl",            optional_argument, 0, 0 },  /* 28 */
+  {"debug_parser",         optional_argument, 0, 0 },  /* 29 */
+  {"debug_start",          required_argument, 0, 0 },  /* 30 */
+  {"debug_end",            required_argument, 0, 0 },  /* 31 */
+  {"debug_abort",          required_argument, 0, 0 },  /* 32 */
+  {"exp_theta",            no_argument,       0, 0 },  /* 33 */
+  {"debug_bruce",          no_argument,       0, 0 },  /* 34 */
+  {"exp_sim",              no_argument,       0, 0 },  /* 35 */
+  {"summary",              required_argument, 0, 0 },  /* 36 */
+  {"exp_imrb",             no_argument,       0, 0 },  /* 37 */
+  {"bfdriver",             required_argument, 0, 0 },  /* 38 */
+  {"points",               required_argument, 0, 0 },  /* 39 */
+  {"mrate-move",           required_argument, 0, 0 },  /* 40 */
+  {"theta-slide-prob",     required_argument, 0, 0 },  /* 41 */
+  {"theta_mode",           required_argument, 0, 0 },  /* 42 */
+  {"no-pin",               no_argument,       0, 0 },  /* 43 */
+  {"theta-showeps",        no_argument,       0, 0 },  /* 44 */
+  {"theta-prop",           required_argument, 0, 0 },  /* 45 */
+  {"no-rb-theta-update",   no_argument,       0, 0 },  /* 46 */
+  {"no-rb-w-update",       no_argument,       0, 0 },  /* 47 */
+  {"no-mix-theta-update",  no_argument,       0, 0 },  /* 48 */
+  {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
+  {"extend",               required_argument, 0, 0 },  /* 50 */
+  {"phi-slide-prob",       required_argument, 0, 0 },  /* 51 */
   { 0, 0, 0, 0 }
 };
 
@@ -432,6 +451,7 @@ void args_init(int argc, char ** argv)
   opt_vbar_beta = -1;
   opt_vi_alpha = -1;
   opt_burnin = 100;
+  opt_a1b1file = NULL; /* assigned at load_cfile() */
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
   opt_clock_vbar = 0;
@@ -507,14 +527,14 @@ void args_init(int argc, char ** argv)
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
   opt_finetune_qrates = 0.3;
-  opt_finetune_reset = 0;
+  opt_finetune_reset = 1;
   opt_finetune_nubar = 0.1;
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
   opt_finetune_theta = (double *)xmalloc(sizeof(double));
   opt_finetune_theta[0] = 0.001;
   opt_finetune_theta_count = 1;
-  opt_finetune_theta_mode = 1;
+  opt_finetune_theta_mode = 2;
   opt_help = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
@@ -542,21 +562,25 @@ void args_init(int argc, char ** argv)
   opt_mig_beta = 0;
   opt_mig_specs = NULL;
   opt_mig_vrates_exist = 0;
+  opt_mix_theta_update = 1;
+  opt_mix_w_update = 1;
   opt_model = -1;
   opt_modelparafile = NULL;
-  opt_mrate_move = BPP_MRATE_SLIDE;
+  opt_mrate_move = BPP_MRATE_GIBBS;
   opt_traitfile = NULL;
   opt_stdfile = NULL;
   opt_msafile = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
   opt_onlysummary = 0;
-  opt_outfile = NULL;
+  opt_jobname = NULL;
   opt_partition_count = 0;
   opt_partition_file = NULL;
   opt_partition_list = NULL;
   opt_phi_alpha = 0;
   opt_phi_beta = 0;
+  opt_phi_slide_prob = 0.2;
+  opt_print_a1b1 = 1;  /* the default is to print into conditional_a1b1.txt */
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
   opt_print_locusfile = 0;
@@ -574,6 +598,8 @@ void args_init(int argc, char ** argv)
   opt_qrates_params = NULL;
   opt_quiet = 0;
   opt_rate_prior = BPP_BRATE_PRIOR_GAMMA;
+  opt_rb_w_update = 1;
+  opt_rb_theta_update = 1;
   opt_resume = NULL;
   opt_rev_gspr = 0;
   opt_rjmcmc_alpha = -1;
@@ -585,6 +611,10 @@ void args_init(int argc, char ** argv)
   opt_scaling = 0;
   opt_seed = -1;
   opt_simulate = NULL;
+  opt_simulate_read_depth = 0;
+  opt_simulate_base_err = 0;
+  opt_simulate_a_samples = 0;
+  opt_simulate_a_sites = 0;
   opt_siterate_fixed = 1;
   opt_siterate_alpha = 0;
   opt_siterate_beta = 0;
@@ -608,6 +638,7 @@ void args_init(int argc, char ** argv)
   opt_treefile = NULL;
   opt_usedata = 1;
   opt_version = 0;
+  opt_extend = 0;
   opt_seqAncestral = 0; 
 
   g_pj_gage = 0;
@@ -615,7 +646,8 @@ void args_init(int argc, char ** argv)
   g_pj_tau = 0;
   g_pj_mix = 0;
   g_pj_lrht = 0;
-  g_pj_phi = 0;
+  g_pj_phi_gibbs = 0;
+  g_pj_phi_slide = 0;
   g_pj_freqs = 0;
   g_pj_qmat = 0;
   g_pj_alpha = 0;
@@ -845,8 +877,6 @@ void args_init(int argc, char ** argv)
         break;
 
       case 41:
-        if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
-          fatal("Invalid proportion of sliding window proposals (%s)", optarg);
         opt_theta_slide_prob = atof(optarg);
         break;
 
@@ -871,6 +901,30 @@ void args_init(int argc, char ** argv)
           opt_theta_prop = BPP_THETA_PROP_MG_GAMMA;
         else
           fatal("Invalid theta prop (%s)", optarg);
+        break;
+
+      case 46:
+        opt_rb_theta_update = 0;
+        break;
+
+      case 47:
+        opt_rb_w_update = 0;
+        break;
+
+      case 48:
+        opt_mix_theta_update = 0;
+        break;
+
+      case 49:
+        opt_mix_w_update = 0;
+        break;
+
+      case 50:
+        opt_extend = atol(optarg);
+        break;
+
+      case 51:
+        opt_phi_slide_prob = atof(optarg);
         break;
 
       default:
@@ -926,12 +980,21 @@ void args_init(int argc, char ** argv)
   if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
     fatal("Proportion of sliding window proposals must be between 0 and 1");
 
+  if (opt_theta_slide_prob == 0)
+  {
+    opt_finetune_theta_count = 1;
+    opt_finetune_theta_mode = 1;
+  }
+
   /* if no command specified, turn on --help */
   if (!commands)
   {
     opt_help = 1;
     return;
   }
+  if (!opt_resume && opt_extend)
+    fatal("--extend can only be used with --resume");
+
 }
 
 static void dealloc_switches()
@@ -946,11 +1009,13 @@ static void dealloc_switches()
   if (opt_stdfile) free(opt_stdfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);
-  if (opt_outfile) free(opt_outfile);
+  if (opt_jobname) free(opt_jobname);
   if (opt_reorder) free(opt_reorder);
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
   if (opt_bfdriver) free(opt_bfdriver);
+  if (opt_print_locus_num) free(opt_print_locus_num);
+  if (opt_a1b1file) free(opt_a1b1file);
 
   /* mccoal switches */
   if (opt_basefreqs_params) free(opt_basefreqs_params);
@@ -986,6 +1051,8 @@ void cmd_help()
           "  --theta-prop STRING      proposal distribution for theta gibbs move\n"
           "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
           "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.2)\n"
+          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.2)\n"
+          "  --mrate-move STRING      'gibbs' or 'slide' sampling of migration rate W\n"
           "\n"
          );
 
@@ -1030,11 +1097,10 @@ void show_header()
 int main (int argc, char * argv[])
 {
   fillheader();
+  show_header();
   getentirecommandline(argc, argv);
 
   args_init(argc, argv);
-
-  show_header();
 
   cpu_features_detect();
   cpu_features_show();

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2022 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -1167,6 +1167,9 @@ void cmd_bfdriver()
   char * ctlfile = NULL;
   char * cfdata= NULL;
   size_t cfsize = 0;
+  char * bwfile = NULL;
+
+  xasprintf(&bwfile, "%s.betaweights.csv", opt_bfdriver);
 
   /* gauss-legendre quadrature points and weights */
   const double * xni;
@@ -1176,8 +1179,9 @@ void cmd_bfdriver()
   gauss_legendre_rule(&xni,&wni,opt_bfd_points);
 
   fprintf(stdout, "quadrature: log{M} = 0.5 * SUM w_b * E_b(log{f(X)})\n\n");
-  fp_beta = xopen("betaweights.csv", "w");
+  fp_beta = xopen(bwfile, "w");
   fprintf(fp_beta,"beta,weight,ElnfX\n");
+  free(bwfile);
 
   /* read control file into a buffer */
   cfsize = readfile(opt_bfdriver, &cfdata);

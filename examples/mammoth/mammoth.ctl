@@ -1,9 +1,8 @@
-seed = 1
+seed = -1
 
 seqfile = mammoth_nuclear.txt
 Imapfile = map.txt
-outfile = out.txt
-mcmcfile = mcmc.txt
+jobname = out
 datefile = dates.txt
 
 # fixed number of species/populations 
