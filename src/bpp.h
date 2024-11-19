@@ -3000,8 +3000,8 @@ void cmd_bfdriver();
 void stree_export_pdf(const stree_t * stree);
 
 /* functions in a1b1.c */
-void conditional_to_marginal(double * ai,
-                             double * bi,
+void conditional_to_marginal(double * ai_full,
+                             double * bi_full,
                              long nsamples,
                              long nbins,
                              long cond_dist,
@@ -3016,10 +3016,10 @@ void conditional_to_marginal(double * ai,
                              double * out_effu,
                              double * out_effy);
 
-void conditional_to_marginal_M(double * ai1,
-                               double * bi1,
-                               double * ai2,
-                               double * bi2,
+void conditional_to_marginal_M(double * ai1_full,
+                               double * bi1_full,
+                               double * ai2_full,
+                               double * bi2_full,
                                int nsamples,
                                int nbins,
                                int cond_dist1,

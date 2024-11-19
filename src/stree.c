@@ -4695,14 +4695,17 @@ static long update_migs(gtree_t * gtree,
 
       x->mi->me[j].old_time = x->mi->me[j].time;
 
+#if 0
       /* mark populations to update logpr */
       #if 0
       assert(x->mi->me[j].source->mark[thread_index]);
       #else
       for (k = 0; k < paffected_count; ++k)
         if (x->mi->me[j].source == affected[k]) break;
+        //if (x->mi->me[j].source == affected[k] || x->mi->me[j].target == affected[k]) break;
       assert(k < paffected_count);
       #endif
+#endif
 
       if (x->mi->me[j].time >= oldage)
       {
@@ -4806,7 +4809,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_mig_reject = 0;
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
-    if (opt_exp_imrb)
+    if (0 && opt_exp_imrb)
     {
       #if 0
       /* XXX: The below is old code and is wrong */
@@ -6512,6 +6515,55 @@ static long getlinkedpops(stree_t * stree,
   return lcount;
 }
 
+long ** linkage_matrix(stree_t * stree,
+                       gtree_t ** gtree_list,
+                       double tl,
+                       double tu)
+{
+  long i,j,k;
+  long total_nodes = stree->tip_count+stree->inner_count;
+  long si,ti;  /* source and target index */
+  dlist_item_t * li;
+  long ** m;
+
+  m = (long **)xmalloc((size_t)total_nodes * sizeof(long *));
+  for (i = 0; i < total_nodes; ++i)
+    m[i] = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+
+  /* part I: fill node adjacency matrix according to migration events
+     m[i,j] = 1 : there is at least one migration event between i and j */
+     
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    for (j = 0; j < total_nodes; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+
+      /* it does not matter whether we go through the source or target list. Either way
+         we will visit each migration event exactly once */
+      for (li = x->mig_source[i]->head; li; li = li->next)
+      {
+        migevent_t * me = (migevent_t *)(li->data);
+        if (me->time > tl && me->time < tu)
+        {
+          si = me->target->node_index;
+          ti = me->source->node_index;
+          m[si][ti] = m[ti][si] = 1;
+        }
+      }
+    }
+  }
+
+  /* part II: Floyd-Warshall */
+  for (k = 0; k < total_nodes; ++k)
+    for (i = 0; i < total_nodes; ++i)
+      for (j = 0; j < total_nodes; ++j)
+        m[i][j] = m[i][j] || (m[i][k] && m[k][j]);
+
+  return m;
+}
+
+
 static long rb_bounds(stree_t * stree,
                       gtree_t ** gtree_list,
                       snode_t * x,
@@ -6543,9 +6595,49 @@ static long rb_bounds(stree_t * stree,
   linked[0] = x; linked[1] = x->left; linked[2] = x->right;
   lcount = 3;
 
+  #if 0
   lcount += getlinkedpops(stree,gtree_list,x,       bounds,0,linked+lcount);
   lcount += getlinkedpops(stree,gtree_list,x->left, bounds,1,linked+lcount);
   lcount += getlinkedpops(stree,gtree_list,x->right,bounds,2,linked+lcount);
+  #else
+  long ** mat = linkage_matrix(stree,gtree_list,tl,tu);
+  
+  for (i = 0; i < 3; ++i)
+  {
+    for (j = 0; j < total_nodes; ++j)
+    {
+      snode_t * x = stree->nodes[j];
+      long si = linked[i]->node_index;
+      long ti = x->node_index;
+      if (mat[si][ti] && !x->mark[thread_index_zero])
+      {
+        linked[lcount++] = x;
+        x->mark[thread_index_zero] = RB_MARK;
+      }
+    }
+  }
+  #if 0
+  printf("%s: ", x->label);
+  for (i = 0; i < lcount; ++i)
+    printf(" %s", linked[i]->label);
+  printf("\n");
+  #endif
+
+  for (i = 0; i < total_nodes; ++i)
+    free(mat[i]);
+  free(mat);
+
+  #if 0
+  printf("Node: %s\n", x->label);
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    printf("%ld lcount: %ld\n", i, lcount);
+    for (j = 0; j < lcount; ++j)
+      gtree_list[i]->rb_linked[j] = linked[j];
+    gtree_list[i]->rb_lcount = lcount;
+  }
+  #endif
+  #endif
 
   /* cleans marks also on x, x->left and x->right */
   for (i = 0; i < lcount; ++i)
@@ -6597,6 +6689,7 @@ static long rb_bounds(stree_t * stree,
   }
   lcount = j;
 
+  #if 0
   /* update per locus lists */
   for (m = 0; m < opt_locus_count; ++m)
   {
@@ -6621,6 +6714,7 @@ static long rb_bounds(stree_t * stree,
     }
     gtree_list[m]->rb_lcount = j;
   }
+  #endif
 
   return lcount;
 }

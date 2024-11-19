@@ -4541,8 +4541,6 @@ void cmd_run()
   /* *** start of MCMC loop *** */
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
-    //if (opt_debug && opt_debug_counter==10) exit(0);
-    printf("opt_debug_counter = %ld\n", opt_debug_counter);
     #if 0
     if (opt_debug_counter == 0)
     {
