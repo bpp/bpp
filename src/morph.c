@@ -16,9 +16,11 @@ static int get_nb_char(FILE *fp)
   return c;
 }
 
-static int parse_header(FILE * fp, int * nrow, int * ncol,
+static int parse_header(FILE * fp, int * nrow, int * ncol, int * type,
                         double * v_pop, double * ldetRs)
 {
+  int t;
+  
   if (fscanf(fp, "%d %d", nrow, ncol) != 2) {
     fprintf(stderr, "Expecting two numbers\n");
     return 0;
@@ -32,13 +34,28 @@ static int parse_header(FILE * fp, int * nrow, int * ncol,
     return 0;
   }
 
-  /* also read in here v_pop and ldetRs, which have been obtained when
-     preprocessing the trait data */
-  if (fscanf(fp, "%lf %lf", v_pop, ldetRs) != 2) {
-    fprintf(stderr, "Expecting population variance and log(det(R*))\n");
+  t = get_nb_char(fp);
+  if (t == 'C' || t == 'c')
+  {
+    *type = BPP_DATA_CONT;
+    
+    /* also read in here v_pop and ldetRs, which have been obtained when
+       preprocessing the trait data */
+    if (fscanf(fp, "%lf %lf", v_pop, ldetRs) != 2) {
+      fprintf(stderr, "Expecting population variance and log(det(R*))\n");
+      return 0;
+    }
+  }
+  else if (t == 'D' || t == 'd')
+  {
+    *type = BPP_DATA_DISC;
+  }
+  else
+  {
+    fprintf(stderr, "Unrecognized data type (%c)\n", t);
     return 0;
   }
-  
+
   return 1;
 }
 
@@ -65,7 +82,7 @@ static int parse_label(FILE * fp, char * name, int len)
   return 1;
 }
 
-static int parse_value(FILE * fp, double * trait, int len)
+static int parse_value_c(FILE * fp, double * trait, int len)
 {
   int c, j;
   
@@ -99,6 +116,40 @@ static int parse_value(FILE * fp, double * trait, int len)
   return 1;
 }
 
+static int parse_value_d(FILE * fp, int * std, int len)
+{
+  int c, j;
+  int stdID[] = {1,2,4,8,16,32,64,128,256,512,1023,1024};
+  
+  for (j = 0; j < len; ++j)
+  {
+    c = get_nb_char(fp);
+    
+    if (c == EOF)
+      return 0;
+    
+    if (isdigit(c))
+    {
+      std[j] = stdID[c-'0'];
+    }
+    else if (c == '?')
+    {
+      std[j] = stdID[10];
+    }
+    else if (c == '-')
+    {
+      std[j] = stdID[11];
+    }
+    else // TODO: ambiguity
+    {
+      fprintf(stderr, "Unrecognized trait value (%c)\n", c);
+      return 0;
+    }
+  }
+  
+  return 1;
+}
+
 static void parse_comment(FILE * fp)
 {
   int c;
@@ -109,35 +160,48 @@ static void parse_comment(FILE * fp)
   ungetc(c, fp);
 }
 
-static trait_t * parse_trait_part(FILE * fp)
+static morph_t * parse_trait_part(FILE * fp)
 {
   int i, j;
   
-  trait_t * morph = (trait_t *)xmalloc(sizeof(trait_t));
+  morph_t * morph = (morph_t *)xmalloc(sizeof(morph_t));
   
   /* skip comments, assuming they are at the beginning of the trait block */
   parse_comment(fp);
   
   /* read header */
-  if (!parse_header(fp, &(morph->count), &(morph->length),
+  if (!parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype),
                         &(morph->v_pop), &(morph->ldetRs)))
   {
     fprintf(stderr, "Error in header\n");
     return NULL;
   }
   
-  morph->label = (char **)xmalloc((morph->count)*sizeof(char *));
-  morph->trait = (double **)xmalloc((morph->count)*sizeof(double *));
-  for (i = 0; i < morph->count; ++i)
+  /* allocate space */
+  morph->label = (char **)xmalloc((morph->ntaxa)*sizeof(char *));
+  if (morph->dtype == BPP_DATA_CONT)
   {
-    morph->trait[i] = (double *)xmalloc((morph->length)*sizeof(double));
-    morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
+    morph->conti = (double **)xmalloc((morph->ntaxa)*sizeof(double *));
+    for (i = 0; i < morph->ntaxa; ++i)
+    {
+      morph->conti[i] = (double *)xmalloc((morph->length)*sizeof(double));
+      morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
+    }
+  }
+  else // morph->dtype == BPP_DATA_DISC
+  {
+    morph->discr = (int **)xmalloc((morph->ntaxa)*sizeof(int *));
+    for (i = 0; i < morph->ntaxa; ++i)
+    {
+      morph->discr[i] = (int *)xmalloc((morph->length)*sizeof(int));
+      morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
+    }
   }
   
   /* read morphological traits of each species,
      assuming each line has a label followed by m->length numbers.
      morph->trait has dimension m->count * m->length */
-  for (i = 0; i < morph->count; ++i)
+  for (i = 0; i < morph->ntaxa; ++i)
   {
     /* read the label (species name) */
     if (!parse_label(fp, morph->label[i], LABEL_LEN+1))
@@ -146,36 +210,47 @@ static trait_t * parse_trait_part(FILE * fp)
       return NULL;
     }
     /* read the trait values of this species */
-    if (!parse_value(fp, morph->trait[i], morph->length))
+    if (morph->dtype == BPP_DATA_CONT &&
+        !parse_value_c(fp, morph->conti[i], morph->length))
     {
-      fprintf(stderr, "Failed to read traits of species %d\n", i+1);
+      fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
+      return NULL;
+    }
+    else if (!parse_value_d(fp, morph->discr[i], morph->length))
+    {
+      fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
       return NULL;
     }
   }
   
 #ifdef DEBUG_Chi
-  printf("\n%d %d\t", morph->count, morph->length);
-  printf("%lf %lf\n", morph->v_pop, morph->ldetRs);
-  for (i = 0; i < morph->count; ++i) {
+  printf("\n%d %d %c\t", morph->ntaxa, morph->length, morph->dtype);
+  if (morph->dtype == BPP_DATA_CONT)
+    printf("%lf %lf\n", morph->v_pop, morph->ldetRs);
+  else
+    printf("\n");
+  for (i = 0; i < morph->ntaxa; ++i) {
     printf("%s\t", morph->label[i]);
-    for (j = 0; j < morph->length; ++j)
-      printf("%lf\t", morph->trait[i][j]);
+    if (morph->dtype == BPP_DATA_CONT)
+      for (j = 0; j < morph->length; ++j)
+        printf("%lf\t", morph->conti[i][j]);
+    else
+      for (j = 0; j < morph->length; ++j)
+        printf("%d\t", morph->discr[i][j]);
     printf("\n");
   }
 #endif
   
-  morph->dtype = BPP_DATA_TRAIT;
-  
   return morph;
 }
 
-trait_t ** parse_traitfile(const char * traitfile, int * count)
+morph_t ** parse_traitfile(const char * traitfile, int * count)
 {
   int c, i, m_slotalloc = 10, m_maxcount = 10;
   
   FILE * fp = xopen(traitfile,"r");
 
-  trait_t ** pmorph = (trait_t **)xmalloc(m_maxcount*sizeof(trait_t *));
+  morph_t ** pmorph = (morph_t **)xmalloc(m_maxcount*sizeof(morph_t *));
 
   *count = 0;
 
@@ -187,8 +262,8 @@ trait_t ** parse_traitfile(const char * traitfile, int * count)
     if (*count == m_maxcount)
     {
       m_maxcount += m_slotalloc;
-      trait_t ** temp = (trait_t **)xmalloc(m_maxcount*sizeof(trait_t *));
-      memcpy(temp, pmorph, (*count)*sizeof(trait_t *));
+      morph_t ** temp = (morph_t **)xmalloc(m_maxcount*sizeof(morph_t *));
+      memcpy(temp, pmorph, (*count)*sizeof(morph_t *));
       free(pmorph);
       pmorph = temp;
     }
@@ -197,7 +272,7 @@ trait_t ** parse_traitfile(const char * traitfile, int * count)
     if (pmorph[*count] == NULL)
     {
       for (i = 0; i < *count; ++i)
-        trait_destroy(pmorph[i]);
+        morph_destroy(pmorph[i]);
       free(pmorph);
 
       fatal("Error parsing trait partition %d", *count+1);
@@ -211,59 +286,77 @@ trait_t ** parse_traitfile(const char * traitfile, int * count)
   return pmorph;
 }
 
-void trait_destroy(trait_t * morph)
+void morph_destroy(morph_t * morph)
 {
   int i;
 
   if (morph->label)
   {
-    for (i = 0; i < morph->count; ++i)
+    for (i = 0; i < morph->ntaxa; ++i)
       if (morph->label[i])
         free(morph->label[i]);
     free(morph->label);
   }
 
-  if (morph->trait)
+  if (morph->conti)
   {
-    for (i = 0; i < morph->count; ++i)
-      if (morph->trait[i])
-        free(morph->trait[i]);
-    free(morph->trait);
+    for (i = 0; i < morph->ntaxa; ++i)
+      if (morph->conti[i])
+        free(morph->conti[i]);
+    free(morph->conti);
+  }
+
+  if (morph->discr)
+  {
+    for (i = 0; i < morph->ntaxa; ++i)
+      if (morph->discr[i])
+        free(morph->discr[i]);
+    free(morph->discr);
   }
 
   free(morph);
 }
 
-void pic_destroy(stree_t * stree)
+void trait_destroy(stree_t * stree)
 {
   int n, i;
   snode_t * snode;
-  contrast_t * ic;
+  trait_t * trait;
 
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    if (snode->pic)
+    if (snode->trait)
     {
       for (n = 0; n < stree->trait_count; ++n)
       {
-        ic = snode->pic[n];
-        if (ic)
+        trait = snode->trait[n];
+        if (trait)
         {
-          if(ic->trait)
-            free(ic->trait);
-          if(ic->contrast)
-            free(ic->contrast);
-          free(ic);
+          if(trait->state_d)
+            free(trait->state_d);
+         if(trait->state_m)
+            free(trait->state_m);
+          if(trait->contrast)
+            free(trait->contrast);
+          free(trait);
         }
       }
-      free(snode->pic);
+      free(snode->trait);
     }
   }
   
   if (stree->trait_dim)
     free(stree->trait_dim);
-  
+  if (stree->trait_type)
+    free(stree->trait_type);
+
+  if (stree->trait_nstate)
+  {
+    for (n = 0; n < stree->trait_count; ++i)
+      free(stree->trait_nstate[n]);
+    free(stree->trait_nstate);
+  }
   if (stree->trait_v_pop)
     free(stree->trait_v_pop);
   if (stree->trait_ldetRs)
@@ -279,37 +372,11 @@ void pic_destroy(stree_t * stree)
     free(stree->trait_old_logpr);
 }
 
-void debug_print_pic(int idx, stree_t * stree)
-{
-  int i, j;
-  snode_t * snode;
-  
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    snode = stree->nodes[i];
-    printf("%s\t", snode->label);
-    printf(" r_k=%lf", snode->pic[idx]->brate);
-    printf(" v_k=%lf", snode->pic[idx]->brlen);
-    printf(" m_k:");
-    for (j = 0; j < stree->trait_dim[idx]; ++j)
-      printf(" %+lf", snode->pic[idx]->trait[j]);
-    printf(" x_k:");
-    for (j = 0; j < stree->trait_dim[idx]; ++j)
-      printf(" %+lf", snode->pic[idx]->contrast[j]);
-    printf("\n");
-  }
-  
-  printf("cur log(like)=%lf", stree->trait_logl[idx]);
-  printf("\t log(prior)=%lf\n", stree->trait_logpr[idx]);
-  printf("old log(like)=%lf", stree->trait_old_logl[idx]);
-  printf("\t log(prior)=%lf\n", stree->trait_old_logpr[idx]);
-}
-
-static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
+static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
 {
   int n, i, j, l;
   snode_t * snode;
-  trait_t * morph;
+  morph_t * morph;
   
   for (i = 0; i < stree->tip_count; ++i)
   {
@@ -318,18 +385,22 @@ static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
     /* loop over the trait partitions */
     for (n = 0; n < stree->trait_count; ++n)
     {
-      morph = trait_list[n];
-      for (l = 0; l < morph->count; ++l)
+      morph = morph_list[n];
+      for (l = 0; l < morph->ntaxa; ++l)
       {
         if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
         {
           /* copy the trait values over */
-          for (j = 0; j < morph->length; ++j)
-            snode->pic[n]->trait[j] = morph->trait[l][j];
+          for (j = 0; j < morph->length; ++j) {
+            if (morph->dtype == BPP_DATA_CONT)
+              snode->trait[n]->state_m[j] = morph->conti[l][j];
+            else
+              snode->trait[n]->state_d[j] = morph->discr[l][j];
+          }
           break;
         }
       }
-      if (l == morph->count)
+      if (l == morph->ntaxa)
       {
         fprintf(stderr, "Species name %s not found in partition %d\n",
                 snode->label, n+1);
@@ -341,104 +412,120 @@ static int pic_fill_tip(stree_t * stree, trait_t ** trait_list)
   return 1;
 }
 
-static void pic_update_part(int idx, snode_t * snode, stree_t * stree)
+static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
 {
   int j;
   double v_pop, v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
-    pic_update_part(idx, snode->left, stree);
-    pic_update_part(idx, snode->right, stree);
+    trait_update_pic_part(idx, snode->left, stree);
+    trait_update_pic_part(idx, snode->right, stree);
     
     if (snode->parent)
-      v_k = (snode->parent->tau - snode->tau) * snode->pic[idx]->brate;
+      v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
     else
       v_k = 0;
-    v_k1 = snode->left->pic[idx]->brlen;
-    v_k2 = snode->right->pic[idx]->brlen;
-    snode->pic[idx]->brlen = v_k + v_k1*v_k2/(v_k1+v_k2);  // v_k'
+    v_k1 = snode->left->trait[idx]->brlen;
+    v_k2 = snode->right->trait[idx]->brlen;
+    snode->trait[idx]->brlen = v_k + v_k1*v_k2/(v_k1+v_k2);  // v_k'
     
-    m_k1 = snode->left->pic[idx]->trait;
-    m_k2 = snode->right->pic[idx]->trait;
+    m_k1 = snode->left->trait[idx]->state_m;
+    m_k2 = snode->right->trait[idx]->state_m;
     for (j = 0; j < stree->trait_dim[idx]; ++j)
     {
-      snode->pic[idx]->contrast[j] = m_k1[j] - m_k2[j];  // x_k and m_k'
-      snode->pic[idx]->trait[j] = (v_k2*m_k1[j] + v_k1*m_k2[j]) /(v_k1+v_k2);
+      snode->trait[idx]->contrast[j] = m_k1[j] - m_k2[j];  // x_k and m_k'
+      snode->trait[idx]->state_m[j] = (v_k2*m_k1[j] + v_k1*m_k2[j]) /(v_k1+v_k2);
     }
   }
   else  /* tip node */
   {
-    v_k = (snode->parent->tau - snode->tau) * snode->pic[idx]->brate;
+    v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
     /* The trait matrix has been standardized so that all characters have the
        same variance and the population noise has variance of v_pop.
        Alvarez-Carretero et al. 2019. p.970. */
     v_pop = stree->trait_v_pop[idx];
-    snode->pic[idx]->brlen = v_k + v_pop;
+    snode->trait[idx]->brlen = v_k + v_pop;
   }
 }
 
-void pic_update(stree_t * stree)
-{
-  int n;
-
-  /* loop over the trait partitions */
-  for (n = 0; n < stree->trait_count; ++n)
-    pic_update_part(n, stree->root, stree);
-}
-
-void pic_init(stree_t * stree, trait_t ** trait_list, int n_part)
+void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 {
   int n, i;
   snode_t * snode;
   
-  assert(stree != NULL && trait_list != NULL && n_part > 0);
-  for (n = 0; n < n_part; ++n) assert(trait_list[n] != NULL);
+  assert(stree != NULL && morph_list != NULL && n_part > 0);
+  for (n = 0; n < n_part; ++n) assert(morph_list[n] != NULL);
   
   stree->trait_logl = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_old_logl = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_logpr = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_old_logpr = (double *)xcalloc(n_part, sizeof(double));
-
+  
   stree->trait_count = n_part;
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
-  for (n = 0; n < n_part; ++n)
-  {
-    stree->trait_dim[n] = trait_list[n]->length;
-    stree->trait_v_pop[n] = trait_list[n]->v_pop;
-    stree->trait_ldetRs[n] = trait_list[n]->ldetRs;
+  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
+  for (n = 0; n < n_part; ++n) {
+    stree->trait_dim[n] = morph_list[n]->length;
+    stree->trait_type[n] = morph_list[n]->dtype;
+    if (morph_list[n]->dtype == BPP_DATA_CONT)
+    {
+      stree->trait_v_pop[n] = morph_list[n]->v_pop;
+      stree->trait_ldetRs[n] = morph_list[n]->ldetRs;
+    }
+    else
+    {
+      stree->trait_nstate[n] =
+          (int *)xcalloc(morph_list[n]->length, sizeof(int));
+    }
   }
-  
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    snode->pic = (contrast_t **)xmalloc(n_part*sizeof(contrast_t *));
+    snode->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
     for (n = 0; n < n_part; ++n)
     {
-      snode->pic[n] = (contrast_t *)xmalloc(sizeof(contrast_t));
-      snode->pic[n]->trait = (double *)xcalloc(trait_list[n]->length,
-                                               sizeof(double));
-      snode->pic[n]->contrast = (double *)xcalloc(trait_list[n]->length,
-                                                  sizeof(double));
+      snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
+      
+      if (morph_list[n]->dtype == BPP_DATA_CONT)
+      {
+        snode->trait[n]->state_m =
+          (double *)xcalloc(morph_list[n]->length, sizeof(double));
+        snode->trait[n]->contrast =
+          (double *)xcalloc(morph_list[n]->length, sizeof(double));
+      }
+      else if (i < stree->tip_count) // do not need ancestral states?
+      {
+        snode->trait[n]->state_d =
+          (int *)xcalloc(morph_list[n]->length, sizeof(int));
+      }
+      
       /* initialize branch rates */
-      snode->pic[n]->brate = 1.0;
+      snode->trait[n]->brate = 1.0;
     }
   }
   
   /* fill the trait values for the tip nodes */
-  if (!pic_fill_tip(stree, trait_list))
+  if (!trait_fill_tip(stree, morph_list))
   {
-    pic_destroy(stree);
+    trait_destroy(stree);
     fatal("Error filling traits");
   }
   
-  /* then update the independent contrasts */
-  pic_update(stree);
+  /* then set up relevant things */
+  for (n = 0; n < n_part; ++n)
+  {
+    if (morph_list[n]->dtype == BPP_DATA_CONT)
+      trait_update_pic_part(n, stree->root, stree);
+    // else
+    // TODO: trait_nstate_part(stree->trait_nstate[n], morph_list[n]);
+  }
 }
 
-static void pic_store_part(int idx, stree_t * stree)
+static void trait_store_part(int idx, stree_t * stree)
 {
   int i;
   snode_t * snode;
@@ -449,11 +536,11 @@ static void pic_store_part(int idx, stree_t * stree)
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    snode->pic[idx]->old_brate = snode->pic[idx]->brate;
+    snode->trait[idx]->old_brate = snode->trait[idx]->brate;
   }
 }
 
-static void pic_restore_part(int idx, stree_t * stree)
+static void trait_restore_part(int idx, stree_t * stree)
 {
   int i;
   snode_t * snode;
@@ -464,29 +551,55 @@ static void pic_restore_part(int idx, stree_t * stree)
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
-    snode->pic[idx]->brate = snode->pic[idx]->old_brate;
+    snode->trait[idx]->brate = snode->trait[idx]->old_brate;
   }
 }
 
-void pic_store(stree_t * stree)
+void trait_store(stree_t * stree)
 {
   int n;
   
   /* loop over the trait partitions */
   for (n = 0; n < stree->trait_count; ++n)
-    pic_store_part(n, stree);
+    trait_store_part(n, stree);
 }
 
-void pic_restore(stree_t * stree)
+void trait_restore(stree_t * stree)
 {
   int n;
   
   /* loop over the trait partitions */
   for (n = 0; n < stree->trait_count; ++n)
-    pic_restore_part(n, stree);
+    trait_restore_part(n, stree);
 }
 
-static double loglikelihood_trait_part(int idx, stree_t * stree)
+void debug_print_pic(int idx, stree_t * stree)
+{
+  int i, j;
+  snode_t * snode;
+  
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    printf("%s\t", snode->label);
+//    printf(" r_k=%lf", snode->pic[idx]->brate);
+//    printf(" v_k=%lf", snode->pic[idx]->brlen);
+//    printf(" m_k:");
+//    for (j = 0; j < stree->trait_dim[idx]; ++j)
+//      printf(" %+lf", snode->pic[idx]->trait[j]);
+//    printf(" x_k:");
+//    for (j = 0; j < stree->trait_dim[idx]; ++j)
+//      printf(" %+lf", snode->pic[idx]->contrast[j]);
+    printf("\n");
+  }
+  
+  printf("cur log(like)=%lf", stree->trait_logl[idx]);
+  printf("\t log(prior)=%lf\n", stree->trait_logpr[idx]);
+  printf("old log(like)=%lf", stree->trait_old_logl[idx]);
+  printf("\t log(prior)=%lf\n", stree->trait_old_logpr[idx]);
+}
+
+static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
 {
   int i, j, p;
   double v_k1, v_k2, zz, ldetRs, logl;
@@ -501,11 +614,11 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
   {
     snode = stree->nodes[i];
     
-    v_k1 = snode->left->pic[idx]->brlen;
-    v_k2 = snode->right->pic[idx]->brlen;
+    v_k1 = snode->left->trait[idx]->brlen;
+    v_k2 = snode->right->trait[idx]->brlen;
 
     for (zz = 0, j = 0; j < p; ++j)
-      zz += snode->pic[idx]->contrast[j] * snode->pic[idx]->contrast[j];
+      zz += snode->trait[idx]->contrast[j] * snode->trait[idx]->contrast[j];
     
     /* Alvarez-Carretero et al. 2019. eq.5. */
     logl += -0.5* (p*log(2.0*BPP_PI*(v_k1+v_k2)) + ldetRs + zz/(v_k1+v_k2));
@@ -520,6 +633,15 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
   return logl;
 }
 
+static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
+{
+  double logl;
+  
+  logl = 0.0;
+  
+  return logl;
+}
+
 double loglikelihood_trait(stree_t * stree)
 {
   int n;
@@ -527,7 +649,12 @@ double loglikelihood_trait(stree_t * stree)
   
   /* loop over the trait partitions */
   for (n = 0; n < stree->trait_count; ++n)
-    logl_sum += loglikelihood_trait_part(n, stree);
+  {
+    if (stree->trait_type[n] == BPP_DATA_CONT)
+      logl_sum += loglikelihood_trait_c_bm(n, stree);
+    else
+      logl_sum += loglikelihood_trait_d_mkv(n, stree);
+  }
   
   return logl_sum;
 }
@@ -554,12 +681,12 @@ static double prop_branch_rates_relax(stree_t * stree)
       if (!snode->parent)
         continue;
       
-      old_rate = snode->pic[n]->brate;
+      old_rate = snode->trait[n]->brate;
       old_lograte = log(old_rate);
       new_lograte = old_lograte +
            opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
       new_lograte = reflect(new_lograte, -99, 99, thread_index);
-      snode->pic[n]->brate = new_rate = exp(new_lograte);
+      snode->trait[n]->brate = new_rate = exp(new_lograte);
       
       lnacceptance = new_lograte - old_lograte;
       
@@ -568,7 +695,7 @@ static double prop_branch_rates_relax(stree_t * stree)
                          - opt_brate_beta * (new_rate - old_rate);
       
       /* update the contrasts as branch rate has been changed */
-      pic_update_part(n, stree->root, stree);
+      trait_update_part(n, stree->root, stree);
       
       /* then calculate the log likelihood difference */
       lnacceptance += loglikelihood_trait_part(n, stree)
@@ -578,11 +705,11 @@ static double prop_branch_rates_relax(stree_t * stree)
           legacy_rndu(thread_index) < exp(lnacceptance))
       {
         accepted++;
-        pic_store_part(n, stree);
+        trait_store_part(n, stree);
       }
       else  // rejected
       {
-        pic_restore_part(n, stree);
+        trait_restore_part(n, stree);
       }
       
       proposed++;
@@ -602,7 +729,7 @@ static double prop_branch_rates_strict(stree_t * stree)
   
   /* there is a single rate parameter shared across branches and among
      partitions, thus we propose one and update them all */
-  old_rate = stree->nodes[0]->pic[0]->brate;
+  old_rate = stree->nodes[0]->trait[0]->brate;
   old_lograte = log(old_rate);
   new_lograte = old_lograte +
        opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
@@ -625,12 +752,12 @@ static double prop_branch_rates_strict(stree_t * stree)
       if (!snode->parent)
         continue;
       
-      snode->pic[n]->brate = new_rate;
+      snode->trait[n]->brate = new_rate;
     }
   }
       
   /* update the contrasts as branch rate has been changed */
-  pic_update(stree);
+  trait_update(stree);
   
   /* then calculate the log likelihood difference */
   for (n = 0; n < stree->trait_count; ++n)
@@ -640,12 +767,12 @@ static double prop_branch_rates_strict(stree_t * stree)
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
   {
     accepted = 1;
-    pic_store(stree);
+    trait_store(stree);
   }
   else  // rejected
   {
     accepted = 0;
-    pic_restore(stree);
+    trait_restore(stree);
   }
   
   return (double)accepted;

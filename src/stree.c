@@ -6152,7 +6152,7 @@ static long propose_tau(locus_t ** loci,
        the way to the root.  */
     
     /* update the contrasts as node age (tau) has been changed */
-    pic_update(stree);
+    trait_update(stree);
     
     /* then calculate the log likelihood difference */
     for (i = 0; i < stree->trait_count; ++i)
@@ -6172,7 +6172,7 @@ static long propose_tau(locus_t ** loci,
     accepted++;
 
     if (opt_traitfile)  //Chi
-      pic_store(stree);
+      trait_store(stree);
 
     for (i = 0; i < stree->locus_count; ++i)
     {
@@ -6192,7 +6192,7 @@ static long propose_tau(locus_t ** loci,
     snode->tau = oldage;
 
     if (opt_traitfile)  //Chi
-      pic_restore(stree);
+      trait_restore(stree);
 
     if (opt_msci && snode->hybrid)
     {

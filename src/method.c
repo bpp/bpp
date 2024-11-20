@@ -2741,7 +2741,7 @@ static FILE * init(stree_t ** ptr_stree,
   msa_t ** msa_list;
   gtree_t ** gtree;
   locus_t ** locus;
-  trait_t ** trait_list;
+  morph_t ** morph_list;
 
   const long thread_index = 0;
 
@@ -3306,18 +3306,18 @@ static FILE * init(stree_t ** ptr_stree,
   {
     /* parse the trait file */
     printf("Parsing trait file...");
-    trait_list = parse_traitfile(opt_traitfile, &opt_trait_count);
-    assert(trait_list);
+    morph_list = parse_traitfile(opt_traitfile, &opt_trait_count);
+    assert(morph_list);
     printf(" Done\n");
 
     /* initialize trait values and contrasts */
-    pic_init(stree, trait_list, opt_trait_count);
+    trait_init(stree, morph_list, opt_trait_count);
     
     /* calculate log likelihood for morphological traits */
     logl_sum += loglikelihood_trait(stree);
     
     /* store current values for later use */
-    pic_store(stree);
+    trait_store(stree);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -3917,8 +3917,8 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)
   {
     for (i = 0; i < opt_trait_count; ++i)
-      trait_destroy(trait_list[i]);
-    free(trait_list);
+      morph_destroy(morph_list[i]);
+    free(morph_list);
   }
   
   return fp_mcmc;

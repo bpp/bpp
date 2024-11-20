@@ -206,8 +206,8 @@
 
 #define BPP_DATA_DNA                    0
 #define BPP_DATA_AA                     1
-#define BPP_DATA_TRAIT                  2
-#define BPP_DATA_STD                    3
+#define BPP_DATA_CONT                   2
+#define BPP_DATA_DISC                   3
 
 #define BPP_DNA_MODEL_MIN               0
 #define BPP_DNA_MODEL_DEFAULT           0
@@ -479,14 +479,22 @@ typedef struct migbuffer_s
   long donors_count;
 } migbuffer_t;
 
-typedef struct contrast_s
+/* shared by both continuous and discrete traits (for now),
+   but each data type also has its own set of variables */
+typedef struct trait_s
 {
   double brate;      // branch rate (r_k)
   double old_brate;
+  
+  /* for continuous traits */
   double brlen;      // transformed branch length (v_k')
-  double * trait;    // (ancestral) trait values (m_k')
+  double * state_m;  // (ancestral) state values (m_k')
   double * contrast; // independent contrasts (x_k)
-} contrast_t;
+  
+  /* for discrete traits */
+  int    * state_d;  // discrete state values
+  
+} trait_t;
 
 typedef struct snode_s
 {
@@ -585,8 +593,10 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
-  /* phylogenetic indepandent contrasts (per partition) */
-  contrast_t ** pic;
+  /* trait related things (per partition):
+     for discrete traits, ;
+     for continuous traits, it contains phylogenetic indepandent contrasts */
+  trait_t ** trait;
 
   long flag;
 } snode_t;
@@ -652,10 +662,12 @@ typedef struct stree_s
   /* morphological traits //Chi */
   int      trait_count;         /* number of trait partitions */
   int    * trait_dim;  /* dimension of trait vector of each partition */
+  int    * trait_type;   /* data type: continuous or discrete */
   double * trait_logl;    /* log likelihood of each partition */
   double * trait_old_logl; /* store old log likelihood values */
   double * trait_logpr;        /* log prior of each partition */
   double * trait_old_logpr;     /* store old log prior values */
+  int   ** trait_nstate;   /* # states for each discrete character */
   double * trait_v_pop;         /* within population variance */
   double * trait_ldetRs;  /* log determinant of shrinkage estimate of
                              correlation matrix, i.e. log(det(R*)) */
@@ -780,20 +792,21 @@ typedef struct ntree_s
   node_t ** inner;
 } ntree_t;
 
-typedef struct trait_s
+typedef struct morph_s
 {
-  int count;        // number of species
-  int length;       // number of traits
+  int ntaxa;        // number of species (populations)
+  int length;       // number of characters
 
-  double ** trait;  // continuous trait matrix
-  char ** label;    // #count labels
+  double ** conti;  // continuous trait matrix
+  int    ** discr;  // discrete trait matrix
+  char   ** label;  // species labels
 
   double v_pop;     // population variance
   double ldetRs;    // log determinant of R*
 
   int dtype;        // data type: continuous or discrete
   int model;
-} trait_t;
+} morph_t;
 
 typedef struct msa_s
 {
@@ -1302,7 +1315,6 @@ extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_traitfile;
-extern char * opt_stdfile;
 extern char * opt_msafile;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
@@ -1474,14 +1486,14 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
 /* functions in morph.c //Chi */
 
-trait_t ** parse_traitfile(const char * traitfile, int * count);
-void trait_destroy(trait_t * morph);
+morph_t ** parse_traitfile(const char * traitfile, int * count);
+void morph_destroy(morph_t * morph);
 
-void pic_init(stree_t * stree, trait_t ** trait_list, int count);
-void pic_destroy(stree_t * stree);
-void pic_store(stree_t * stree);
-void pic_restore(stree_t * stree);
-void pic_update(stree_t * stree);
+void trait_init(stree_t * stree, morph_t ** morph_list, int count);
+void trait_destroy(stree_t * stree);
+void trait_store(stree_t * stree);
+void trait_restore(stree_t * stree);
+void trait_update(stree_t * stree);
 
 double loglikelihood_trait(stree_t * stree);
 double logprior_trait(stree_t * stree);
