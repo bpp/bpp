@@ -993,10 +993,6 @@ gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
       memset(migcount[i],0,total_nodes*sizeof(long));
     }
     migpops = (snode_t **)xcalloc((size_t)(total_nodes),sizeof(snode_t *));
-
-    if (opt_exp_imrb)
-      clone->rb_linked = (snode_t **)xmalloc((size_t)(nodes_count+1) *
-                                             sizeof(snode_t *));
   }
   clone->migcount = migcount;
   clone->migpops = migpops;
@@ -4809,52 +4805,12 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_mig_reject = 0;
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
-    if (0 && opt_exp_imrb)
-    {
-      #if 0
-      /* XXX: The below is old code and is wrong */
-      /* new rubberband */
-      affected = gtree[i]->rb_linked;
-      paffected_count = gtree[i]->rb_lcount;
-      assert(paffected_count >= 3);
-      #else
-      paffected_count = original_count;
-      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
-        stree->nodes[j]->mark[thread_index] = 0;
-        //stree->nodes[j]->mark[thread_index] = (j < original_count) ? 1 : 0;
-      for (j = 0; j < paffected_count; ++j)
-        affected[j]->mark[thread_index] = 1;
-        
-
-      for (j = 0; j < gtree[i]->rb_lcount; ++j)
-        if (!gtree[i]->rb_linked[j]->mark[thread_index])
-          affected[paffected_count++] = gtree[i]->rb_linked[j];
-      /* TODO: 2024-07-01 Debugging check, does the pafffected_count ever get an increase? */
-      assert(paffected_count == original_count); // does this hold?
-      #endif
-    }
-
     /* reset marks for updating population msc density contribution */
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
       stree->nodes[j]->mark[thread_index] = 0;
 
     /* mark affected populations with more than one sequences for updating their
        density contribution */
-    #if 0
-    /* XXX: 2024-06-19 Not sure whether to keep it or not */
-    for (j = 0; j < paffected_count; ++j)
-    {
-      /* TODO: 2024-06-19 TF: Is this needed? */
-      /* TODO:
-        I think the below for loop can be made to detect overlaps between populations
-        and thus detect which ones really need to update */
-      affected[j]->mark[thread_index] = 1;
-      /* TODO: This appears to be correct but if I delete any of the two opt_mig_bitmatrix checks, it's wrong */
-      for (k = 0; k < stree->tip_count+stree->inner_count; ++k)
-        if (opt_mig_bitmatrix[k][affected[j]->node_index] || opt_mig_bitmatrix[affected[j]->node_index][k])
-          stree->nodes[k]->mark[thread_index] = 1;
-    }
-    #endif
 
     k = 0;
     locus_count_above = locus_count_below = 0;
@@ -6393,127 +6349,6 @@ static long propose_tau(locus_t ** loci,
 }
 
 #define RB_MARK 1
-#define RB_INLIST 2
-static long getlinkedpops(stree_t * stree,
-                          gtree_t ** gtree_list,
-                          snode_t * x,
-                          double * bounds,
-                          long round,
-                          snode_t ** linked)
-{
-  long i,j,k,m;
-  long lcount = 0;
-  long mfound;
-  long loc_lcount = 0;
-  double tl = bounds[0];
-  double tu = bounds[1];
-  migevent_t * me;
-  dlist_item_t * dli;
-  snode_t ** loc_linked;
-  static const long thread_index_zero = 0;
-
-  snode_t * startx = x;
-
-  /* calculate per locus lists of linked populations to x */
-  for (m = 0; m < opt_locus_count; ++m)
-  {
-    x = startx;
-    gtree_t * gtree = gtree_list[m];
-
-    /* place one of the three affected nodes in the corresponding slot */
-    gtree->rb_linked[round] = x;
-
-    /* if it's the first round of calling this function zero-out the number of
-       linked nodes for the current population. We set it to 3 since the first
-       three slots are reserved for the focal node and its two children */
-    if (round == 0)
-      gtree->rb_lcount = 3;
-
-    loc_linked = gtree->rb_linked + gtree->rb_lcount;
-    loc_lcount = 0;
-
-    /* part "auto-cleaning" the list from the previous MCMC step */
-    loc_linked[0] = NULL;
-
-    /* mark nodes already in the per locus list of linked pops */
-    for (i = 3; i < gtree->rb_lcount; ++i)
-      gtree->rb_linked[i]->mark[thread_index_zero] |= RB_MARK;
-
-    k = 0;
-    while (x)
-    {
-      /* get index of population for which we are looking for its linked pops */
-      j = x->node_index;
-
-      /* look for linked pops */
-      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-      {
-        /* skip populations already identified as linked */
-        if (stree->nodes[i]->mark[thread_index_zero] & RB_MARK) continue;
-
-        #if 0
-        /* skip if no migration between the two populations */
-        if (!(gtree->migcount[i][j] || gtree->migcount[j][i])) continue;
-        #endif
-
-        mfound = 0;
-        if (gtree->migcount[i][j])
-        {
-          for (dli = x->mig_source[m]->head; dli; dli = dli->next)
-          {
-            me = (migevent_t *)(dli->data);
-            if (me->target == stree->nodes[i] && me->time > tl && me->time < tu)
-            {
-              mfound = 1;
-              break;
-            }
-          }
-        }
-
-        if (!mfound && gtree->migcount[j][i])
-        {
-          for (dli = x->mig_target[m]->head; dli; dli = dli->next)
-          {
-            me = (migevent_t *)(dli->data);
-            if (me->source == stree->nodes[i] && me->time > tl && me->time < tu)
-            {
-              mfound = 1;
-              break;
-            }
-          }
-        }
-
-        if (!mfound) continue;
-
-        loc_linked[loc_lcount++] = stree->nodes[i];
-        loc_linked[loc_lcount] = NULL;               /* part of auto-cleaning */
-
-        stree->nodes[i]->mark[thread_index_zero] |= RB_MARK;
-      }
-
-      /* move to the next population in the list of linked pops and repeat */
-      x = loc_linked[k++];
-    }
-
-    /* update number of linked populations for current locus */
-    gtree->rb_lcount += loc_lcount;
-
-    /* unmark the nodes already in the per locus list of linked pops */
-    for (i = 3; i < gtree->rb_lcount; ++i)
-      gtree->rb_linked[i]->mark[thread_index_zero] &= ~RB_MARK;
-
-    /* update the list of linked populations */
-    for (i = 0; i < loc_lcount; ++i)
-    {
-      if (loc_linked[i]->mark[thread_index_zero] & RB_INLIST) continue;
-
-      loc_linked[i]->mark[thread_index_zero] |= RB_INLIST;
-      linked[lcount++] = loc_linked[i];
-    }
-  }
-
-  return lcount;
-}
 
 long ** linkage_matrix(stree_t * stree,
                        gtree_t ** gtree_list,
@@ -6589,17 +6424,12 @@ static long rb_bounds(stree_t * stree,
   bounds[0] = tl; bounds[1] = tu;
 
   /* 2. Find populations linked to X,V,W - both directly and indirectly linked */
-  x->mark[thread_index_zero] = RB_MARK | RB_INLIST;
-  x->left->mark[thread_index_zero] = RB_MARK | RB_INLIST;
-  x->right->mark[thread_index_zero] = RB_MARK | RB_INLIST;
+  x->mark[thread_index_zero] = RB_MARK;
+  x->left->mark[thread_index_zero] = RB_MARK;
+  x->right->mark[thread_index_zero] = RB_MARK;
   linked[0] = x; linked[1] = x->left; linked[2] = x->right;
   lcount = 3;
 
-  #if 0
-  lcount += getlinkedpops(stree,gtree_list,x,       bounds,0,linked+lcount);
-  lcount += getlinkedpops(stree,gtree_list,x->left, bounds,1,linked+lcount);
-  lcount += getlinkedpops(stree,gtree_list,x->right,bounds,2,linked+lcount);
-  #else
   long ** mat = linkage_matrix(stree,gtree_list,tl,tu);
   
   for (i = 0; i < 3; ++i)
@@ -6616,28 +6446,10 @@ static long rb_bounds(stree_t * stree,
       }
     }
   }
-  #if 0
-  printf("%s: ", x->label);
-  for (i = 0; i < lcount; ++i)
-    printf(" %s", linked[i]->label);
-  printf("\n");
-  #endif
 
   for (i = 0; i < total_nodes; ++i)
     free(mat[i]);
   free(mat);
-
-  #if 0
-  printf("Node: %s\n", x->label);
-  for (i = 0; i < opt_locus_count; ++i)
-  {
-    printf("%ld lcount: %ld\n", i, lcount);
-    for (j = 0; j < lcount; ++j)
-      gtree_list[i]->rb_linked[j] = linked[j];
-    gtree_list[i]->rb_lcount = lcount;
-  }
-  #endif
-  #endif
 
   /* cleans marks also on x, x->left and x->right */
   for (i = 0; i < lcount; ++i)
@@ -6688,33 +6500,6 @@ static long rb_bounds(stree_t * stree,
     }
   }
   lcount = j;
-
-  #if 0
-  /* update per locus lists */
-  for (m = 0; m < opt_locus_count; ++m)
-  {
-    snode_t ** loc_linked = gtree_list[m]->rb_linked;
-    long loc_lcount = gtree_list[m]->rb_lcount;
-
-    for (j=3, i=3; i < loc_lcount; ++i)
-    {
-      if (loc_linked[i]->tau > tu || loc_linked[i]->parent->tau < tl)
-      {
-        loc_linked[i] = NULL;
-      }
-      else
-      {
-        if (i != j)
-        {
-          loc_linked[j] = loc_linked[i];
-          loc_linked[i] = NULL;
-        }
-        ++j;
-      }
-    }
-    gtree_list[m]->rb_lcount = j;
-  }
-  #endif
 
   return lcount;
 }

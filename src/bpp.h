@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 0
 
-#define PVER_SHA1 "a448e21d86fe595c1fc14574d4df606e31bdf6b6"
+#define PVER_SHA1 "b1730d8c0e0d07f20294055a6840155b5eb30fc2"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -719,8 +719,6 @@ typedef struct gtree_s
 
   /* buffer to store feasible populations where migrants come from during simulation */
   snode_t ** migpops;
-  snode_t ** rb_linked;  /* per-locus affected snodes in new rubberband */
-  long rb_lcount;
 
   /* per locus migration rate */
   double locus_mig_rate;

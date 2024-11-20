@@ -293,8 +293,6 @@ void gtree_destroy(gtree_t * tree,
     free(tree->migcount);
   if (tree->migpops)
     free(tree->migpops);
-  if (tree->rb_linked)
-    free(tree->rb_linked);
   free(tree);
 }
 
@@ -567,8 +565,6 @@ static gtree_t * gtree_wraptree(gnode_t * root,
   gtree_t * tree = (gtree_t *)xmalloc(sizeof(gtree_t));
   tree->migpops  = NULL;
   tree->migcount = NULL;
-  tree->rb_linked = NULL;
-  tree->rb_lcount = 0;
 
   if (tip_count < 2 && tip_count != 0)
     fatal("Invalid number of tips in input tree (%u).\n"
@@ -2902,13 +2898,6 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
     mp = (snode_t **)xcalloc((size_t)(stree->tip_count+stree->inner_count),
                              sizeof(snode_t *));
   gtree->migpops = mp;
-
-  if (opt_migration && opt_exp_imrb && !opt_simulate)
-  {
-    long total_nodes = stree->tip_count + stree->inner_count;
-    gtree->rb_linked = (snode_t **)xmalloc((size_t)(total_nodes+1) *
-                                           sizeof(snode_t *));
-  }
 
   /* Update the number of lineages coming into each ancestral population as the
      sum of lineages coming into its two children populations minus the

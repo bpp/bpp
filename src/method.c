@@ -5376,7 +5376,7 @@ void cmd_run()
 
       if (print_newline)
       {
-        timer_print("  ", "\n", fp_out);
+        timer_print("  ", "", fp_out);
         if (isinf(mean_logl))
           fatal("\n[ERROR] The mean log-L over loci is -inf.\n"
                 "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
@@ -5465,10 +5465,16 @@ void cmd_run()
                         prec_logpr,
                         prec_logl, 
 			printLocusIndex);
+        //printf(" [CHKP %ld]", opt_checkpoint_current);
       }
     }
     if (opt_debug_abort == opt_debug_counter)
       fatal("[DBG] Aborting debugging (reached step %ld)", opt_debug_abort);
+    if (print_newline)
+    {
+      fprintf(stdout, "\n");
+      fprintf(fp_out, "\n");
+    }
   }
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
@@ -5649,12 +5655,12 @@ void cmd_run()
 
   if (opt_print_genetrees)
   {
-    for (i = 0; i < opt_locus_count; ++i){
-
-      if (!printLocusIndex || printLocusIndex[i]) {
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      if (!printLocusIndex || printLocusIndex[i])
+      {
         fclose(fp_gtree[i]);
 
-        //if (opt_migration)
         if (printLocusIndex && printLocusIndex[i])
 	  fclose(fp_mig[i]);
       }
@@ -5663,7 +5669,8 @@ void cmd_run()
 	free(fp_mig);
 
     free(fp_gtree);
-    if (opt_checkpoint) {
+    if (opt_checkpoint)
+    {
       free(gtree_offset);
       free(mig_offset);
     }
