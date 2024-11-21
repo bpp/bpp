@@ -68,6 +68,7 @@ static void alloc_gtree()
     gt->travbuffer = (gnode_t **)xcalloc(alloc_size, sizeof(gnode_t *));
     gt->migcount = NULL;
     gt->migpops = NULL;
+    gt->rb_linked = NULL;
     
     for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
     {
@@ -1802,6 +1803,11 @@ static void load_gene_tree(FILE * fp, long index)
     }
 
     gt->migpops = (snode_t **)xcalloc((size_t)total_snodes, sizeof(snode_t *));
+    gt->rb_linked = NULL;
+    if (opt_exp_imrb)
+      gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
+                                          sizeof(snode_t *));
+    gt->rb_lcount = 0;
   }
 }
 

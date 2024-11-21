@@ -993,6 +993,10 @@ gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
       memset(migcount[i],0,total_nodes*sizeof(long));
     }
     migpops = (snode_t **)xcalloc((size_t)(total_nodes),sizeof(snode_t *));
+
+    if (opt_exp_imrb)
+      clone->rb_linked = (snode_t **)xmalloc((size_t)(nodes_count+1) *
+                                             sizeof(snode_t *));
   }
   clone->migcount = migcount;
   clone->migpops = migpops;
@@ -4805,6 +4809,13 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_mig_reject = 0;
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
+    /* use per-locus affected lists if extended rubberband */
+    if (opt_exp_imrb)
+    {
+      affected = gtree[i]->rb_linked;
+      paffected_count = gtree[i]->rb_lcount;
+    }
+
     /* reset marks for updating population msc density contribution */
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
       stree->nodes[j]->mark[thread_index] = 0;
@@ -6348,43 +6359,40 @@ static long propose_tau(locus_t ** loci,
   return accepted;
 }
 
-#define RB_MARK 1
-
-long ** linkage_matrix(stree_t * stree,
-                       gtree_t ** gtree_list,
-                       double tl,
-                       double tu)
+void fill_linkage_matrix(stree_t * stree,
+                         gtree_t * gtree,
+                         long msa_index,
+                         long ** m,
+                         double tl,
+                         double tu)
 {
   long i,j,k;
   long total_nodes = stree->tip_count+stree->inner_count;
   long si,ti;  /* source and target index */
   dlist_item_t * li;
-  long ** m;
 
-  m = (long **)xmalloc((size_t)total_nodes * sizeof(long *));
+  /* zero out matrix */
   for (i = 0; i < total_nodes; ++i)
-    m[i] = (long *)xcalloc((size_t)total_nodes, sizeof(long));
+    for (j = 0; j < total_nodes; ++j)
+      m[i][j] = 0;
 
   /* part I: fill node adjacency matrix according to migration events
      m[i,j] = 1 : there is at least one migration event between i and j */
      
-  for (i = 0; i < opt_locus_count; ++i)
+  for (i = 0; i < total_nodes; ++i)
   {
-    for (j = 0; j < total_nodes; ++j)
-    {
-      snode_t * x = stree->nodes[j];
+    snode_t * x = stree->nodes[i];
 
-      /* it does not matter whether we go through the source or target list. Either way
-         we will visit each migration event exactly once */
-      for (li = x->mig_source[i]->head; li; li = li->next)
+    /* it does not matter whether we go through the source or target list. Either way
+       we will visit each migration event exactly once */
+    for (li = x->mig_source[msa_index]->head; li; li = li->next)
+    {
+      migevent_t * me = (migevent_t *)(li->data);
+      if (me->time > tl && me->time < tu)
       {
-        migevent_t * me = (migevent_t *)(li->data);
-        if (me->time > tl && me->time < tu)
-        {
-          si = me->target->node_index;
-          ti = me->source->node_index;
-          m[si][ti] = m[ti][si] = 1;
-        }
+        si = me->target->node_index;
+        ti = me->source->node_index;
+        m[si][ti] = m[ti][si] = 1;
       }
     }
   }
@@ -6394,113 +6402,162 @@ long ** linkage_matrix(stree_t * stree,
     for (i = 0; i < total_nodes; ++i)
       for (j = 0; j < total_nodes; ++j)
         m[i][j] = m[i][j] || (m[i][k] && m[k][j]);
-
-  return m;
 }
 
-
 static long rb_bounds(stree_t * stree,
-                      gtree_t ** gtree_list,
+                      gtree_t ** gtree,
                       snode_t * x,
-                      snode_t ** linked,
+                      snode_t ** affected,
                       double * bounds)
 {
-  long i,j,m;
+  long i,j,k;
   long lcount = 0;
-  double tl, tu;
+  long total_nodes = stree->tip_count+stree->inner_count;
+  double init_tl;
+  double init_tu;
+  double final_tl;
+  double final_tu;
+  gtree_t * gt;
+  double * tl;
+  double * tu;
+  long ** m;
+  snode_t ** linked;
 
   static const long thread_index_zero = 0;
 
-  unsigned int total_nodes = stree->tip_count+stree->inner_count;
-
-  /* sanity check -- remove */
+  m = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
-    assert(stree->nodes[i]->mark[thread_index_zero] == 0);
+    m[i] = (long *)xmalloc((size_t)total_nodes*sizeof(long));
+
+  tl = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+  tu = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
 
   /* 1. Set initial bounds */
-  tu = (x->parent) ? x->parent->tau : 999;
-  tl = MAX(x->left->tau, x->right->tau);
-  
-  bounds[0] = tl; bounds[1] = tu;
+  init_tu = (x->parent) ? x->parent->tau : 999;
+  init_tl = MAX(x->left->tau, x->right->tau);
 
-  /* 2. Find populations linked to X,V,W - both directly and indirectly linked */
-  x->mark[thread_index_zero] = RB_MARK;
-  x->left->mark[thread_index_zero] = RB_MARK;
-  x->right->mark[thread_index_zero] = RB_MARK;
-  linked[0] = x; linked[1] = x->left; linked[2] = x->right;
-  lcount = 3;
+  final_tl = init_tl;
+  final_tu = init_tu;
 
-  long ** mat = linkage_matrix(stree,gtree_list,tl,tu);
-  
-  for (i = 0; i < 3; ++i)
+  /* calculate linkage matrix for each locus */
+  for (i = 0; i < opt_locus_count; ++i)
   {
+    gt = gtree[i];
+    linked = gt->rb_linked;
+
+    /* calculate linkage matrix */
+    fill_linkage_matrix(stree, gt, i, m, init_tl, init_tu);
+
+    /* get affected populations for current locus */
+    gt->rb_linked[0] = x;
+    gt->rb_linked[1] = x->left;
+    gt->rb_linked[2] = x->right;
+    gt->rb_lcount = 3;
+    x->mark[thread_index_zero] = 1;
+    x->left->mark[thread_index_zero] = 1;
+    x->right->mark[thread_index_zero] = 1;
+
+    for (j = 0; j < 3; ++j)
+    {
+      unsigned int p = gt->rb_linked[j]->node_index;
+
+      for (k = 0; k < total_nodes; ++k)
+        if (m[p][k] && !stree->nodes[k]->mark[thread_index_zero])
+        {
+          linked[gt->rb_lcount++] = stree->nodes[k];
+          stree->nodes[k]->mark[thread_index_zero] = 1;
+        }
+    }
+
+    /* reset marks on nodes */
     for (j = 0; j < total_nodes; ++j)
+      stree->nodes[j]->mark[thread_index_zero] = 0;
+
+    /* get locus-specific lower and upper bound */
+    tl[i] = init_tl; tu[i] = init_tu;
+    /* 3. and 4. merged -- get final upper and lower bounds. Skip first 3 nodes */
+    for (j = 3; j < gt->rb_lcount; ++j)
     {
-      snode_t * x = stree->nodes[j];
-      long si = linked[i]->node_index;
-      long ti = x->node_index;
-      if (mat[si][ti] && !x->mark[thread_index_zero])
+      if (linked[j]->tau < x->tau && linked[j]->parent->tau > x->tau)
       {
-        linked[lcount++] = x;
-        x->mark[thread_index_zero] = RB_MARK;
+        if (linked[j]->parent->tau < tu[i])
+          tu[i] = linked[j]->parent->tau;
+        if (linked[j]->tau > tl[i])
+          tl[i] = linked[j]->tau;
+      }
+      else if (linked[j]->parent->tau < x->tau)
+      {
+        /* t_a < t_X */
+        if (linked[j]->parent->tau > tl[i])
+          tl[i] = linked[j]->parent->tau;
+      }
+      else
+      {
+        /* t_b > t_X */
+        assert(linked[j]->tau > x->tau);
+        if (linked[j]->tau < tu[i])
+          tu[i] = linked[j]->tau;
       }
     }
+
+    /* update final bounds with bounds from current locus */
+    if (final_tu > tu[i])
+      final_tu = tu[i];
+    if (final_tl < tl[i])
+      final_tl = tl[i];
   }
 
+  /* deallocate matrix */
   for (i = 0; i < total_nodes; ++i)
-    free(mat[i]);
-  free(mat);
+    free(m[i]);
+  free(m);
+  free(tl);
+  free(tu);
 
-  /* cleans marks also on x, x->left and x->right */
-  for (i = 0; i < lcount; ++i)
-    linked[i]->mark[thread_index_zero] = 0;
-
-  /* 3. and 4. merged -- get final upper and lower bounds. Skip first 3 nodes */
-  for (i = 3; i < lcount; ++i)
+  /* update locus lists with respect to new bounds */
+  for (i = 0; i < opt_locus_count; ++i)
   {
-    if (linked[i]->tau < x->tau && linked[i]->parent->tau > x->tau)
+    gt = gtree[i];
+    linked = gt->rb_linked;
+    for (j=3, k=3; k < gt->rb_lcount; ++k)
     {
-      if (linked[i]->parent->tau < tu)
-        tu = linked[i]->parent->tau;
-      if (linked[i]->tau > tl)
-        tl = linked[i]->tau;
-    }
-    else if (linked[i]->parent->tau < x->tau)
-    {
-      /* t_a < t_X */
-      if (linked[i]->parent->tau > tl)
-        tl = linked[i]->parent->tau;
-    }
-    else
-    {
-      /* t_b > t_X */
-      assert(linked[i]->tau > x->tau);
-      if (linked[i]->tau < tu)
-        tu = linked[i]->tau;
-    }
-  }
-  bounds[0] = tl; bounds[1] = tu;
-
-  /* 5. Delete unaffected linked populations. Skip first three nodes
-        NOTE: j holds the last empty position */
-  for (j=3, i=3; i < lcount; ++i)
-  {
-    if (linked[i]->tau > tu || linked[i]->parent->tau < tl)
-    {
-      linked[i] = NULL;
-    }
-    else
-    {
-      if (i != j)
+      if (linked[k]->tau > final_tu || linked[k]->parent->tau < final_tl)
       {
-        linked[j] = linked[i];
-        linked[i] = NULL;
+        linked[k] = NULL;
       }
-      ++j;
+      else
+      {
+        if (k != j)
+        {
+          linked[j] = linked[k];
+          linked[k] = NULL;
+        }
+        ++j;
+      }
     }
+    gt->rb_lcount = j;
   }
-  lcount = j;
 
+  bounds[0] = final_tl;
+  bounds[1] = final_tu;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gt = gtree[i];
+    linked = gt->rb_linked;
+
+    for (j = 0; j < gt->rb_lcount; ++j)
+      if (!linked[j]->mark[thread_index_zero])
+      {
+        affected[lcount++] = linked[j];
+        linked[j]->mark[thread_index_zero] = 1;
+      }
+  }
+  /* reset marks on nodes */
+  for (j = 0; j < total_nodes; ++j)
+    stree->nodes[j]->mark[thread_index_zero] = 0;
+
+  assert(affected[0] == x && affected[1] == x->left && affected[2] == x->right);
   return lcount;
 }
 
