@@ -216,7 +216,8 @@ static morph_t * parse_trait_part(FILE * fp)
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
       return NULL;
     }
-    else if (!parse_value_d(fp, morph->discr[i], morph->length))
+    else if (morph->dtype == BPP_DATA_DISC &&
+             !parse_value_d(fp, morph->discr[i], morph->length))
     {
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
       return NULL;
@@ -449,6 +450,36 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   }
 }
 
+static void trait_update_disc_part(int idx, snode_t * snode, stree_t * stree)
+{
+  if (snode->left && snode->right)  /* internal node */
+  {
+    trait_update_disc_part(idx, snode->left, stree);
+    trait_update_disc_part(idx, snode->right, stree);
+  }
+
+  /* update the branch length */
+  if (snode->parent)
+    snode->trait[idx]->brlen =
+      (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
+  else
+    snode->trait[idx]->brlen = 0.0;
+}
+
+void trait_update(stree_t * stree)
+{
+  int n;
+  
+  /* loop over the trait partitions */
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    if (stree->trait_type[n] == BPP_DATA_CONT)
+      trait_update_pic_part(n, stree->root, stree);
+    else
+      trait_update_disc_part(n, stree->root, stree);
+  }
+}
+
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 {
   int n, i;
@@ -500,7 +531,7 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
       else if (i < stree->tip_count) // do not need ancestral states?
       {
         snode->trait[n]->state_d =
-          (int *)xcalloc(morph_list[n]->length, sizeof(int));
+             (int *)xcalloc(morph_list[n]->length, sizeof(int));
       }
       
       /* initialize branch rates */
@@ -519,9 +550,17 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   for (n = 0; n < n_part; ++n)
   {
     if (morph_list[n]->dtype == BPP_DATA_CONT)
+    {
+      /* update the independent contrasts */
       trait_update_pic_part(n, stree->root, stree);
-    // else
-    // TODO: trait_nstate_part(stree->trait_nstate[n], morph_list[n]);
+    }
+    else
+    {
+      /* update the branch lengths */
+      trait_update_disc_part(n, stree->root, stree);
+      /* also need to set the number of states for each character */
+      // TODO: trait_nstate_part(stree->trait_nstate[n], morph_list[n]);
+    }
   }
 }
 
@@ -573,7 +612,7 @@ void trait_restore(stree_t * stree)
     trait_restore_part(n, stree);
 }
 
-void debug_print_pic(int idx, stree_t * stree)
+void debug_print_trait(int idx, stree_t * stree)
 {
   int i, j;
   snode_t * snode;
@@ -627,7 +666,7 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
   stree->trait_logl[idx] = logl;
 
 #ifdef DEBUG_Chi
-  debug_print_pic(idx, stree);
+  debug_print_trait(idx, stree);
 #endif
 
   return logl;
@@ -638,7 +677,13 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
   double logl;
   
   logl = 0.0;
-  
+
+  stree->trait_logl[idx] = logl;
+
+#ifdef DEBUG_Chi
+  debug_print_trait(idx, stree);
+#endif
+
   return logl;
 }
 
@@ -659,6 +704,15 @@ double loglikelihood_trait(stree_t * stree)
   return logl_sum;
 }
 
+double logprior_trait(stree_t * stree)
+{
+  /* the branch rates follow i.i.d. gamma distributions
+     with parameters opt_brate_alpha and opt_brate_beta */
+
+  // TODO: calc prior
+
+  return 0.0;
+}
 
 static double prop_branch_rates_relax(stree_t * stree)
 {
@@ -668,11 +722,11 @@ static double prop_branch_rates_relax(stree_t * stree)
   double lnacceptance;
   snode_t * snode;
 
+  /* morphological rates are independent among partitions,
+     and within a partition, each branch has a rate parameter */
   proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
-    /* morphological rates are independent among partitions,
-       and within a partition, each branch has a rate parameter */
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
@@ -694,12 +748,24 @@ static double prop_branch_rates_relax(stree_t * stree)
       lnacceptance += (opt_brate_alpha-1) * log(new_rate/old_rate)
                          - opt_brate_beta * (new_rate - old_rate);
       
-      /* update the contrasts as branch rate has been changed */
-      trait_update_part(n, stree->root, stree);
-      
-      /* then calculate the log likelihood difference */
-      lnacceptance += loglikelihood_trait_part(n, stree)
+      if (stree->trait_type[n] == BPP_DATA_CONT)
+      {
+        /* update the contrasts as branch rate has been changed */
+        trait_update_pic_part(n, stree->root, stree);
+        
+        /* then calculate the log likelihood difference */
+        lnacceptance += loglikelihood_trait_c_bm(n, stree)
                       - stree->trait_old_logl[n];
+      }
+      else
+      {
+        /* update branch length as branch rate has been changed */
+        trait_update_disc_part(n, stree->root, stree);
+        
+        /* then calculate the log likelihood difference */
+        lnacceptance += loglikelihood_trait_d_mkv(n, stree)
+                      - stree->trait_old_logl[n];
+      }
       
       if (lnacceptance >= -1e-10 ||
           legacy_rndu(thread_index) < exp(lnacceptance))
@@ -721,29 +787,30 @@ static double prop_branch_rates_relax(stree_t * stree)
 
 static double prop_branch_rates_strict(stree_t * stree)
 {
-  int n, i, accepted;
+  int n, i,  proposed, accepted;
   long thread_index = 0;
   double old_rate, old_lograte, new_rate, new_lograte;
   double lnacceptance;
   snode_t * snode;
   
-  /* there is a single rate parameter shared across branches and among
-     partitions, thus we propose one and update them all */
-  old_rate = stree->nodes[0]->trait[0]->brate;
-  old_lograte = log(old_rate);
-  new_lograte = old_lograte +
-       opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
-  new_lograte = reflect(new_lograte, -99, 99, thread_index);
-  new_rate = exp(new_lograte);
-  
-  lnacceptance = new_lograte - old_lograte;
-
-  /* calculate the log prior difference */
-  lnacceptance += (opt_brate_alpha-1) * log(new_rate/old_rate)
-                     - opt_brate_beta * (new_rate - old_rate);
-
+  /* morphological rates are independent among partitions (?); within each
+     partition, there is a single rate parameter shared across branches */
+  proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
+    old_rate = stree->nodes[0]->trait[n]->brate;
+    old_lograte = log(old_rate);
+    new_lograte = old_lograte +
+         opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
+    new_lograte = reflect(new_lograte, -99, 99, thread_index);
+    new_rate = exp(new_lograte);
+    
+    lnacceptance = new_lograte - old_lograte;
+    
+    /* calculate the log prior difference */
+    lnacceptance += (opt_brate_alpha-1) * log(new_rate/old_rate)
+                       - opt_brate_beta * (new_rate - old_rate);
+
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
@@ -754,28 +821,41 @@ static double prop_branch_rates_strict(stree_t * stree)
       
       snode->trait[n]->brate = new_rate;
     }
-  }
       
-  /* update the contrasts as branch rate has been changed */
-  trait_update(stree);
-  
-  /* then calculate the log likelihood difference */
-  for (n = 0; n < stree->trait_count; ++n)
-    lnacceptance += loglikelihood_trait_part(n, stree)
-                  - stree->trait_old_logl[n];
-  
-  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
-  {
-    accepted = 1;
-    trait_store(stree);
+    if (stree->trait_type[n] == BPP_DATA_CONT)
+    {
+      /* update the contrasts as branch rate has been changed */
+      trait_update_pic_part(n, stree->root, stree);
+      
+      /* then calculate the log likelihood difference */
+      lnacceptance += loglikelihood_trait_c_bm(n, stree)
+                    - stree->trait_old_logl[n];
+    }
+    else
+    {
+      /* update branch length as branch rate has been changed */
+      trait_update_disc_part(n, stree->root, stree);
+      
+      /* then calculate the log likelihood difference */
+      lnacceptance += loglikelihood_trait_d_mkv(n, stree)
+                    - stree->trait_old_logl[n];
+    }
+    
+    if (lnacceptance >= -1e-10 ||
+        legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      accepted++;
+      trait_store_part(n, stree);
+    }
+    else  // rejected
+    {
+      trait_restore_part(n, stree);
+    }
+    
+    proposed++;
   }
-  else  // rejected
-  {
-    accepted = 0;
-    trait_restore(stree);
-  }
   
-  return (double)accepted;
+  return (double)accepted/proposed;
 }
 
 double prop_branch_rates_trait(stree_t * stree)
