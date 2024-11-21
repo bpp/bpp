@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 0
 
-#define PVER_SHA1 "e578e39c16eb4a3d8e174ed0025cd02f0b6d7c56"
+#define PVER_SHA1 "150644dee07bf2c8bc911a8b608c3f6b595793f7"
 /* checkpoint version */
 #define VERSION_CHKP 1
 

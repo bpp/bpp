@@ -4131,7 +4131,8 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
         fprintf(fp_a1b1, "\t-\t-");
       else
       {
-        a1 = b1 = 0;
+        a1 = opt_mig_specs[i].alpha;
+        b1 = opt_mig_specs[i].beta;
         for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
         {
           a1 += gtree[msa_index]->migcount[si][ti];
