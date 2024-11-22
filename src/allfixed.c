@@ -1242,8 +1242,17 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
   pname      = (char **)xmalloc((size_t)cols*sizeof(char *));
   pname_mcmc = (char **)xmalloc((size_t)cols*sizeof(char *));
-  long dist_theta = opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA ? 
-                      DIST_INVGAMMA : DIST_GAMMA;
+  long dist_theta = DIST_INVGAMMA;
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+  {
+    if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+      dist_theta = DIST_GAMMA;
+    else
+      assert(opt_theta_prop == BPP_THETA_PROP_MG_INVG);
+  }
+  else
+    assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA);
+
   long dist_phi = DIST_BETA;
   long dist_w = DIST_GAMMA;
 
