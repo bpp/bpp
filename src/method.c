@@ -3259,8 +3259,13 @@ static FILE * init(stree_t ** ptr_stree,
     }
     else
     {
-      fp_a1b1 = xopen(opt_a1b1file, "w");
-      *ptr_fp_a1b1 = fp_a1b1;
+      if (!opt_onlysummary)
+      {
+        fp_a1b1 = xopen(opt_a1b1file, "w");
+        *ptr_fp_a1b1 = fp_a1b1;
+      }
+      else
+        *ptr_fp_a1b1 = NULL;
     }
   }
 
@@ -4434,7 +4439,7 @@ void cmd_run()
 
   /* flush all open files */
   fflush(NULL);
-  if (!opt_resume)
+  if (!opt_resume && !opt_onlysummary)
     timer_print("", " taken to read and process data..\nRestarting timer...\n\n",
                 fp_out);
   timer_start();
@@ -4503,25 +4508,28 @@ void cmd_run()
     delim_digit_count = dels ? (int)floor(log10(labs(dels)))+1 : 1;
   }
 
-  print_mcmc_headerline(stdout,
-                        stree,
-                        gtree,
-                        mean_mrate_row,
-                        mean_mrate_col,
-                        mean_mrate_count);
-  if (!opt_resume)
+  if (!opt_onlysummary)
   {
-    print_mcmc_headerline(fp_out,
+    print_mcmc_headerline(stdout,
                           stree,
                           gtree,
                           mean_mrate_row,
                           mean_mrate_col,
                           mean_mrate_count);
-    
-    if (!opt_debug_start)
-      opt_debug_start = 1;
-    if (!opt_debug_end)
-      opt_debug_end = opt_burnin+opt_samples*opt_samplefreq;
+    if (!opt_resume)
+    {
+      print_mcmc_headerline(fp_out,
+                            stree,
+                            gtree,
+                            mean_mrate_row,
+                            mean_mrate_col,
+                            mean_mrate_count);
+      
+      if (!opt_debug_start)
+        opt_debug_start = 1;
+      if (!opt_debug_end)
+        opt_debug_end = opt_burnin+opt_samples*opt_samplefreq;
+    }
   }
 
   FILE * fp_debug = stdout;
