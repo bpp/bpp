@@ -1020,7 +1020,7 @@ static void reset_finetune(FILE * fp_out)
               spacing, "", active_pjft_spacing[i], *(finetune_values_ptr[i]));
     fprintf(fp[j],"\n\n");
 
-    fprintf(fp[j], "=> 'finetune =");
+    fprintf(fp[j], "=> 'finetune = 1");
     for (i = 0; i < active_pjump_count; ++i)
     {
       fprintf(fp[j], " %s:%f", active_pjump_titles[i], *(finetune_values_ptr[i]));
@@ -3691,7 +3691,10 @@ static FILE * init(stree_t ** ptr_stree,
      tree inference or inference with migration) */
   if (opt_est_stree || opt_migration)
   {
-    assert(opt_msci == 0);
+    if (opt_msci)
+    {
+      fatal("ERROR. Species tree estimation is available under the MSC model only");
+    }
     sclone = stree_clone_init(stree);
     gclones = (gtree_t **)xmalloc((size_t)msa_count*sizeof(gtree_t *));
     for (i = 0; i < msa_count; ++i)
