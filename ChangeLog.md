@@ -2,6 +2,20 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.8.1] - 2024-11-25
+### Changed
+ - a1b1 summary handles missing data
+ - per-locus affected lists for extended rubberband algorithm
+ - finetune option to use dictionary-like syntax
+### Added
+ - logging of a1,b1 parameters of theta conditionals when thetas integrated out
+### Fixed
+ - -nan for th1 caused by having one sequence per species and  differnt step
+   lengths for inner and tip nodes
+ - logging a1 and b1 for W parameters
+ - theta distribution flag when summarizing conditional a1b1 file
+ - when running --summary the conditional a1b1 file was being overwritten
+
 ## [4.8.0] - 2024-11-12
 ### Changed
  - Re-parameterization of the MSC-M model (M to w)

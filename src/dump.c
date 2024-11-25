@@ -294,6 +294,9 @@ static void dump_chk_section_1(FILE * fp,
     DUMP(stree->nodes[hoffset+i]->label,
          strlen(stree->nodes[hoffset+i]->label)+1,
          fp);
+
+  /* write number of sequences per species */
+  DUMP(opt_sp_seqcount,stree->tip_count,fp);
   
   /* write usedata, cleandata and nloci */
   DUMP(&opt_usedata,1,fp);

@@ -465,6 +465,10 @@ static void load_chk_section_1(FILE * fp,
   }
   #endif
 
+  opt_sp_seqcount = (long *)xmalloc((size_t)stree_tip_count*sizeof(long));
+  if (!LOAD(opt_sp_seqcount,stree_tip_count,fp))
+    fatal("Cannot read 'opt_sp_seqcount'");
+
   /* read usedata, cleandata and nloci */
   if (!LOAD(&opt_usedata,1,fp))
     fatal("Cannot read 'usedata' tag");
@@ -707,7 +711,7 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read nui_sum value");
 
   /* read diploid */
-  opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(char *));
+  opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(long));
   if (!LOAD(opt_diploid,stree_tip_count,fp))
     fatal("Cannot read 'diploid' tag");
 
