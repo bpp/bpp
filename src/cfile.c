@@ -1823,28 +1823,18 @@ static long parse_finetune(const char * line, long line_count)
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
-  if (p[ws] == '0')
+  if (p[ws] != '0' && p[ws] != '1') goto l_unwind;
+  
+  if (p[ws] == '1') opt_finetune_reset = 1;
+  else if (p[ws] == '0') opt_finetune_reset = 0;
+
+  p += ws+1;
+
+  if (is_emptyline(p))
   {
-    opt_finetune_reset = 0;
-    p += ws+1;
-
-    if (is_emptyline(p))
-      ret = 1;
-
+    ret = 1;
     goto l_unwind;
   }
-  if (p[ws] == '1')
-  {
-    fatal("%s:%ld:  Error when processing option 'finetune'\n\n"
-          "The syntax for the 'finetune' tag has changed since BPP v4.8.1, adopting a\n"
-          "dictionary-like key:val format where the key specifies the step length and\n"
-          "val the corresponding starting value.\n\n"
-          "Example:\n\n"
-          "  finetune = Gage:5 Gspr:0.001 mix:0.3\n",
-          opt_cfile, line_count);
-  }
-
-  assert(p[ws] != '0');
 
   /* now read the remaining part of the line and trim comments */
   if (!get_string(p,&dict)) goto l_unwind;
@@ -1918,7 +1908,10 @@ static long parse_finetune(const char * line, long line_count)
           break;
       }
       if (i == ft_labels_count)
-        fatal("Cannot find step length %s in list", token);
+      {
+        fprintf(stderr, "Cannot find step length %s in list", token);
+        goto l_unwind;
+      }
 
       count = get_double(sval, ft_ptr[i]); 
       if (!count) goto l_unwind;
@@ -1943,6 +1936,26 @@ static long parse_finetune(const char * line, long line_count)
   ret = 1;
 
 l_unwind:
+  if (!ret)
+    fatal(ANSI_COLOR_RED
+          "%s:%ld:"
+          ANSI_COLOR_RESET
+          " Error when processing option 'finetune'.\n\n"
+          "The syntax for the 'finetune' tag has changed since BPP v4.8.1, adopting a\n"
+          "dictionary-like key:val format where the key specifies the step length and\n"
+          "val the corresponding starting value.\n\n"
+          "Examples:\n\n"
+          "             +-> step lenghts are fixed to the specified values and are not auto adjusted during burnin\n"
+          "             |\n"
+          "  finetune = 0 Gage:5 Gspr:0.001 mix:0.3\n"
+          "  finetune = 1 Gage:5 Gspr:0.001 mix:0.3\n"
+          "             |\n"
+          "             +-> step lengths are set to the specified initial values and are adjusted during burnin\n"
+          "\n"
+          "  finetune = 0    # (no fine tuning, use default values, *NOT RECOMMENDED*)\n"
+          "  finetune = 1    # (fine tuning, use default inital values, default setting)\n\n",
+          opt_cfile, line_count);
+
   free(s);
   if (token)
     free(token);
