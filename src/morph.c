@@ -442,7 +442,7 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   else  /* tip node */
   {
     v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
-    /* The trait matrix has been standardized so that all characters have the
+    /* the trait matrix has been standardized so that all characters have the
        same variance and the population noise has variance of v_pop.
        Alvarez-Carretero et al. 2019. p.970. */
     v_pop = stree->trait_v_pop[idx];
@@ -450,20 +450,55 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   }
 }
 
-static void trait_update_disc_part(int idx, snode_t * snode, stree_t * stree)
+static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 {
-  if (snode->left && snode->right)  /* internal node */
-  {
-    trait_update_disc_part(idx, snode->left, stree);
-    trait_update_disc_part(idx, snode->right, stree);
-  }
-
+  int h, x, x_j, x_k,  * nstate;
+  double prob_j, prob_k;
+  
   /* update the branch length */
   if (snode->parent)
     snode->trait[idx]->brlen =
       (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
   else
     snode->trait[idx]->brlen = 0.0;
+
+  /* pruning algorithm */
+  nstate = stree->trait_nstate[idx];
+  if (snode->left && snode->right)  /* internal node */
+  {
+    trait_update_cpl_part(idx, snode->left, stree);
+    trait_update_cpl_part(idx, snode->right, stree);
+
+    for (h = 0; h < stree->trait_dim[idx]; ++h)
+    {
+      for (x = 0; x < nstate[h]; ++x)
+      {
+        prob_j = prob_k = 0.0;
+        for (x_j = 0; x_j < nstate[h]; ++x_j)
+          prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen)
+                    * snode->left->trait[idx]->condprob[h][x_j];
+        for (x_k = 0; x_k < nstate[h]; ++x_k)
+          prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen)
+                    * snode->right->trait[idx]->condprob[h][x_k];
+        snode->trait[idx]->condprob[h][x] = prob_j * prob_k;
+      }
+    }
+  }
+  else  /* tip node */
+  {
+    for (h = 0; h < stree->trait_dim[idx]; ++h)
+    {
+      /* set the conditional probabilities (L) to 1 for any state that is
+         compatible with the observed state and to 0 otherwise */
+      for (x = 0; x < nstate[h]; ++x)
+      {
+        if (snode->trait[idx]->state_d[h] & dec_to_bin(x))
+          snode->trait[idx]->condprob[h][x] = 1.;
+        else
+          snode->trait[idx]->condprob[h][x] = 0.;
+      }
+    }
+  }
 }
 
 void trait_update(stree_t * stree)
@@ -476,7 +511,7 @@ void trait_update(stree_t * stree)
     if (stree->trait_type[n] == BPP_DATA_CONT)
       trait_update_pic_part(n, stree->root, stree);
     else
-      trait_update_disc_part(n, stree->root, stree);
+      trait_update_cpl_part(n, stree->root, stree);
   }
 }
 
@@ -551,15 +586,15 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   {
     if (morph_list[n]->dtype == BPP_DATA_CONT)
     {
-      /* update the independent contrasts */
+      /* update the branch lengths and independent contrasts */
       trait_update_pic_part(n, stree->root, stree);
     }
     else
     {
-      /* update the branch lengths */
-      trait_update_disc_part(n, stree->root, stree);
-      /* also need to set the number of states for each character */
+      /* need to set the number of states for each character first */
       // TODO: trait_nstate_part(stree->trait_nstate[n], morph_list[n]);
+      /* update the branch lengths and conditional probabilities */
+      trait_update_cpl_part(n, stree->root, stree);
     }
   }
 }
@@ -674,9 +709,19 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
 
 static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
 {
-  double logl;
+  int h, x,  * nstate;
+  double prob, logl;
   
   logl = 0.0;
+  /* assuming the characters are independent */
+  nstate = stree->trait_nstate[idx];
+  for (h = 0; h < stree->trait_dim[idx]; ++h)
+  {
+    prob = 0.0;
+    for (x = 0; x < nstate[h]; ++x)
+      prob += stree->root->trait[idx]->condprob[h][x] / nstate[h];
+    logl += log(prob);
+  }
 
   stree->trait_logl[idx] = logl;
 
@@ -759,8 +804,8 @@ static double prop_branch_rates_relax(stree_t * stree)
       }
       else
       {
-        /* update branch length as branch rate has been changed */
-        trait_update_disc_part(n, stree->root, stree);
+        /* update conditional probs as branch rate has been changed */
+        trait_update_cpl_part(n, stree->root, stree);
         
         /* then calculate the log likelihood difference */
         lnacceptance += loglikelihood_trait_d_mkv(n, stree)
@@ -833,8 +878,8 @@ static double prop_branch_rates_strict(stree_t * stree)
     }
     else
     {
-      /* update branch length as branch rate has been changed */
-      trait_update_disc_part(n, stree->root, stree);
+      /* update conditional probs as branch rate has been changed */
+      trait_update_cpl_part(n, stree->root, stree);
       
       /* then calculate the log likelihood difference */
       lnacceptance += loglikelihood_trait_d_mkv(n, stree)
