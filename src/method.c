@@ -66,6 +66,16 @@ static void timer_start()
   time_start = time(NULL);
 }
 
+/* pjump related variables */
+static long active_pjump_count = 0;
+static char ** active_pjump_titles = NULL;
+static double ** active_pjump_values = NULL;
+static double ** finetune_values_ptr = NULL;
+static double * old_finetune_values = NULL;
+static int * active_pjft_spacing = NULL;
+
+
+
 #if 1
 /* TF: Debug 2023-06-19 */
 
@@ -736,6 +746,187 @@ static stree_t * load_tree_or_network(void)
   return stree;
 }
 
+static void active_pjumps_dealloc()
+{
+  long i;
+
+  if (active_pjump_titles)
+  {
+    for (i = 0; i < active_pjump_count; ++i)
+      free(active_pjump_titles[i]);
+    free(active_pjump_titles);
+  }
+
+  if (active_pjump_values)
+    free(active_pjump_values);
+
+  if (finetune_values_ptr)
+    free(finetune_values_ptr);
+
+  if (old_finetune_values)
+    free(old_finetune_values);
+  if (active_pjft_spacing)
+    free(active_pjft_spacing);
+}
+
+static void active_pjumps_alloc()
+{
+  long i,k;
+
+  size_t maxalloc = 16 + opt_finetune_theta_count;
+
+  active_pjump_titles = (char **)xmalloc(maxalloc*sizeof(char *));
+  active_pjump_values = (double **)xmalloc(maxalloc*sizeof(double *));
+  finetune_values_ptr = (double **)xmalloc(maxalloc*sizeof(double *));
+  old_finetune_values = (double *)xmalloc(maxalloc*sizeof(double));
+  active_pjft_spacing = (int *)xmalloc(maxalloc*sizeof(int));
+  
+  int lrht = (opt_est_heredity == HEREDITY_ESTIMATE ||
+              (opt_est_locusrate == MUTRATE_ESTIMATE &&
+               opt_locusrate_prior == BPP_LOCRATE_PRIOR_DIR));
+
+  int mubar = (opt_est_locusrate == MUTRATE_ESTIMATE &&
+               opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
+               opt_est_mubar) ||
+              (opt_est_locusrate == MUTRATE_ONLY);
+
+  int nubar = (opt_clock != BPP_CLOCK_GLOBAL &&
+               opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL);
+
+  int mui = (opt_est_locusrate == MUTRATE_ESTIMATE &&
+            (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
+             opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR));
+
+  int nuibr = (opt_clock != BPP_CLOCK_GLOBAL);
+
+  k = 0;
+
+  active_pjump_titles[k] = xstrdup("Gage");
+  active_pjump_values[k] = &g_pj_gage;
+  finetune_values_ptr[k] = &opt_finetune_gtage;
+  ++k;
+  
+  active_pjump_titles[k] = xstrdup("Gspr");
+  active_pjump_values[k] = &g_pj_gspr;
+  finetune_values_ptr[k] = &opt_finetune_gtspr;
+  ++k;
+  
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+  {
+    xasprintf(active_pjump_titles+k, "th%ld", i+1);
+    active_pjump_values[k] = g_pj_theta_slide+i;
+    finetune_values_ptr[k] = opt_finetune_theta+i;
+    ++k;
+  }
+  
+  active_pjump_titles[k] = xstrdup("tau");
+  active_pjump_values[k] = &g_pj_tau;
+  finetune_values_ptr[k] = &opt_finetune_tau;
+  ++k;
+
+  active_pjump_titles[k] = xstrdup("mix");
+  active_pjump_values[k] = &g_pj_mix;
+  finetune_values_ptr[k] = &opt_finetune_mix;
+  ++k;
+
+  if (lrht)
+  {
+    active_pjump_titles[k] = xstrdup("lrht");
+    active_pjump_values[k] = &g_pj_lrht;
+    finetune_values_ptr[k] = &opt_finetune_locusrate;
+    ++k;
+  }
+
+  if (opt_msci && opt_phi_slide_prob > 0)
+  {
+    active_pjump_titles[k] = xstrdup("phis");
+    active_pjump_values[k] = &g_pj_phi_slide;
+    finetune_values_ptr[k] = &opt_finetune_phi;
+    ++k;
+  }
+
+  if (enabled_prop_freqs)
+  {
+    active_pjump_titles[k] = xstrdup("pi");
+    active_pjump_values[k] = &g_pj_freqs;
+    finetune_values_ptr[k] = &opt_finetune_freqs;
+    ++k;
+  }
+
+  if (enabled_prop_qrates)
+  {
+    active_pjump_titles[k] = xstrdup("qmat");
+    active_pjump_values[k] = &g_pj_qmat;
+    finetune_values_ptr[k] = &opt_finetune_qrates;
+    ++k;
+  }
+
+  if (enabled_prop_alpha)
+  {
+    active_pjump_titles[k] = xstrdup("alfa");
+    active_pjump_values[k] = &g_pj_alpha;
+    finetune_values_ptr[k] = &opt_finetune_alpha;
+    ++k;
+  }
+
+  if (mubar)
+  {
+    active_pjump_titles[k] = xstrdup("mubr");
+    active_pjump_values[k] = &g_pj_mubar;
+    finetune_values_ptr[k] = &opt_finetune_mubar;
+    ++k;
+  }
+
+  if (nubar)
+  {
+    active_pjump_titles[k] = xstrdup("nubr");
+    active_pjump_values[k] = &g_pj_nubar;
+    finetune_values_ptr[k] = &opt_finetune_nubar;
+    ++k;
+  }
+
+  /* mu_i with conditional iid */
+  if (mui)
+  {
+    active_pjump_titles[k] = xstrdup("mu_i");
+    active_pjump_values[k] = &g_pj_mui;
+    finetune_values_ptr[k] = &opt_finetune_mui;
+    ++k;
+  }
+
+  if (nuibr)
+  {
+    active_pjump_titles[k] = xstrdup("nu_i");
+    active_pjump_values[k] = &g_pj_nui;
+    finetune_values_ptr[k] = &opt_finetune_nui;
+    ++k;
+
+    active_pjump_titles[k] = xstrdup("brte");
+    active_pjump_values[k] = &g_pj_brate;
+    finetune_values_ptr[k] = &opt_finetune_branchrate;
+    ++k;
+  }
+
+  if (opt_migration && !opt_est_geneflow)
+  {
+    active_pjump_titles[k] = xstrdup("mrte");
+    active_pjump_values[k] = &g_pj_mrate;
+    finetune_values_ptr[k] = &opt_finetune_migrates;
+    ++k;
+
+    if (opt_mig_vrates_exist)
+    {
+      active_pjump_titles[k] = xstrdup("mr_i");
+      active_pjump_values[k] = &g_pj_migvr;
+      finetune_values_ptr[k] = &opt_finetune_mig_Mi;
+      ++k;
+    }
+  }
+
+  active_pjump_count = k;
+}
+
+
 static void reset_finetune_onestep(double pjump, double * param)
 {
   double maxstep = 99;
@@ -752,6 +943,92 @@ static void reset_finetune_onestep(double pjump, double * param)
   
 }
 
+static double xfloor1(double x)
+{
+  double r = floor(x);
+  if (r < 1) r = 1;
+  return r;
+}
+static char * center(const char * s, int space)
+{
+  char * r;
+  int len = (int)strlen(s);
+  int left,right;
+
+  left  = (space-len)/2;
+  right = space-len-left;
+
+  xasprintf(&r, "%*s%s%*s", left, "", s, right, "");
+
+  return r;
+}
+
+static void reset_finetune(FILE * fp_out)
+{
+  long i,j;
+  int spacing = 1;
+  FILE * fp[2];
+  int digits1;
+  int digits2;
+
+  int prec = 5;
+
+  fp[0] = stdout; fp[1] = fp_out;
+
+  for (i = 0; i < active_pjump_count; ++i)
+  {
+    old_finetune_values[i] = *(finetune_values_ptr[i]);
+    reset_finetune_onestep(*(active_pjump_values[i]), finetune_values_ptr[i]);
+
+    digits1 = (int)floor(log10(xfloor1(old_finetune_values[i]))+1);
+    digits1 += prec+1;
+    digits2 = (int)floor(log10(xfloor1(*(finetune_values_ptr[i])))+1);
+    digits2 += prec+1;
+    active_pjft_spacing[i] = MAX(digits1,digits2);
+    active_pjft_spacing[i] = MAX(active_pjft_spacing[i],(int)strlen(active_pjump_titles[i]));
+  }
+
+  for (j = 0; j < 2; ++j)
+  {
+    fprintf(fp[j], "\n                   ");
+    for (i = 0; i < active_pjump_count; ++i)
+    {
+      char * s = center(active_pjump_titles[i], active_pjft_spacing[i]);
+      fprintf(fp[j], "%*s%s", spacing, "", s);
+      free(s);
+    }
+    fprintf(fp[j],"\n");
+  }
+
+  for (j = 0; j < 2; ++j)
+  {
+    fprintf(fp[j], "Current Pjump:    ");
+    for (i = 0; i < active_pjump_count; ++i)
+      fprintf(fp[j], "%*s%*.5f",
+              spacing, "", active_pjft_spacing[i], *(active_pjump_values[i]));
+    fprintf(fp[j],"\n");
+
+    fprintf(fp[j], "Current finetune: ");
+    for (i = 0; i < active_pjump_count; ++i)
+      fprintf(fp[j], "%*s%*.5f",
+              spacing, "", active_pjft_spacing[i], old_finetune_values[i]);
+    fprintf(fp[j],"\n");
+
+    fprintf(fp[j], "New finetune:     ");
+    for (i = 0; i < active_pjump_count; ++i)
+      fprintf(fp[j], "%*s%*.5f",
+              spacing, "", active_pjft_spacing[i], *(finetune_values_ptr[i]));
+    fprintf(fp[j],"\n\n");
+
+    fprintf(fp[j], "=> 'finetune =");
+    for (i = 0; i < active_pjump_count; ++i)
+    {
+      fprintf(fp[j], " %s:%f", active_pjump_titles[i], *(finetune_values_ptr[i]));
+    }
+    fprintf(fp[j],"'\n\n");
+  }
+}
+#if 0
 static void reset_finetune(FILE * fp_out)
 {
   int j,k;
@@ -1190,6 +1467,7 @@ static void reset_finetune(FILE * fp_out)
   fprintf(fp[0],"\n");
   fprintf(fp_out, "\n");
 }
+#endif
 
 static char * cb_serialize_branch(const snode_t * node)
 {
@@ -4548,6 +4826,7 @@ void cmd_run()
   }
 
   /* *** start of MCMC loop *** */
+  active_pjumps_alloc();
   for ( ; i < opt_samples*opt_samplefreq; ++i)
   {
     #if 0
@@ -5485,6 +5764,7 @@ void cmd_run()
       fprintf(fp_out, "\n");
     }
   }
+  active_pjumps_dealloc();
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 

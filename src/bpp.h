@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 0
 
-#define PVER_SHA1 "150644dee07bf2c8bc911a8b608c3f6b595793f7"
+#define PVER_SHA1 "78fa33a42a2d604b50fa809817acaab1eafd7d4b"
 /* checkpoint version */
 #define VERSION_CHKP 1
 
@@ -1245,8 +1245,9 @@ extern double opt_vbar_beta;
 extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
-extern long * opt_sp_seqcount;
+extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
+extern long * opt_sp_seqcount;
 extern char * opt_bfdriver;
 extern char * cmdline;
 extern char * opt_a1b1file;

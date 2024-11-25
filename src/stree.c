@@ -2274,9 +2274,11 @@ static void mscm_link_thetas(stree_t* stree)
 
 static void init_theta_stepsize(stree_t * stree)
 {
+  int alloced = 0;
   long i,j;
   unsigned int total_nodes;
   long theta_params = 0;
+  double theta_eps_default = 0.001;
 
   /* theta mode sets the number of steplengths:
 
@@ -2288,10 +2290,19 @@ static void init_theta_stepsize(stree_t * stree)
 
   total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+    if (opt_finetune_theta_mask[i])
+    {
+      alloced = 1;
+      break;
+    }
+
   if (opt_finetune_theta_mode == 1 ||
       opt_linkedtheta == BPP_LINKEDTHETA_ALL ||
       stree->tip_count == 1)
   {
+    if (!alloced)
+      opt_finetune_theta[0] = theta_eps_default;
     /* single step length for all thetas */
     for (i = 0; i < total_nodes; ++i)
       stree->nodes[i]->theta_step_index = 0;
@@ -2300,16 +2311,29 @@ static void init_theta_stepsize(stree_t * stree)
   }
   else
   {
-    double eps = opt_finetune_theta[0];
-
-    free(opt_finetune_theta);
+    if (!alloced)
+      free(opt_finetune_theta);
 
     if (opt_finetune_theta_mode == 2)
     {
       /* two step lengths, one for tips and one for inner nodes */
-      opt_finetune_theta = (double *)xmalloc(2*sizeof(double));
-      opt_finetune_theta[0] = eps/2;
-      opt_finetune_theta[1] = eps*2;
+      if (!alloced)
+      {
+        assert(!opt_finetune_theta_mask[0] && !opt_finetune_theta_mask[1]);
+
+        opt_finetune_theta = (double *)xmalloc(2*sizeof(double));
+        opt_finetune_theta[0] = theta_eps_default/2;
+        opt_finetune_theta[1] = theta_eps_default*2;
+      }
+      else
+      {
+        if (opt_finetune_theta_mask[0] && !opt_finetune_theta_mask[1])
+          opt_finetune_theta[1] = opt_finetune_theta[0]*4;
+        else if (!opt_finetune_theta_mask[0] && opt_finetune_theta_mask[1])
+          opt_finetune_theta[0] = opt_finetune_theta[1]/4;
+        else
+          assert(opt_finetune_theta_mask[0] && opt_finetune_theta_mask[1]);
+      }
 
       for (i = 0; i < total_nodes; ++i)
         if (stree->nodes[i]->linked_theta == NULL)
@@ -2325,18 +2349,28 @@ static void init_theta_stepsize(stree_t * stree)
     {
       /* one step length for each theta */
       for (i = 0; i < total_nodes; ++i)
-        if (stree->nodes[i]->linked_theta == NULL)
+        if (stree->nodes[i]->has_theta && stree->nodes[i]->linked_theta == NULL)
           theta_params++;
+
+      if (alloced)
+      {
+        for (i = theta_params; i < opt_finetune_theta_count; ++i)
+          if (opt_finetune_theta_mask[i])
+            fatal("ERROR: th%ld specified in finetune does not exist", i+1);
+      }
       
-      opt_finetune_theta = (double *)xmalloc((size_t)(theta_params)*sizeof(double));
+      if (!alloced)
+      {
+        opt_finetune_theta = (double *)xcalloc((size_t)(theta_params),sizeof(double));
+      }
       opt_finetune_theta_count = theta_params;
       for (i = 0; i < theta_params; ++i)
-        opt_finetune_theta[i] = eps;
+        if ((alloced && !opt_finetune_theta_mask[i]) || opt_finetune_theta[i] == 0)
+          opt_finetune_theta[i] = theta_eps_default;
 
       for (i = 0, j = 0; i < total_nodes; ++i)
-        if (stree->nodes[i]->linked_theta == NULL)
+        if (stree->nodes[i]->has_theta && stree->nodes[i]->linked_theta == NULL)
           stree->nodes[i]->theta_step_index = j++;
-
     }
   }
 }
