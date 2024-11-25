@@ -3510,28 +3510,12 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_a1b1file)
   {
-    int params_avail = 0;
-
     if (opt_est_stree || opt_est_delimit) opt_print_a1b1 = 0;
 
-    params_avail = ((opt_est_theta && opt_theta_slide_prob == 0)
-       || (opt_msci && opt_phi_slide_prob == 0) 
-       || (opt_migration && opt_mrate_move == BPP_MRATE_GIBBS));
-
-    if(!params_avail) opt_print_a1b1 = 0;
+    if (!opt_usedata) opt_print_a1b1 = 0;
 
     if (!opt_print_a1b1)
     {
-      fprintf(stdout, "\nSome parameters must be sampled from the conditional  to generate the %s.a1b1.txt file\n"
-            "  * To use Gibbs sampler for thetas: use the switch --theta-slide-prob 0\n"
-            "  * To use Gibbs sampler for phi (MSC-I model): use the switch --phi-slide-prob 0\n"
-            "  * To use Gibbs sampler for migration rates (MSC-M model): use the switch --mrate-move gibbs\n"
-            "  * The option is available only for analysis A00 and for sampfreq=1...\n", opt_jobname);
-      fprintf(fp_out, "\nSome parameters must be sampled from the conditional to generate the %s.a1b1.txt file\n"
-            "  * To use Gibbs sampler for thetas: use the switch --theta-slide-prob 0\n"
-            "  * To use Gibbs sampler for phi (MSC-I model): use the switch --phi-slide-prob 0\n"
-            "  * To use Gibbs sampler for migration rates (MSC-M model): use the switch --mrate-move gibbs\n"
-            "  * The option is available only for analysis A00...\n", opt_jobname);
       free(opt_a1b1file);
       opt_a1b1file = NULL;
     }
@@ -4074,19 +4058,16 @@ static FILE * init(stree_t ** ptr_stree,
     {
       assert(!opt_est_delimit && !opt_est_stree);
       fprintf(fp_a1b1,"Gen");
-      if (opt_est_theta)
+      for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
       {
-        for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
-        {
-          snode_t * x = stree->nodes[i];
+        snode_t * x = stree->nodes[i];
 
-          if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
+        if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
 
-          if (!x->linked_theta)
-            fprintf(fp_a1b1,
-                    "\ttheta:%d_a1\ttheta:%d_b1",
-                    x->node_index+1,x->node_index+1);
-        }
+        if (x->theta >= 0 && !x->linked_theta)
+          fprintf(fp_a1b1,
+                  "\ttheta:%d_a1\ttheta:%d_b1",
+                  x->node_index+1,x->node_index+1);
       }
       if (opt_msci)
       {
@@ -4363,6 +4344,8 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
 
     /* no identifiable theta for tip pops with < 2 sequences */
     if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
+
+    if (snode->linked_theta || snode->theta < 0) continue;
 
     coal_sum = C2h_sum = 0;
 

@@ -1110,10 +1110,9 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
   header_tokens_shorten(tokens,token_count);
 
   /* compute number of theta parameters */
-  if (opt_est_theta)
-    for (i = 0; i < snodes_total; ++i)
-      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-        cols += 2;
+  for (i = 0; i < snodes_total; ++i)
+    if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
+      cols += 2;
 
 #if  1
   if (opt_migration && !opt_est_geneflow)
