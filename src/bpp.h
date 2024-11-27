@@ -156,9 +156,9 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 1
+#define VERSION_PATCH 2
 
-#define PVER_SHA1 "ce22a7888808ac4bc463120587d2d27de5b1e926"
+#define PVER_SHA1 "8a3de7ab3ad7a03941c3f8d49545680584b39b23"
 /* checkpoint version */
 #define VERSION_CHKP 1
 
@@ -1464,9 +1464,7 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype,
-                         long mcmc_step,
-                         FILE * fp_a1b1);
+                         long * acceptvec_movetype);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -1579,7 +1577,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus,long mcmc_step, FILE * fp_a1b1);
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 

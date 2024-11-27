@@ -5005,7 +5005,7 @@ void cmd_run()
       
     if (opt_est_theta)
     {
-      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype, i, fp_a1b1);
+      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype);
       if (opt_theta_slide_prob == 1)
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
@@ -5070,7 +5070,7 @@ void cmd_run()
       
     if (opt_migration)
     {
-      ratio = prop_migrates(stree,gtree,locus, i, fp_a1b1);
+      ratio = prop_migrates(stree,gtree,locus);
       g_pj_mrate = (g_pj_mrate*(ft_round-1)+ratio) / (double)ft_round;
 
       if (opt_mig_vrates_exist)

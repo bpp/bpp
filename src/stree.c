@@ -1776,10 +1776,13 @@ static int propose_phi_gibbs(stree_t * stree,
 static int propose_phi_slide(stree_t * stree,
                              gtree_t ** gtree,
                              snode_t * snode,
+                             double * a1ptr,
+                             double * b1ptr,
                              long thread_index)
 {
   int accepted;
   int sequp_count;
+  int p,q;
   long i;
   double phinew;
   double phiold;
@@ -1788,8 +1791,6 @@ static int propose_phi_slide(stree_t * stree,
   double lnacceptance;
   double lnphiratio, lnphiratio1;
   double aratio, bratio;
-
-  snode_t * pnode;   /* node that has the phi parameter */
 
   /* Note: snode is the main node */
   assert(!node_is_mirror(snode));
@@ -1802,21 +1803,34 @@ static int propose_phi_slide(stree_t * stree,
      node that has the parameter.
   */
 
-  #if 0
+  p = q = 0;
+  /* get k and n */
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    /* For bidirectional introgression we need to subtract the lineages
+       coming from right. See issue #97 */
+    p += snode->seqin_count[i];
+    if (node_is_bidirection(snode))
+      p -= snode->right->seqin_count[i];
 
-  /* old code before the introduction of has_phi flag */
-  phiold = snode->hphi;
+    q += snode->hybrid->seqin_count[i];
+  }
 
-  #else
-
-  /* new correct code */
-  pnode = snode->has_phi ? snode : snode->hybrid;
+  snode_t * pnode = snode->has_phi ? snode : snode->hybrid;
   assert(pnode->has_phi);
+
+  if (snode != pnode)
+  {
+    p ^= q;
+    q ^= p;
+    p ^= q;
+  }
+
+  /* a1 and b1 */
+  *a1ptr = opt_phi_alpha + p;
+  *b1ptr = opt_phi_beta + q;
+
   phiold = pnode->hphi;
-
-
-  #endif
-
   phinew = phiold + opt_finetune_phi*legacy_rnd_symmetrical(thread_index);
   phinew = reflect(phinew,0,1,thread_index);
 
@@ -2068,11 +2082,13 @@ void stree_propose_phi(stree_t * stree,
       accepted = propose_phi_slide(stree,
                                    gtree,
                                    stree->nodes[offset+i]->hybrid,
+                                   &a1,
+                                   &b1,
                                    thread_index);
       acceptvec[BPP_PHI_MOVE_SLIDE] += accepted;
       movecount[BPP_PHI_MOVE_SLIDE]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t-\t-");
+        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
     }
     else
     {
@@ -3917,9 +3933,7 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype,
-                         long mcmc_step,
-                         FILE * fp_a1b1)
+                         long * acceptvec_movetype)
 {
   unsigned int i;
   long slide_tip_count = 0;
@@ -3959,9 +3973,6 @@ void stree_propose_theta(gtree_t ** gtree,
           slide_tip_count++;
         else
           slide_inner_count++;
-
-        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-          fprintf(fp_a1b1, "\t-\t-");
       }   
       else                                                  /* gibbs */
       {
@@ -3978,8 +3989,6 @@ void stree_propose_theta(gtree_t ** gtree,
           gibbs_tip_count++;
         else
           gibbs_inner_count++;
-        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-          fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
       }
     }
   }
@@ -11291,9 +11300,7 @@ double migrate_gibbs(stree_t * stree,
                      gtree_t ** gtree,
                      locus_t ** locus,
                      unsigned int si,
-                     unsigned int ti,
-                     double * a1ptr,
-                     double * b1ptr)
+                     unsigned int ti)
 {
   long i;
   long asj = 0;
@@ -11428,9 +11435,6 @@ double migrate_gibbs(stree_t * stree,
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
-  *a1ptr = a1;
-  *b1ptr = b1;
-
   double old_w = spec->M;
   if (opt_mig_specs[mindex].am)
     assert(0);  /* TODO: Go through all loci and propose Mi? */
@@ -11491,9 +11495,7 @@ double migrate_gibbs(stree_t * stree,
 
 static double prop_migrates_gibbs(stree_t * stree,
                                   gtree_t ** gtree,
-                                  locus_t ** locus,
-                                  long mcmc_step,
-                                  FILE * fp_a1b1)
+                                  locus_t ** locus)
 {
   long i,j;
   long accepted = 0;
@@ -11508,16 +11510,12 @@ static double prop_migrates_gibbs(stree_t * stree,
 
       ++total;
 
-      accepted += migrate_gibbs(stree,gtree,locus,i,j,&a1,&b1);
-
-      if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+      accepted += migrate_gibbs(stree,gtree,locus,i,j);
     }
   }
-
   return 1;
 
-  return accepted / (double)total;
+  /* return accepted / (double)total; */
 
 }
 
@@ -11795,10 +11793,10 @@ double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 }
 #endif
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long mcmc_step, FILE * fp_a1b1)
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
   if (opt_mrate_move == BPP_MRATE_GIBBS && !opt_mig_vrates_exist)
-    return prop_migrates_gibbs(stree,gtree,locus,mcmc_step,fp_a1b1);
+    return prop_migrates_gibbs(stree,gtree,locus);
 
   return prop_migrates_slide(stree,gtree,locus);
 }
