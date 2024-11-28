@@ -459,13 +459,16 @@ static long get_e(const char * line, long * value)
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
+  *value = 1;
+
   /* is it a blank line or comment ? */
   if (!p[ws] || p[ws] == '*' || p[ws] == '#')
   {
     free(s);
-    *value = 0;
     return 0;
   }
+
+  /* there is at least one character */
 
   /* store address of value's beginning */
   char * start = p+ws;
@@ -475,14 +478,20 @@ static long get_e(const char * line, long * value)
 
   *end = 0;
 
-  if ((*start != 'E' && *start != 'e') || (start+1 != end))
+  if (strlen(start) == 3 && !strcasecmp(start,"int"))
+  {
+    *value = 0;
+  }
+  else if (strlen(start) == 1 && (*start == 'E' || *start == 'e'))
+  {
+    *value = 1;
+  }
+  else
   {
     free(s);
     *value = 2;         /* erroneous value */
     return 0;
   }
-
-  *value = 1;
 
   ret = ws + end - start;
   free(s);
@@ -2449,7 +2458,7 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
 
 static void update_theta_finetunes()
 {
-  double eps = opt_finetune_theta[0];
+  //double eps = opt_finetune_theta[0];
   /* allocate proper space for opt_finetune_theta */
   free(opt_finetune_theta);
   free(opt_finetune_theta_mask);
@@ -2548,8 +2557,8 @@ static void check_validity()
 
   if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
-    if (opt_theta_alpha <= 1)
-      fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
+    if (opt_theta_alpha <= 2)
+      fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 2");
 
     if (opt_theta_beta <= 0)
       fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
@@ -2702,6 +2711,11 @@ static void check_validity()
 
   if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
 	fatal("locusrate must be 3 for tip dating.\n");
+
+  if (opt_migration && opt_est_stree)
+  {
+    fatal("Species tree estimation under the MSC-M model not available");
+  }
 }
 
 static void update_locusrate_information()

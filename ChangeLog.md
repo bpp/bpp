@@ -2,6 +2,15 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.8.2] - 2024-11-28
+## Changed
+ - thetaprior: always estimate theta with invgamma prior unless 'int' specified
+ - invgamma theta prior requires that a>2
+## Fixed
+ - duplicate logging of a1,b1 for theta and w under certain conditions
+ - logging a1,b1 for phi even when sliding window is used
+ - SNL move assertion fails with thetas integrated (called old density function)
+
 ## [4.8.1] - 2024-11-25
 ### Changed
  - a1b1 summary handles missing data

@@ -10928,54 +10928,74 @@ long snl_expand_and_shrink(stree_t * stree,
     }
     else
     {
-         /* locate additional populations that need to be updated */
+      /* locate additional populations that need to be updated */
     
-         /* find and mark those populations whose number of incoming lineages has
-            changed due to the reset_gene_leaves_count() call, but were previously
-            not marked for log-probability contribution update */
-        for (j = 0; j < snode_contrib_count[i]; ++j)
-          snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
-        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-        {
-          snode_t * snode = stree->nodes[j];
+      /* find and mark those populations whose number of incoming lineages has
+         changed due to the reset_gene_leaves_count() call, but were previously
+         not marked for log-probability contribution update */
+      for (j = 0; j < snode_contrib_count[i]; ++j)
+        snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      {
+        snode_t * snode = stree->nodes[j];
     
-          if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
-              (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
-            snode_contrib[snode_contrib_count[i]++] = snode;
-    
-    
-        }
-    
-        /* now update the log-probability contributions for the affected, marked
-           populations */
-        for (j = 0; j < snode_contrib_count[i]; ++j)
-        {
-          if (opt_est_theta)
-            gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
-          else
-            logpr_notheta -= snode_contrib[j]->notheta_logpr_contrib;
-    
-          double xtmp;
-          
-          if (opt_migration)
-            xtmp = gtree_update_logprob_contrib_mig(snode_contrib[j],
-                                                    stree,
-                                                    gtree_list[i],
-                                                    loci[i]->heredity[0],
-                                                    i,
-                                                    thread_index);
-          else
-            xtmp = gtree_update_logprob_contrib(snode_contrib[j],
-                                                loci[i]->heredity[0],
-                                                i,
-                                                thread_index);
+        if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
+            (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
+          snode_contrib[snode_contrib_count[i]++] = snode;
+      }
 
-    
-          if (opt_est_theta)
-            gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
-          else
-            logpr_notheta += xtmp;
+      #if 1
+      if (opt_est_theta)
+      {
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
+          gtree_list[i]->logpr += gtree_update_logprob_contrib(snode_contrib[j],
+                                                               loci[i]->heredity[0],
+                                                               i,
+                                                               thread_index);
         }
+      }
+      else
+      {
+        long * marks = NULL;
+
+        marks = (long *)xcalloc((size_t)(stree->tip_count+stree->inner_count),
+                                sizeof(long));
+
+        /* first step */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          if (!marks[master->node_index])
+          {
+            logpr_notheta -= master->notheta_logpr_contrib;
+            marks[master->node_index] = 1;
+          }
+
+          gtree_update_C2j(snode_contrib[j],loci[i]->heredity[0],i,thread_index);
+        }
+
+        /* reset marks */
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+          marks[j] = 0;
+        
+        /* second part */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          
+          if (!marks[master->node_index])
+          {
+            logpr_notheta += update_logpg_contrib(stree,master);
+            marks[master->node_index] = 1;
+          }
+        }
+        free(marks);
+      }
+      #endif
     }
 
     /* 
