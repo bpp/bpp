@@ -128,7 +128,7 @@ Windows: You will now have the binary distribution in a folder called `bpp-4.8.2
 
 ```
 wget https://github.com/bpp/bpp/archive/v4.8.2.tar.gz
-tar zxvf 4.8.2.tar.gz
+tar zxvf v4.8.2.tar.gz
 cd bpp-4.8.2/src
 make
 ```
