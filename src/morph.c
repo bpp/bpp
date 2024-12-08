@@ -116,11 +116,24 @@ static int parse_value_c(FILE * fp, double * trait, int len)
   return 1;
 }
 
+static int state_bin(int x)
+{
+  int std_bin[] = {1,2,4,8,16,32,64,128,256,512,1023,1024};
+  
+  if (x >= 0 && x <= 9)
+    return std_bin[x];
+  else
+  {
+    fprintf(stderr, "Unsupported trait value (%d)\n", x);
+    return 0;
+  }
+}
+
 static int parse_value_d(FILE * fp, int * std, int len)
 {
   int c, j;
-  int stdID[] = {1,2,4,8,16,32,64,128,256,512,1023,1024};
   
+  /* store the states in binary to get ready for bit operations */
   for (j = 0; j < len; ++j)
   {
     c = get_nb_char(fp);
@@ -130,15 +143,15 @@ static int parse_value_d(FILE * fp, int * std, int len)
     
     if (isdigit(c))
     {
-      std[j] = stdID[c-'0'];
+      std[j] = state_bin(c-'0');
     }
     else if (c == '?')
     {
-      std[j] = stdID[10];
+      std[j] = 1023;
     }
     else if (c == '-')
     {
-      std[j] = stdID[11];
+      std[j] = 1024;
     }
     else // TODO: ambiguity
     {
@@ -450,9 +463,16 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   }
 }
 
+static double tran_prob(int x, int y, double t, int k)
+{
+  /* Mk model */
+  
+}
+
 static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 {
-  int h, x, x_j, x_k,  * nstate;
+  int h, n, a, x, x_j, x_k;
+  int * nstate, nchar;
   double prob_j, prob_k;
   
   /* update the branch length */
@@ -462,40 +482,72 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
   else
     snode->trait[idx]->brlen = 0.0;
 
-  /* pruning algorithm */
+  nchar = stree->trait_dim[idx];
   nstate = stree->trait_nstate[idx];
+
+  /* pruning algorithm */
   if (snode->left && snode->right)  /* internal node */
   {
     trait_update_cpl_part(idx, snode->left, stree);
     trait_update_cpl_part(idx, snode->right, stree);
 
-    for (h = 0; h < stree->trait_dim[idx]; ++h)
+    for (h = 0; h < nchar; ++h)
     {
       for (x = 0; x < nstate[h]; ++x)
       {
         prob_j = prob_k = 0.0;
         for (x_j = 0; x_j < nstate[h]; ++x_j)
-          prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen)
+          prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen, nstate[h])
                     * snode->left->trait[idx]->condprob[h][x_j];
         for (x_k = 0; x_k < nstate[h]; ++x_k)
-          prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen)
+          prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen,nstate[h])
                     * snode->right->trait[idx]->condprob[h][x_k];
         snode->trait[idx]->condprob[h][x] = prob_j * prob_k;
+      }
+    }
+    for (n = 2; n <= 10; ++n) {
+      for (a = 0; a < n; ++a) // dummy constant chars
+      {
+        h = nchar + n*(n-1)/2 - 1 + a;
+        for (x = 0; x < n; ++x)
+        {
+          prob_j = prob_k = 0.0;
+          for (x_j = 0; x_j < n; ++x_j)
+            prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen, n)
+                      * snode->left->trait[idx]->condprob[h][x_j];
+          for (x_k = 0; x_k < n; ++x_k)
+            prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen,n)
+                      * snode->right->trait[idx]->condprob[h][x_k];
+          snode->trait[idx]->condprob[h][x] = prob_j * prob_k;
+        }
       }
     }
   }
   else  /* tip node */
   {
-    for (h = 0; h < stree->trait_dim[idx]; ++h)
+    for (h = 0; h < nchar; ++h)
     {
       /* set the conditional probabilities (L) to 1 for any state that is
          compatible with the observed state and to 0 otherwise */
       for (x = 0; x < nstate[h]; ++x)
       {
-        if (snode->trait[idx]->state_d[h] & dec_to_bin(x))
+        if (snode->trait[idx]->state_d[h] & state_bin(x))
           snode->trait[idx]->condprob[h][x] = 1.;
         else
           snode->trait[idx]->condprob[h][x] = 0.;
+      }
+    }
+    for (n = 2; n <= 10; ++n) {
+      for (a = 0; a < n; ++a) // dummy constant chars
+      {
+        h = nchar + n*(n-1)/2 - 1 + a;
+        for (x = 0; x < n; ++x)
+        {
+          if (x == a)
+            snode->trait[idx]->condprob[h][x] = 1.;
+          else
+            snode->trait[idx]->condprob[h][x] = 0.;
+        }
       }
     }
   }
@@ -683,6 +735,7 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
   p = stree->trait_dim[idx];
 
   logl = 0.0;
+
   /* loop over the internal species nodes */
   for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
   {
@@ -709,18 +762,33 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
 
 static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
 {
-  int h, x,  * nstate;
-  double prob, logl;
+  int h, j, a, x;
+  int * nstate, nchar;
+  double prob, p0, logl;
+  
+  nchar = stree->trait_dim[idx];
+  nstate = stree->trait_nstate[idx];
   
   logl = 0.0;
+
   /* assuming the characters are independent */
-  nstate = stree->trait_nstate[idx];
-  for (h = 0; h < stree->trait_dim[idx]; ++h)
+  for (h = 0; h < nchar; ++h)
   {
+    /* average the conditional probabilities over the root states */
     prob = 0.0;
     for (x = 0; x < nstate[h]; ++x)
       prob += stree->root->trait[idx]->condprob[h][x] / nstate[h];
-    logl += log(prob);
+    
+    /* correct for the variable coding bias */
+    p0 = 0.0;  // prob of being constant
+    for (a = 0; a < nstate[h]; ++a)
+    {
+      j = nchar + nstate[h]*(nstate[h]-1)/2 - 1 + a;
+      for (x = 0; x < nstate[h]; ++x)
+        p0 += stree->root->trait[idx]->condprob[j][x] / nstate[h];
+    }
+
+    logl += log(prob) - log(1-p0);
   }
 
   stree->trait_logl[idx] = logl;
