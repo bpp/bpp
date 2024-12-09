@@ -333,7 +333,7 @@ void morph_destroy(morph_t * morph)
 
 void trait_destroy(stree_t * stree)
 {
-  int n, i;
+  int n, i, j;
   snode_t * snode;
   trait_t * trait;
 
@@ -347,11 +347,23 @@ void trait_destroy(stree_t * stree)
         trait = snode->trait[n];
         if (trait)
         {
-          if(trait->state_d)
+          if (trait->state_d)
             free(trait->state_d);
-         if(trait->state_m)
+          if (trait->condprob)
+          {
+            for (j = 0; j < stree->trait_dim[n] +54; ++j)
+              free(trait->condprob[j]);
+            free(trait->condprob);
+          }
+          if (trait->tranprob)
+          {
+            for (j = 0; j < 9; ++j)
+              free(trait->tranprob[j]);
+            free(trait->tranprob);
+          }
+          if (trait->state_m)
             free(trait->state_m);
-          if(trait->contrast)
+          if (trait->contrast)
             free(trait->contrast);
           free(trait);
         }
@@ -388,7 +400,7 @@ void trait_destroy(stree_t * stree)
 
 static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
 {
-  int n, i, j, l;
+  int n, i, j, k, l, nchar, state, max_state;
   snode_t * snode;
   morph_t * morph;
   
@@ -423,6 +435,43 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
   }
   
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    if (morph_list[n]->dtype == BPP_DATA_DISC)
+    {
+      nchar = stree->trait_dim[n];
+      for (j = 0; j < nchar; ++j)
+      {
+        /* check whether all discrete characters are variable */
+        l = max_state = 0;
+        for (i = 0; i < stree->tip_count; ++i)
+        {
+          state = stree->nodes[i]->trait[n]->state_d[j];
+          if (i == 0 || state >= 1023) // ? or -
+            l++;
+          else if (state == stree->nodes[0]->trait[n]->state_d[j])
+            l++;
+          if (state < 1023 && state > max_state)
+            max_state = state;
+        }
+        if (l == stree->tip_count)
+        {
+          /* this happens when all states are the same (constant) */
+          fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
+          return 0;
+        }
+        
+        /* record the number of states for each character */
+        for (k = 2; state_bin(k) < max_state; ++k);
+        stree->trait_nstate[n][j] = k;
+        
+        /* record the max number of states of this partition */
+        if (stree->trait_nstate[n][nchar] < k)
+          stree->trait_nstate[n][nchar] = k;
+      }
+    }
+  }
+  
   return 1;
 }
 
@@ -442,14 +491,14 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
       v_k = 0;
     v_k1 = snode->left->trait[idx]->brlen;
     v_k2 = snode->right->trait[idx]->brlen;
-    snode->trait[idx]->brlen = v_k + v_k1*v_k2/(v_k1+v_k2);  // v_k'
+    snode->trait[idx]->brlen = v_k + v_k1*v_k2 / (v_k1+v_k2);  // v_k'
     
     m_k1 = snode->left->trait[idx]->state_m;
     m_k2 = snode->right->trait[idx]->state_m;
     for (j = 0; j < stree->trait_dim[idx]; ++j)
     {
       snode->trait[idx]->contrast[j] = m_k1[j] - m_k2[j];  // x_k and m_k'
-      snode->trait[idx]->state_m[j] = (v_k2*m_k1[j] + v_k1*m_k2[j]) /(v_k1+v_k2);
+      snode->trait[idx]->state_m[j] = (v_k2*m_k1[j]+v_k1*m_k2[j]) / (v_k1+v_k2);
     }
   }
   else  /* tip node */
@@ -463,27 +512,37 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   }
 }
 
-static double tran_prob(int x, int y, double t, int k)
+static void trait_trprob_mk(double ** p, double v, int max_state)
 {
-  /* Mk model */
+  int k;
   
+  /* Mk model, Lewis 2001 */
+  for (k = 2; k <= max_state; ++k)
+  {
+    p[k-2][0] = 1.0/k + (k-1.0)/k * exp(-v * k/(k-1.0)); // no change
+    p[k-2][1] = 1.0/k - 1.0/k * exp(-v * k/(k-1.0));     // change
+  }
 }
 
 static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 {
-  int h, n, a, x, x_j, x_k;
-  int * nstate, nchar;
-  double prob_j, prob_k;
+  int h, j, k, a, x, y, z;
+  int * nstate, nchar, max_state;
+  double v, prob_l, prob_r, tr_prob;
   
   /* update the branch length */
   if (snode->parent)
-    snode->trait[idx]->brlen =
-      (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
+    v = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
   else
-    snode->trait[idx]->brlen = 0.0;
+    v = 0.0;
+  snode->trait[idx]->brlen = v;
 
   nchar = stree->trait_dim[idx];
   nstate = stree->trait_nstate[idx];
+  max_state = nstate[nchar];
+
+  /* calculate the transition probabilities */
+  trait_trprob_mk(snode->trait[idx]->tranprob, v, max_state);
 
   /* pruning algorithm */
   if (snode->left && snode->right)  /* internal node */
@@ -493,32 +552,53 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 
     for (h = 0; h < nchar; ++h)
     {
-      for (x = 0; x < nstate[h]; ++x)
+      k = nstate[h];
+      for (x = 0; x < k; ++x)
       {
-        prob_j = prob_k = 0.0;
-        for (x_j = 0; x_j < nstate[h]; ++x_j)
-          prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen, nstate[h])
-                    * snode->left->trait[idx]->condprob[h][x_j];
-        for (x_k = 0; x_k < nstate[h]; ++x_k)
-          prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen,nstate[h])
-                    * snode->right->trait[idx]->condprob[h][x_k];
-        snode->trait[idx]->condprob[h][x] = prob_j * prob_k;
+        prob_l = prob_r = 0.0;
+        for (y = 0; y < k; ++y)
+        {
+          if (y == x)
+            tr_prob = snode->left->trait[idx]->tranprob[k-2][0];
+          else
+            tr_prob = snode->left->trait[idx]->tranprob[k-2][1];
+          prob_l += tr_prob * snode->left->trait[idx]->condprob[h][y];
+        }
+        for (z = 0; z < k; ++z)
+        {
+          if (z == x)
+            tr_prob = snode->right->trait[idx]->tranprob[k-2][0];
+          else
+            tr_prob = snode->right->trait[idx]->tranprob[k-2][1];
+          prob_r += tr_prob * snode->right->trait[idx]->condprob[h][z];
+        }
+        snode->trait[idx]->condprob[h][x] = prob_l * prob_r;
       }
     }
-    for (n = 2; n <= 10; ++n) {
-      for (a = 0; a < n; ++a) // dummy constant chars
+    for (k = 2; k <= max_state; ++k) {
+      for (a = 0; a < k; ++a) // dummy constant chars
       {
-        h = nchar + n*(n-1)/2 - 1 + a;
-        for (x = 0; x < n; ++x)
+        j = nchar + k*(k-1)/2 - 1 + a;
+        for (x = 0; x < k; ++x)
         {
-          prob_j = prob_k = 0.0;
-          for (x_j = 0; x_j < n; ++x_j)
-            prob_j += tran_prob(x, x_j, snode->left->trait[idx]->brlen, n)
-                      * snode->left->trait[idx]->condprob[h][x_j];
-          for (x_k = 0; x_k < n; ++x_k)
-            prob_k += tran_prob(x, x_k, snode->right->trait[idx]->brlen,n)
-                      * snode->right->trait[idx]->condprob[h][x_k];
-          snode->trait[idx]->condprob[h][x] = prob_j * prob_k;
+          prob_l = prob_r = 0.0;
+          for (y = 0; y < k; ++y)
+          {
+            if (y == x)
+              tr_prob = snode->left->trait[idx]->tranprob[k-2][0];
+            else
+              tr_prob = snode->left->trait[idx]->tranprob[k-2][1];
+            prob_l += tr_prob * snode->left->trait[idx]->condprob[j][y];
+          }
+          for (z = 0; z < k; ++z)
+          {
+            if (z == x)
+              tr_prob = snode->right->trait[idx]->tranprob[k-2][0];
+            else
+              tr_prob = snode->right->trait[idx]->tranprob[k-2][1];
+            prob_r += tr_prob * snode->right->trait[idx]->condprob[j][z];
+          }
+          snode->trait[idx]->condprob[j][x] = prob_l * prob_r;
         }
       }
     }
@@ -537,16 +617,16 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
           snode->trait[idx]->condprob[h][x] = 0.;
       }
     }
-    for (n = 2; n <= 10; ++n) {
-      for (a = 0; a < n; ++a) // dummy constant chars
+    for (k = 2; k <= max_state; ++k) {
+      for (a = 0; a < k; ++a) // dummy constant chars
       {
-        h = nchar + n*(n-1)/2 - 1 + a;
-        for (x = 0; x < n; ++x)
+        j = nchar + k*(k-1)/2 - 1 + a;
+        for (x = 0; x < k; ++x)
         {
           if (x == a)
-            snode->trait[idx]->condprob[h][x] = 1.;
+            snode->trait[idx]->condprob[j][x] = 1.;
           else
-            snode->trait[idx]->condprob[h][x] = 0.;
+            snode->trait[idx]->condprob[j][x] = 0.;
         }
       }
     }
@@ -569,9 +649,10 @@ void trait_update(stree_t * stree)
 
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 {
-  int n, i;
+  int n, i, j;
   snode_t * snode;
-  
+  trait_t * trait;
+
   assert(stree != NULL && morph_list != NULL && n_part > 0);
   for (n = 0; n < n_part; ++n) assert(morph_list[n] != NULL);
   
@@ -595,9 +676,9 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
       stree->trait_ldetRs[n] = morph_list[n]->ldetRs;
     }
     else
-    {
+    { /* use the last element to store the max number of states */
       stree->trait_nstate[n] =
-          (int *)xcalloc(morph_list[n]->length, sizeof(int));
+          (int *)xcalloc(morph_list[n]->length +1, sizeof(int));
     }
   }
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
@@ -608,21 +689,34 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     {
       snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
       
+      trait = snode->trait[n];
       if (morph_list[n]->dtype == BPP_DATA_CONT)
       {
-        snode->trait[n]->state_m =
+        trait->state_m =
           (double *)xcalloc(morph_list[n]->length, sizeof(double));
-        snode->trait[n]->contrast =
+        trait->contrast =
           (double *)xcalloc(morph_list[n]->length, sizeof(double));
       }
-      else if (i < stree->tip_count) // do not need ancestral states?
+      else
       {
-        snode->trait[n]->state_d =
+        trait->state_d =
              (int *)xcalloc(morph_list[n]->length, sizeof(int));
+        /* each character has maximally ten states; the last 2+3+...+10=54
+           cells are for storing conditional probs of dummy constant chars
+           of 2, 3, ..., 10 states */
+        trait->condprob =
+         (double **)xcalloc(morph_list[n]->length +54, sizeof(double *));
+        for (j = 0; j < morph_list[n]->length +54; ++j)
+          trait->condprob[j] = (double *)xcalloc(10, sizeof(double));
+        /* store the transition probabilities for characters
+           of 2, 3, ..., 10 states */
+        trait->tranprob = (double **)xcalloc(9, sizeof(double *));
+        for (j = 0; j < 9; ++j)
+          trait->tranprob[j] = (double *)xcalloc(j+2, sizeof(double));
       }
       
       /* initialize branch rates */
-      snode->trait[n]->brate = 1.0;
+      trait->brate = 1.0;
     }
   }
   
@@ -643,8 +737,6 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     }
     else
     {
-      /* need to set the number of states for each character first */
-      // TODO: trait_nstate_part(stree->trait_nstate[n], morph_list[n]);
       /* update the branch lengths and conditional probabilities */
       trait_update_cpl_part(n, stree->root, stree);
     }

@@ -494,6 +494,7 @@ typedef struct trait_s
   /* for discrete traits */
   int    * state_d;  // discrete state values
   double **condprob; // conditional probabilities (L)
+  double **tranprob; // transition probabilities
 } trait_t;
 
 typedef struct snode_s
