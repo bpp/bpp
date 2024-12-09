@@ -131,6 +131,51 @@ static long get_long(const char * line, long * value)
   return ret;
 }
 
+static long get_doubleordash(const char * line, double * value)
+{
+  int len=0;
+  long ret = 0;
+  size_t ws;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  /* skip all white-space */
+  ws = strspn(p, " \t\r\n");
+
+  /* is it a blank line or comment ? */
+  if (!p[ws] || p[ws] == '*' || p[ws] == '#')
+  {
+    free(s);
+    return 0;
+  }
+
+  /* store address of value's beginning */
+  char * start = p+ws;
+
+  /* skip all characters except star, hash and whitespace */
+  char * end = start + strcspn(start," \t\r\n*#");
+
+  *end = 0;
+
+  if (!strcmp(start,"-"))
+  {
+    ret = ws+end-start;
+    free(s);
+    return ret;
+  }
+
+  ret = sscanf(start, "%lf%n", value, &len);
+  if ((ret == 0) || (((unsigned int)(len)) < strlen(start)))
+  {
+    free(s);
+    return 0;
+  }
+
+  ret = ws + end - start;
+  free(s);
+  return ret;
+}
+
 static long get_double(const char * line, double * value)
 {
   int ret,len=0;
@@ -838,7 +883,8 @@ static long find_theta_index(char ** tokens, long cols, const char * wstr)
 
     if (k == m) break;
   }
-  assert(i != cols);
+  if (i == cols)
+    return -1;
 
   return i;
 }
@@ -1024,6 +1070,7 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
   long cols = 0;
   long line_count = 0;
   long bad_count = 0;
+  long na_count = 0;
   long lineno = 0;
   long prevbad = 0;
   long sample_num;
@@ -1063,10 +1110,9 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
   header_tokens_shorten(tokens,token_count);
 
   /* compute number of theta parameters */
-  if (opt_est_theta)
-    for (i = 0; i < snodes_total; ++i)
-      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-        cols += 2;
+  for (i = 0; i < snodes_total; ++i)
+    if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
+      cols += 2;
 
 #if  1
   if (opt_migration && !opt_est_geneflow)
@@ -1120,11 +1166,13 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
     for (i = 0; i < cols; ++i)
     {
-      count = get_double(p,&x);
+      x = -1;
+      count = get_doubleordash(p,&x);
       if (!count)
       {
         if (prevbad || (line_count == 0))
         {
+          printf("i = %ld\n", i);
           if (line_count == 0)
             fprintf(stderr,
                     "ERROR: First record has mismatching number of columns (expected %ld)\n",cols);
@@ -1148,6 +1196,10 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
       p += count;
 
+      /* skip if missing data */
+      if (x == -1)
+        ++na_count;
+
       matrix[i][line_count] = x;
     }
     if (i == cols)
@@ -1159,6 +1211,8 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
   assert(line_count > 0);
   if (bad_count)
     fprintf(stderr, "Skipped a total of %ld erroneous records...\n", bad_count);
+  if (na_count)
+    fprintf(stderr, "Found %ld missing data entries...\n", na_count);
 
   long label_count = sizeof(label) / sizeof(label[0]);
   label_size = (int *)xcalloc((size_t)label_count,sizeof(int));
@@ -1187,8 +1241,17 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
   pname      = (char **)xmalloc((size_t)cols*sizeof(char *));
   pname_mcmc = (char **)xmalloc((size_t)cols*sizeof(char *));
-  long dist_theta = opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA ? 
-                      DIST_INVGAMMA : DIST_GAMMA;
+  long dist_theta = DIST_INVGAMMA;
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+  {
+    if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+      dist_theta = DIST_GAMMA;
+    else
+      assert(opt_theta_prop == BPP_THETA_PROP_MG_INVG);
+  }
+  else
+    assert(opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA);
+
   long dist_phi = DIST_BETA;
   long dist_w = DIST_GAMMA;
 
@@ -1197,21 +1260,19 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
     char * tok = tokens[i];
     long trim_suffix = 0;
     size_t toklen = strlen(tok);
-    //printf("TOKEN: %s\n", tok);
 
     if (toklen > tp_len && !strncmp(tok, theta_prefix, tp_len))
     {
-      //printf("FOUND THETA\n");
       /* theta */
       a1_index[param_count] = i;
-      b1_index[param_count] = i++ + 1;
+      b1_index[param_count] = ++i;
       prdist1[param_count] = dist_theta;
     }
     else if (toklen > pp_len && !strncmp(tok, phi_prefix, pp_len))
     {
       /* phi */
       a1_index[param_count] = i;
-      b1_index[param_count] = i++ + 1;
+      b1_index[param_count] = ++i;
       prdist1[param_count] = dist_phi;
       trim_suffix = 1;
     }
@@ -1219,7 +1280,7 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
     {
       /* W */
       a1_index[param_count] = i;
-      b1_index[param_count] = i+1;
+      b1_index[param_count] = ++i;
 
       a2_index[param_count] = find_theta_index(tokens, cols, tok);
       b2_index[param_count] = a2_index[param_count]+1;
@@ -1227,7 +1288,6 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
       prdist1[param_count] = dist_w;
       prdist2[param_count] = dist_theta;
       trim_suffix = 1;
-      ++i;
     }
     else
     {

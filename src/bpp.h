@@ -156,10 +156,9 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 0
+#define VERSION_PATCH 2
 
-#define PVER_SHA1 "a448e21d86fe595c1fc14574d4df606e31bdf6b6"
-
+#define PVER_SHA1 "1a053a3b61831dc4fb680235a5f6e63e8158ea54"
 /* checkpoint version */
 #define VERSION_CHKP 1
 
@@ -756,7 +755,9 @@ typedef struct gtree_s
 
   /* buffer to store feasible populations where migrants come from during simulation */
   snode_t ** migpops;
-  snode_t ** rb_linked;  /* per-locus affected snodes in new rubberband */
+
+  /* per-locus affected snodes in new rubberband */
+  snode_t ** rb_linked;
   long rb_lcount;
 
   /* per locus migration rate */
@@ -1301,8 +1302,9 @@ extern double opt_vbar_beta;
 extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
-extern long * opt_sp_seqcount;
+extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
+extern long * opt_sp_seqcount;
 extern char * opt_bfdriver;
 extern char * cmdline;
 extern char * opt_a1b1file;
@@ -1535,9 +1537,7 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype,
-                         long mcmc_step,
-                         FILE * fp_a1b1);
+                         long * acceptvec_movetype);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -1650,7 +1650,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
 
 void stree_reset_leaves(stree_t * stree);
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus,long mcmc_step, FILE * fp_a1b1);
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
@@ -3075,8 +3075,8 @@ void cmd_bfdriver();
 void stree_export_pdf(const stree_t * stree);
 
 /* functions in a1b1.c */
-void conditional_to_marginal(double * ai,
-                             double * bi,
+void conditional_to_marginal(double * ai_full,
+                             double * bi_full,
                              long nsamples,
                              long nbins,
                              long cond_dist,
@@ -3091,10 +3091,10 @@ void conditional_to_marginal(double * ai,
                              double * out_effu,
                              double * out_effy);
 
-void conditional_to_marginal_M(double * ai1,
-                               double * bi1,
-                               double * ai2,
-                               double * bi2,
+void conditional_to_marginal_M(double * ai1_full,
+                               double * bi1_full,
+                               double * ai2_full,
+                               double * bi2_full,
                                int nsamples,
                                int nbins,
                                int cond_dist1,

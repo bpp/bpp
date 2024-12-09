@@ -203,9 +203,6 @@ double opt_theta_slide_prob;
 double opt_vbar_alpha;
 double opt_vbar_beta;
 double opt_vi_alpha;
-long * opt_diploid;
-long * opt_print_locus_num;
-long * opt_sp_seqcount;
 char * opt_a1b1file;
 char * opt_bfdriver;
 char * opt_cfile;
@@ -231,6 +228,10 @@ char * opt_treefile;
 double * opt_basefreqs_params;
 double * opt_finetune_theta;
 double * opt_qrates_params;
+long * opt_diploid;
+long * opt_finetune_theta_mask;
+long * opt_print_locus_num;
+long * opt_sp_seqcount;
 migspec_t * opt_mig_specs;
 char ** opt_mig_source;
 char ** opt_mig_target;
@@ -531,7 +532,9 @@ void args_init(int argc, char ** argv)
   opt_finetune_nui = 0.1;
   opt_finetune_tau = 0.001;
   opt_finetune_theta = (double *)xmalloc(sizeof(double));
+  opt_finetune_theta_mask = (long *)xmalloc(sizeof(long));
   opt_finetune_theta[0] = 0.001;
+  opt_finetune_theta_mask[0] = 0;  /* 0: default, 1: specified by user */
   opt_finetune_theta_count = 1;
   opt_finetune_theta_mode = 2;
   opt_help = 0;
@@ -1151,6 +1154,7 @@ int main (int argc, char * argv[])
   }
 
   free(opt_finetune_theta);
+  free(opt_finetune_theta_mask);
   legacy_fini();
   dealloc_switches();
   free(cmdline);

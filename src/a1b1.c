@@ -78,10 +78,10 @@ static void posterior_interval(int nbins,
   EqualTail[1] = x[u0];
 }
 
-void conditional_to_marginal_M(double * ai1,
-                               double * bi1,
-                               double * ai2,
-                               double * bi2,
+void conditional_to_marginal_M(double * ai1_full,
+                               double * bi1_full,
+                               double * ai2_full,
+                               double * bi2_full,
                                int nsamples,
                                int nbins,
                                int cond_dist1,
@@ -123,6 +123,38 @@ void conditional_to_marginal_M(double * ai1,
   #if 0
   starttimer();
   #endif
+
+  double * ai1 = (double *)xmalloc((size_t)nsamples * sizeof(double));
+  double * bi1 = (double *)xmalloc((size_t)nsamples * sizeof(double));
+  double * ai2 = (double *)xmalloc((size_t)nsamples * sizeof(double));
+  double * bi2 = (double *)xmalloc((size_t)nsamples * sizeof(double));
+  
+  /* remove missing data */
+  k = 0;
+  for (i = 0; i < nsamples; ++i)
+  {
+
+    if (ai1_full[i] < 0 || bi1_full[i] < 0)
+    {
+      assert(ai1_full[i] < 0 && bi1_full[i] < 0);
+      continue;
+    }
+
+    if (ai2_full[i] < 0 || bi2_full[i] < 0)
+    {
+      assert(ai2_full[i] < 0 && bi2_full[i] < 0);
+      continue;
+    }
+
+    ai1[k] = ai1_full[i];
+    bi1[k] = bi1_full[i];
+    ai2[k] = ai2_full[i];
+    bi2[k] = bi2_full[i];
+    ++k;
+  }
+  nsamples = k;
+
+
   npoints = nbins * nbins;
   ui1 = (double*)xmalloc((3 * nsamples + 4 * nbins + 2 * npoints)*sizeof(double));
   //if (ui1 == NULL) fatal("oom");
@@ -322,10 +354,14 @@ void conditional_to_marginal_M(double * ai1,
 
   free(ui1);
   free(pdfy);
+  free(ai1);
+  free(bi1);
+  free(ai2);
+  free(bi2);
 }
 
-void conditional_to_marginal(double * ai,
-                             double * bi,
+void conditional_to_marginal(double * ai_full,
+                             double * bi_full,
                              long nsamples,
                              long nbins,
                              long cond_dist,
@@ -358,6 +394,27 @@ void conditional_to_marginal(double * ai,
   #if 0
   starttimer();
   #endif
+
+  double * ai = (double *)xmalloc((size_t)nsamples * sizeof(double));
+  double * bi = (double *)xmalloc((size_t)nsamples * sizeof(double));
+
+  /* remove missing data */
+  k = 0;
+  for (i = 0; i < nsamples; ++i)
+  {
+    if (ai_full[i] < 0 || bi_full[i] < 0)
+    {
+      assert(ai_full[i] < 0 && bi_full[i] < 0);
+      continue;
+    }
+
+    ai[k] = ai_full[i];
+    bi[k] = bi_full[i];
+    ++k;
+  }
+  nsamples = k;
+
+  /* start calculations */
   ui = (double*)xmalloc((nsamples + 4 * nbins) * sizeof(double));
   pdf = ui + nsamples;
   cdf = pdf + nbins;
@@ -492,4 +549,6 @@ void conditional_to_marginal(double * ai,
   *out_c = c;
 
   free(ui);
+  free(ai);
+  free(bi);
 }

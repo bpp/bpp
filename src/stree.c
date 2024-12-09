@@ -1776,10 +1776,13 @@ static int propose_phi_gibbs(stree_t * stree,
 static int propose_phi_slide(stree_t * stree,
                              gtree_t ** gtree,
                              snode_t * snode,
+                             double * a1ptr,
+                             double * b1ptr,
                              long thread_index)
 {
   int accepted;
   int sequp_count;
+  int p,q;
   long i;
   double phinew;
   double phiold;
@@ -1788,8 +1791,6 @@ static int propose_phi_slide(stree_t * stree,
   double lnacceptance;
   double lnphiratio, lnphiratio1;
   double aratio, bratio;
-
-  snode_t * pnode;   /* node that has the phi parameter */
 
   /* Note: snode is the main node */
   assert(!node_is_mirror(snode));
@@ -1802,21 +1803,34 @@ static int propose_phi_slide(stree_t * stree,
      node that has the parameter.
   */
 
-  #if 0
+  p = q = 0;
+  /* get k and n */
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    /* For bidirectional introgression we need to subtract the lineages
+       coming from right. See issue #97 */
+    p += snode->seqin_count[i];
+    if (node_is_bidirection(snode))
+      p -= snode->right->seqin_count[i];
 
-  /* old code before the introduction of has_phi flag */
-  phiold = snode->hphi;
+    q += snode->hybrid->seqin_count[i];
+  }
 
-  #else
-
-  /* new correct code */
-  pnode = snode->has_phi ? snode : snode->hybrid;
+  snode_t * pnode = snode->has_phi ? snode : snode->hybrid;
   assert(pnode->has_phi);
+
+  if (snode != pnode)
+  {
+    p ^= q;
+    q ^= p;
+    p ^= q;
+  }
+
+  /* a1 and b1 */
+  *a1ptr = opt_phi_alpha + p;
+  *b1ptr = opt_phi_beta + q;
+
   phiold = pnode->hphi;
-
-
-  #endif
-
   phinew = phiold + opt_finetune_phi*legacy_rnd_symmetrical(thread_index);
   phinew = reflect(phinew,0,1,thread_index);
 
@@ -2068,11 +2082,13 @@ void stree_propose_phi(stree_t * stree,
       accepted = propose_phi_slide(stree,
                                    gtree,
                                    stree->nodes[offset+i]->hybrid,
+                                   &a1,
+                                   &b1,
                                    thread_index);
       acceptvec[BPP_PHI_MOVE_SLIDE] += accepted;
       movecount[BPP_PHI_MOVE_SLIDE]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t-\t-");
+        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
     }
     else
     {
@@ -2274,9 +2290,11 @@ static void mscm_link_thetas(stree_t* stree)
 
 static void init_theta_stepsize(stree_t * stree)
 {
+  int alloced = 0;
   long i,j;
   unsigned int total_nodes;
   long theta_params = 0;
+  double theta_eps_default = 0.001;
 
   /* theta mode sets the number of steplengths:
 
@@ -2288,10 +2306,19 @@ static void init_theta_stepsize(stree_t * stree)
 
   total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+    if (opt_finetune_theta_mask[i])
+    {
+      alloced = 1;
+      break;
+    }
+
   if (opt_finetune_theta_mode == 1 ||
       opt_linkedtheta == BPP_LINKEDTHETA_ALL ||
       stree->tip_count == 1)
   {
+    if (!alloced)
+      opt_finetune_theta[0] = theta_eps_default;
     /* single step length for all thetas */
     for (i = 0; i < total_nodes; ++i)
       stree->nodes[i]->theta_step_index = 0;
@@ -2300,16 +2327,29 @@ static void init_theta_stepsize(stree_t * stree)
   }
   else
   {
-    double eps = opt_finetune_theta[0];
-
-    free(opt_finetune_theta);
+    if (!alloced)
+      free(opt_finetune_theta);
 
     if (opt_finetune_theta_mode == 2)
     {
       /* two step lengths, one for tips and one for inner nodes */
-      opt_finetune_theta = (double *)xmalloc(2*sizeof(double));
-      opt_finetune_theta[0] = eps/2;
-      opt_finetune_theta[1] = eps*2;
+      if (!alloced)
+      {
+        assert(!opt_finetune_theta_mask[0] && !opt_finetune_theta_mask[1]);
+
+        opt_finetune_theta = (double *)xmalloc(2*sizeof(double));
+        opt_finetune_theta[0] = theta_eps_default/2;
+        opt_finetune_theta[1] = theta_eps_default*2;
+      }
+      else
+      {
+        if (opt_finetune_theta_mask[0] && !opt_finetune_theta_mask[1])
+          opt_finetune_theta[1] = opt_finetune_theta[0]*4;
+        else if (!opt_finetune_theta_mask[0] && opt_finetune_theta_mask[1])
+          opt_finetune_theta[0] = opt_finetune_theta[1]/4;
+        else
+          assert(opt_finetune_theta_mask[0] && opt_finetune_theta_mask[1]);
+      }
 
       for (i = 0; i < total_nodes; ++i)
         if (stree->nodes[i]->linked_theta == NULL)
@@ -2325,18 +2365,28 @@ static void init_theta_stepsize(stree_t * stree)
     {
       /* one step length for each theta */
       for (i = 0; i < total_nodes; ++i)
-        if (stree->nodes[i]->linked_theta == NULL)
+        if (stree->nodes[i]->has_theta && stree->nodes[i]->linked_theta == NULL)
           theta_params++;
+
+      if (alloced)
+      {
+        for (i = theta_params; i < opt_finetune_theta_count; ++i)
+          if (opt_finetune_theta_mask[i])
+            fatal("ERROR: th%ld specified in finetune does not exist", i+1);
+      }
       
-      opt_finetune_theta = (double *)xmalloc((size_t)(theta_params)*sizeof(double));
+      if (!alloced)
+      {
+        opt_finetune_theta = (double *)xcalloc((size_t)(theta_params),sizeof(double));
+      }
       opt_finetune_theta_count = theta_params;
       for (i = 0; i < theta_params; ++i)
-        opt_finetune_theta[i] = eps;
+        if ((alloced && !opt_finetune_theta_mask[i]) || opt_finetune_theta[i] == 0)
+          opt_finetune_theta[i] = theta_eps_default;
 
       for (i = 0, j = 0; i < total_nodes; ++i)
-        if (stree->nodes[i]->linked_theta == NULL)
+        if (stree->nodes[i]->has_theta && stree->nodes[i]->linked_theta == NULL)
           stree->nodes[i]->theta_step_index = j++;
-
     }
   }
 }
@@ -3883,9 +3933,7 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype,
-                         long mcmc_step,
-                         FILE * fp_a1b1)
+                         long * acceptvec_movetype)
 {
   unsigned int i;
   long slide_tip_count = 0;
@@ -3925,9 +3973,6 @@ void stree_propose_theta(gtree_t ** gtree,
           slide_tip_count++;
         else
           slide_inner_count++;
-
-        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-          fprintf(fp_a1b1, "\t-\t-");
       }   
       else                                                  /* gibbs */
       {
@@ -3944,8 +3989,6 @@ void stree_propose_theta(gtree_t ** gtree,
           gibbs_tip_count++;
         else
           gibbs_inner_count++;
-        if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-          fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
       }
     }
   }
@@ -3970,20 +4013,28 @@ void stree_propose_theta(gtree_t ** gtree,
       /* one step size for tip theta and one for inner theta */
       if (opt_theta_slide_prob == 1)
       {
-        acceptvec_slide[0] /= slide_tip_count;
-        acceptvec_slide[1] /= slide_inner_count;
+        if (slide_tip_count)
+          acceptvec_slide[0] /= slide_tip_count;
+        if (slide_inner_count)
+          acceptvec_slide[1] /= slide_inner_count;
       }
       else if (opt_theta_slide_prob == 0)
       {
-        acceptvec_gibbs[0] /= gibbs_tip_count;
-        acceptvec_gibbs[1] /= gibbs_inner_count;
+        if (gibbs_tip_count)
+          acceptvec_gibbs[0] /= gibbs_tip_count;
+        if (gibbs_inner_count)
+          acceptvec_gibbs[1] /= gibbs_inner_count;
       }
       else
       {
-        acceptvec_gibbs[0] /= gibbs_tip_count;
-        acceptvec_gibbs[1] /= gibbs_inner_count;
-        acceptvec_slide[0] /= slide_tip_count;
-        acceptvec_slide[1] /= slide_inner_count;
+        if (gibbs_tip_count)
+          acceptvec_gibbs[0] /= gibbs_tip_count;
+        if (gibbs_inner_count)
+          acceptvec_gibbs[1] /= gibbs_inner_count;
+        if (slide_tip_count)
+          acceptvec_slide[0] /= slide_tip_count;
+        if (slide_inner_count)
+          acceptvec_slide[1] /= slide_inner_count;
       }
       break;
 
@@ -4687,14 +4738,17 @@ static long update_migs(gtree_t * gtree,
 
       x->mi->me[j].old_time = x->mi->me[j].time;
 
+#if 0
       /* mark populations to update logpr */
       #if 0
       assert(x->mi->me[j].source->mark[thread_index]);
       #else
       for (k = 0; k < paffected_count; ++k)
         if (x->mi->me[j].source == affected[k]) break;
+        //if (x->mi->me[j].source == affected[k] || x->mi->me[j].target == affected[k]) break;
       assert(k < paffected_count);
       #endif
+#endif
 
       if (x->mi->me[j].time >= oldage)
       {
@@ -4798,29 +4852,11 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_mig_reject = 0;
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
+    /* use per-locus affected lists if extended rubberband */
     if (opt_exp_imrb)
     {
-      #if 0
-      /* XXX: The below is old code and is wrong */
-      /* new rubberband */
       affected = gtree[i]->rb_linked;
       paffected_count = gtree[i]->rb_lcount;
-      assert(paffected_count >= 3);
-      #else
-      paffected_count = original_count;
-      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
-        stree->nodes[j]->mark[thread_index] = 0;
-        //stree->nodes[j]->mark[thread_index] = (j < original_count) ? 1 : 0;
-      for (j = 0; j < paffected_count; ++j)
-        affected[j]->mark[thread_index] = 1;
-        
-
-      for (j = 0; j < gtree[i]->rb_lcount; ++j)
-        if (!gtree[i]->rb_linked[j]->mark[thread_index])
-          affected[paffected_count++] = gtree[i]->rb_linked[j];
-      /* TODO: 2024-07-01 Debugging check, does the pafffected_count ever get an increase? */
-      assert(paffected_count == original_count); // does this hold?
-      #endif
     }
 
     /* reset marks for updating population msc density contribution */
@@ -4829,21 +4865,6 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
 
     /* mark affected populations with more than one sequences for updating their
        density contribution */
-    #if 0
-    /* XXX: 2024-06-19 Not sure whether to keep it or not */
-    for (j = 0; j < paffected_count; ++j)
-    {
-      /* TODO: 2024-06-19 TF: Is this needed? */
-      /* TODO:
-        I think the below for loop can be made to detect overlaps between populations
-        and thus detect which ones really need to update */
-      affected[j]->mark[thread_index] = 1;
-      /* TODO: This appears to be correct but if I delete any of the two opt_mig_bitmatrix checks, it's wrong */
-      for (k = 0; k < stree->tip_count+stree->inner_count; ++k)
-        if (opt_mig_bitmatrix[k][affected[j]->node_index] || opt_mig_bitmatrix[affected[j]->node_index][k])
-          stree->nodes[k]->mark[thread_index] = 1;
-    }
-    #endif
 
     k = 0;
     locus_count_above = locus_count_below = 0;
@@ -6403,239 +6424,205 @@ static long propose_tau(locus_t ** loci,
   return accepted;
 }
 
-#define RB_MARK 1
-#define RB_INLIST 2
-static long getlinkedpops(stree_t * stree,
-                          gtree_t ** gtree_list,
-                          snode_t * x,
-                          double * bounds,
-                          long round,
-                          snode_t ** linked)
+void fill_linkage_matrix(stree_t * stree,
+                         gtree_t * gtree,
+                         long msa_index,
+                         long ** m,
+                         double tl,
+                         double tu)
 {
-  long i,j,k,m;
-  long lcount = 0;
-  long mfound;
-  long loc_lcount = 0;
-  double tl = bounds[0];
-  double tu = bounds[1];
-  migevent_t * me;
-  dlist_item_t * dli;
-  snode_t ** loc_linked;
-  static const long thread_index_zero = 0;
+  long i,j,k;
+  long total_nodes = stree->tip_count+stree->inner_count;
+  long si,ti;  /* source and target index */
+  dlist_item_t * li;
 
-  snode_t * startx = x;
+  /* zero out matrix */
+  for (i = 0; i < total_nodes; ++i)
+    for (j = 0; j < total_nodes; ++j)
+      m[i][j] = 0;
 
-  /* calculate per locus lists of linked populations to x */
-  for (m = 0; m < opt_locus_count; ++m)
+  /* part I: fill node adjacency matrix according to migration events
+     m[i,j] = 1 : there is at least one migration event between i and j */
+     
+  for (i = 0; i < total_nodes; ++i)
   {
-    x = startx;
-    gtree_t * gtree = gtree_list[m];
+    snode_t * x = stree->nodes[i];
 
-    /* place one of the three affected nodes in the corresponding slot */
-    gtree->rb_linked[round] = x;
-
-    /* if it's the first round of calling this function zero-out the number of
-       linked nodes for the current population. We set it to 3 since the first
-       three slots are reserved for the focal node and its two children */
-    if (round == 0)
-      gtree->rb_lcount = 3;
-
-    loc_linked = gtree->rb_linked + gtree->rb_lcount;
-    loc_lcount = 0;
-
-    /* part "auto-cleaning" the list from the previous MCMC step */
-    loc_linked[0] = NULL;
-
-    /* mark nodes already in the per locus list of linked pops */
-    for (i = 3; i < gtree->rb_lcount; ++i)
-      gtree->rb_linked[i]->mark[thread_index_zero] |= RB_MARK;
-
-    k = 0;
-    while (x)
+    /* it does not matter whether we go through the source or target list. Either way
+       we will visit each migration event exactly once */
+    for (li = x->mig_source[msa_index]->head; li; li = li->next)
     {
-      /* get index of population for which we are looking for its linked pops */
-      j = x->node_index;
-
-      /* look for linked pops */
-      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      migevent_t * me = (migevent_t *)(li->data);
+      if (me->time > tl && me->time < tu)
       {
-        /* skip populations already identified as linked */
-        if (stree->nodes[i]->mark[thread_index_zero] & RB_MARK) continue;
-
-        #if 0
-        /* skip if no migration between the two populations */
-        if (!(gtree->migcount[i][j] || gtree->migcount[j][i])) continue;
-        #endif
-
-        mfound = 0;
-        if (gtree->migcount[i][j])
-        {
-          for (dli = x->mig_source[m]->head; dli; dli = dli->next)
-          {
-            me = (migevent_t *)(dli->data);
-            if (me->target == stree->nodes[i] && me->time > tl && me->time < tu)
-            {
-              mfound = 1;
-              break;
-            }
-          }
-        }
-
-        if (!mfound && gtree->migcount[j][i])
-        {
-          for (dli = x->mig_target[m]->head; dli; dli = dli->next)
-          {
-            me = (migevent_t *)(dli->data);
-            if (me->source == stree->nodes[i] && me->time > tl && me->time < tu)
-            {
-              mfound = 1;
-              break;
-            }
-          }
-        }
-
-        if (!mfound) continue;
-
-        loc_linked[loc_lcount++] = stree->nodes[i];
-        loc_linked[loc_lcount] = NULL;               /* part of auto-cleaning */
-
-        stree->nodes[i]->mark[thread_index_zero] |= RB_MARK;
+        si = me->target->node_index;
+        ti = me->source->node_index;
+        m[si][ti] = m[ti][si] = 1;
       }
-
-      /* move to the next population in the list of linked pops and repeat */
-      x = loc_linked[k++];
-    }
-
-    /* update number of linked populations for current locus */
-    gtree->rb_lcount += loc_lcount;
-
-    /* unmark the nodes already in the per locus list of linked pops */
-    for (i = 3; i < gtree->rb_lcount; ++i)
-      gtree->rb_linked[i]->mark[thread_index_zero] &= ~RB_MARK;
-
-    /* update the list of linked populations */
-    for (i = 0; i < loc_lcount; ++i)
-    {
-      if (loc_linked[i]->mark[thread_index_zero] & RB_INLIST) continue;
-
-      loc_linked[i]->mark[thread_index_zero] |= RB_INLIST;
-      linked[lcount++] = loc_linked[i];
     }
   }
 
-  return lcount;
+  /* part II: Floyd-Warshall */
+  for (k = 0; k < total_nodes; ++k)
+    for (i = 0; i < total_nodes; ++i)
+      for (j = 0; j < total_nodes; ++j)
+        m[i][j] = m[i][j] || (m[i][k] && m[k][j]);
 }
 
 static long rb_bounds(stree_t * stree,
-                      gtree_t ** gtree_list,
+                      gtree_t ** gtree,
                       snode_t * x,
-                      snode_t ** linked,
+                      snode_t ** affected,
                       double * bounds)
 {
-  long i,j,m;
+  long i,j,k;
   long lcount = 0;
-  double tl, tu;
+  long total_nodes = stree->tip_count+stree->inner_count;
+  double init_tl;
+  double init_tu;
+  double final_tl;
+  double final_tu;
+  gtree_t * gt;
+  double * tl;
+  double * tu;
+  long ** m;
+  snode_t ** linked;
 
   static const long thread_index_zero = 0;
 
-  unsigned int total_nodes = stree->tip_count+stree->inner_count;
-
-  /* sanity check -- remove */
+  m = (long **)xmalloc((size_t)total_nodes*sizeof(long *));
   for (i = 0; i < total_nodes; ++i)
-    assert(stree->nodes[i]->mark[thread_index_zero] == 0);
+    m[i] = (long *)xmalloc((size_t)total_nodes*sizeof(long));
+
+  tl = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
+  tu = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
 
   /* 1. Set initial bounds */
-  tu = (x->parent) ? x->parent->tau : 999;
-  tl = MAX(x->left->tau, x->right->tau);
-  
-  bounds[0] = tl; bounds[1] = tu;
+  init_tu = (x->parent) ? x->parent->tau : 999;
+  init_tl = MAX(x->left->tau, x->right->tau);
 
-  /* 2. Find populations linked to X,V,W - both directly and indirectly linked */
-  x->mark[thread_index_zero] = RB_MARK | RB_INLIST;
-  x->left->mark[thread_index_zero] = RB_MARK | RB_INLIST;
-  x->right->mark[thread_index_zero] = RB_MARK | RB_INLIST;
-  linked[0] = x; linked[1] = x->left; linked[2] = x->right;
-  lcount = 3;
+  final_tl = init_tl;
+  final_tu = init_tu;
 
-  lcount += getlinkedpops(stree,gtree_list,x,       bounds,0,linked+lcount);
-  lcount += getlinkedpops(stree,gtree_list,x->left, bounds,1,linked+lcount);
-  lcount += getlinkedpops(stree,gtree_list,x->right,bounds,2,linked+lcount);
-
-  /* cleans marks also on x, x->left and x->right */
-  for (i = 0; i < lcount; ++i)
-    linked[i]->mark[thread_index_zero] = 0;
-
-  /* 3. and 4. merged -- get final upper and lower bounds. Skip first 3 nodes */
-  for (i = 3; i < lcount; ++i)
+  /* calculate linkage matrix for each locus */
+  for (i = 0; i < opt_locus_count; ++i)
   {
-    if (linked[i]->tau < x->tau && linked[i]->parent->tau > x->tau)
-    {
-      if (linked[i]->parent->tau < tu)
-        tu = linked[i]->parent->tau;
-      if (linked[i]->tau > tl)
-        tl = linked[i]->tau;
-    }
-    else if (linked[i]->parent->tau < x->tau)
-    {
-      /* t_a < t_X */
-      if (linked[i]->parent->tau > tl)
-        tl = linked[i]->parent->tau;
-    }
-    else
-    {
-      /* t_b > t_X */
-      assert(linked[i]->tau > x->tau);
-      if (linked[i]->tau < tu)
-        tu = linked[i]->tau;
-    }
-  }
-  bounds[0] = tl; bounds[1] = tu;
+    gt = gtree[i];
+    linked = gt->rb_linked;
 
-  /* 5. Delete unaffected linked populations. Skip first three nodes
-        NOTE: j holds the last empty position */
-  for (j=3, i=3; i < lcount; ++i)
-  {
-    if (linked[i]->tau > tu || linked[i]->parent->tau < tl)
+    /* calculate linkage matrix */
+    fill_linkage_matrix(stree, gt, i, m, init_tl, init_tu);
+
+    /* get affected populations for current locus */
+    gt->rb_linked[0] = x;
+    gt->rb_linked[1] = x->left;
+    gt->rb_linked[2] = x->right;
+    gt->rb_lcount = 3;
+    x->mark[thread_index_zero] = 1;
+    x->left->mark[thread_index_zero] = 1;
+    x->right->mark[thread_index_zero] = 1;
+
+    for (j = 0; j < 3; ++j)
     {
-      linked[i] = NULL;
+      unsigned int p = gt->rb_linked[j]->node_index;
+
+      for (k = 0; k < total_nodes; ++k)
+        if (m[p][k] && !stree->nodes[k]->mark[thread_index_zero])
+        {
+          linked[gt->rb_lcount++] = stree->nodes[k];
+          stree->nodes[k]->mark[thread_index_zero] = 1;
+        }
     }
-    else
+
+    /* reset marks on nodes */
+    for (j = 0; j < total_nodes; ++j)
+      stree->nodes[j]->mark[thread_index_zero] = 0;
+
+    /* get locus-specific lower and upper bound */
+    tl[i] = init_tl; tu[i] = init_tu;
+    /* 3. and 4. merged -- get final upper and lower bounds. Skip first 3 nodes */
+    for (j = 3; j < gt->rb_lcount; ++j)
     {
-      if (i != j)
+      if (linked[j]->tau < x->tau && linked[j]->parent->tau > x->tau)
       {
-        linked[j] = linked[i];
-        linked[i] = NULL;
+        if (linked[j]->parent->tau < tu[i])
+          tu[i] = linked[j]->parent->tau;
+        if (linked[j]->tau > tl[i])
+          tl[i] = linked[j]->tau;
       }
-      ++j;
-    }
-  }
-  lcount = j;
-
-  /* update per locus lists */
-  for (m = 0; m < opt_locus_count; ++m)
-  {
-    snode_t ** loc_linked = gtree_list[m]->rb_linked;
-    long loc_lcount = gtree_list[m]->rb_lcount;
-
-    for (j=3, i=3; i < loc_lcount; ++i)
-    {
-      if (loc_linked[i]->tau > tu || loc_linked[i]->parent->tau < tl)
+      else if (linked[j]->parent->tau < x->tau)
       {
-        loc_linked[i] = NULL;
+        /* t_a < t_X */
+        if (linked[j]->parent->tau > tl[i])
+          tl[i] = linked[j]->parent->tau;
       }
       else
       {
-        if (i != j)
+        /* t_b > t_X */
+        assert(linked[j]->tau > x->tau);
+        if (linked[j]->tau < tu[i])
+          tu[i] = linked[j]->tau;
+      }
+    }
+
+    /* update final bounds with bounds from current locus */
+    if (final_tu > tu[i])
+      final_tu = tu[i];
+    if (final_tl < tl[i])
+      final_tl = tl[i];
+  }
+
+  /* deallocate matrix */
+  for (i = 0; i < total_nodes; ++i)
+    free(m[i]);
+  free(m);
+  free(tl);
+  free(tu);
+
+  /* update locus lists with respect to new bounds */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gt = gtree[i];
+    linked = gt->rb_linked;
+    for (j=3, k=3; k < gt->rb_lcount; ++k)
+    {
+      if (linked[k]->tau > final_tu || linked[k]->parent->tau < final_tl)
+      {
+        linked[k] = NULL;
+      }
+      else
+      {
+        if (k != j)
         {
-          loc_linked[j] = loc_linked[i];
-          loc_linked[i] = NULL;
+          linked[j] = linked[k];
+          linked[k] = NULL;
         }
         ++j;
       }
     }
-    gtree_list[m]->rb_lcount = j;
+    gt->rb_lcount = j;
   }
 
+  bounds[0] = final_tl;
+  bounds[1] = final_tu;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gt = gtree[i];
+    linked = gt->rb_linked;
+
+    for (j = 0; j < gt->rb_lcount; ++j)
+      if (!linked[j]->mark[thread_index_zero])
+      {
+        affected[lcount++] = linked[j];
+        linked[j]->mark[thread_index_zero] = 1;
+      }
+  }
+  /* reset marks on nodes */
+  for (j = 0; j < total_nodes; ++j)
+    stree->nodes[j]->mark[thread_index_zero] = 0;
+
+  assert(affected[0] == x && affected[1] == x->left && affected[2] == x->right);
   return lcount;
 }
 
@@ -10963,54 +10950,74 @@ long snl_expand_and_shrink(stree_t * stree,
     }
     else
     {
-         /* locate additional populations that need to be updated */
+      /* locate additional populations that need to be updated */
     
-         /* find and mark those populations whose number of incoming lineages has
-            changed due to the reset_gene_leaves_count() call, but were previously
-            not marked for log-probability contribution update */
-        for (j = 0; j < snode_contrib_count[i]; ++j)
-          snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
-        for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
-        {
-          snode_t * snode = stree->nodes[j];
+      /* find and mark those populations whose number of incoming lineages has
+         changed due to the reset_gene_leaves_count() call, but were previously
+         not marked for log-probability contribution update */
+      for (j = 0; j < snode_contrib_count[i]; ++j)
+        snode_contrib[j]->mark[thread_index] |= FLAG_POP_UPDATE;
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      {
+        snode_t * snode = stree->nodes[j];
     
-          if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
-              (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
-            snode_contrib[snode_contrib_count[i]++] = snode;
-    
-    
-        }
-    
-        /* now update the log-probability contributions for the affected, marked
-           populations */
-        for (j = 0; j < snode_contrib_count[i]; ++j)
-        {
-          if (opt_est_theta)
-            gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
-          else
-            logpr_notheta -= snode_contrib[j]->notheta_logpr_contrib;
-    
-          double xtmp;
-          
-          if (opt_migration)
-            xtmp = gtree_update_logprob_contrib_mig(snode_contrib[j],
-                                                    stree,
-                                                    gtree_list[i],
-                                                    loci[i]->heredity[0],
-                                                    i,
-                                                    thread_index);
-          else
-            xtmp = gtree_update_logprob_contrib(snode_contrib[j],
-                                                loci[i]->heredity[0],
-                                                i,
-                                                thread_index);
+        if (!(snode->mark[thread_index] & FLAG_POP_UPDATE) &&
+            (snode->seqin_count[i] != original_stree->nodes[j]->seqin_count[i]))
+          snode_contrib[snode_contrib_count[i]++] = snode;
+      }
 
-    
-          if (opt_est_theta)
-            gtree_list[i]->logpr += snode_contrib[j]->logpr_contrib[i];
-          else
-            logpr_notheta += xtmp;
+      #if 1
+      if (opt_est_theta)
+      {
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          gtree_list[i]->logpr -= snode_contrib[j]->logpr_contrib[i];
+          gtree_list[i]->logpr += gtree_update_logprob_contrib(snode_contrib[j],
+                                                               loci[i]->heredity[0],
+                                                               i,
+                                                               thread_index);
         }
+      }
+      else
+      {
+        long * marks = NULL;
+
+        marks = (long *)xcalloc((size_t)(stree->tip_count+stree->inner_count),
+                                sizeof(long));
+
+        /* first step */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          if (!marks[master->node_index])
+          {
+            logpr_notheta -= master->notheta_logpr_contrib;
+            marks[master->node_index] = 1;
+          }
+
+          gtree_update_C2j(snode_contrib[j],loci[i]->heredity[0],i,thread_index);
+        }
+
+        /* reset marks */
+        for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+          marks[j] = 0;
+        
+        /* second part */
+        for (j = 0; j < snode_contrib_count[i]; ++j)
+        {
+          snode_t * master = snode_contrib[j]->linked_theta ?
+                               snode_contrib[j]->linked_theta : snode_contrib[j];
+          
+          if (!marks[master->node_index])
+          {
+            logpr_notheta += update_logpg_contrib(stree,master);
+            marks[master->node_index] = 1;
+          }
+        }
+        free(marks);
+      }
+      #endif
     }
 
     /* 
@@ -11335,9 +11342,7 @@ double migrate_gibbs(stree_t * stree,
                      gtree_t ** gtree,
                      locus_t ** locus,
                      unsigned int si,
-                     unsigned int ti,
-                     double * a1ptr,
-                     double * b1ptr)
+                     unsigned int ti)
 {
   long i;
   long asj = 0;
@@ -11472,9 +11477,6 @@ double migrate_gibbs(stree_t * stree,
   a1 = spec->alpha + asj;
   b1 = spec->beta  + bsj;
 
-  *a1ptr = a1;
-  *b1ptr = b1;
-
   double old_w = spec->M;
   if (opt_mig_specs[mindex].am)
     assert(0);  /* TODO: Go through all loci and propose Mi? */
@@ -11535,9 +11537,7 @@ double migrate_gibbs(stree_t * stree,
 
 static double prop_migrates_gibbs(stree_t * stree,
                                   gtree_t ** gtree,
-                                  locus_t ** locus,
-                                  long mcmc_step,
-                                  FILE * fp_a1b1)
+                                  locus_t ** locus)
 {
   long i,j;
   long accepted = 0;
@@ -11552,16 +11552,12 @@ static double prop_migrates_gibbs(stree_t * stree,
 
       ++total;
 
-      accepted += migrate_gibbs(stree,gtree,locus,i,j,&a1,&b1);
-
-      if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+      accepted += migrate_gibbs(stree,gtree,locus,i,j);
     }
   }
-
   return 1;
 
-  return accepted / (double)total;
+  /* return accepted / (double)total; */
 
 }
 
@@ -11839,10 +11835,10 @@ double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 }
 #endif
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long mcmc_step, FILE * fp_a1b1)
+double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus)
 {
   if (opt_mrate_move == BPP_MRATE_GIBBS && !opt_mig_vrates_exist)
-    return prop_migrates_gibbs(stree,gtree,locus,mcmc_step,fp_a1b1);
+    return prop_migrates_gibbs(stree,gtree,locus);
 
   return prop_migrates_slide(stree,gtree,locus);
 }

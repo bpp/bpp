@@ -33,6 +33,8 @@ static long species_count = 0;
 static const long dna_model_count =  8;
 static const long aa_model_count  = 19;
 
+static const double ft_eps = 1e-5;
+
 /* Important: CUSTOM *MUST* be last in the list */
 static const char * dna_model_name[] = 
  {
@@ -71,6 +73,42 @@ static const char * rate_prior_name[] =
  {
    "Gamma-Dirichlet", "Conditional iid"
  };
+
+static const long ft_labels_count = 16;
+
+static const char * ft_labels[] = 
+ {
+   "Gage", "Gspr", "tau",  "mix",  "lrht", "phis", "pi",   "qmat",
+   "alfa", "mubr", "nubr", "mu_i", "nu_i", "brte", "mrte", "mr_i"
+ };
+
+static double * ft_ptr[] = 
+ {
+   &opt_finetune_gtage,         /*  1 */
+   &opt_finetune_gtspr,         /*  2 */
+   &opt_finetune_tau,           /*  3 */
+   &opt_finetune_mix,           /*  4 */
+   &opt_finetune_locusrate,     /*  5 */
+   &opt_finetune_phi,           /*  6 */
+   &opt_finetune_freqs,         /*  7 */
+   &opt_finetune_qrates,        /*  8 */
+   &opt_finetune_alpha,         /*  9 */
+   &opt_finetune_mubar,         /* 10 */
+   &opt_finetune_nubar,         /* 11 */
+   &opt_finetune_mui,           /* 12 */
+   &opt_finetune_nui,           /* 13 */
+   &opt_finetune_branchrate,    /* 14 */
+   &opt_finetune_migrates,      /* 15 */
+   &opt_finetune_mig_Mi         /* 16 */
+ };
+
+typedef struct theta_eps_pair_s
+{
+  long indexm1;
+  double eps;
+} theta_eps_pair_t;
+
+static list_t * theta_eps_list = NULL;
 
 static void reallocline(size_t newmaxsize)
 {
@@ -421,13 +459,16 @@ static long get_e(const char * line, long * value)
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
+  *value = 1;
+
   /* is it a blank line or comment ? */
   if (!p[ws] || p[ws] == '*' || p[ws] == '#')
   {
     free(s);
-    *value = 0;
     return 0;
   }
+
+  /* there is at least one character */
 
   /* store address of value's beginning */
   char * start = p+ws;
@@ -437,14 +478,20 @@ static long get_e(const char * line, long * value)
 
   *end = 0;
 
-  if ((*start != 'E' && *start != 'e') || (start+1 != end))
+  if (strlen(start) == 3 && !strcasecmp(start,"int"))
+  {
+    *value = 0;
+  }
+  else if (strlen(start) == 1 && (*start == 'E' || *start == 'e'))
+  {
+    *value = 1;
+  }
+  else
   {
     free(s);
     *value = 2;         /* erroneous value */
     return 0;
   }
-
-  *value = 1;
 
   ret = ws + end - start;
   free(s);
@@ -1761,20 +1808,32 @@ l_unwind:
   return ret;
 }
 
-static long parse_finetune(const char * line)
+static long parse_finetune(const char * line, long line_count)
 {
+  long i;
   long ret = 0;
   long count;
   size_t ws;
   char * s = xstrdup(line);
   char * p = s;
+  char * dict = NULL;
+  char * sval;
+  char * sindex = NULL;
+  char * token = NULL;
+  long indexm1;
+
+  if (theta_eps_list)
+  {
+    list_clear(theta_eps_list,free);
+    free(theta_eps_list);
+  }
+  theta_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
 
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
-  /* is it a blank line or comment ? */
   if (p[ws] != '0' && p[ws] != '1') goto l_unwind;
-
+  
   if (p[ws] == '1') opt_finetune_reset = 1;
   else if (p[ws] == '0') opt_finetune_reset = 0;
 
@@ -1786,235 +1845,147 @@ static long parse_finetune(const char * line)
     goto l_unwind;
   }
 
+  /* now read the remaining part of the line and trim comments */
+  if (!get_string(p,&dict)) goto l_unwind;
 
-  /* skip all white-space */
-  ws = strspn(p, " \t\r\n");
+  p = dict;
 
-  /* skip colon */
-  if (p[ws] != ':') goto l_unwind;
+  /* assertion that seqnames contains at least one character and that the last
+     character is not a whitespace */
+  assert(strlen(dict) > 0 && 
+         strcspn(dict+strlen(dict)-1," \t\n\r") > 0);
 
-  p += ws+1;
-
-  /* now read 7 values */
-
-  /* 1. gene tree age finetune param */
-  count = get_doubleordash(p, &opt_finetune_gtage);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
+  while (*p)
   {
-    ret = 1;
-    goto l_unwind;
+    /* read steplength label:value */
+    count = strcspn(p," \t\n\r");
+    if (count == 0) goto l_unwind;
+
+    token = xstrndup(p,count);
+    #if 0
+    printf("  |%s|\n", token);
+    #endif
+
+    p += count;
+    count = strspn(p, " \t\n\r");
+    p += count;
+
+    if (strlen(token) > 2 &&
+        (token[0] == 't' || token[0] == 'T') &&
+        (token[1] == 'h' || token[1] == 'H') &&
+        (token[2] >= '0' && token[2] <= '9'))
+    {
+      /* parse theta */
+
+      /* split token into label, index, value */
+      sindex = token+2;
+      sval = strchr(sindex,':');
+      if (!sval || sval[1] == '\0')
+      {
+        goto l_unwind;
+      }
+
+      sindex = xstrndup(sindex,sval-sindex);
+      if (!get_long(sindex, &indexm1))
+        goto l_unwind;
+      --indexm1;
+
+      ++sval;
+      double val;
+      count = get_double(sval, &val);
+      if (!count) goto l_unwind;
+
+      theta_eps_pair_t * pair = (theta_eps_pair_t *)xmalloc(sizeof(theta_eps_pair_t));
+      pair->indexm1 = indexm1;
+      pair->eps = val;
+
+      list_append(theta_eps_list,(void *)pair);
+    }
+    else
+    {
+      sval = strchr(token,':');
+      if (!sval || sval == token)
+        goto l_unwind;
+      assert(*sval == ':');
+      *sval++ = '\0';
+      if (!*sval)
+        goto l_unwind;
+
+      for (i = 0; i < ft_labels_count; ++i)
+      {
+        if (!strcasecmp(token,ft_labels[i]))
+          break;
+      }
+      if (i == ft_labels_count)
+      {
+        fprintf(stderr, "Cannot find step length %s in list", token);
+        goto l_unwind;
+      }
+
+      count = get_double(sval, ft_ptr[i]); 
+      if (!count) goto l_unwind;
+
+      if (*ft_ptr[i] == 0)
+        *ft_ptr[i] = ft_eps;
+
+    }
+
+    if (token)
+    {
+      free(token);
+      token = NULL;
+    }
+
+    if (sindex)
+    {
+      free(sindex);
+      sindex = NULL;
+    }
   }
-
-  
-  /* 2. gene tree spr finetune param */
-  count = get_doubleordash(p, &opt_finetune_gtspr);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-
-  /* 3. theta finetune param */
-  count = get_doubleordash(p, opt_finetune_theta+0);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 4. tau finetune param */
-  count = get_doubleordash(p, &opt_finetune_tau);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 5. mixing finetune param */
-  count = get_doubleordash(p, &opt_finetune_mix);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 6. locusrate finetune param */
-  count = get_doubleordash(p, &opt_finetune_locusrate);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  #if 0
-  /* TODO: The next is not implemented yet */
-  double opt_finetune_seqerr;
-
-  /* 7. sequence error finetune param */
-  count = get_doubleordash(p, &opt_finetune_seqerr);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-  #endif
-
-  /* 7. phi finetune */
-  count = get_doubleordash(p, &opt_finetune_phi);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 8. freqs finetune */
-  count = get_doubleordash(p, &opt_finetune_freqs);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 9. qrates finetune */
-  count = get_doubleordash(p, &opt_finetune_qrates);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 10. alpha finetune */
-  count = get_doubleordash(p, &opt_finetune_alpha);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 11. mubar finetune */
-  count = get_doubleordash(p, &opt_finetune_mubar);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 12. nubar finetune */
-  count = get_doubleordash(p, &opt_finetune_nubar);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 13. mu_i finetune */
-  count = get_doubleordash(p, &opt_finetune_mui);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 14. nu_i finetune */
-  count = get_doubleordash(p, &opt_finetune_nui);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 15. branchrates finetune */
-  count = get_doubleordash(p, &opt_finetune_branchrate);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  /* 16. migration rate finetune */
-  count = get_doubleordash(p, &opt_finetune_migrates);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  if (is_emptyline(p))
-  {
-    ret = 1;
-    goto l_unwind;
-  }
-
-  if (is_emptyline(p)) ret = 1;
+  ret = 1;
 
 l_unwind:
+  if (!ret)
+    fatal(ANSI_COLOR_RED
+          "%s:%ld:"
+          ANSI_COLOR_RESET
+          " Error when processing option 'finetune'.\n\n"
+          "The syntax for the 'finetune' tag has changed since BPP v4.8.1, adopting a\n"
+          "dictionary-like key:val format where the key specifies the step length and\n"
+          "val the corresponding starting value.\n\n"
+          "Examples:\n\n"
+          "             +-> step lenghts are fixed to the specified values and are not auto adjusted during burnin\n"
+          "             |\n"
+          "  finetune = 0 Gage:5 Gspr:0.001 mix:0.3\n"
+          "  finetune = 1 Gage:5 Gspr:0.001 mix:0.3\n"
+          "             |\n"
+          "             +-> step lengths are set to the specified initial values and are adjusted during burnin\n"
+          "\n"
+          "  finetune = 0    # (no fine tuning, use default values, *NOT RECOMMENDED*)\n"
+          "  finetune = 1    # (fine tuning, use default inital values, default setting)\n\n",
+          opt_cfile, line_count);
+
   free(s);
+  if (token)
+    free(token);
+  if (sindex)
+    free(sindex);
+  if (dict)
+    free(dict);
+
+  #if 0
+  printf("Thetas:\n");
+  list_item_t * li = theta_eps_list->head;
+  while (li)
+  {
+    theta_eps_pair_t * pair = (theta_eps_pair_t *)(li->data);
+    printf("(%ld,%.6f)\n", pair->indexm1, pair->eps);
+    li = li->next;
+  }
+  #endif
   return ret;
-  
 }
+
 
 static long parse_print(const char * line)
 {
@@ -2485,6 +2456,91 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
   return pa;
 }
 
+static void update_theta_finetunes()
+{
+  //double eps = opt_finetune_theta[0];
+  /* allocate proper space for opt_finetune_theta */
+  free(opt_finetune_theta);
+  free(opt_finetune_theta_mask);
+
+  if (opt_finetune_theta_mode == 1)
+    opt_finetune_theta_count = 1;
+  else if (opt_finetune_theta_mode == 2)
+    opt_finetune_theta_count = 2;
+  else
+  {
+    assert(opt_finetune_theta_mode == 3);
+
+    /* HACK: when parsing networks, the call to bpp_parse_newick_string might
+       call set_phi_values() which uses the PRNG, but the PRNG has not yet been
+       allocated/initialized and leads to segfault. By setting opt_cfile=NULL
+       the set_phi_values() is avoided */
+    char * tmpcfile = opt_cfile;
+    opt_cfile = NULL;
+    stree_t * stree = bpp_parse_newick_string(opt_streenewick);
+    opt_cfile = tmpcfile;
+    opt_finetune_theta_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
+    stree_destroy(stree,NULL);
+  }
+
+  opt_finetune_theta = (double *)xmalloc((size_t)opt_finetune_theta_count*
+                                         sizeof(double));
+  opt_finetune_theta_mask = (long *)xcalloc((size_t)opt_finetune_theta_count,
+                                            sizeof(long));
+
+  //opt_finetune_theta[0] = eps;
+  if (!theta_eps_list) return;
+
+  list_item_t * li = theta_eps_list->head;
+  while (li)
+  {
+    theta_eps_pair_t * pair = (theta_eps_pair_t *)(li->data);
+    #if 0
+    printf("(%ld,%.6f)\n", pair->indexm1, pair->eps);
+    #endif
+
+    if (opt_finetune_theta_mode == 1 ||
+        opt_linkedtheta == BPP_LINKEDTHETA_ALL ||
+        species_count == 1)
+    {
+      if (opt_finetune_theta_mode != 1)
+        fprintf(stdout, "Warning: Setting --theta-mode to 1 due to single theta parameter "
+                "(either linked theta or 1 species)\n");
+      opt_finetune_theta_mode = 1;
+
+      if (pair->indexm1 != 0)
+        fatal("Error: The --theta-mode 1 option defines a single step length (th0) "
+              "for all theta parameters.\nHowever the specified finetune option in "
+              "file %s specifies th%ld.\n", opt_cfile, pair->indexm1+1);
+    }
+    else if (opt_finetune_theta_mode == 2)
+    {
+      if (pair->indexm1 != 0 && pair->indexm1 != 1)
+        fatal("Error. The --theta-mode 2 option defines two step lengths: one for tip "
+              "nodes (th0) and one for inner nodes (th1).\nHowever, the finetune option "
+              "in %s file specifies th%ld.\n", opt_cfile, pair->indexm1+1);
+    }
+    else
+    {
+      assert(opt_finetune_theta_mode == 3);
+      /* note: since we don't know how many hybrid nodes of MSC-I model 1 we have
+      (that's the model were the hybridization node might have two thetas), then
+      we set an upper bounds of 3n-2 (i.e. at most # inner node of hybrid events */
+      if (pair->indexm1 < 0 || pair->indexm1 >= opt_finetune_theta_count)
+        fatal("The --theta-mode 3 option defines a unique step length to each theta "
+              "parameter.\nFor the specified species tree in %s, the maximum number of "
+              "theta parameters is %ld.\nHowever, the finetune option in the file "
+              "specifies th%ld.\n", opt_cfile, opt_finetune_theta_count, pair->indexm1+1);
+    }
+
+    opt_finetune_theta[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+    opt_finetune_theta_mask[pair->indexm1] = 1;
+    li = li->next;
+  }
+  list_clear(theta_eps_list,free);
+  free(theta_eps_list);
+}
+
 static void check_validity()
 {
   if (!opt_streenewick)
@@ -2501,8 +2557,8 @@ static void check_validity()
 
   if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
-    if (opt_theta_alpha <= 1)
-      fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 1");
+    if (opt_theta_alpha <= 2)
+      fatal("Alpha value of Inv-Gamma(a,b) of thetaprior must be > 2");
 
     if (opt_theta_beta <= 0)
       fatal("Beta value of Inv-Gamma(a,b) of thetaprior must be > 0");
@@ -2655,6 +2711,11 @@ static void check_validity()
 
   if (opt_datefile && (opt_est_locusrate != MUTRATE_ONLY)) 
 	fatal("locusrate must be 3 for tip dating.\n");
+
+  if (opt_migration && opt_est_stree)
+  {
+    fatal("Species tree estimation under the MSC-M model not available");
+  }
 }
 
 static void update_locusrate_information()
@@ -2964,7 +3025,7 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"finetune",8))
       {
-        if (!parse_finetune(value))
+        if (!parse_finetune(value,line_count))
           fatal("Option 'finetune' in wrong format (line %ld)", line_count);
         valid = 1;
       }
@@ -3227,6 +3288,7 @@ void load_cfile()
   opt_snl_lambda_shrink = log(opt_snl_lambda_shrink) / log(1 - opt_snl_lambda_shrink);
 
   update_locusrate_information();
+  update_theta_finetunes();
   check_validity();
   if (opt_migration)
   {
