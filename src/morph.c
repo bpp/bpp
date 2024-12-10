@@ -118,7 +118,7 @@ static int parse_value_c(FILE * fp, double * trait, int len)
 
 static int state_bin(int x)
 {
-  int std_bin[] = {1,2,4,8,16,32,64,128,256,512,1023,1024};
+  int std_bin[] = {1,2,4,8,16,32,64,128,256,512};
   
   if (x >= 0 && x <= 9)
     return std_bin[x];
@@ -145,13 +145,9 @@ static int parse_value_d(FILE * fp, int * std, int len)
     {
       std[j] = state_bin(c-'0');
     }
-    else if (c == '?')
+    else if (c == '?' || c == '-')
     {
       std[j] = 1023;
-    }
-    else if (c == '-')
-    {
-      std[j] = 1024;
     }
     else // TODO: ambiguity
     {
@@ -238,7 +234,7 @@ static morph_t * parse_trait_part(FILE * fp)
   }
   
 #ifdef DEBUG_Chi
-  printf("\n%d %d %c\t", morph->ntaxa, morph->length, morph->dtype);
+  printf("\n%d %d  %d\t", morph->ntaxa, morph->length, morph->dtype);
   if (morph->dtype == BPP_DATA_CONT)
     printf("%lf %lf\n", morph->v_pop, morph->ldetRs);
   else
@@ -247,10 +243,10 @@ static morph_t * parse_trait_part(FILE * fp)
     printf("%s\t", morph->label[i]);
     if (morph->dtype == BPP_DATA_CONT)
       for (j = 0; j < morph->length; ++j)
-        printf("%lf\t", morph->conti[i][j]);
+        printf("%+lf\t", morph->conti[i][j]);
     else
       for (j = 0; j < morph->length; ++j)
-        printf("%d\t", morph->discr[i][j]);
+        printf("%4d ", morph->discr[i][j]);
     printf("\n");
   }
 #endif
@@ -379,8 +375,11 @@ void trait_destroy(stree_t * stree)
 
   if (stree->trait_nstate)
   {
-    for (n = 0; n < stree->trait_count; ++i)
-      free(stree->trait_nstate[n]);
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      if (stree->trait_nstate[n])
+        free(stree->trait_nstate[n]);
+    }
     free(stree->trait_nstate);
   }
   if (stree->trait_v_pop)
@@ -443,26 +442,27 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       for (j = 0; j < nchar; ++j)
       {
         /* check whether all discrete characters are variable */
-        l = max_state = 0;
+        k = l = max_state = 0;
         for (i = 0; i < stree->tip_count; ++i)
         {
           state = stree->nodes[i]->trait[n]->state_d[j];
-          if (i == 0 || state >= 1023) // ? or -
+          if (state >= 1023) { // ? or -
             l++;
-          else if (state == stree->nodes[0]->trait[n]->state_d[j])
+            if (k == i) k++;
+          }
+          else if (state == stree->nodes[k]->trait[n]->state_d[j])
             l++;
           if (state < 1023 && state > max_state)
             max_state = state;
         }
         if (l == stree->tip_count)
         {
-          /* this happens when all states are the same (constant) */
           fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
           return 0;
         }
         
         /* record the number of states for each character */
-        for (k = 2; state_bin(k) < max_state; ++k);
+        for (k = 2; state_bin(k-1) < max_state; ++k);
         stree->trait_nstate[n][j] = k;
         
         /* record the max number of states of this partition */
@@ -472,6 +472,35 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
   }
   
+#ifdef DEBUG_Chi
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    printf("\n");
+    for (i = 0; i < stree->tip_count; ++i)
+    {
+      snode = stree->nodes[i];
+      printf("%s\t", snode->label);
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf("%4d ", snode->trait[n]->state_d[j]);
+      else
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf("%+lf\t", snode->trait[n]->state_m[j]);
+      printf("\n");
+    }
+    if (stree->trait_type[n] == BPP_DATA_DISC)
+    {
+      printf("#\t");
+      for (j = 0; j < stree->trait_dim[n] +1; ++j)
+        printf("%4d ", stree->trait_nstate[n][j]);
+      printf(" states\n");
+    }
+    else {
+      printf("\n");
+    }
+  }
+#endif
+
   return 1;
 }
 
@@ -631,6 +660,32 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
       }
     }
   }
+
+#ifdef DEBUG_Chi
+  printf("%s\n", snode->label);
+  
+  double ** condprob = snode->trait[idx]->condprob,
+         ** tranprob = snode->trait[idx]->tranprob;
+  for (k = 2; k <= max_state; ++k)
+    printf("k=%d\tp0=%lf\tp1=%lf\n", k, tranprob[k-2][0], tranprob[k-2][1]);
+  for (h = 0; h < nchar; ++h) {
+    printf("ch%d\t", h+1);
+    for (x = 0; x < nstate[h]; ++x)
+      printf("%.2e ", condprob[h][x]);
+    printf("\n");
+  }
+  for (k = 2; k <= max_state; ++k) {
+    for (a = 0; a < k; ++a) // dummy constant chars
+    {
+      printf("dm%d\t", a);
+      j = nchar + k*(k-1)/2 - 1 + a;
+      for (x = 0; x < k; ++x)
+        printf("%.2e ", condprob[j][x]);
+      printf("\n");
+    }
+  }
+  printf("\n");
+#endif
 }
 
 void trait_update(stree_t * stree)
@@ -791,32 +846,6 @@ void trait_restore(stree_t * stree)
     trait_restore_part(n, stree);
 }
 
-void debug_print_trait(int idx, stree_t * stree)
-{
-  int i, j;
-  snode_t * snode;
-  
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    snode = stree->nodes[i];
-    printf("%s\t", snode->label);
-//    printf(" r_k=%lf", snode->pic[idx]->brate);
-//    printf(" v_k=%lf", snode->pic[idx]->brlen);
-//    printf(" m_k:");
-//    for (j = 0; j < stree->trait_dim[idx]; ++j)
-//      printf(" %+lf", snode->pic[idx]->trait[j]);
-//    printf(" x_k:");
-//    for (j = 0; j < stree->trait_dim[idx]; ++j)
-//      printf(" %+lf", snode->pic[idx]->contrast[j]);
-    printf("\n");
-  }
-  
-  printf("cur log(like)=%lf", stree->trait_logl[idx]);
-  printf("\t log(prior)=%lf\n", stree->trait_logpr[idx]);
-  printf("old log(like)=%lf", stree->trait_old_logl[idx]);
-  printf("\t log(prior)=%lf\n", stree->trait_old_logpr[idx]);
-}
-
 static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
 {
   int i, j, p;
@@ -846,7 +875,8 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
   stree->trait_logl[idx] = logl;
 
 #ifdef DEBUG_Chi
-  debug_print_trait(idx, stree);
+  printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
+         stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
 
   return logl;
@@ -854,12 +884,25 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
 
 static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
 {
-  int h, j, a, x;
-  int * nstate, nchar;
-  double prob, p0, logl;
+  int h, j, k, a, x;
+  int * nstate, nchar, max_state;
+  double prob, p0, p[9]={0}, logl;
+  double ** root_prob;
   
   nchar = stree->trait_dim[idx];
   nstate = stree->trait_nstate[idx];
+  max_state = nstate[nchar];
+  root_prob = stree->root->trait[idx]->condprob;
+  
+  /* prob of being constant */
+  for (k = 2; k <= max_state; ++k) {
+    for (a = 0; a < k; ++a)
+    {
+      j = nchar + k*(k-1)/2 - 1 + a;
+      for (x = 0; x < k; ++x)
+        p[k-2] += root_prob[j][x] / k;
+    }
+  }
   
   logl = 0.0;
 
@@ -869,16 +912,10 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
     /* average the conditional probabilities over the root states */
     prob = 0.0;
     for (x = 0; x < nstate[h]; ++x)
-      prob += stree->root->trait[idx]->condprob[h][x] / nstate[h];
+      prob += root_prob[h][x] / nstate[h];
     
     /* correct for the variable coding bias */
-    p0 = 0.0;  // prob of being constant
-    for (a = 0; a < nstate[h]; ++a)
-    {
-      j = nchar + nstate[h]*(nstate[h]-1)/2 - 1 + a;
-      for (x = 0; x < nstate[h]; ++x)
-        p0 += stree->root->trait[idx]->condprob[j][x] / nstate[h];
-    }
+    p0 = p[nstate[h]-2];
 
     logl += log(prob) - log(1-p0);
   }
@@ -886,7 +923,8 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
   stree->trait_logl[idx] = logl;
 
 #ifdef DEBUG_Chi
-  debug_print_trait(idx, stree);
+  printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
+         stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
 
   return logl;
@@ -914,9 +952,11 @@ double logprior_trait(stree_t * stree)
   /* the branch rates follow i.i.d. gamma distributions
      with parameters opt_brate_alpha and opt_brate_beta */
 
+  double logpr_sum = 0.0;
+
   // TODO: calc prior
 
-  return 0.0;
+  return logpr_sum;
 }
 
 static double prop_branch_rates_relax(stree_t * stree)

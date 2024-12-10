@@ -593,8 +593,8 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
-  /* trait related things (per partition):
-     for discrete traits, ;
+  /* trait related things (per partition): branch length, rate, trait values;
+     for discrete traits, it contains transition & conditional probabilities;
      for continuous traits, it contains phylogenetic indepandent contrasts */
   trait_t ** trait;
 
