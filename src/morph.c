@@ -403,11 +403,10 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
   snode_t * snode;
   morph_t * morph;
   
+  /* copy the trait values over */
   for (i = 0; i < stree->tip_count; ++i)
   {
     snode = stree->nodes[i];
-    
-    /* loop over the trait partitions */
     for (n = 0; n < stree->trait_count; ++n)
     {
       morph = morph_list[n];
@@ -415,7 +414,6 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       {
         if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
         {
-          /* copy the trait values over */
           for (j = 0; j < morph->length; ++j) {
             if (morph->dtype == BPP_DATA_CONT)
               snode->trait[n]->state_m[j] = morph->conti[l][j];
@@ -434,6 +432,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
   }
   
+  /* check whether all discrete characters are variable */
   for (n = 0; n < stree->trait_count; ++n)
   {
     if (morph_list[n]->dtype == BPP_DATA_DISC)
@@ -441,7 +440,6 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       nchar = stree->trait_dim[n];
       for (j = 0; j < nchar; ++j)
       {
-        /* check whether all discrete characters are variable */
         k = l = max_state = 0;
         for (i = 0; i < stree->tip_count; ++i)
         {
@@ -702,26 +700,77 @@ void trait_update(stree_t * stree)
   }
 }
 
-void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
+static void trait_alloc_mem(stree_t * stree)
 {
-  int n, i, j;
+  int n, n_part, i, j, nchar;
   snode_t * snode;
   trait_t * trait;
+  
+  n_part = stree->trait_count;
 
-  assert(stree != NULL && morph_list != NULL && n_part > 0);
-  for (n = 0; n < n_part; ++n) assert(morph_list[n] != NULL);
+  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
+  for (n = 0; n < n_part; ++n)
+  {
+    nchar = stree->trait_dim[n];
+    if (stree->trait_type[n] == BPP_DATA_DISC)
+    { /* for the number of states of each character
+         use the last element to store the max number of states */
+      stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
+    }
+  }
+  
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    snode->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
+    for (n = 0; n < n_part; ++n)
+    {
+      snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
+      trait = snode->trait[n];
+      
+      nchar = stree->trait_dim[n];
+      if (stree->trait_type[n] == BPP_DATA_CONT)
+      {
+        trait->state_m  = (double *)xcalloc(nchar, sizeof(double));
+        trait->contrast = (double *)xcalloc(nchar, sizeof(double));
+      }
+      else
+      {
+        trait->state_d  = (int *)xcalloc(nchar, sizeof(int));
+        /* each character has maximally ten states; the last 2+3+...+10=54
+           cells are for storing conditional probs of dummy constant chars
+           of 2, 3, ..., 10 states */
+        trait->condprob = (double **)xcalloc(nchar +54, sizeof(double *));
+        for (j = 0; j < nchar +54; ++j)
+          trait->condprob[j] = (double *)xcalloc(10, sizeof(double));
+        /* store the transition probabilities for characters
+           of 2, 3, ..., 10 states */
+        trait->tranprob = (double **)xcalloc(9, sizeof(double *));
+        for (j = 0; j < 9; ++j)
+          trait->tranprob[j] = (double *)xcalloc(j+2, sizeof(double));
+      }
+    }
+  }
   
   stree->trait_logl = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_old_logl = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_logpr = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_old_logpr = (double *)xcalloc(n_part, sizeof(double));
+}
+
+void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
+{
+  int n, i, j;
+
+  assert(stree != NULL && morph_list != NULL && n_part > 0);
+  for (n = 0; n < n_part; ++n) assert(morph_list[n] != NULL);
   
+  /* set up necessary values and allocate memory */
   stree->trait_count = n_part;
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
-  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
   for (n = 0; n < n_part; ++n) {
     stree->trait_dim[n] = morph_list[n]->length;
     stree->trait_type[n] = morph_list[n]->dtype;
@@ -730,50 +779,8 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
       stree->trait_v_pop[n] = morph_list[n]->v_pop;
       stree->trait_ldetRs[n] = morph_list[n]->ldetRs;
     }
-    else
-    { /* use the last element to store the max number of states */
-      stree->trait_nstate[n] =
-          (int *)xcalloc(morph_list[n]->length +1, sizeof(int));
-    }
   }
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    snode = stree->nodes[i];
-    snode->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
-    for (n = 0; n < n_part; ++n)
-    {
-      snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
-      
-      trait = snode->trait[n];
-      if (morph_list[n]->dtype == BPP_DATA_CONT)
-      {
-        trait->state_m =
-          (double *)xcalloc(morph_list[n]->length, sizeof(double));
-        trait->contrast =
-          (double *)xcalloc(morph_list[n]->length, sizeof(double));
-      }
-      else
-      {
-        trait->state_d =
-             (int *)xcalloc(morph_list[n]->length, sizeof(int));
-        /* each character has maximally ten states; the last 2+3+...+10=54
-           cells are for storing conditional probs of dummy constant chars
-           of 2, 3, ..., 10 states */
-        trait->condprob =
-         (double **)xcalloc(morph_list[n]->length +54, sizeof(double *));
-        for (j = 0; j < morph_list[n]->length +54; ++j)
-          trait->condprob[j] = (double *)xcalloc(10, sizeof(double));
-        /* store the transition probabilities for characters
-           of 2, 3, ..., 10 states */
-        trait->tranprob = (double **)xcalloc(9, sizeof(double *));
-        for (j = 0; j < 9; ++j)
-          trait->tranprob[j] = (double *)xcalloc(j+2, sizeof(double));
-      }
-      
-      /* initialize branch rates */
-      trait->brate = 1.0;
-    }
-  }
+  trait_alloc_mem(stree);
   
   /* fill the trait values for the tip nodes */
   if (!trait_fill_tip(stree, morph_list))
@@ -782,20 +789,13 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     fatal("Error filling traits");
   }
   
-  /* then set up relevant things */
-  for (n = 0; n < n_part; ++n)
-  {
-    if (morph_list[n]->dtype == BPP_DATA_CONT)
-    {
-      /* update the branch lengths and independent contrasts */
-      trait_update_pic_part(n, stree->root, stree);
-    }
-    else
-    {
-      /* update the branch lengths and conditional probabilities */
-      trait_update_cpl_part(n, stree->root, stree);
-    }
-  }
+  /* initialize branch rates */
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+    for (n = 0; n < n_part; ++n)
+      stree->nodes[i]->trait[n]->brate = 1.0;
+  
+  /* then fill up relevant things */
+  trait_update(stree);
 }
 
 static void trait_store_part(int idx, stree_t * stree)
@@ -947,15 +947,45 @@ double loglikelihood_trait(stree_t * stree)
   return logl_sum;
 }
 
+static double logprior_trait_part(int idx, stree_t * stree)
+{
+  int i;
+  double logpr, a, b, x;
+  snode_t * snode;
+
+  logpr = 0.0;
+  
+  /* the branch rates follow i.i.d. gamma distributions
+     with parameters opt_brate_alpha and opt_brate_beta ? */
+  a = opt_brate_alpha;
+  b = opt_brate_beta;
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    
+    /* skip the root */
+    if (!snode->parent)
+      continue;
+    
+    x = snode->trait[idx]->brate;
+ 
+    logpr += a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
+  }
+  
+  stree->trait_logpr[idx] = logpr;
+  
+  return logpr;
+}
+
 double logprior_trait(stree_t * stree)
 {
-  /* the branch rates follow i.i.d. gamma distributions
-     with parameters opt_brate_alpha and opt_brate_beta */
-
+  int n;
   double logpr_sum = 0.0;
 
-  // TODO: calc prior
-
+  for (n = 0; n < stree->trait_count; ++n)
+    logpr_sum += logprior_trait_part(n, stree);
+  
   return logpr_sum;
 }
 
