@@ -6,7 +6,7 @@
 
 #define LABEL_LEN 99
 
-#define DEBUG_Chi 1
+// #define DEBUG_Chi 1
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
@@ -397,111 +397,6 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_old_logpr);
 }
 
-static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
-{
-  int n, i, j, k, l, nchar, state, max_state;
-  snode_t * snode;
-  morph_t * morph;
-  
-  /* copy the trait values over */
-  for (i = 0; i < stree->tip_count; ++i)
-  {
-    snode = stree->nodes[i];
-    for (n = 0; n < stree->trait_count; ++n)
-    {
-      morph = morph_list[n];
-      for (l = 0; l < morph->ntaxa; ++l)
-      {
-        if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
-        {
-          for (j = 0; j < morph->length; ++j) {
-            if (morph->dtype == BPP_DATA_CONT)
-              snode->trait[n]->state_m[j] = morph->conti[l][j];
-            else
-              snode->trait[n]->state_d[j] = morph->discr[l][j];
-          }
-          break;
-        }
-      }
-      if (l == morph->ntaxa)
-      {
-        fprintf(stderr, "Species name %s not found in partition %d\n",
-                snode->label, n+1);
-        return 0;
-      }
-    }
-  }
-  
-  /* check whether all discrete characters are variable */
-  for (n = 0; n < stree->trait_count; ++n)
-  {
-    if (morph_list[n]->dtype == BPP_DATA_DISC)
-    {
-      nchar = stree->trait_dim[n];
-      for (j = 0; j < nchar; ++j)
-      {
-        k = l = max_state = 0;
-        for (i = 0; i < stree->tip_count; ++i)
-        {
-          state = stree->nodes[i]->trait[n]->state_d[j];
-          if (state >= 1023) { // ? or -
-            l++;
-            if (k == i) k++;
-          }
-          else if (state == stree->nodes[k]->trait[n]->state_d[j])
-            l++;
-          if (state < 1023 && state > max_state)
-            max_state = state;
-        }
-        if (l == stree->tip_count)
-        {
-          fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
-          return 0;
-        }
-        
-        /* record the number of states for each character */
-        for (k = 2; state_bin(k-1) < max_state; ++k);
-        stree->trait_nstate[n][j] = k;
-        
-        /* record the max number of states of this partition */
-        if (stree->trait_nstate[n][nchar] < k)
-          stree->trait_nstate[n][nchar] = k;
-      }
-    }
-  }
-  
-#ifdef DEBUG_Chi
-  for (n = 0; n < stree->trait_count; ++n)
-  {
-    printf("\n");
-    for (i = 0; i < stree->tip_count; ++i)
-    {
-      snode = stree->nodes[i];
-      printf("%s\t", snode->label);
-      if (stree->trait_type[n] == BPP_DATA_DISC)
-        for (j = 0; j < stree->trait_dim[n]; ++j)
-          printf("%4d ", snode->trait[n]->state_d[j]);
-      else
-        for (j = 0; j < stree->trait_dim[n]; ++j)
-          printf("%+lf\t", snode->trait[n]->state_m[j]);
-      printf("\n");
-    }
-    if (stree->trait_type[n] == BPP_DATA_DISC)
-    {
-      printf("#\t");
-      for (j = 0; j < stree->trait_dim[n] +1; ++j)
-        printf("%4d ", stree->trait_nstate[n][j]);
-      printf(" states\n");
-    }
-    else {
-      printf("\n");
-    }
-  }
-#endif
-
-  return 1;
-}
-
 static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
 {
   int j;
@@ -690,6 +585,11 @@ void trait_update(stree_t * stree)
 {
   int n;
   
+#ifdef DEBUG_Chi
+  // stree->nodes[3]->tau = 0.13;
+  // stree->nodes[4]->tau = 0.08;
+#endif
+
   /* loop over the trait partitions */
   for (n = 0; n < stree->trait_count; ++n)
   {
@@ -700,19 +600,127 @@ void trait_update(stree_t * stree)
   }
 }
 
-static void trait_alloc_mem(stree_t * stree)
+static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
 {
-  int n, n_part, i, j, nchar;
+  int n, i, j, k, l, nchar, state, max_state;
+  snode_t * snode;
+  morph_t * morph;
+  
+  /* copy the trait values over */
+  for (i = 0; i < stree->tip_count; ++i)
+  {
+    snode = stree->nodes[i];
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      morph = morph_list[n];
+      for (l = 0; l < morph->ntaxa; ++l)
+      {
+        if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
+        {
+          for (j = 0; j < morph->length; ++j) {
+            if (morph->dtype == BPP_DATA_CONT)
+              snode->trait[n]->state_m[j] = morph->conti[l][j];
+            else
+              snode->trait[n]->state_d[j] = morph->discr[l][j];
+          }
+          break;
+        }
+      }
+      if (l == morph->ntaxa)
+      {
+        fprintf(stderr, "Species name %s not found in partition %d\n",
+                snode->label, n+1);
+        return 0;
+      }
+    }
+  }
+  
+  /* check whether all discrete characters are variable */
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    if (morph_list[n]->dtype == BPP_DATA_DISC)
+    {
+      nchar = stree->trait_dim[n];
+      for (j = 0; j < nchar; ++j)
+      {
+        k = l = max_state = 0;
+        for (i = 0; i < stree->tip_count; ++i)
+        {
+          state = stree->nodes[i]->trait[n]->state_d[j];
+          if (state >= 1023) { // ? or -
+            l++;
+            if (k == i) k++;
+          }
+          else if (state == stree->nodes[k]->trait[n]->state_d[j])
+            l++;
+          if (state < 1023 && state > max_state)
+            max_state = state;
+        }
+        if (l == stree->tip_count)
+        {
+          fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
+          return 0;
+        }
+        
+        /* record the number of states for each character */
+        for (k = 2; state_bin(k-1) < max_state; ++k);
+        stree->trait_nstate[n][j] = k;
+        
+        /* record the max number of states of this partition */
+        if (stree->trait_nstate[n][nchar] < k)
+          stree->trait_nstate[n][nchar] = k;
+      }
+    }
+  }
+  
+#ifdef DEBUG_Chi
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    printf("\n");
+    for (i = 0; i < stree->tip_count; ++i)
+    {
+      snode = stree->nodes[i];
+      printf("%s\t", snode->label);
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf("%4d ", snode->trait[n]->state_d[j]);
+      else
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf("%+lf\t", snode->trait[n]->state_m[j]);
+      printf("\n");
+    }
+    if (stree->trait_type[n] == BPP_DATA_DISC)
+    {
+      printf("#\t");
+      for (j = 0; j < stree->trait_dim[n] +1; ++j)
+        printf("%4d ", stree->trait_nstate[n][j]);
+      printf(" states\n");
+    }
+    else {
+      printf("\n");
+    }
+  }
+#endif
+
+  return 1;
+}
+
+static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
+{
+  int n, i, j, nchar;
   snode_t * snode;
   trait_t * trait;
   
-  n_part = stree->trait_count;
-
+  stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
+  
   stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
   for (n = 0; n < n_part; ++n)
   {
-    nchar = stree->trait_dim[n];
-    if (stree->trait_type[n] == BPP_DATA_DISC)
+    nchar = morph_list[n]->length;
+    if (morph_list[n]->dtype == BPP_DATA_DISC)
     { /* for the number of states of each character
          use the last element to store the max number of states */
       stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
@@ -728,8 +736,8 @@ static void trait_alloc_mem(stree_t * stree)
       snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
       trait = snode->trait[n];
       
-      nchar = stree->trait_dim[n];
-      if (stree->trait_type[n] == BPP_DATA_CONT)
+      nchar = morph_list[n]->length;
+      if (morph_list[n]->dtype == BPP_DATA_CONT)
       {
         trait->state_m  = (double *)xcalloc(nchar, sizeof(double));
         trait->contrast = (double *)xcalloc(nchar, sizeof(double));
@@ -760,17 +768,16 @@ static void trait_alloc_mem(stree_t * stree)
 
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 {
-  int n, i, j;
+  int n, i;
 
   assert(stree != NULL && morph_list != NULL && n_part > 0);
   for (n = 0; n < n_part; ++n) assert(morph_list[n] != NULL);
   
-  /* set up necessary values and allocate memory */
+  /* allocate necessary memory */
+  trait_alloc_mem(stree, morph_list, n_part);
+
+  /* set up values */
   stree->trait_count = n_part;
-  stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
-  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
   for (n = 0; n < n_part; ++n) {
     stree->trait_dim[n] = morph_list[n]->length;
     stree->trait_type[n] = morph_list[n]->dtype;
@@ -780,7 +787,6 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
       stree->trait_ldetRs[n] = morph_list[n]->ldetRs;
     }
   }
-  trait_alloc_mem(stree);
   
   /* fill the trait values for the tip nodes */
   if (!trait_fill_tip(stree, morph_list))
@@ -916,6 +922,8 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
     
     /* correct for the variable coding bias */
     p0 = p[nstate[h]-2];
+    /* note: MrBayes uses p[0] for all characters, including those
+       with more than two states (is that a good approximation?) */
 
     logl += log(prob) - log(1-p0);
   }
