@@ -6168,17 +6168,14 @@ static long propose_tau(locus_t ** loci,
 
   if (opt_traitfile)  //Chi
   {
-    /* TODO: this can be optimized. Instead of calculating the full likelihood,
-       calculate the normal densities at the current node and its ancestors all
-       the way to the root.  */
-    
-    /* update the contrasts as node age (tau) has been changed */
+    /* update the contrasts (continuous) or conditional probs (discrete)
+       as node age (tau) has been changed */
     trait_update(stree);
     
     /* then calculate the log likelihood difference */
     for (i = 0; i < stree->trait_count; ++i)
-      logl_diff -= stree->trait_old_logl[i];
-    logl_diff += loglikelihood_trait(stree);
+      lnacceptance -= stree->trait_old_logl[i];
+    lnacceptance += loglikelihood_trait(stree);
   }
 
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +

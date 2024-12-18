@@ -102,6 +102,7 @@ static int parse_value_c(FILE * fp, double * trait, int len)
     }
     else if (c == '?') // missing value
     {
+      // TODO: deal with missing data
       trait[j] = sqrt(-1); // nan
     }
     else // positive value
@@ -145,7 +146,7 @@ static int parse_value_d(FILE * fp, int * std, int len)
     {
       std[j] = state_bin(c-'0');
     }
-    else if (c == '?' || c == '-')
+    else if (c == '?' || c == '-')  // treat gap as missing
     {
       std[j] = 1023;
     }
@@ -430,8 +431,20 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
        same variance and the population noise has variance of v_pop.
        Alvarez-Carretero et al. 2019. p.970. */
     v_pop = stree->trait_v_pop[idx];
+    assert(v_k > 0 || v_pop > 0);
     snode->trait[idx]->brlen = v_k + v_pop;
   }
+
+#ifdef DEBUG_Chi2
+  printf("%s\t v'=%lf\n", snode->label, snode->trait[idx]->brlen);
+  for (j = 0; j < stree->trait_dim[idx]; ++j) {
+    printf("m'=%lf ", snode->trait[idx]->state_m[j]);
+    if (snode->left)
+      printf("x=%lf", snode->trait[idx]->contrast[j]);
+    printf("\n");
+  }
+  printf("\n");
+#endif
 }
 
 static void trait_trprob_mk(double ** p, double v, int max_state)
@@ -457,6 +470,10 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
     v = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
   else
     v = 0.0;
+  
+  // this is a hack to avoid log likelihood becoming nan
+  if (v < 1e-8) v = 1e-8;
+  
   snode->trait[idx]->brlen = v;
 
   nchar = stree->trait_dim[idx];
@@ -466,6 +483,7 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
   /* calculate the transition probabilities */
   trait_trprob_mk(snode->trait[idx]->tranprob, v, max_state);
 
+  // TODO: this can be optimized by grouping character patterns
   /* pruning algorithm */
   if (snode->left && snode->right)  /* internal node */
   {
@@ -554,7 +572,7 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
     }
   }
 
-#ifdef DEBUG_Chi
+#ifdef DEBUG_Chi2
   printf("%s\n", snode->label);
   
   double ** condprob = snode->trait[idx]->condprob,
@@ -584,6 +602,9 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 void trait_update(stree_t * stree)
 {
   int n;
+  
+  /* TODO: this can be optimized. Instead of updating all nodes,
+     update the modified node and its ancestors all the way to the root. */
   
 #ifdef DEBUG_Chi
   // stree->nodes[3]->tau = 0.13;
@@ -673,7 +694,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
   }
   
-#ifdef DEBUG_Chi
+#ifdef DEBUG_Chi2
   for (n = 0; n < stree->trait_count; ++n)
   {
     printf("\n");
@@ -892,7 +913,7 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
 {
   int h, j, k, a, x;
   int * nstate, nchar, max_state;
-  double prob, p0, p[9]={0}, logl;
+  double prob, p_c, p[9]={0}, logl;
   double ** root_prob;
   
   nchar = stree->trait_dim[idx];
@@ -921,11 +942,11 @@ static double loglikelihood_trait_d_mkv(int idx, stree_t * stree)
       prob += root_prob[h][x] / nstate[h];
     
     /* correct for the variable coding bias */
-    p0 = p[nstate[h]-2];
+    p_c = p[nstate[h]-2];
     /* note: MrBayes uses p[0] for all characters, including those
        with more than two states (is that a good approximation?) */
 
-    logl += log(prob) - log(1-p0);
+    logl += log(prob) - log(1 - p_c);
   }
 
   stree->trait_logl[idx] = logl;

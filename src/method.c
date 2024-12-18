@@ -5710,31 +5710,31 @@ void cmd_run()
           for (j = 0; j < opt_locus_count; ++j) {
             if (!printLocusIndex || printLocusIndex[j])
               gtree_offset[j] = ftell(fp_gtree[j]);
-	    else 
+            else 
               gtree_offset[j] = 0;
-	  }
-	}
+          }
+        }
 
         /* if gene tree printing is enabled get current file offsets */
         if (printLocusIndex) {
           for (j = 0; j < opt_locus_count; ++j) {
             if (printLocusIndex[j]) {
-		    fflush(stdout);
+              fflush(stdout);
               mig_offset[j] = ftell(fp_mig[j]);
-	    }
-	    else 
+            }
+            else 
               mig_offset[j] = 0;
-	  }
-	}
+          }
+        }
 
         /* if relaxed clock is enabled get offsets for rates files */
         if (opt_print_locusfile)
           for (j = 0; j < opt_locus_count; ++j) {
             if (!printLocusIndex || printLocusIndex[j])
               rates_offset[j] = ftell(fp_locus[j]);
-	    else 
+            else 
               rates_offset[j] = 0;
-	  }
+          }
 
         checkpoint_dump(stree,
                         gtree,
