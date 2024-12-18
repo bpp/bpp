@@ -5418,7 +5418,6 @@ static long propose_tau(locus_t ** loci,
   #ifdef OLD_CODE
   unsigned int offset = 0;
   #endif
-  int theta_method = 3;   /* how we change theta */
   long accepted = 0;
   double oldage, newage;
   double minage = 0, maxage = 999;
@@ -5438,8 +5437,6 @@ static long propose_tau(locus_t ** loci,
   snode_t ** theta_list = NULL;
 
   oldage = snode->tau;
-
-  theta_method = opt_rb_theta_update;
 
   /* compute minage and maxage bounds */
   if (opt_msci && snode->hybrid)
@@ -5738,7 +5735,7 @@ static long propose_tau(locus_t ** loci,
   for (j = 0; j < paffected_count; ++j)
     affected[j]->flag |= SN_AFFECT;
 
-  if (opt_est_theta && theta_method)
+  if (opt_est_theta && opt_rb_theta_update)
   {
     snode_t ** snodes = stree->nodes;
 
@@ -6233,7 +6230,7 @@ static long propose_tau(locus_t ** loci,
       }
     }
 
-    if (opt_est_theta && theta_method)
+    if (opt_est_theta && opt_rb_theta_update)
     {
       /* the -1 check is due to network code (when snode is hybridization with
          its two parents having no tau) */
@@ -6408,7 +6405,7 @@ static long propose_tau(locus_t ** loci,
   for (i = 0; i < theta_count; ++i)
     theta_list[i]->flag = 0;
 
-  if (!opt_est_theta || (opt_linkedtheta && theta_method))
+  if (!opt_est_theta || (opt_linkedtheta && opt_rb_theta_update))
   {
     free(marks);
     if (opt_est_theta)

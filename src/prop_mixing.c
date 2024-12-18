@@ -67,6 +67,7 @@ void prop_mixing_update_gtrees(locus_t ** locus,
   double logpr = 0;
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
 
+  
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
     gtree_t * gt = gtree[i];
@@ -142,27 +143,29 @@ void prop_mixing_update_gtrees(locus_t ** locus,
       }
       else
       {
-        #if 0
-        logpr = gtree_logprob(stree,locus[i]->heredity[0],i,thread_index);
-        #else
         logpr = 0;
         for (j = 0; j < nodes_count; ++j)
         {
           snode_t * x = stree->nodes[j];
+
           x->old_C2ji[i] = x->C2ji[i];
           x->C2ji[i] *= c;
+
+          double oldtheta = opt_mix_theta_update ? x->old_theta : x->theta;
+
           x->old_logpr_contrib[i] = x->logpr_contrib[i];
-          if (x->old_C2ji[i] > 0 && x->old_theta > 0)
-            x->logpr_contrib[i] += (x->old_C2ji[i]/x->old_theta - x->C2ji[i]/x->theta) /
+
+          if (x->old_C2ji[i] > 0 && oldtheta > 0)
+            x->logpr_contrib[i] += (x->old_C2ji[i]/oldtheta - x->C2ji[i]/x->theta) /
                                    locus[i]->heredity[0];
-          if (x->coal_count[i])
+          if (x->coal_count[i] && opt_mix_theta_update)
           {
-            x->logpr_contrib[i] += x->coal_count[i]*log(x->old_theta*locus[i]->heredity[0]);
+            x->logpr_contrib[i] += x->coal_count[i]*log(oldtheta*locus[i]->heredity[0]);
             x->logpr_contrib[i] -= x->coal_count[i]*log(x->theta*locus[i]->heredity[0]);
           }
+
           logpr += x->logpr_contrib[i];
         }
-        #endif
       }
     }
     else
@@ -170,29 +173,17 @@ void prop_mixing_update_gtrees(locus_t ** locus,
       if (opt_migration)
         fatal("Integrating out thetas for IM model not implemented yet");
 
-      #if 0
-      for (j = 0; j < nodes_count; ++j)
-      {
-        logpr -= stree->nodes[j]->notheta_logpr_contrib;
-        logpr += gtree_update_logprob_contrib(stree->nodes[j],
-                                              locus[i]->heredity[0],
-                                              i,
-                                              thread_index);
-      }
-      #else
-      #if 0
-      for (j = 0; j < nodes_count; ++j)
-        gtree_update_C2j(stree->nodes[j],locus[i]->heredity[0],i,thread_index);
-      #else
       for (j = 0; j < nodes_count; ++j)
       {
         snode_t * x = stree->nodes[j];
         x->old_C2ji[i] = x->C2ji[i]; 
         x->C2ji[i] *= c;
       }
-      
-      #endif
-      #endif
+
+      /* NOTE: logpr is updated *outside* of this function, and then difference
+         of logpr's added to lnacceptance. This is because of the two step
+         update (first update C2j for all nodes, and then PG) when integrating
+         out thetas */
     }
 
     if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_LOGNORMAL)
@@ -285,19 +276,14 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 {
   unsigned i,j,k;
   long n;
-  unsigned int theta_count=0;
   unsigned int tau_count=0;
   double lnc,c;
   double logpr = 0;
   double lnacceptance;
   double new_w, old_w;
   long accepted = 0;
-  long theta_method = 1;
   long mig_method = 1;
 
-  theta_method = opt_mix_theta_update;
-  if (opt_theta_slide_prob == 1)
-    theta_method = 0;
   mig_method = opt_mix_w_update;
   if (opt_mig_vrates_exist)
     mig_method = 0;
@@ -305,17 +291,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   const long thread_index = 0;
 
   size_t nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count; 
-
-  /* TODO: Account for method 11 / rj-MCMC */
-  if (opt_est_theta)
-  {
-    /* TODO: Precompute how many theta parameters we have for A00 */
-    for (i = 0; i < nodes_count; ++i)
-      if (stree->nodes[i]->theta > 0 && !stree->nodes[i]->linked_theta)
-        theta_count++;
-  }
-  else
-    theta_count = 0;
 
   if (opt_msci)
   {
@@ -339,11 +314,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   for (i=0,k=0; i < stree->locus_count; ++i)
     k += gtree[i]->inner_count; 
 
-  if (theta_method)
-    lnacceptance = (tau_count + k)*lnc;
-  else
-    lnacceptance = (theta_count + tau_count + k)*lnc;
-    
+  lnacceptance = (tau_count + k)*lnc;
 
   /* account for migration events */
   if (opt_migration)
@@ -365,7 +336,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     snodes[i] = stree->nodes[i];
 
   /* change thetas */
-  if (opt_est_theta && theta_method)
+  if (opt_est_theta && opt_mix_theta_update)
   {
     for (i = 0; i < nodes_count; ++i)
     {
@@ -450,27 +421,6 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         lnacceptance += logPDFRatioGamma(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
       else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
         lnacceptance += logPDFRatioInvG(newtheta, oldtheta, opt_theta_alpha, opt_theta_beta);
-    }
-  }
-  else if (opt_est_theta)
-  {
-    for (i = 0; i < nodes_count; ++i)
-    {
-      if (snodes[i]->theta <= 0 || snodes[i]->linked_theta) continue;
-
-      snodes[i]->old_theta = snodes[i]->theta;
-      snodes[i]->theta *= c;
-
-      if (snodes[i]->linked_theta) continue;
-
-      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        lnacceptance += (-opt_theta_alpha-1)*lnc -
-                     opt_theta_beta*(1/snodes[i]->theta-1/snodes[i]->old_theta);
-      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        lnacceptance += (opt_theta_alpha-1)*lnc -
-                       opt_theta_beta*(snodes[i]->theta - snodes[i]->old_theta);
-      else
-        fatal("Invalid theta prior");
     }
   }
 
@@ -749,7 +699,8 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         /* TODO: Note that, it is both faster and more precise to restore the old
            value from memory, than re-computing it with a division. For now, we
            use the division here to be compatible with the old bpp */
-        snodes[i]->theta = snodes[i]->old_theta;
+        if (opt_mix_theta_update)
+          snodes[i]->theta = snodes[i]->old_theta;
       }
     }
     else
