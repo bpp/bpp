@@ -150,9 +150,21 @@ static int parse_value_d(FILE * fp, int * std, int len)
     {
       std[j] = 1023;
     }
-    else // TODO: ambiguity
+    else if (c == '{' || c == '(')  // ambiguity
     {
-      fprintf(stderr, "Unrecognized trait value (%c)\n", c);
+      std[j] = 0;
+      while ((c = get_nb_char(fp)) != '}' && c != ')')
+        if (isdigit(c))
+          std[j] |= state_bin(c-'0');
+        
+      if (std[j] == 0) {
+        fprintf(stderr, "Misspecified ambiguity state at %d\n", j+1);
+        return 0;
+      }
+    }
+    else
+    {
+      fprintf(stderr, "Unrecognized trait value (%c) at %d\n", c, j+1);
       return 0;
     }
   }
@@ -684,7 +696,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         }
         
         /* record the number of states for each character */
-        for (k = 2; state_bin(k-1) < max_state; ++k);
+        for (k = 2; state_bin(k) <= max_state; ++k);
         stree->trait_nstate[n][j] = k;
         
         /* record the max number of states of this partition */
