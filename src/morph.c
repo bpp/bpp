@@ -142,7 +142,7 @@ static int parse_value_d(FILE * fp, int * std, int len)
     if (c == EOF)
       return 0;
     
-    if (isdigit(c))
+    if (isdigit(c))  // 0-9
     {
       std[j] = state_bin(c-'0');
     }
@@ -222,7 +222,7 @@ static morph_t * parse_trait_part(FILE * fp)
   
   /* read morphological traits of each species,
      assuming each line has a label followed by m->length numbers.
-     morph->trait has dimension m->count * m->length */
+     trait matrix has dimension m->ntaxa * m->length */
   for (i = 0; i < morph->ntaxa; ++i)
   {
     /* read the label (species name) */
@@ -440,7 +440,7 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
   {
     v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
     /* the trait matrix has been standardized so that all characters have the
-       same variance and the population noise has variance of v_pop.
+       same variance and the population noise has variance of v_pop (1.0).
        Alvarez-Carretero et al. 2019. p.970. */
     v_pop = stree->trait_v_pop[idx];
     assert(v_k > 0 || v_pop > 0);
@@ -495,7 +495,7 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
   /* calculate the transition probabilities */
   trait_trprob_mk(snode->trait[idx]->tranprob, v, max_state);
 
-  // TODO: this can be optimized by grouping character patterns
+  // TODO: this can be optimized by grouping characters by patterns
   /* pruning algorithm */
   if (snode->left && snode->right)  /* internal node */
   {
