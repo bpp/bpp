@@ -2116,15 +2116,10 @@ l_unwind:
   if (!rc)
     fatal("Error while reading/summarizing %s", opt_mcmcfile);
 
-
   if (opt_a1b1file)
   {
-    fprintf(stdout,
-            "\nSummarizing parameter estimates using file %s ...\n\n",
-            opt_a1b1file);
-    fprintf(fp_out,
-            "\nSummarizing parameter estimates using file %s ...\n\n",
-            opt_a1b1file);
+    fprintf(stdout, "\nSummarizing parameter estimates using file %s ...\n\n", opt_a1b1file);
+    fprintf(fp_out, "\nSummarizing parameter estimates using file %s ...\n\n", opt_a1b1file);
     summarize_a1b1(stree,fp_out);
   }
 }
