@@ -154,6 +154,7 @@ void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map)
       msa->amb_sites_count++;
   }
 }
+
 static int * mark_ambiguous_sites(msa_t * msa, const unsigned int * map)
 {
   int i,j;

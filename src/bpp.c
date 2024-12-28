@@ -144,6 +144,7 @@ long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
 long opt_usedata;
+long opt_usedata_fix_gtree; 
 long opt_version;
 long opt_extend;
 double opt_alpha_alpha;
@@ -569,7 +570,7 @@ void args_init(int argc, char ** argv)
   opt_partition_list = NULL;
   opt_phi_alpha = 0;
   opt_phi_beta = 0;
-  opt_phi_slide_prob = 0.2;
+  opt_phi_slide_prob = 0.1;
   opt_print_a1b1 = 1;  /* the default is to print into conditional_a1b1.txt */
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
@@ -621,12 +622,13 @@ void args_init(int argc, char ** argv)
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_prop = -1;
   opt_theta_gibbs_showall_eps = 0;
-  opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
+  opt_theta_slide_prob = 0.1; /* proportion of sliding window proposals */
   opt_threads = 1;
   opt_threads_start = 1;
   opt_threads_step = 1;
   opt_treefile = NULL;
   opt_usedata = 1;
+  opt_usedata_fix_gtree = 0;
   opt_version = 0;
   opt_extend = 0;
   opt_seqAncestral = 0; 
@@ -1037,8 +1039,8 @@ void cmd_help()
           "  --theta-eps-mode INTEGER step lengths for theta proposals (default: 1)\n"
           "  --theta-prop STRING      proposal distribution for theta gibbs move\n"
           "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
-          "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.2)\n"
-          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.2)\n"
+          "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.1)\n"
+          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.1)\n"
           "  --mrate-move STRING      'gibbs' or 'slide' sampling of migration rate W\n"
           "\n"
          );

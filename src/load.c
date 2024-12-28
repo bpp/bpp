@@ -470,11 +470,14 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'opt_sp_seqcount'");
 
   /* read usedata, cleandata and nloci */
-  if (!LOAD(&opt_usedata,1,fp))
+  if (!LOAD(&opt_usedata, 1, fp))
     fatal("Cannot read 'usedata' tag");
-  #if 0
+  if (!LOAD(&opt_usedata_fix_gtree, 1, fp))
+    fatal("Cannot read 'usedata_fix_gtree' tag");
+#if 0
   printf(" usedata: %ld\n", opt_usedata);
-  #endif
+  printf(" usedata_fix_gtree: %ld\n", opt_usedata_fix_gtree);
+#endif
   if (!LOAD(&opt_cleandata,1,fp))
     fatal("Cannot read 'cleandata' tag");
   #if 0

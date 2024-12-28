@@ -2553,7 +2553,7 @@ static void check_validity()
     fatal("Invalid method");
 
   if (!opt_usedata && opt_bfbeta != 1)
-    fatal("Cannot use option option 'BayesFactorBeta' when usedata=0");
+    fatal("Cannot use option 'BayesFactorBeta' when usedata = 0");
 
   if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
@@ -2813,7 +2813,6 @@ void load_cfile()
   long line_not_processed = 0;
 
   fp = xopen(opt_cfile,"r");
-
   while (line_not_processed || getnextline(fp))
   {
     int valid = 0;
@@ -2955,10 +2954,13 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"usedata",7))
       {
-        if (!parse_long(value,&opt_usedata) ||
-            (opt_usedata != 0 && opt_usedata != 1))
-          fatal("Option 'usedata' expects value 0 or 1 (line %ld)",
-                line_count);
+        if (!parse_long(value, &opt_usedata) ||
+            (opt_usedata != 0 && opt_usedata != 1 && opt_usedata != 2))
+          fatal("Option 'usedata' expects value 0 or 1 or 2 (line %ld)", line_count);
+        if (opt_usedata == 2) {
+          opt_usedata = 0;
+          opt_usedata_fix_gtree = 1;
+        }
         valid = 1;
       }
       else if (!strncasecmp(token,"nsample",7))

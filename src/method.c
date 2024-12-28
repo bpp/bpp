@@ -2517,21 +2517,10 @@ static void create_mig_bitmatrix(stree_t * stree)
         break;
     }
 
-    #if 0
-    /* TF: Debug 2023-06-19 */
-
-    /* set migration rate to prior mean */
-    spec->M = spec->alpha / spec->beta;
-    #else
-
     /* 2024-07-31 -- Decided that setting W to 1 is best */
-    /*
-    spec->M = spec->alpha / spec->beta *
-                          (0.9 + 0.2*legacy_rndu(thread_index_zero));
-    */
-
     spec->M = 1;
-    #endif
+    if(opt_usedata_fix_gtree)
+      spec->M = spec->alpha / spec->beta;
 
     /* if rate variation across loci then allocate array */
     if (spec->params == 1 || spec->params == 3 || spec->params == 5)
@@ -2541,16 +2530,13 @@ static void create_mig_bitmatrix(stree_t * stree)
       double a = spec->am;
       double b = spec->am / spec->M;
       for (j = 0; j < opt_locus_count; ++j)
-        spec->Mi[j] = legacy_rndgamma(thread_index_zero,a) / b;
+        spec->Mi[j] = 0.8*spec->M + 0.2*legacy_rndgamma(thread_index_zero,a) / b;
 
       /* set flag that indicates stree->nodes[t]->migbuffer[...]->mrsum must be
          an array of size opt_locus_count */
       stree->nodes[t]->mb_mrsum_isarray = 1;
-
     }
-
   }
-
 }
 
 static FILE * resume(stree_t ** ptr_stree,
@@ -3014,6 +3000,10 @@ static FILE * init(stree_t ** ptr_stree,
   /* load species tree */
   stree = load_tree_or_network();
   printf(" Done\n");
+
+  /* check the option usedata = 2 */
+  if (opt_usedata_fix_gtree && (opt_est_stree || opt_est_delimit))
+    fatal("opt_usedata = 2 (fixing gene trees) works with MSC-A00, no gene flow, only");
 
   if (opt_msci && opt_migration)
     fatal(BPP_ERROR " Cannot use isolation with migration (IM) and "
@@ -3485,8 +3475,10 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_a1b1file)
   {
     if (opt_est_stree || opt_est_delimit) opt_print_a1b1 = 0;
-
+   
+    /* 
     if (!opt_usedata) opt_print_a1b1 = 0;
+    */
 
     if (!opt_print_a1b1)
     {
@@ -4423,7 +4415,7 @@ void cmd_run()
   long * mig_offset = NULL;     /* for checkpointing when printing migration event */
   long * rates_offset = NULL;
   long * migcount_offset = NULL;
-  double ratio;
+  double ratio = 0;
   long ndspecies;
   double gf_acc = 0;
   double gf_acc_flip = 0;
@@ -4541,10 +4533,10 @@ void cmd_run()
     /* allocate mean_mrate, mean_tau, mean_theta */
     if (opt_migration && !opt_est_geneflow)
     {
-      long mig_size    = MIN(MAX_MRATE_OUTPUT,opt_migration_count);
-      mean_mrate_row   = (long *)xcalloc((size_t)mig_size,sizeof(long));
-      mean_mrate_col   = (long *)xcalloc((size_t)mig_size,sizeof(long));
-      mean_mrate_round = (long *)xcalloc((size_t)mig_size,sizeof(long));
+      long mig_size    = MIN(MAX_MRATE_OUTPUT, opt_migration_count);
+      mean_mrate_row   = (long *)xcalloc((size_t)mig_size, sizeof(long));
+      mean_mrate_col   = (long *)xcalloc((size_t)mig_size, sizeof(long));
+      mean_mrate_round = (long *)xcalloc((size_t)mig_size, sizeof(long));
       mean_mrate       = (double *)xcalloc((size_t)mig_size, sizeof(double));
 
       fill_mean_mrate_indices(stree, mean_mrate_row, mean_mrate_col, mig_size);
@@ -4552,11 +4544,11 @@ void cmd_run()
       mean_mrate_count = mig_size;
     }
     if (opt_est_theta)
-      mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT,sizeof(double));
-    mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT,sizeof(double));
+      mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT, sizeof(double));
+    mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT, sizeof(double));
 
     if (opt_msci)
-      mean_phi = (double *)xcalloc(MAX_PHI_OUTPUT,sizeof(double));
+      mean_phi = (double *)xcalloc(MAX_PHI_OUTPUT, sizeof(double));
 
     /* count number of delimited species with current species tree */
     ndspecies = 1;
@@ -4924,9 +4916,10 @@ void cmd_run()
 #if(1)
     /* propose gene tree ages */
     /* Note: call serial version when thetas are integrated out */
-    if (!opt_est_theta || opt_threads == 1)
+    ratio = 0;
+    if (!opt_usedata_fix_gtree && (!opt_est_theta || opt_threads == 1))
       ratio = gtree_propose_ages_serial(locus, gtree, stree);
-    else
+    else if (!opt_usedata_fix_gtree)
     {
       td.locus = locus; td.gtree = gtree; td.stree = stree;
       threads_wakeup(THREAD_WORK_GTAGE,&td);
@@ -4948,20 +4941,19 @@ void cmd_run()
 #endif
 
     /* propose migration ages */
-    if (opt_migration)
-    {
-      ratio = gtree_propose_migevent_ages_serial(locus,gtree,stree);
-    } 
-
-    
+    ratio = 0;
+    if (!opt_usedata_fix_gtree && opt_migration)
+      ratio = gtree_propose_migevent_ages_serial(locus, gtree, stree);
+        
     /* propose gene tree topologies using SPR */
     /* Note: call serial version when thetas are integrated out */
 
 /*** Ziheng $$$ ***/
 #if(1)
-    if (!opt_est_theta || opt_threads == 1)
-      ratio = gtree_propose_spr_serial(locus,gtree,stree);
-    else
+    ratio = 0;
+    if (!opt_usedata_fix_gtree && (!opt_est_theta || opt_threads == 1))
+      ratio = gtree_propose_spr_serial(locus, gtree, stree);
+    else if (!opt_usedata_fix_gtree)
     {
       td.locus = locus; td.gtree = gtree; td.stree = stree;
       threads_wakeup(THREAD_WORK_GTSPR,&td);
@@ -4982,8 +4974,7 @@ void cmd_run()
       if (opt_debug_bruce)
         debug_bruce(stree,gtree,"GSPR", i, fp_debug); 
 
-    /* propose population sizes on species tree */
-      
+    /* propose population sizes on species tree */     
       
     if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
       fprintf(fp_a1b1,"%ld", i+1);
@@ -5001,19 +4992,15 @@ void cmd_run()
         for (j = 0; j < opt_finetune_theta_count; ++j)
           g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
       }
-      else
+      else  /* ziheng-note-2024.12.28: is this block correct?  It does not look right to use ft_round? */
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
           if (theta_av_movetype[j] == BPP_THETA_MOVE_SLIDE)
             g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
           else if (theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS)
-          {
             g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
-          }
           else
-          {
             assert(theta_av_movetype[j] == BPP_THETA_MOVE_NONE);
-          }
       }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
@@ -5026,16 +5013,14 @@ void cmd_run()
       #endif
     } 
  
-    
-    /* propose species tree taus */
-     
+    /* propose species tree taus */     
     #if 1
     if (stree->tip_count > 1 && stree->root->tau > 0)
     {
-
-      if (opt_migration) 
+      ratio = 0;
+      if(!opt_usedata_fix_gtree && opt_migration)
         ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
-      else
+      else if (!opt_usedata_fix_gtree)
         ratio = stree_propose_tau(gtree,stree,locus);
       g_pj_tau = (g_pj_tau*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL
@@ -5051,8 +5036,7 @@ void cmd_run()
     }
     #endif
 
-    /* propose migration rates */
-      
+    /* propose migration rates */      
     if (opt_migration)
     {
       ratio = prop_migrates(stree,gtree,locus);
@@ -5064,16 +5048,14 @@ void cmd_run()
         g_pj_migvr = (g_pj_migvr*(ft_round-1)+ratio) / (double)ft_round;
       }
     }
-
     
     if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
     {
       log_a1b1(fp_a1b1, stree, gtree, i);
-    }
-    
+    }    
 
     /* mixing step */
-    if (!opt_datefile)
+    if (!opt_datefile && !opt_usedata_fix_gtree)
     {
       ratio = proposal_mixing(gtree, stree, locus);
       g_pj_mix = (g_pj_mix * (ft_round - 1) + ratio) / (double)ft_round;

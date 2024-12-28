@@ -1186,6 +1186,7 @@ extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
 extern long opt_usedata;
+extern long opt_usedata_fix_gtree;
 extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;

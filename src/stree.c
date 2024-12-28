@@ -1309,8 +1309,7 @@ static void network_init_tau_iterative(stree_t * stree,
           if (x->tau != 1)
             continue;
 
-          x->tau = MIN(age1,age2) *
-                   (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+          x->tau = MIN(age1,age2) * prop;
           x->hybrid->tau = x->tau;
           if (x->htau == 0)
             x->parent->tau = x->tau;
@@ -1343,8 +1342,7 @@ static void network_init_tau_iterative(stree_t * stree,
                  x->right->tau == 1 &&
                  x->right->hybrid->tau == 1);
 
-          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau)*
-                       (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau) * prop;
 
           x->tau                = age;
           x->hybrid->tau        = age;
@@ -1369,8 +1367,7 @@ static void network_init_tau_iterative(stree_t * stree,
             {
               if (x->prop_tau)
               {
-                x->tau = x->parent->tau *
-                         (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+                x->tau = x->parent->tau * prop;
               }
               else
               {
@@ -1415,16 +1412,17 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   int index = node->node_index - stree->tip_count;
   if (node->tau && node->tau > 0) {
 
-    newage = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
-    if ((u_constraint[index] && newage > u_constraint[index]) || (l_constraint[index] && newage < l_constraint[index])) {
-	minage = l_constraint[index];
-	maxage = tau_parent;
-	if (u_constraint[index]) {
-		maxage = MIN (u_constraint[index], tau_parent);
-	}
-  	newage = reflect(newage, minage, maxage, thread_index);
-    } 
-    node->tau = newage;	
+    newage = tau_parent * prop;
+    if ((u_constraint[index] && newage > u_constraint[index]) 
+     || (l_constraint[index] && newage < l_constraint[index])) {
+      minage = l_constraint[index];
+      maxage = tau_parent;
+      if (u_constraint[index]) {
+        maxage = MIN(u_constraint[index], tau_parent);
+      }
+      newage = reflect(newage, minage, maxage, thread_index);
+    }
+    node->tau = newage;
   }
   else
     node->tau = 0;
@@ -1433,9 +1431,7 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   stree_init_tau_recursive_constraint(stree, node->right, prop, thread_index, u_constraint, l_constraint);
 }
 
-static void stree_init_tau_recursive(snode_t * node,
-                                     double prop,
-                                     long thread_index)
+static void stree_init_tau_recursive(snode_t * node, double prop, long thread_index)
 {
   assert(!opt_msci);
 
@@ -1455,7 +1451,7 @@ static void stree_init_tau_recursive(snode_t * node,
     node->theta = -1;
 
   if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+    node->tau = tau_parent * prop;
   else
     node->tau = 0;
 
@@ -1515,10 +1511,8 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 	   if (setDates) {
 	   	*tau_ctl  = 1; 
 	   	for (i = 0; i < stree->inner_count + stree->tip_count; i++) 
-		   	stree->nodes[i]->tau = stree->nodes[i]->length;
-	   
+		   	stree->nodes[i]->tau = stree->nodes[i]->length;	   
 	   }
-
   }
 
    /* set the speciation time for root */
@@ -1526,11 +1520,9 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
    	if (stree->root->tau)
    	{
    	  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
-   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1);
    	  else
-   	    stree->root->tau = opt_tau_alpha / opt_tau_beta *
-   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	    stree->root->tau = opt_tau_alpha / opt_tau_beta;
    	}
    }
 
@@ -2108,10 +2100,9 @@ void stree_propose_phi(stree_t * stree,
 
 static void stree_init_phi(stree_t * stree)
 {
-  long i;
-
+  long i, thread_index = 0;
   long offset = stree->tip_count + stree->inner_count;
-  long thread_index = 0;
+  double phi0 = 0.8;  /* initial phi for vertical branch */
 
   if (opt_phi_alpha <= 0)
     fatal("Alpha value for 'phiprior' must be larger than 0");
@@ -2121,7 +2112,6 @@ static void stree_init_phi(stree_t * stree)
   for (i = 0; i < stree->hybrid_count; ++i)
   {
     snode_t * mnode = stree->nodes[offset+i];
-
     assert(node_is_bidirection(mnode) || node_is_mirror(mnode));
 
     /* set phi parameter to the mean */
@@ -2130,42 +2120,34 @@ static void stree_init_phi(stree_t * stree)
       if (node_is_bidirection(mnode->hybrid))
       {
         /* bidirection (model D) */
-
-        /* we set phi for the vertical branch to U|(0.7,0.9). The mnode is
-           the mirror node, hence it is the horizontal branch */
-        double a = 0.7; double b = 0.9;
-        double r = (b-a)*legacy_rndu(thread_index) + a;
-        
-        mnode->hybrid->hphi = r;
-        mnode->hphi = 1-r;
+        /* The mnode is the mirror node, hence the horizontal branch */
+        mnode->hybrid->hphi = phi0;
+        mnode->hphi = 1 - phi0;
       }
       else
       {
         /* hybridization */
-
         /* for models A and C draw the value of phi from U(0,1). For model B
-           set phi for the vertical branch to U(0.7,0.9) */
+           set phi for the vertical branch to phi0 */
         if ((!mnode->htau && !mnode->hybrid->htau) ||
             (mnode->htau && mnode->hybrid->htau))
         {
           /* model A or C */
-          mnode->hphi = legacy_rndu(thread_index);
+          mnode->hphi = phi0;
           mnode->hybrid->hphi = 1 - mnode->hphi;
         }
         else
         {
-          /* model B */
-          double a = 0.7; double b = 0.9;
-          double r = (b-a)*legacy_rndu(thread_index) + a;
+          /* model B */;
           if (mnode->htau)
           {
-            mnode->hphi = r;
-            mnode->hybrid->hphi = 1 - r;
+            mnode->hphi = phi0;
+            mnode->hybrid->hphi = 1 - phi0;
           }
           else
           {
-            mnode->hybrid->hphi = r;
-            mnode->hphi = 1 - r;
+            mnode->hybrid->hphi = phi0;
+            mnode->hphi = 1 - phi0;
           }
         }
       }
@@ -2445,7 +2427,12 @@ static void stree_init_theta(stree_t * stree,
   long abort = 0;
   long warn = 0;
   unsigned int i, j;
-
+  double theta0 = -1;
+  
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+    theta0 = opt_theta_beta / (opt_theta_alpha - 1);
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+    theta0 = opt_theta_alpha / opt_theta_beta;
 
   /* initialize population sizes for extinct populations and populations
      with more than one lineage at some locus */
@@ -2604,78 +2591,38 @@ static void stree_init_theta(stree_t * stree,
         continue;
       }
     }
-
-    /* otherwise set theta around the mean of the prior */
-    if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-      snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                    (0.9 + 0.2 * legacy_rndu(thread_index));
-    else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-      snode->theta = opt_theta_alpha / opt_theta_beta *
-                     (0.6+0.8*legacy_rndu(thread_index));
+    /* otherwise set theta */
+    snode->theta = theta0;    
   }
 
   /* go through inner nodes and setup thetas */
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     snode_t * snode = stree->nodes[i];
-
     if (opt_msci && snode->hybrid)
     {
       snode->theta = snode->hybrid->theta = -1;
       snode->has_theta = snode->hybrid->has_theta = 0;
-
       if (!node_is_bidirection(snode))
       {
         /* node is a hybridization: we assign a theta to the nodes that
            compose it that have a 'tau-parent' (htau) annotation */
-
         if (snode->htau)
         {
-          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                           (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            snode->theta = opt_theta_alpha / opt_theta_beta *
-                           (0.6+0.8*legacy_rndu(thread_index));
+          snode->theta = theta0;
           snode->has_theta = 1;
         }
-        else
-        {
-          snode->theta = -1;
-          snode->has_theta = 0;
-        }
-
         if (snode->hybrid->htau)
         {
-          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            snode->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                                   (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            snode->hybrid->theta = opt_theta_alpha / opt_theta_beta *
-                                   (0.6+0.8*legacy_rndu(thread_index));
+          snode->hybrid->theta = theta0;
           snode->hybrid->has_theta = 1;
-        }
-        else
-        {
-          snode->hybrid->theta = -1;
-          snode->hybrid->has_theta = 0;
         }
       }
       else
       {
-        /* bidirectional introgression */
-
-        if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-          snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                         (0.9 + 0.2 * legacy_rndu(thread_index));
-        else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-          snode->theta = opt_theta_alpha / opt_theta_beta *
-                         (0.6+0.8*legacy_rndu(thread_index));
+        /* bidirectional introgression: the mirrored nodes do not have a theta */
+        snode->theta = theta0;
         snode->has_theta = 1;
-
-        /* the mirrored nodes do not have a theta */
-        snode->hybrid->theta = -1;
-        snode->hybrid->has_theta = 0;
       }
     }
     else
@@ -2684,12 +2631,7 @@ static void stree_init_theta(stree_t * stree,
          case of inner nodes that have an incoming number of lineages equal to 1
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
-      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                      (0.9 + 0.2 * legacy_rndu(thread_index));
-      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        snode->theta = opt_theta_alpha / opt_theta_beta *
-                       (0.6+0.8*legacy_rndu(thread_index));
+      snode->theta = theta0;
     }
   }
 
@@ -3120,9 +3062,7 @@ void stree_init(stree_t * stree,
   stree_reset_leaves(stree);
 
   if (opt_msci)
-  {
     msci_validate(stree);
-  }
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
@@ -3137,9 +3077,8 @@ void stree_init(stree_t * stree,
     stree_init_tau(stree, thread_index, tau_ctl);
   }
   else
-  {
     stree->nodes[0]->tau = 0;
-  }
+
   //ANNA
   //stree->nodes[2]->tau = 1.4;
   /*stree->nodes[4]->tau = .1; 

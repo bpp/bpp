@@ -299,7 +299,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(opt_sp_seqcount,stree->tip_count,fp);
   
   /* write usedata, cleandata and nloci */
-  DUMP(&opt_usedata,1,fp);
+  DUMP(&opt_usedata, 1, fp);
+  DUMP(&opt_usedata_fix_gtree, 1, fp);
   DUMP(&opt_cleandata,1,fp);
   DUMP(&opt_locus_count,1,fp);
 
