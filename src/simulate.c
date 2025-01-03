@@ -994,7 +994,7 @@ static char * consensus(const char * x, const char * y, long n)
 
 
 static char read_depth_model_beta = 1;  /* 1: beta; 0:gamma */
-static int read_depth_min = 2, read_depth_max = 100;
+static int read_depth_min = 2, read_depth_max = 10;
 static double read_depth_prob_prev = 0.9;
 static double** read_depth_AliasF;  /* multinomial sampling */
 int** read_depth_AliasL;
@@ -1006,7 +1006,7 @@ int** read_depth_AliasL;
    FL space for multinomial is arranged as follows:
    read_depth_AliasF: Fn1-00 Fn1-01 Fn2-00 Fn2-F01 ...
    read_depth_AliasL: Ln1-00 Ln1-01 Ln2-00 Ln2-F01 ...
-   read_depth_species[ispecies] has depthx for the beta model, and depth for gamma.
+   read_depth_species[ispecies] has xdepth for the beta model, and depth for gamma.
    We assume that at most two alleles are called. 
 */
 
@@ -1081,28 +1081,34 @@ static void init_sequencing_machine(stree_t* stree, double** read_depth_species,
 static void sequencing_machine(stree_t* stree, msa_t* msa, 
             double *read_depth_species, double *gt_err, double *gt_count)
 {
+/* This adds genotyping errors to sequences at one locus.  
+   Sequences may already be diploid.
+*/ 
   long iseq, isite, i, depth, k, ib;
-  double depthx=-1, xm, a = opt_simulate_a_sites;
+  double xdepth=-1, xm, a = opt_simulate_a_sites;
   double eps = opt_simulate_base_err, lne = log(eps), ln1e = log(1 - eps);
   double lnL[3], p;
   char dna[4] = "TCAG", bases[4] = {1,2,4,8}, alleles[2], nallele, nallele_called, gt;
 
   int ispecies = 0, seq_count_species = 0;
-  for (iseq = 0; iseq < msa->count; iseq++) {
-    // printf("seq %-10s is from species %-10s\n", msa->label[iseq], stree->nodes[ispecies]->label);
-
-    for (isite = 0; isite < msa->length; isite++) {
+  for (iseq = 0; iseq < msa->count; iseq++) {  /* msa->count: number of sequences in alignment. */
+    /*
+    printf("seq %-10s is from %-8s (%s)\n", msa->label[iseq], stree->nodes[ispecies]->label, 
+      (opt_diploid[ispecies] ? "diploid" : "haploid"));
+    */
+    /* loop through sites.  ignore haploid sequences */
+    for (isite = 0; isite < (opt_diploid[ispecies]==1) * msa->length; isite++) {
       /* generate depth for isite */
       xm = read_depth_species[ispecies];
       if (isite > 0)
-        xm = read_depth_prob_prev * depthx + (1 - read_depth_prob_prev) * xm;
+        xm = read_depth_prob_prev * xdepth + (1 - read_depth_prob_prev) * xm;
       if (read_depth_model_beta) {
-        depthx = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);  /* xm: mean of beta */
-        depth = (long)(read_depth_min + depthx * (read_depth_max - read_depth_min) + 0.5);
+        xdepth = legacy_rndbeta(thread_index_zero, xm * a, (1 - xm) * a);  /* xm: mean of beta */
+        depth = (long)(read_depth_min + xdepth * (read_depth_max - read_depth_min) + 0.5);
       }
       else {
-        depthx = legacy_rndgamma(thread_index_zero, a) / a * xm;
-        depth = (long)(depthx + 0.5);
+        xdepth = legacy_rndgamma(thread_index_zero, a) / a * xm;
+        depth = (long)(xdepth + 0.5);
         if (depth < read_depth_min || depth > read_depth_max) fatal("bad depth");
       }
 
@@ -1140,12 +1146,14 @@ static void sequencing_machine(stree_t* stree, msa_t* msa,
           gt_err[ispecies * 2 + 1] ++;
         }
       }
-    }
-    if (++seq_count_species == opt_sp_seqcount[ispecies] / 2) {
+    }  /*  for (isite) */
+
+    seq_count_species += opt_diploid[ispecies] ? 2 : 1;
+    if (seq_count_species >= opt_sp_seqcount[ispecies]) {
       ispecies++;
       seq_count_species = 0;
     }
-  }
+  } /* for (iseq) */
 }
 
 static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long hets_count)
@@ -1178,18 +1186,16 @@ static void collapse_diploid(stree_t * stree, gtree_t * gtree, msa_t * msa, long
       {
         xasprintf(label+k, "%s^%s%ld", stree->nodes[i]->label, seqname, ++index);
         //xasprintf(label+k, "%s%ld^%s", seqname, ++index, stree->nodes[i]->label);
-        sequence[k] = consensus(msa->sequence[j],msa->sequence[j+1],msa->length);
+        sequence[k] = consensus(msa->sequence[j], msa->sequence[j+1], msa->length);
 
         gtree->nodes[j]->data = sequence[k];
         gtree->nodes[j+1]->data = NULL;
 
         ++k;
-
         free(msa->sequence[j]);
         free(msa->sequence[j+1]);
         free(msa->label[j]);
         free(msa->label[j+1]);
-
       }
       free(seqname);
     }
@@ -2220,10 +2226,10 @@ static void simulate(stree_t * stree)
             md_full = msa_mean_distance(msa[i]->count, opt_locus_simlen, msa[i]);
         }
         if (fp_seqrand)
-          write_diploid_rand_seqs(fp_seqrand,stree,msa[i],&md_rand);
+          write_diploid_rand_seqs(fp_seqrand, stree, msa[i], &md_rand);
 
         /* then collapse sequences */
-        collapse_diploid(stree,gtree[i],msa[i],hets);
+        collapse_diploid(stree, gtree[i], msa[i], hets);
       }
 
       /* write sequences */
@@ -2289,18 +2295,22 @@ static void simulate(stree_t * stree)
 
   if (opt_simulate_read_depth) {
     printf("\nObserved genotype-calling error rates\n");
-    printf("\nSpecies   :    meanDP            GT00-error           GT-01 error\n");
+    printf("\nSpecies   :    meanDP              GT00-error             GT-01 error\n");
     if (read_depth_model_beta)
-      for (i = 0; i < stree->tip_count; i++)  /* change depthx -> depth for printing */
+      for (i = 0; i < stree->tip_count; i++)  /* change xdepth -> depth for printing */
         read_depth_species[i] = read_depth_min + read_depth_species[i] * (read_depth_max - read_depth_min);
 
     for (i = 0; i < stree->tip_count; i++) {
-      assert(gt_count[i * 2 + 0] + gt_count[i * 2 + 1] ==
-        opt_locus_count * opt_sp_seqcount[i] / 2 * msa[0]->length);
-      gt_err[i * 2 + 0] /= gt_count[i * 2 + 0];
-      gt_err[i * 2 + 1] /= gt_count[i * 2 + 1];
-      printf("%-10s: %9.4f %12.7f (%8.0f) %12.7f (%8.0f)\n", stree->nodes[i]->label,
-        read_depth_species[i], gt_err[i * 2 + 0], gt_count[i * 2 + 0], gt_err[i * 2 + 1], gt_count[i * 2 + 1]);
+      if (opt_diploid[i] == 0)
+        printf("%-6s (H):\n", stree->nodes[i]->label);
+      else {
+        assert(gt_count[i * 2 + 0] + gt_count[i * 2 + 1] ==
+          opt_locus_count * opt_sp_seqcount[i] / 2 * msa[0]->length);
+        gt_err[i * 2 + 0] /= gt_count[i * 2 + 0];
+        gt_err[i * 2 + 1] /= gt_count[i * 2 + 1];
+        printf("%-10s: %9.4f %12.7f (%8.0f) %12.7f (%8.0f)\n", stree->nodes[i]->label,
+          read_depth_species[i], gt_err[i * 2 + 0], gt_count[i * 2 + 0], gt_err[i * 2 + 1], gt_count[i * 2 + 1]);
+      }
     }
     free(read_depth_species);
     free(read_depth_AliasF);
@@ -2314,13 +2324,11 @@ static void simulate(stree_t * stree)
       int length = strlen(label);
       if (label[length-1] == 'a')
       {
-        fprintf(fp_seqDates, "%.*s %.12f\n",
-                length-1, label, gtree[0]->nodes[i]->time);
+        fprintf(fp_seqDates, "%.*s %.12f\n", length-1, label, gtree[0]->nodes[i]->time);
         i++;
       }
       else
         fprintf(fp_seqDates, "%s %.12f\n", label, gtree[0]->nodes[i]->time);
-
     }
 
     list_clear(dateList,mapDate_dealloc);
@@ -2613,8 +2621,7 @@ void cmd_simulate()
   
   if (opt_migration)
     for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-      stree->nodes[i]->migevent_count = (long *)xcalloc((size_t)opt_locus_count,
-                                                        sizeof(long));
+      stree->nodes[i]->migevent_count = (long *)xcalloc((size_t)opt_locus_count, sizeof(long));
 
   /* allocate and set pptable */
   stree_init_pptable(stree);
