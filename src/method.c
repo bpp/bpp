@@ -2938,47 +2938,47 @@ static FILE * resume(stree_t ** ptr_stree,
    NOTE: *ALL* parameters of this function are output parameters, therefore
    do not concentrate on them when reading this function - they are filled
    at the end of the routine */
-static FILE * init(stree_t ** ptr_stree,
-                   gtree_t *** ptr_gtree,
-                   locus_t *** ptr_locus,
-                   unsigned long * ptr_curstep,
-                   long * ptr_ft_round,
-                   long * ptr_dparam_count,
-                   double ** ptr_posterior,
-                   long * ptr_ft_round_rj,
-                   long* ptr_ft_round_spr,
-                   long* ptr_ft_round_snl,
-                   double * ptr_mean_logl,
-                   stree_t ** ptr_sclone, 
-                   gtree_t *** ptr_gclones,
-                   FILE *** ptr_fp_gtree,
-                   FILE *** ptr_fp_mig,
-                   FILE *** ptr_fp_locus,
-                   FILE *** ptr_fp_migcount,
-                   FILE ** ptr_fp_out,
-                   FILE ** ptr_fp_a1b1,
-		   int ** ptr_printLocusIndex)
+static FILE* init(stree_t** ptr_stree,
+  gtree_t*** ptr_gtree,
+  locus_t*** ptr_locus,
+  unsigned long* ptr_curstep,
+  long* ptr_ft_round,
+  long* ptr_dparam_count,
+  double** ptr_posterior,
+  long* ptr_ft_round_rj,
+  long* ptr_ft_round_spr,
+  long* ptr_ft_round_snl,
+  double* ptr_mean_logl,
+  stree_t** ptr_sclone,
+  gtree_t*** ptr_gclones,
+  FILE*** ptr_fp_gtree,
+  FILE*** ptr_fp_mig,
+  FILE*** ptr_fp_locus,
+  FILE*** ptr_fp_migcount,
+  FILE** ptr_fp_out,
+  FILE** ptr_fp_a1b1,
+  int** ptr_printLocusIndex)
 {
-  long i,j;
+  long i, j;
   long msa_count;
   long pindex;
-  double logl,logpr;
+  double logl, logpr;
   double logl_sum = 0;
   double logpr_sum = 0;
-  list_t * map_list = NULL;
-  list_t * date_list = NULL;
-  stree_t * stree;
-  const unsigned int * pll_map;
-  FILE * fp_mcmc = NULL;
-  FILE * fp_out;
-  FILE * fp_a1b1 = NULL;
-  FILE ** fp_gtree = NULL;
-  FILE ** fp_mig = NULL;
-  FILE ** fp_locus = NULL;
-  FILE ** fp_migcount = NULL;
-  msa_t ** msa_list;
-  gtree_t ** gtree;
-  locus_t ** locus;
+  list_t* map_list = NULL;
+  list_t* date_list = NULL;
+  stree_t* stree;
+  const unsigned int* pll_map;
+  FILE* fp_mcmc = NULL;
+  FILE* fp_out;
+  FILE* fp_a1b1 = NULL;
+  FILE** fp_gtree = NULL;
+  FILE** fp_mig = NULL;
+  FILE** fp_locus = NULL;
+  FILE** fp_migcount = NULL;
+  msa_t** msa_list;
+  gtree_t** gtree;
+  locus_t** locus;
 
   const long thread_index = 0;
 
@@ -2986,10 +2986,10 @@ static FILE * init(stree_t ** ptr_stree,
   long dparam_count = 0;
 
   /* method 01 specific variables */
-  stree_t * sclone = NULL;
-  gtree_t ** gclones = NULL;
+  stree_t* sclone = NULL;
+  gtree_t** gclones = NULL;
 
-  char * tmpoutfile = NULL;
+  char* tmpoutfile = NULL;
   xasprintf(&tmpoutfile, "%s.txt", opt_jobname);
   if (!(fp_out = fopen(tmpoutfile, "w")))
     fatal("Cannot open file %s for writing...", opt_jobname);
@@ -3007,7 +3007,7 @@ static FILE * init(stree_t ** ptr_stree,
 
   if (opt_msci && opt_migration)
     fatal(BPP_ERROR " Cannot use isolation with migration (IM) and "
-          "introgression (MSci) models together.");
+      "introgression (MSci) models together.");
 
   /* Show network */
   if (opt_msci)
@@ -3017,12 +3017,12 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_clock == BPP_CLOCK_CORR)
       fatal("MSCi model with auto-correlated relaxed clock is not currently implemented.");
 
-    print_network_table(stree,fp_out);
-    print_network_table(stree,stdout);
+    print_network_table(stree, fp_out);
+    print_network_table(stree, stdout);
   }
 
   /* parse the phylip file */
-  phylip_t * fd = phylip_open(opt_msafile, pll_map_fasta);
+  phylip_t* fd = phylip_open(opt_msafile, pll_map_fasta);
   assert(fd);
 
   printf("Parsing phylip file...");
@@ -3039,23 +3039,23 @@ static FILE * init(stree_t ** ptr_stree,
     opt_locus_count = msa_count;
 
   /* check for locusrate and one locus */
-  if (opt_locus_count == 1 && opt_est_locusrate && ! opt_datefile)
+  if (opt_locus_count == 1 && opt_est_locusrate && !opt_datefile)
     fatal("Cannot use option 'locusrate' with only one locus");
 
   /* set the data type for each multiple sequence alignment */
   if (opt_partition_list)
   {
     assert(opt_partition_count > 0);
-    if (opt_partition_list[opt_partition_count-1]->end != msa_count)
+    if (opt_partition_list[opt_partition_count - 1]->end != msa_count)
       fatal("Partition file %s differs in number of partitions (%ld) "
-            "to the specified number of loci (%ld)",
-            opt_partition_file, opt_partition_list[opt_partition_count-1]->end,
-            msa_count);
+        "to the specified number of loci (%ld)",
+        opt_partition_file, opt_partition_list[opt_partition_count - 1]->end,
+        msa_count);
   }
 
   assert(BPP_DNA_MODEL_CUSTOM > BPP_DNA_MODEL_MAX &&
-         BPP_DNA_MODEL_CUSTOM < BPP_AA_MODEL_MIN);
-  assert (BPP_DNA_MODEL_MAX < BPP_AA_MODEL_MIN);
+    BPP_DNA_MODEL_CUSTOM < BPP_AA_MODEL_MIN);
+  assert(BPP_DNA_MODEL_MAX < BPP_AA_MODEL_MIN);
 
 
   if (opt_partition_file)
@@ -3068,11 +3068,11 @@ static FILE * init(stree_t ** ptr_stree,
     pindex = 0;
     for (i = 0; i < opt_locus_count; ++i)
     {
-      assert((i+1) >= opt_partition_list[pindex]->start);
-      if ((i+1) > opt_partition_list[pindex]->end)
+      assert((i + 1) >= opt_partition_list[pindex]->start);
+      if ((i + 1) > opt_partition_list[pindex]->end)
         ++pindex;
-      assert((i+1) >= opt_partition_list[pindex]->start &&
-             (i+1) <= opt_partition_list[pindex]->end);
+      assert((i + 1) >= opt_partition_list[pindex]->start &&
+        (i + 1) <= opt_partition_list[pindex]->end);
 
       msa_list[i]->dtype = opt_partition_list[pindex]->dtype;
       msa_list[i]->model = opt_partition_list[pindex]->model;
@@ -3088,7 +3088,7 @@ static FILE * init(stree_t ** ptr_stree,
   {
     /* all loci have the same substitution model */
 
-    int dtype,model;
+    int dtype, model;
 
     assert(opt_model != BPP_DNA_MODEL_CUSTOM);
 
@@ -3113,16 +3113,16 @@ static FILE * init(stree_t ** ptr_stree,
     int deleted = msa_remove_missing_sequences(msa_list[i]);
     if (deleted == -1)
       fatal("[ERROR]: Locus %ld contains missing sequences only.\n"
-            "Please remove the locus and restart the analysis.\n");
+        "Please remove the locus and restart the analysis.\n");
 
     if (deleted)
     {
       fprintf(stdout,
-              "[WARNING]: Removing %d missing sequences from locus %ld\n",
-              deleted, i);
+        "[WARNING]: Removing %d missing sequences from locus %ld\n",
+        deleted, i);
       fprintf(fp_out,
-              "[WARNING]: Removing %d missing sequences from locus %ld\n",
-              deleted, i);
+        "[WARNING]: Removing %d missing sequences from locus %ld\n",
+        deleted, i);
     }
     msa_list[i]->original_index = i;
   }
@@ -3137,7 +3137,7 @@ static FILE * init(stree_t ** ptr_stree,
         continue;
 
       if (!msa_remove_ambiguous(msa_list[i]))
-        fatal("All sites in locus %d contain ambiguous characters",i);
+        fatal("All sites in locus %d contain ambiguous characters", i);
     }
     printf(" Done\n");
   }
@@ -3148,8 +3148,7 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   /* compress it */
-  unsigned int ** weights = (unsigned int **)xmalloc(msa_count *
-                                                     sizeof(unsigned int *));
+  unsigned int** weights = (unsigned int**)xmalloc(msa_count * sizeof(unsigned int*));
   for (i = 0; i < msa_count; ++i)
   {
     int compress_method;
@@ -3180,10 +3179,10 @@ static FILE * init(stree_t ** ptr_stree,
     /* NOTE: Original length is the length after opt_cleandata is applied */
     msa_list[i]->original_length = msa_list[i]->length;
     weights[i] = compress_site_patterns(msa_list[i]->sequence,
-                                        pll_map,
-                                        msa_list[i]->count,
-                                        &(msa_list[i]->length),
-                                        compress_method);
+      pll_map,
+      msa_list[i]->count,
+      &(msa_list[i]->length),
+      compress_method);
 
     /* compute base frequencies */
     compute_base_freqs(msa_list[i], weights[i], pll_map);
@@ -3194,8 +3193,31 @@ static FILE * init(stree_t ** ptr_stree,
     fprintf(stdout, "\nSummary of alignments *before* phasing sequences:");
     fprintf(fp_out, "\nSummary of alignments *before* phasing sequences:");
   }
-  msa_summary(stdout, msa_list,msa_count);
-  msa_summary(fp_out, msa_list,msa_count);
+  msa_summary(stdout, msa_list, msa_count);
+  msa_summary(fp_out, msa_list, msa_count);
+
+#if(0)
+  /*** ziheng-2025.1.3 print the number of heterozygotes at each site in heliconius-HCM data. ***/
+  FILE* ftmp = xopen("heliconius-HCM-summary.txt", "w");
+  fprintf(ftmp, "length_li\txi_C\txi_H\txi_M\n");
+  assert(pll_map['A'] == 1 && pll_map['C'] == 2 && pll_map['G'] == 4 && pll_map['T'] == 8);
+  for (long locus = 0; locus < msa_count; ++locus) {
+    fprintf(ftmp, "%d", msa_list[locus]->original_length);
+    for (long seq = 0; seq < msa_list[locus]->count; ++seq) {
+      int diff = 0;
+      for (long site = 0; site < msa_list[locus]->length; ++site) {
+        int b = pll_map[(int)msa_list[locus]->sequence[seq][site]];
+        int nallele = ((b & 1) > 0) + ((b & 2) > 0) + ((b & 4) > 0) + ((b & 8) > 0);
+        assert(nallele == 1 || nallele == 2);
+        if (nallele==2) diff += weights[locus][site];
+      }
+      fprintf(ftmp, "\t%d", diff);
+    }
+    fprintf(ftmp, "\n");
+  }
+  fclose(ftmp);
+  /*** ziheng-2025.1.3  ***/
+#endif
 
   /* parse map file */
   if (stree->tip_count > 1)
@@ -4034,9 +4056,7 @@ static FILE * init(stree_t ** ptr_stree,
         if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
 
         if (x->theta >= 0 && !x->linked_theta)
-          fprintf(fp_a1b1,
-                  "\ttheta:%d_a1\ttheta:%d_b1",
-                  x->node_index+1,x->node_index+1);
+          fprintf(fp_a1b1, "\ttheta:%d_a1\ttheta:%d_b1", x->node_index+1,x->node_index+1);
       }
       if (opt_msci)
       {
@@ -4358,7 +4378,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
     if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
       get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
        
-    fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+    fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
   }
 
   /* W */
@@ -4384,7 +4404,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
           a1 += gtree[msa_index]->migcount[si][ti];
           b1 += stree->Wsji[si][ti][msa_index];
         }
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+        fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
       }
     }
   }
