@@ -2080,7 +2080,7 @@ void stree_propose_phi(stree_t * stree,
       acceptvec[BPP_PHI_MOVE_SLIDE] += accepted;
       movecount[BPP_PHI_MOVE_SLIDE]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+        fprintf(fp_a1b1, "\t%.2f\t%.2f",a1,b1);
     }
     else
     {
@@ -2093,7 +2093,7 @@ void stree_propose_phi(stree_t * stree,
       acceptvec[BPP_PHI_MOVE_GIBBS] += accepted;
       movecount[BPP_PHI_MOVE_GIBBS]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+        fprintf(fp_a1b1, "\t%.2f\t%.2f",a1,b1);
     }
   }
 }

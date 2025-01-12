@@ -4378,7 +4378,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
     if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
       get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
        
-    fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
+    fprintf(fp_a1b1, "\t%.1f\t%.5f", a1, b1);
   }
 
   /* W */
