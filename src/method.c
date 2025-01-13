@@ -4086,7 +4086,7 @@ static FILE* init(stree_t** ptr_stree,
         for (i = 0; i < stree->tip_count + stree->inner_count; ++i) {
           printf("%2d %-10s %9.5f ", stree->nodes[i]->node_index, stree->nodes[i]->label, stree->nodes[i]->tau);
           for (j = 0; j < stree->tip_count + stree->inner_count; ++j) {
-            printf("%3d", opt_mig_bitmatrix[stree->nodes[i]->node_index][stree->nodes[j]->node_index]);
+            printf("%3ld", opt_mig_bitmatrix[stree->nodes[i]->node_index][stree->nodes[j]->node_index]);
           }
           printf("\n");
         }
@@ -4387,6 +4387,10 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
     if (opt_est_geneflow)
       fatal("Not implemented [migration rates with a1b1 summary]");
 
+    #if 0
+    /* TODO: The below disabled code is a better alternative as it avoids the quadratic complexity
+       of going through the matrix, but the same must be implemented for the header line so that
+       columns match. The same principle should be applied to the MCMC file as well */
     for (i = 0; i < opt_migration_count; ++i)
     {
       unsigned int si = opt_mig_specs[i].si;
@@ -4407,6 +4411,27 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
         fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
       }
     }
+    #else
+    for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+      for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
+        if (opt_mig_bitmatrix[i][j])
+        {
+          if (!migration_valid(stree->nodes[i], stree->nodes[j]))
+            fprintf(fp_a1b1, "\t-\t-");
+          else
+          {
+            long windex = opt_migration_matrix[i][j];
+            a1 = opt_mig_specs[windex].alpha;
+            b1 = opt_mig_specs[windex].beta;
+            for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+            {
+              a1 += gtree[msa_index]->migcount[i][j];
+              b1 += stree->Wsji[i][j][msa_index];
+            }
+            fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
+          }
+        }
+    #endif
   }
 }
 
