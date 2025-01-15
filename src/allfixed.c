@@ -790,9 +790,33 @@ static char ** header_explode(const char * hdr, long * count)
   return tokens;
 }
 
-static void header_tokens_shorten(char ** tokens, long count)
+static void header_tokens_shorten(char ** tokens, long keep_labels, long count)
 {
   long i;
+
+  if (keep_labels)
+  {
+    /* keep original labels instead of mapped numbers */
+    for (i = 0; i < count; ++i)
+    {
+      char * start = tokens[i];
+      char * p = strchr(start,':');
+      if (p)
+      {
+        char * q = strchr(p+1,':');
+        assert(q);
+        assert(*(q+1));
+        assert(p != q);
+        long len = strlen(q+1);
+        memmove(p+1,q+1,len);
+        p[len+1] = 0;
+        char * tmp = xstrdup(start);
+        free(tokens[i]);
+        tokens[i] = tmp;
+      }
+    }
+    return;
+  }
 
   for (i = 0; i < count; ++i)
   {
@@ -846,6 +870,14 @@ static long find_theta_index(char ** tokens, long cols, const char * wstr)
   /* get the wstr number into m */
   wtmp = xstrdup(wstr);
   p = wtmp + strlen(wtmp);
+  assert(*p == 0);
+  --p;
+  assert(*p == '1');
+  --p;
+  assert(*p == 'a' || *p == 'b');
+  --p;
+  assert(*p == '_');
+
   while (*(--p) != '>')
   {
     assert(*p >= '0' && *p <= '9');
@@ -971,8 +1003,8 @@ static void print_a1b1_summary_line(FILE * fp_out,
   char * s;
 
   /* print line */
-  fprintf(stdout, "%*s", pname_size,pname);
-  fprintf(fp_out, "%*s", pname_size,pname);
+  fprintf(stdout, "%-*s", pname_size,pname);
+  fprintf(fp_out, "%-*s", pname_size,pname);
 
   fprintf(stdout, "  ");
   fprintf(fp_out, "  ");
@@ -1107,7 +1139,13 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
   long token_count;
   char ** tokens = header_explode(header,&token_count);
-  header_tokens_shorten(tokens,token_count);
+
+  char ** numeric_tokens = (char **)xmalloc((size_t)token_count*sizeof(char *));
+  for (i = 0; i < token_count; ++i)
+    numeric_tokens[i] = xstrdup(tokens[i]);
+  header_tokens_shorten(tokens,opt_keep_labels,token_count);
+  /* the following is required for finding theta indices associated with Ws */
+  header_tokens_shorten(numeric_tokens,0,token_count);
 
   /* compute number of theta parameters */
   for (i = 0; i < snodes_total; ++i)
@@ -1274,7 +1312,6 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
       a1_index[param_count] = i;
       b1_index[param_count] = ++i;
       prdist1[param_count] = dist_phi;
-      trim_suffix = 1;
     }
     else if (toklen > wp_len && !strncmp(tok, w_prefix, wp_len))
     {
@@ -1282,12 +1319,11 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
       a1_index[param_count] = i;
       b1_index[param_count] = ++i;
 
-      a2_index[param_count] = find_theta_index(tokens, cols, tok);
+      a2_index[param_count] = find_theta_index(numeric_tokens, cols, numeric_tokens[i]);
       b2_index[param_count] = a2_index[param_count]+1;
 
       prdist1[param_count] = dist_w;
       prdist2[param_count] = dist_theta;
-      trim_suffix = 1;
     }
     else
     {
@@ -1463,8 +1499,12 @@ l_unwind:
   free(pname);
 
   for (i = 0; i < token_count; ++i)
+  {
     free(tokens[i]);
+    free(numeric_tokens[i]);
+  }
   free(tokens);
+  free(numeric_tokens);
 
   for (i = 0; i < cols; ++i)
     free(matrix[i]);
@@ -1578,7 +1618,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
   long token_count;
   char ** tokens = header_explode(header,&token_count);
-  header_tokens_shorten(tokens,token_count);
+  header_tokens_shorten(tokens,opt_keep_labels,token_count);
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -1955,8 +1995,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       fprintf(fp_out, "\n");
     }
 
-    fprintf(stdout, "%*s", pname_size,tokens[i]);
-    fprintf(fp_out, "%*s", pname_size,tokens[i]);
+    fprintf(stdout, "%-*s", pname_size,tokens[i]);
+    fprintf(fp_out, "%-*s", pname_size,tokens[i]);
 
     fprintf(stdout, "  ");
     fprintf(fp_out, "  ");

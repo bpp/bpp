@@ -2554,7 +2554,6 @@ static void stree_init_theta(stree_t * stree,
      to set estimation of thetas according to the 'species&tree' tag in the
      control file. */
   init_theta_linkage(stree);
-  init_theta_stepsize(stree);
   for (i = 0; i < stree->tip_count; ++i)
   {
     snode_t * snode = stree->nodes[i];
@@ -2634,6 +2633,7 @@ static void stree_init_theta(stree_t * stree,
       snode->theta = theta0;
     }
   }
+  init_theta_stepsize(stree);
 
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {

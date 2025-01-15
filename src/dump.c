@@ -324,6 +324,9 @@ static void dump_chk_section_1(FILE * fp,
       DUMP(&printLocusIndex[i],1,fp);
   }
 
+  /* write keep labels option */
+  DUMP(&opt_keep_labels,1,fp);
+
   /* write theta prior */
   DUMP(&opt_theta_prior,1,fp);
   DUMP(&opt_theta_alpha,1,fp);

@@ -1135,6 +1135,7 @@ extern long opt_finetune_reset;
 extern long opt_finetune_theta_count;
 extern long opt_finetune_theta_mode;
 extern long opt_help;
+extern long opt_keep_labels;
 extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;

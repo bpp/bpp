@@ -534,6 +534,10 @@ static void load_chk_section_1(FILE * fp,
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
 
+  /* read keep labels option */
+  if (!LOAD(&opt_keep_labels,1,fp))
+    fatal("Cannot read keep-labels option");
+
   /* read theta prior */
   if (!LOAD(&opt_theta_prior,1,fp))
     fatal("Cannot read type of theta prior");

@@ -4056,7 +4056,7 @@ static FILE * init(stree_t ** ptr_stree,
         if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
 
         if (x->theta >= 0 && !x->linked_theta)
-          fprintf(fp_a1b1, "\ttheta:%d_a1\ttheta:%d_b1", x->node_index+1,x->node_index+1);
+          fprintf(fp_a1b1, "\ttheta:%d_a1:%s_a1\ttheta:%d_b1:%s_b1", x->node_index+1,x->label,x->node_index+1,x->label);
       }
       if (opt_msci)
       {
@@ -4067,7 +4067,7 @@ static FILE * init(stree_t ** ptr_stree,
           if (!tmpnode->has_phi)
             tmpnode = tmpnode->hybrid;
           fprintf(fp_a1b1,
-                  "\tphi:%d<-%d:%s<-%s_a1\tphi:%d<-%d:%s<-%s_b1",
+                  "\tphi:%d<-%d_a1:%s<-%s_a1\tphi:%d<-%d_b1:%s<-%s_b1",
                   tmpnode->node_index+1,
                   tmpnode->parent->node_index+1,
                   tmpnode->label,
@@ -4102,7 +4102,7 @@ static FILE * init(stree_t ** ptr_stree,
             /* if (!migration_valid(stree->nodes[i], stree->nodes[j])) continue; */
 
             fprintf(fp_a1b1,
-              "\tW:%ld->%ld:%s->%s_a1\tW:%ld->%ld:%s->%s_b1",
+              "\tW:%ld->%ld_a1:%s->%s_a1\tW:%ld->%ld_b1:%s->%s_b1",
               i + 1, j + 1, stree->nodes[i]->label, stree->nodes[j]->label,
               i + 1, j + 1, stree->nodes[i]->label, stree->nodes[j]->label);
           }
@@ -4386,7 +4386,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
   }
 
   /* W */
-  if (!opt_mig_vrates_exist)
+  if (opt_migration && !opt_mig_vrates_exist)
   {
     if (opt_est_geneflow)
       fatal("Not implemented [migration rates with a1b1 summary]");

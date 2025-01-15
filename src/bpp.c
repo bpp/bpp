@@ -93,6 +93,7 @@ long opt_finetune_reset;
 long opt_finetune_theta_count;
 long opt_finetune_theta_mode;
 long opt_help;
+long opt_keep_labels;
 long opt_linkedtheta;
 long opt_load_balance;
 long opt_locusrate_prior;
@@ -329,6 +330,7 @@ static struct option long_options[] =
   {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
   {"extend",               required_argument, 0, 0 },  /* 50 */
   {"phi-slide-prob",       required_argument, 0, 0 },  /* 51 */
+  {"keep-labels",          no_argument,       0, 0 },  /* 52 */
   { 0, 0, 0, 0 }
 };
 
@@ -530,6 +532,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_theta_count = 1;
   opt_finetune_theta_mode = 2;
   opt_help = 0;
+  opt_keep_labels = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
   opt_heredity_filename = NULL;
@@ -916,6 +919,10 @@ void args_init(int argc, char ** argv)
 
       case 51:
         opt_phi_slide_prob = atof(optarg);
+        break;
+
+      case 52:
+        opt_keep_labels = 1;
         break;
 
       default:
