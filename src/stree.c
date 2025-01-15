@@ -3872,7 +3872,8 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype)
+                         long * acceptvec_movetype,
+                         long * ft_round_theta_bits)
 {
   unsigned int i;
   long slide_tip_count = 0;
@@ -3885,13 +3886,16 @@ void stree_propose_theta(gtree_t ** gtree,
 
   long thread_index = 0;
 
-  /* reset acceptance vector */
+  /* reset acceptance vector and ft_rounds */
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
     acceptvec_gibbs[i] = 0;
     acceptvec_slide[i] = 0;
-    acceptvec_movetype[i] = -1;
+    acceptvec_movetype[i] = BPP_THETA_MOVE_NONE;
+
+    ft_round_theta_bits[i] = 0;
   }
+  ft_round_theta_bits[opt_finetune_theta_count] = 0;  /* gibbs */
 
   /* propose theta for each node */
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
@@ -3902,6 +3906,7 @@ void stree_propose_theta(gtree_t ** gtree,
       if (opt_theta_slide_prob>0 && legacy_rndu(thread_index) < opt_theta_slide_prob) /* slide */
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_SLIDE;
+        ft_round_theta_bits[snode->theta_step_index] = 1;
         av = acceptvec_slide;
         av[snode->theta_step_index] += propose_theta_slide(stree,
                                                            gtree,
@@ -3916,6 +3921,9 @@ void stree_propose_theta(gtree_t ** gtree,
       else                                                  /* gibbs */
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_GIBBS;
+        
+        /* last element in ft_round_theta_bits corresponds to gibbs sampler */
+        ft_round_theta_bits[opt_finetune_theta_count] = 1;
         av = acceptvec_gibbs;
         av[snode->theta_step_index] += propose_theta_gibbs(stree,
                                                            gtree,

@@ -2545,15 +2545,13 @@ static FILE * resume(stree_t ** ptr_stree,
                      unsigned long * ptr_curstep,
                      long * ptr_ft_round,
                      long * ptr_ndspecies,
-
                      long * ptr_dparam_count,
                      double ** ptr_posterior,
                      double ** ptr_pspecies,
                      long * ptr_ft_round_rj,
-
                      long * ptr_ft_round_spr,
                      long * ptr_ft_round_snl,
-
+                     long ** ptr_ft_round_theta,
                      double * ptr_mean_logl,
                      long ** ptr_mrate_row,
                      long ** ptr_mrate_col,
@@ -2618,6 +2616,7 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_ft_round_rj,
                   ptr_ft_round_spr,
                   ptr_ft_round_snl,
+                  ptr_ft_round_theta,
                   ptr_mean_logl,
                   ptr_mrate_row,
                   ptr_mrate_col,
@@ -2938,26 +2937,27 @@ static FILE * resume(stree_t ** ptr_stree,
    NOTE: *ALL* parameters of this function are output parameters, therefore
    do not concentrate on them when reading this function - they are filled
    at the end of the routine */
-static FILE* init(stree_t** ptr_stree,
-  gtree_t*** ptr_gtree,
-  locus_t*** ptr_locus,
-  unsigned long* ptr_curstep,
-  long* ptr_ft_round,
-  long* ptr_dparam_count,
-  double** ptr_posterior,
-  long* ptr_ft_round_rj,
-  long* ptr_ft_round_spr,
-  long* ptr_ft_round_snl,
-  double* ptr_mean_logl,
-  stree_t** ptr_sclone,
-  gtree_t*** ptr_gclones,
-  FILE*** ptr_fp_gtree,
-  FILE*** ptr_fp_mig,
-  FILE*** ptr_fp_locus,
-  FILE*** ptr_fp_migcount,
-  FILE** ptr_fp_out,
-  FILE** ptr_fp_a1b1,
-  int** ptr_printLocusIndex)
+static FILE * init(stree_t ** ptr_stree,
+                   gtree_t *** ptr_gtree,
+                   locus_t *** ptr_locus,
+                   unsigned long * ptr_curstep,
+                   long * ptr_ft_round,
+                   long * ptr_dparam_count,
+                   double ** ptr_posterior,
+                   long * ptr_ft_round_rj,
+                   long * ptr_ft_round_spr,
+                   long * ptr_ft_round_snl,
+                   long ** ptr_ft_round_theta,
+                   double * ptr_mean_logl,
+                   stree_t ** ptr_sclone,
+                   gtree_t *** ptr_gclones,
+                   FILE *** ptr_fp_gtree,
+                   FILE *** ptr_fp_mig,
+                   FILE *** ptr_fp_locus,
+                   FILE *** ptr_fp_migcount,
+                   FILE ** ptr_fp_out,
+                   FILE ** ptr_fp_a1b1,
+                   int ** ptr_printLocusIndex)
 {
   long i, j;
   long msa_count;
@@ -4146,6 +4146,10 @@ static FILE* init(stree_t** ptr_stree,
   *ptr_ft_round_snl = 0;
   *ptr_mean_logl = 0;
 
+  /* keeping track of theta rounds (+1 for gibbs) for adjusting step lengths */
+  *ptr_ft_round_theta = (long *)xcalloc((size_t)opt_finetune_theta_count+1,
+                                        sizeof(long));
+
   *ptr_sclone = sclone;
   *ptr_gclones = gclones;
 
@@ -4428,7 +4432,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
               a1 += gtree[msa_index]->migcount[i][j];
               b1 += stree->Wsji[i][j][msa_index];
             }
-            fprintf(fp_a1b1, "\t%.1f\t%.1f", a1, b1);
+            fprintf(fp_a1b1, "\t%.1f\t%.2f", a1, b1);
           }
         }
     #endif
@@ -4440,6 +4444,8 @@ void cmd_run()
   /* common variables for all methods */
   long i,j,k;
   long ft_round;
+  long * ft_round_theta = NULL;
+  long * ft_round_theta_bits = NULL;
   double logl_sum = 0;
   long * phi_av = NULL;
   long * phi_av_count = NULL;
@@ -4531,6 +4537,7 @@ void cmd_run()
                      &ft_round_rj,
                      &ft_round_spr,
                      &ft_round_snl,
+                     &ft_round_theta,
                      &mean_logl,
                      &mean_mrate_row,
                      &mean_mrate_col,
@@ -4564,6 +4571,7 @@ void cmd_run()
                    &ft_round_rj,
                    &ft_round_spr,
                    &ft_round_snl,
+                   &ft_round_theta,
                    &mean_logl,
                    &sclone, 
                    &gclones,
@@ -4606,8 +4614,11 @@ void cmd_run()
     /* TODO: pspecies should be in the checkpoint */
     if (opt_method == METHOD_11)
       pspecies = (double *)xcalloc((size_t)(stree->tip_count),sizeof(double));
-
   }
+
+  /* initialize theta finetune bits (+1 for gibbs) */
+  ft_round_theta_bits = (long *)xcalloc((size_t)opt_finetune_theta_count+1,
+                                        sizeof(long));
 
   if (opt_migration && opt_msci)
     fatal("Cannot use both MSci and IM models together");
@@ -4890,6 +4901,9 @@ void cmd_run()
       for (j = 0; j < 256; ++j)
         mig_model_count[j] = 0;
       #endif
+
+      for (j = 0; j <= opt_finetune_theta_count; ++j)
+        ft_round_theta[j] = 0;
     }
 
     ++ft_round;
@@ -5026,24 +5040,37 @@ void cmd_run()
       
     if (opt_est_theta)
     {
-      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype);
+      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype,ft_round_theta_bits);
+
+      /* increase ft_round for corresponding step lengths */
+      for (j = 0; j <= opt_finetune_theta_count; ++j)
+      {
+        ft_round_theta[j] += ft_round_theta_bits[j];
+      }
+
       if (opt_theta_slide_prob == 1)
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
-          g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
+          g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
       }
       else if (opt_theta_slide_prob == 0)
       {
+        /* gibbs sampler */
+        long round_gibbs = ft_round_theta[opt_finetune_theta_count];
         for (j = 0; j < opt_finetune_theta_count; ++j)
-          g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+          g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(round_gibbs-1)+theta_av_gibbs[j]) / (double)round_gibbs;
+        
       }
       else  /* ziheng-note-2024.12.28: is this block correct?  It does not look right to use ft_round? */
       {
+        long round_gibbs = ft_round_theta[opt_finetune_theta_count];
         for (j = 0; j < opt_finetune_theta_count; ++j)
           if (theta_av_movetype[j] == BPP_THETA_MOVE_SLIDE)
-            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round-1)+theta_av_slide[j]) / (double)ft_round;
+            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
           else if (theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS)
-            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(ft_round-1)+theta_av_gibbs[j]) / (double)ft_round;
+          {
+            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(round_gibbs-1)+theta_av_gibbs[j]) / (double)round_gibbs;
+          }
           else
             assert(theta_av_movetype[j] == BPP_THETA_MOVE_NONE);
       }
@@ -5736,6 +5763,7 @@ void cmd_run()
                         ft_round_rj,
                         ft_round_spr,
                         ft_round_snl,
+                        ft_round_theta,
                         mean_logl,
                         mean_mrate_row,
                         mean_mrate_col,
@@ -6049,6 +6077,8 @@ void cmd_run()
     free(opt_mig_specs);
   }
 
+  free(ft_round_theta);
+  free(ft_round_theta_bits);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 4
 
-#define PVER_SHA1 "0f15be94786f938283015aa11b484593f61daada"
+#define PVER_SHA1 "7c78aabe9a115e0980fe929cf9a4ba17fe416eeb"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -1466,7 +1466,8 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype);
+                         long * acceptvec_movetype,
+                         long * ft_round_theta_bits);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -2102,6 +2103,7 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
+                    long * ft_round_theta,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -2139,6 +2141,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
+                    long ** ft_round_theta,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,

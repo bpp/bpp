@@ -189,6 +189,7 @@ static void dump_chk_section_1(FILE * fp,
                                long ft_round_rj,
                                long ft_round_spr,
                                long ft_round_snl,
+                               long * ft_round_theta,
                                double mean_logl,
                                long * mean_mrate_row,
                                long * mean_mrate_col,
@@ -496,6 +497,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
   DUMP(&ft_round_snl, 1, fp);
+  DUMP(ft_round_theta,opt_finetune_theta_count+1,fp);
   DUMP(&g_pj_sspr, 1, fp);
   DUMP(&g_pj_ssnl,1,fp);
   DUMP(&mean_logl,1,fp);
@@ -1029,6 +1031,7 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
+                    long * ft_round_theta,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -1084,6 +1087,7 @@ int checkpoint_dump(stree_t * stree,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
+                     ft_round_theta,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

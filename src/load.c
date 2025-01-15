@@ -253,6 +253,7 @@ static void load_chk_section_1(FILE * fp,
                                long * ft_round_rj,
                                long * ft_round_spr,
                                long * ft_round_snl,
+                               long ** ft_round_theta,
                                double * mean_logl,
                                long ** mean_mrate_row,
                                long ** mean_mrate_col,
@@ -877,6 +878,11 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(ft_round_snl, 1, fp))
     fatal("Cannot read finetune round for species tree SNL");
+
+  *ft_round_theta = (long *)xmalloc((size_t)(opt_finetune_theta_count+1) *
+                                    sizeof(long));
+  if (!LOAD(*ft_round_theta,opt_finetune_theta_count+1,fp))
+    fatal("Cannot read finetune round for thetas");
 
   if (!LOAD(&g_pj_sspr, 1, fp))
     fatal("Cannot read species tree SPR pjump");
@@ -2036,6 +2042,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
+                    long ** ft_round_theta,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,
@@ -2090,6 +2097,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
+                     ft_round_theta,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

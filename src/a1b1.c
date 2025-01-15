@@ -469,11 +469,15 @@ void conditional_to_marginal(double * ai_full,
   for (i = 0; i < nsamples; ++i)
     sd += (ui[i]-mean)*(ui[i]-mean);
   sd = sqrt(sd/nsamples);
+  long c_inf = 0;
+  if (fabs(sd) < 1e-10)
+    c_inf = 1;
 
   T_u = eff_ict(ui, nsamples, mean, sd, &rho1_u);
   vm = sd*sd;
   variance = mv + vm; sd = sqrt(variance);
-  c = variance / vm; 
+  c = c_inf ? INFINITY : variance / vm;
+
   E_u = c / T_u;
   E_y = 1. / (1. + (T_u - 1.) / c);
 
