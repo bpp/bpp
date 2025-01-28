@@ -3244,14 +3244,28 @@ static FILE * init(stree_t ** ptr_stree,
   if (!opt_onlysummary)
   {
     if (!(fp_mcmc = fopen(opt_mcmcfile, "w")))
-      fatal("Cannot open file %s for writing...");
+      fatal("Cannot open file %s for writing...", opt_mcmcfile);
   }
 
   /* print compressed alignmens in output file */
-  fprintf(fp_out, "COMPRESSED ALIGNMENTS\n\n");
+
+  char * fn_seqaln_zip;
+  xasprintf(&fn_seqaln_zip, "%s.compressed-aln.phy", opt_jobname);
+
+  fprintf(stdout,
+          "Writing multilocus alignments with compressed site patterns in %s\n\n",
+          fn_seqaln_zip);
+  fprintf(fp_out,
+          "Writing multilocus alignments with compressed site patterns in %s\n\n",
+          fn_seqaln_zip);
+
+  FILE * fp_seqaln_zip = xopen(fn_seqaln_zip, "w");
 
   /* print the alignments */
-  msa_print_phylip(fp_out,msa_list,msa_count, weights);
+  msa_print_phylip(fp_seqaln_zip,msa_list,msa_count, weights);
+
+  free(fn_seqaln_zip);
+  fclose(fp_seqaln_zip);
 
   /* TODO: PLACE DIPLOID CODE HERE */
   /* mapping from A2 -> A3 if diploid sequences used */
