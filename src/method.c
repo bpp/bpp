@@ -392,9 +392,9 @@ static void print_mcmc_headerline(FILE * fp,
   if (opt_msci)
   {
     if (opt_phi_slide_prob > 0)
-      fprintf(fp, "  phis: MSCi phi parameter proposal (sliding window)\n");
+      fprintf(fp, "  phis: MSC-I phi parameter proposal (sliding window)\n");
     if (opt_phi_slide_prob < 1)
-      fprintf(fp, "  phig: MSCi phi parameter proposal (gibbs sampler)\n");
+      fprintf(fp, "  phig: MSC-I phi parameter proposal (gibbs sampler)\n");
   }
   if (enabled_prop_freqs)
     fprintf(fp, "    pi: base frequencies proposal\n");
@@ -484,7 +484,7 @@ static void print_mcmc_headerline(FILE * fp,
     }
   }
   if (opt_msci)
-    fprintf(fp, "log-PG: log-probability of gene trees (MSCi)\n");
+    fprintf(fp, "log-PG: log-probability of gene trees (MSC-I)\n");
   else
     fprintf(fp, "log-PG: log-probability of gene trees (MSC)\n");
   fprintf(fp, " log-L: mean log-L of observing data\n");
@@ -3015,7 +3015,7 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_finetune_phi == -1)
       fatal("Missing finetune value for phi parameter");
     if (opt_clock == BPP_CLOCK_CORR)
-      fatal("MSCi model with auto-correlated relaxed clock is not currently implemented.");
+      fatal("MSC-I model with auto-correlated relaxed clock is not currently implemented.");
 
     print_network_table(stree, fp_out);
     print_network_table(stree, stdout);
