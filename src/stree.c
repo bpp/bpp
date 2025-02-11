@@ -3588,7 +3588,7 @@ static int propose_theta_gibbs(stree_t * stree,
 
       for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
       {
-        C2h_sum += stree->nodes[j]->C2ji[msa_index];
+        C2h_sum += stree->nodes[j]->C2ji[msa_index]/locus[msa_index]->heredity[0];
         coal_sum += stree->nodes[j]->coal_count[msa_index];
       }
     }
@@ -3598,7 +3598,7 @@ static int propose_theta_gibbs(stree_t * stree,
     for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
     {
       coal_sum += snode->coal_count[msa_index];
-      C2h_sum += snode->C2ji[msa_index];
+      C2h_sum += snode->C2ji[msa_index]/locus[msa_index]->heredity[0];
     }
   }
 
@@ -3655,8 +3655,8 @@ static int propose_theta_gibbs(stree_t * stree,
         gtree_update_logprob_contrib_mig(x, stree, gtree[i], locus[i]->heredity[0],i,thread_index);
       #else
       x->old_logpr_contrib[i] = x->logpr_contrib[i];
-      x->logpr_contrib[i] += x->C2ji[i]/oldtheta;
-      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] += x->C2ji[i]/(oldtheta*locus[i]->heredity[0]);
+      x->logpr_contrib[i] -= x->C2ji[i]/(x->theta*locus[i]->heredity[0]);
       x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*oldtheta));
       x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
       #endif
@@ -3820,8 +3820,8 @@ static int propose_theta_slide(stree_t * stree,
         gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
       #else
       x->old_logpr_contrib[i] = x->logpr_contrib[i];
-      x->logpr_contrib[i] += x->C2ji[i]/thetaold;
-      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] += x->C2ji[i]/(thetaold*locus[i]->heredity[0]);
+      x->logpr_contrib[i] -= x->C2ji[i]/(x->theta*locus[i]->heredity[0]);
       x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*thetaold));
       x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
       #endif
@@ -5730,7 +5730,7 @@ static long propose_tau(locus_t ** loci,
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          C2j_old += snodes[jj]->C2ji[ii];
+          C2j_old += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
 
           #if 0
           double dbg_shortC2j = 0;
@@ -5768,7 +5768,7 @@ static long propose_tau(locus_t ** loci,
                                    ii,
                                    thread_index);
           else
-            C2j_new += snodes[jj]->C2ji[ii];
+            C2j_new += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
         }
       }
 
@@ -6769,7 +6769,7 @@ static long propose_tau_mig(locus_t ** loci,
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          C2j_old += snodes[jj]->C2ji[ii];
+          C2j_old += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
 
           if (snodes[jj]->flag & SN_AFFECT)
           {
@@ -6786,7 +6786,7 @@ static long propose_tau_mig(locus_t ** loci,
                                            thread_index);
           }
           else
-            C2j_new += snodes[jj]->C2ji[ii];
+            C2j_new += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
         }
 
         /* change migration rate */

@@ -4344,7 +4344,11 @@ static void pjump_reset()
   g_pj_rj = 0;
 }
 
-static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcmc_step)
+static void log_a1b1(FILE * fp_a1b1,
+                     stree_t * stree,
+                     gtree_t ** gtree,
+                     locus_t ** locus,
+                     long mcmc_step)
 {
   long i,j;
   long msa_index;
@@ -4376,7 +4380,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
 
         for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
         {
-          C2h_sum += stree->nodes[j]->C2ji[msa_index];
+          C2h_sum += stree->nodes[j]->C2ji[msa_index]/locus[msa_index]->heredity[0];
           coal_sum += stree->nodes[j]->coal_count[msa_index];
         }
       }
@@ -4386,7 +4390,7 @@ static void log_a1b1(FILE * fp_a1b1, stree_t * stree, gtree_t ** gtree, long mcm
       for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
       {
         coal_sum += snode->coal_count[msa_index];
-        C2h_sum += snode->C2ji[msa_index];
+        C2h_sum += snode->C2ji[msa_index]/locus[msa_index]->heredity[0];
       }
     }
 
@@ -5137,7 +5141,7 @@ void cmd_run()
     
     if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
     {
-      log_a1b1(fp_a1b1, stree, gtree, i);
+      log_a1b1(fp_a1b1, stree, gtree, locus, i);
     }    
 
     /* mixing step */
@@ -5335,7 +5339,6 @@ void cmd_run()
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-
       ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
       g_pj_nui = (g_pj_nui*(ft_round-1)+ratio) / (double)ft_round;
       #ifdef CHECK_LOGL

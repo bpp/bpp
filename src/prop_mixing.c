@@ -356,7 +356,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          Cjstar += snodes[jj]->C2ji[ii];
+          Cjstar += snodes[jj]->C2ji[ii]/locus[ii]->heredity[0];
         }
       }
       Cjstar *= c;

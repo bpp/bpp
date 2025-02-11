@@ -253,8 +253,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
 #define BPP_LOCRATE_PRIOR_NONE  	2
-#define BPP_LOCRATE_PRIOR_MAX           1
-#define BPP_LOCRATE_PRIOR_DIR           2
+#define BPP_LOCRATE_PRIOR_MAX           3
+#define BPP_LOCRATE_PRIOR_DIR           3
 
 #define BPP_BRATE_PRIOR_MIN             0
 #define BPP_BRATE_PRIOR_LOGNORMAL       0
