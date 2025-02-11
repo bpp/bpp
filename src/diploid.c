@@ -177,7 +177,7 @@ static void update_date_list(list_t * maplist, list_t * datelist)
       list_append(newlist, (void *)newmap);
 
       /* add second label mapping */
-      newmap = (mapping_t *)xmalloc(sizeof(mapping_t));
+      newmap = (mappingDate_t *)xmalloc(sizeof(mapping_t));
       xasprintf(&(newmap->individual), "%s.2", map->individual);
       newmap->date = map->date;
       newmap->lineno = map->lineno;
@@ -187,7 +187,7 @@ static void update_date_list(list_t * maplist, list_t * datelist)
     /* Adds the sequence without changing the name to the new list if phased */
     else
     {
-      newmap = (mapping_t *)xmalloc(sizeof(mapping_t));
+      newmap = (mappingDate_t *)xmalloc(sizeof(mapping_t));
       newmap->individual = xstrdup(map->individual);
       newmap->date    = map->date;
       newmap->lineno = map->lineno;
