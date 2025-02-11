@@ -5069,7 +5069,10 @@ void cmd_run()
       if (opt_theta_slide_prob == 1)
       {
         for (j = 0; j < opt_finetune_theta_count; ++j)
-          g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
+        {
+          if (theta_av_movetype[j] != BPP_THETA_MOVE_NONE)
+            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
+        }
       }
       else if (opt_theta_slide_prob == 0)
       {
