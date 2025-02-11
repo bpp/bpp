@@ -2,7 +2,7 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [4.8.4] - 2025-02-05
+## [4.8.4] - 2025-02-11
 ## Added
  - usedata=2 for using fixed gene trees as data instead of sequences
  - Simulation of sequences with genotyping errors with mixed diploid and haploid
@@ -18,6 +18,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
  - Theta pjump calculation for mixture of gibbs and sliding window sampling by
    introducing move counters for each eps
  - Incorrect number of steplengths when using --theta_mode 3 under MSC-I model 3
+ - Heredity scaler estimation when combined with gibbs sampler for thetas
+ - Incorrect typecast in diploid code when tipdating
 
 ## [4.8.2] - 2024-11-28
 ## Changed
