@@ -674,6 +674,18 @@ long prop_split(gtree_t ** gtree,
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
+  if (opt_traitfile)  //Chi
+  {
+    /* update the contrasts (continuous) or conditional probs (discrete)
+       as node age (tau) has been changed */
+    trait_update(stree);
+    
+    /* then calculate the log likelihood difference */
+    for (i = 0; i < stree->trait_count; ++i)
+      lnacceptance -= stree->trait_old_logl[i];
+    lnacceptance += loglikelihood_trait(stree);
+  }
+
   if (opt_debug_rj)
     printf("[Debug] (split) lnacceptance = %f\n", lnacceptance);
 
@@ -701,10 +713,15 @@ long prop_split(gtree_t ** gtree,
 
     if (!opt_est_theta)
       stree->notheta_logpr = logpr;
+    
+    if (opt_traitfile)  //Chi
+      trait_store(stree);
   }
   else
   {
     /* reject */
+    if (opt_traitfile)  //Chi
+      trait_restore(stree);
 
     node->tau = node->old_tau;
     node->left->theta  = node->left->old_theta;
@@ -1142,6 +1159,18 @@ long prop_join(gtree_t ** gtree,
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
+  if (opt_traitfile)  //Chi
+  {
+    /* update the contrasts (continuous) or conditional probs (discrete)
+       as node age (tau) has been changed */
+    trait_update(stree);
+    
+    /* then calculate the log likelihood difference */
+    for (i = 0; i < stree->trait_count; ++i)
+      lnacceptance -= stree->trait_old_logl[i];
+    lnacceptance += loglikelihood_trait(stree);
+  }
+
   if (opt_debug_rj)
     printf("[Debug] (join) lnacceptance = %f\n", lnacceptance);
 
@@ -1168,10 +1197,14 @@ long prop_join(gtree_t ** gtree,
     if (!opt_est_theta)
       stree->notheta_logpr = logpr;
 
+    if (opt_traitfile)  //Chi
+      trait_store(stree);
   }
   else
   {
     /* rejected */
+    if (opt_traitfile)  //Chi
+      trait_restore(stree);
 
     /* restore old tau */
     node->tau = node->old_tau;

@@ -6110,6 +6110,18 @@ static long propose_tau(locus_t ** loci,
   debug_consistency(stree,gtree,"tau");
   #endif
 
+  if (opt_traitfile)  //Chi
+  {
+    /* update the contrasts (continuous) or conditional probs (discrete)
+       as node age (tau) has been changed */
+    trait_update(stree);
+    
+    /* then calculate the log likelihood difference */
+    for (i = 0; i < stree->trait_count; ++i)
+      lnacceptance -= stree->trait_old_logl[i];
+    lnacceptance += loglikelihood_trait(stree);
+  }
+
   lnacceptance += logpr_diff + logl_diff + count_below*log(minfactor) +
                   count_above*log(maxfactor);
 
@@ -6120,6 +6132,9 @@ static long propose_tau(locus_t ** loci,
   {
     /* accepted */
     accepted++;
+
+    if (opt_traitfile)  //Chi
+      trait_store(stree);
 
     for (i = 0; i < stree->locus_count; ++i)
     {
@@ -6137,6 +6152,10 @@ static long propose_tau(locus_t ** loci,
   {
     /* rejected */
     snode->tau = oldage;
+
+    if (opt_traitfile)  //Chi
+      trait_restore(stree);
+
     if (opt_msci && snode->hybrid)
     {
       if (node_is_hybridization(snode))
@@ -15180,8 +15199,8 @@ static long mig_models_count(long n)
 
 
 /*** Ziheng $$$ ***/
-#define DEBUG_zy
-int times = 0;
+// #define DEBUG_zy
+// int times = 0;
 
 static void debug_check_matrix(stree_t * stree)
 {

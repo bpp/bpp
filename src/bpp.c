@@ -98,6 +98,7 @@ long opt_linkedtheta;
 long opt_load_balance;
 long opt_locusrate_prior;
 long opt_locus_count;
+long opt_trait_count;
 long opt_locus_simlen;
 long opt_max_species_count;
 long opt_method;
@@ -150,10 +151,13 @@ long opt_version;
 long opt_extend;
 double opt_alpha_alpha;
 double opt_alpha_beta;
+double opt_brate_alpha;
+double opt_brate_beta;
 double opt_bfbeta;
 double opt_clock_vbar;
 double opt_finetune_alpha;
 double opt_finetune_branchrate;
+double opt_finetune_brate_m;
 double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
@@ -213,6 +217,7 @@ char * opt_locusrate_filename;
 char * opt_mapfile;
 char * opt_mcmcfile;
 char * opt_modelparafile;
+char * opt_traitfile;  // morphological traits
 char * opt_msafile;
 char * opt_mscifile;
 char * opt_partition_file;
@@ -267,6 +272,7 @@ double g_pj_nubar;
 double g_pj_mui;
 double g_pj_nui;
 double g_pj_brate;
+double g_pj_brate_m;
 double g_pj_mrate;
 double g_pj_migvr;
 double * g_pj_theta_gibbs;
@@ -436,6 +442,8 @@ void args_init(int argc, char ** argv)
   opt_arch = -1;
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
+  opt_brate_alpha = 1;
+  opt_brate_beta = 1;
   opt_bfbeta = 1;
   opt_bfdriver = NULL;
   opt_bfd_points = 0;
@@ -510,6 +518,7 @@ void args_init(int argc, char ** argv)
 #endif
   opt_finetune_alpha = 0.1;
   opt_finetune_branchrate = 0.1;
+  opt_finetune_brate_m = 0.1;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
@@ -542,6 +551,7 @@ void args_init(int argc, char ** argv)
   opt_locusrate_prior = -1;
   opt_locusrate_mubar = 1;
   opt_locus_count = 0;
+  opt_trait_count = 0;
   opt_locus_simlen = 0;
   opt_mapfile = NULL;
   opt_datefile = NULL;
@@ -563,6 +573,7 @@ void args_init(int argc, char ** argv)
   opt_model = -1;
   opt_modelparafile = NULL;
   opt_mrate_move = BPP_MRATE_GIBBS;
+  opt_traitfile = NULL;
   opt_msafile = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
@@ -651,6 +662,7 @@ void args_init(int argc, char ** argv)
   g_pj_mui = 0;
   g_pj_nui = 0;
   g_pj_brate = 0;
+  g_pj_brate_m = 0;
   g_pj_mrate = 0;
   g_pj_migvr = 0;
   g_pj_theta_gibbs = NULL;
@@ -1003,6 +1015,7 @@ static void dealloc_switches()
   if (opt_datefile) free(opt_datefile);
   if (opt_seqDates) free(opt_seqDates);
   if (opt_mcmcfile) free(opt_mcmcfile);
+  if (opt_traitfile) free(opt_traitfile);
   if (opt_msafile) free(opt_msafile);
   if (opt_mscifile) free(opt_mscifile);
   if (opt_jobname) free(opt_jobname);
