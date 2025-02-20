@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -253,6 +253,7 @@ static void load_chk_section_1(FILE * fp,
                                long * ft_round_rj,
                                long * ft_round_spr,
                                long * ft_round_snl,
+                               long ** ft_round_theta,
                                double * mean_logl,
                                long ** mean_mrate_row,
                                long ** mean_mrate_col,
@@ -470,11 +471,14 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'opt_sp_seqcount'");
 
   /* read usedata, cleandata and nloci */
-  if (!LOAD(&opt_usedata,1,fp))
+  if (!LOAD(&opt_usedata, 1, fp))
     fatal("Cannot read 'usedata' tag");
-  #if 0
+  if (!LOAD(&opt_usedata_fix_gtree, 1, fp))
+    fatal("Cannot read 'usedata_fix_gtree' tag");
+#if 0
   printf(" usedata: %ld\n", opt_usedata);
-  #endif
+  printf(" usedata_fix_gtree: %ld\n", opt_usedata_fix_gtree);
+#endif
   if (!LOAD(&opt_cleandata,1,fp))
     fatal("Cannot read 'cleandata' tag");
   #if 0
@@ -529,6 +533,10 @@ static void load_chk_section_1(FILE * fp,
 
   if (opt_print_samples == 0)
     fatal("Corrupted checkfpoint file, opt_print_samples=0");
+
+  /* read keep labels option */
+  if (!LOAD(&opt_keep_labels,1,fp))
+    fatal("Cannot read keep-labels option");
 
   /* read theta prior */
   if (!LOAD(&opt_theta_prior,1,fp))
@@ -874,6 +882,11 @@ static void load_chk_section_1(FILE * fp,
 
   if (!LOAD(ft_round_snl, 1, fp))
     fatal("Cannot read finetune round for species tree SNL");
+
+  *ft_round_theta = (long *)xmalloc((size_t)(opt_finetune_theta_count+1) *
+                                    sizeof(long));
+  if (!LOAD(*ft_round_theta,opt_finetune_theta_count+1,fp))
+    fatal("Cannot read finetune round for thetas");
 
   if (!LOAD(&g_pj_sspr, 1, fp))
     fatal("Cannot read species tree SPR pjump");
@@ -2033,6 +2046,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
+                    long ** ft_round_theta,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,
@@ -2087,6 +2101,7 @@ int checkpoint_load(gtree_t *** gtreep,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
+                     ft_round_theta,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

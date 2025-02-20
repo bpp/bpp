@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -93,6 +93,7 @@ long opt_finetune_reset;
 long opt_finetune_theta_count;
 long opt_finetune_theta_mode;
 long opt_help;
+long opt_keep_labels;
 long opt_linkedtheta;
 long opt_load_balance;
 long opt_locusrate_prior;
@@ -145,6 +146,7 @@ long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
 long opt_usedata;
+long opt_usedata_fix_gtree; 
 long opt_version;
 long opt_extend;
 double opt_alpha_alpha;
@@ -334,6 +336,7 @@ static struct option long_options[] =
   {"no-mix-w-update",      no_argument,       0, 0 },  /* 49 */
   {"extend",               required_argument, 0, 0 },  /* 50 */
   {"phi-slide-prob",       required_argument, 0, 0 },  /* 51 */
+  {"keep-labels",          no_argument,       0, 0 },  /* 52 */
   { 0, 0, 0, 0 }
 };
 
@@ -538,6 +541,7 @@ void args_init(int argc, char ** argv)
   opt_finetune_theta_count = 1;
   opt_finetune_theta_mode = 2;
   opt_help = 0;
+  opt_keep_labels = 0;
   opt_heredity_alpha = 0;
   opt_heredity_beta = 0;
   opt_heredity_filename = NULL;
@@ -580,7 +584,7 @@ void args_init(int argc, char ** argv)
   opt_partition_list = NULL;
   opt_phi_alpha = 0;
   opt_phi_beta = 0;
-  opt_phi_slide_prob = 0.2;
+  opt_phi_slide_prob = 0.1;
   opt_print_a1b1 = 1;  /* the default is to print into conditional_a1b1.txt */
   opt_print_genetrees = 0;
   opt_print_hscalars = 0;
@@ -632,12 +636,13 @@ void args_init(int argc, char ** argv)
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_prop = -1;
   opt_theta_gibbs_showall_eps = 0;
-  opt_theta_slide_prob = 0.2; /* proportion of sliding window proposals */
+  opt_theta_slide_prob = 0.1; /* proportion of sliding window proposals */
   opt_threads = 1;
   opt_threads_start = 1;
   opt_threads_step = 1;
   opt_treefile = NULL;
   opt_usedata = 1;
+  opt_usedata_fix_gtree = 0;
   opt_version = 0;
   opt_extend = 0;
   opt_seqAncestral = 0; 
@@ -928,6 +933,10 @@ void args_init(int argc, char ** argv)
         opt_phi_slide_prob = atof(optarg);
         break;
 
+      case 52:
+        opt_keep_labels = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1041,18 +1050,21 @@ void cmd_help()
           "  --cfile FILENAME         run analysis for the specified control file\n"
           "  --simulate FILENAME      run simulation for the specified control file\n"
           "  --resume FILENAME        resume analysis from a specified checkpoint file\n"
-          "  --arch SIMD              force specific vector instruction set (default: auto)\n"
           "  --msci-create FILENAME   construct an MSci graph using a definitions file\n"
+          "  --summary FILENAME       summarize results using specified control file\n"
+          "\n"
+          "Advanced options:\n"
+          "  --arch SIMD              force specific vector instruction set (default: auto)\n"
           "  --bfdriver FILENAME      create control files to calculate marginal likelihood\n"
           "  --points INTEGER         number of G-L quadrature points (used with --bfdriver)\n"
-          "  --summary FILENAME       summarize results using specified control file\n"
           "  --no-pin                 do not pin threads to cores\n"
           "  --theta-eps-mode INTEGER step lengths for theta proposals (default: 1)\n"
-          "  --theta-prop STRING      proposal distribution for theta gibbs move\n"
+          "  --theta-prop STRING      prop. dist. for theta gibbs move ('mg_invg' or 'mg_gamma')\n"
           "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
-          "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.2)\n"
-          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.2)\n"
+          "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.1)\n"
+          "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.1)\n"
           "  --mrate-move STRING      'gibbs' or 'slide' sampling of migration rate W\n"
+          "  --extend INTEGER         extend resumed analysis by number of MCMC samples\n"
           "\n"
          );
 

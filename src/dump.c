@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -189,6 +189,7 @@ static void dump_chk_section_1(FILE * fp,
                                long ft_round_rj,
                                long ft_round_spr,
                                long ft_round_snl,
+                               long * ft_round_theta,
                                double mean_logl,
                                long * mean_mrate_row,
                                long * mean_mrate_col,
@@ -299,7 +300,8 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(opt_sp_seqcount,stree->tip_count,fp);
   
   /* write usedata, cleandata and nloci */
-  DUMP(&opt_usedata,1,fp);
+  DUMP(&opt_usedata, 1, fp);
+  DUMP(&opt_usedata_fix_gtree, 1, fp);
   DUMP(&opt_cleandata,1,fp);
   DUMP(&opt_locus_count,1,fp);
 
@@ -321,6 +323,9 @@ static void dump_chk_section_1(FILE * fp,
     for (i = 0; i < opt_locus_count; i++) 
       DUMP(&printLocusIndex[i],1,fp);
   }
+
+  /* write keep labels option */
+  DUMP(&opt_keep_labels,1,fp);
 
   /* write theta prior */
   DUMP(&opt_theta_prior,1,fp);
@@ -495,6 +500,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
   DUMP(&ft_round_snl, 1, fp);
+  DUMP(ft_round_theta,opt_finetune_theta_count+1,fp);
   DUMP(&g_pj_sspr, 1, fp);
   DUMP(&g_pj_ssnl,1,fp);
   DUMP(&mean_logl,1,fp);
@@ -1028,6 +1034,7 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
+                    long * ft_round_theta,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -1083,6 +1090,7 @@ int checkpoint_dump(stree_t * stree,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
+                     ft_round_theta,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

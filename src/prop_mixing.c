@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -356,7 +356,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          Cjstar += snodes[jj]->C2ji[ii];
+          Cjstar += snodes[jj]->C2ji[ii]/locus[ii]->heredity[0];
         }
       }
       Cjstar *= c;

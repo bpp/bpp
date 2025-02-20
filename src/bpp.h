@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -156,9 +156,9 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 3
+#define VERSION_PATCH 4
 
-#define PVER_SHA1 "079bb48a9dc5c766bcc28e7cf766e47f5b4edf08"
+#define PVER_SHA1 "8b31bd5c0b7b5881ee361e995d87b8c868678181"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -255,8 +255,8 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
 #define BPP_LOCRATE_PRIOR_NONE          2
-#define BPP_LOCRATE_PRIOR_MAX           1
-#define BPP_LOCRATE_PRIOR_DIR           2
+#define BPP_LOCRATE_PRIOR_MAX           3
+#define BPP_LOCRATE_PRIOR_DIR           3
 
 #define BPP_BRATE_PRIOR_MIN             0
 #define BPP_BRATE_PRIOR_LOGNORMAL       0
@@ -1188,6 +1188,7 @@ extern long opt_finetune_reset;
 extern long opt_finetune_theta_count;
 extern long opt_finetune_theta_mode;
 extern long opt_help;
+extern long opt_keep_labels;
 extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;
@@ -1240,6 +1241,7 @@ extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;
 extern long opt_usedata;
+extern long opt_usedata_fix_gtree;
 extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;
@@ -1538,7 +1540,8 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype);
+                         long * acceptvec_movetype,
+                         long * ft_round_theta_bits);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -2176,6 +2179,7 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
+                    long * ft_round_theta,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -2213,6 +2217,7 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
+                    long ** ft_round_theta,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,

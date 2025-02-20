@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2014-2024 Tomas Flouri, Torbjorn Rognes, Jeff Epler
+    Copyright (C) 2014-2025 Tomas Flouri, Torbjorn Rognes, Jeff Epler
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as

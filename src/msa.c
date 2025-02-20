@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -154,6 +154,7 @@ void msa_count_ambiguous_sites(msa_t * msa, const unsigned int * map)
       msa->amb_sites_count++;
   }
 }
+
 static int * mark_ambiguous_sites(msa_t * msa, const unsigned int * map)
 {
   int i,j;

@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2016-2024 Tomas Flouri, Bruce Rannala and Ziheng Yang
+    Copyright (C) 2016-2025 Tomas Flouri, Bruce Rannala and Ziheng Yang
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -1309,8 +1309,7 @@ static void network_init_tau_iterative(stree_t * stree,
           if (x->tau != 1)
             continue;
 
-          x->tau = MIN(age1,age2) *
-                   (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+          x->tau = MIN(age1,age2) * prop;
           x->hybrid->tau = x->tau;
           if (x->htau == 0)
             x->parent->tau = x->tau;
@@ -1343,8 +1342,7 @@ static void network_init_tau_iterative(stree_t * stree,
                  x->right->tau == 1 &&
                  x->right->hybrid->tau == 1);
 
-          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau)*
-                       (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau) * prop;
 
           x->tau                = age;
           x->hybrid->tau        = age;
@@ -1369,8 +1367,7 @@ static void network_init_tau_iterative(stree_t * stree,
             {
               if (x->prop_tau)
               {
-                x->tau = x->parent->tau *
-                         (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+                x->tau = x->parent->tau * prop;
               }
               else
               {
@@ -1415,16 +1412,17 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   int index = node->node_index - stree->tip_count;
   if (node->tau && node->tau > 0) {
 
-    newage = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
-    if ((u_constraint[index] && newage > u_constraint[index]) || (l_constraint[index] && newage < l_constraint[index])) {
-	minage = l_constraint[index];
-	maxage = tau_parent;
-	if (u_constraint[index]) {
-		maxage = MIN (u_constraint[index], tau_parent);
-	}
-  	newage = reflect(newage, minage, maxage, thread_index);
-    } 
-    node->tau = newage;	
+    newage = tau_parent * prop;
+    if ((u_constraint[index] && newage > u_constraint[index]) 
+     || (l_constraint[index] && newage < l_constraint[index])) {
+      minage = l_constraint[index];
+      maxage = tau_parent;
+      if (u_constraint[index]) {
+        maxage = MIN(u_constraint[index], tau_parent);
+      }
+      newage = reflect(newage, minage, maxage, thread_index);
+    }
+    node->tau = newage;
   }
   else
     node->tau = 0;
@@ -1433,9 +1431,7 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   stree_init_tau_recursive_constraint(stree, node->right, prop, thread_index, u_constraint, l_constraint);
 }
 
-static void stree_init_tau_recursive(snode_t * node,
-                                     double prop,
-                                     long thread_index)
+static void stree_init_tau_recursive(snode_t * node, double prop, long thread_index)
 {
   assert(!opt_msci);
 
@@ -1455,7 +1451,7 @@ static void stree_init_tau_recursive(snode_t * node,
     node->theta = -1;
 
   if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * (prop + (1 - prop - 0.02)*legacy_rndu(thread_index));
+    node->tau = tau_parent * prop;
   else
     node->tau = 0;
 
@@ -1515,10 +1511,8 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 	   if (setDates) {
 	   	*tau_ctl  = 1; 
 	   	for (i = 0; i < stree->inner_count + stree->tip_count; i++) 
-		   	stree->nodes[i]->tau = stree->nodes[i]->length;
-	   
+		   	stree->nodes[i]->tau = stree->nodes[i]->length;	   
 	   }
-
   }
 
    /* set the speciation time for root */
@@ -1526,11 +1520,9 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
    	if (stree->root->tau)
    	{
    	  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1) *
-   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1);
    	  else
-   	    stree->root->tau = opt_tau_alpha / opt_tau_beta *
-   	                       (0.9 + 0.2*legacy_rndu(thread_index));
+   	    stree->root->tau = opt_tau_alpha / opt_tau_beta;
    	}
    }
 
@@ -2088,7 +2080,7 @@ void stree_propose_phi(stree_t * stree,
       acceptvec[BPP_PHI_MOVE_SLIDE] += accepted;
       movecount[BPP_PHI_MOVE_SLIDE]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+        fprintf(fp_a1b1, "\t%.2f\t%.2f",a1,b1);
     }
     else
     {
@@ -2101,17 +2093,16 @@ void stree_propose_phi(stree_t * stree,
       acceptvec[BPP_PHI_MOVE_GIBBS] += accepted;
       movecount[BPP_PHI_MOVE_GIBBS]++;
       if (opt_a1b1file && fp_a1b1 && mcmc_step >= 0 && (mcmc_step+1)%opt_samplefreq == 0)
-        fprintf(fp_a1b1, "\t%f\t%f",a1,b1);
+        fprintf(fp_a1b1, "\t%.2f\t%.2f",a1,b1);
     }
   }
 }
 
 static void stree_init_phi(stree_t * stree)
 {
-  long i;
-
+  long i, thread_index = 0;
   long offset = stree->tip_count + stree->inner_count;
-  long thread_index = 0;
+  double phi0 = 0.8;  /* initial phi for vertical branch */
 
   if (opt_phi_alpha <= 0)
     fatal("Alpha value for 'phiprior' must be larger than 0");
@@ -2121,7 +2112,6 @@ static void stree_init_phi(stree_t * stree)
   for (i = 0; i < stree->hybrid_count; ++i)
   {
     snode_t * mnode = stree->nodes[offset+i];
-
     assert(node_is_bidirection(mnode) || node_is_mirror(mnode));
 
     /* set phi parameter to the mean */
@@ -2130,42 +2120,34 @@ static void stree_init_phi(stree_t * stree)
       if (node_is_bidirection(mnode->hybrid))
       {
         /* bidirection (model D) */
-
-        /* we set phi for the vertical branch to U|(0.7,0.9). The mnode is
-           the mirror node, hence it is the horizontal branch */
-        double a = 0.7; double b = 0.9;
-        double r = (b-a)*legacy_rndu(thread_index) + a;
-        
-        mnode->hybrid->hphi = r;
-        mnode->hphi = 1-r;
+        /* The mnode is the mirror node, hence the horizontal branch */
+        mnode->hybrid->hphi = phi0;
+        mnode->hphi = 1 - phi0;
       }
       else
       {
         /* hybridization */
-
         /* for models A and C draw the value of phi from U(0,1). For model B
-           set phi for the vertical branch to U(0.7,0.9) */
+           set phi for the vertical branch to phi0 */
         if ((!mnode->htau && !mnode->hybrid->htau) ||
             (mnode->htau && mnode->hybrid->htau))
         {
           /* model A or C */
-          mnode->hphi = legacy_rndu(thread_index);
+          mnode->hphi = phi0;
           mnode->hybrid->hphi = 1 - mnode->hphi;
         }
         else
         {
-          /* model B */
-          double a = 0.7; double b = 0.9;
-          double r = (b-a)*legacy_rndu(thread_index) + a;
+          /* model B */;
           if (mnode->htau)
           {
-            mnode->hphi = r;
-            mnode->hybrid->hphi = 1 - r;
+            mnode->hphi = phi0;
+            mnode->hybrid->hphi = 1 - phi0;
           }
           else
           {
-            mnode->hybrid->hphi = r;
-            mnode->hphi = 1 - r;
+            mnode->hybrid->hphi = phi0;
+            mnode->hphi = 1 - phi0;
           }
         }
       }
@@ -2445,7 +2427,12 @@ static void stree_init_theta(stree_t * stree,
   long abort = 0;
   long warn = 0;
   unsigned int i, j;
-
+  double theta0 = -1;
+  
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+    theta0 = opt_theta_beta / (opt_theta_alpha - 1);
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+    theta0 = opt_theta_alpha / opt_theta_beta;
 
   /* initialize population sizes for extinct populations and populations
      with more than one lineage at some locus */
@@ -2567,7 +2554,6 @@ static void stree_init_theta(stree_t * stree,
      to set estimation of thetas according to the 'species&tree' tag in the
      control file. */
   init_theta_linkage(stree);
-  init_theta_stepsize(stree);
   for (i = 0; i < stree->tip_count; ++i)
   {
     snode_t * snode = stree->nodes[i];
@@ -2604,78 +2590,38 @@ static void stree_init_theta(stree_t * stree,
         continue;
       }
     }
-
-    /* otherwise set theta around the mean of the prior */
-    if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-      snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                    (0.9 + 0.2 * legacy_rndu(thread_index));
-    else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-      snode->theta = opt_theta_alpha / opt_theta_beta *
-                     (0.6+0.8*legacy_rndu(thread_index));
+    /* otherwise set theta */
+    snode->theta = theta0;    
   }
 
   /* go through inner nodes and setup thetas */
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
   {
     snode_t * snode = stree->nodes[i];
-
     if (opt_msci && snode->hybrid)
     {
       snode->theta = snode->hybrid->theta = -1;
       snode->has_theta = snode->hybrid->has_theta = 0;
-
       if (!node_is_bidirection(snode))
       {
         /* node is a hybridization: we assign a theta to the nodes that
            compose it that have a 'tau-parent' (htau) annotation */
-
         if (snode->htau)
         {
-          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                           (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            snode->theta = opt_theta_alpha / opt_theta_beta *
-                           (0.6+0.8*legacy_rndu(thread_index));
+          snode->theta = theta0;
           snode->has_theta = 1;
         }
-        else
-        {
-          snode->theta = -1;
-          snode->has_theta = 0;
-        }
-
         if (snode->hybrid->htau)
         {
-          if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-            snode->hybrid->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                                   (0.9 + 0.2 * legacy_rndu(thread_index));
-          else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-            snode->hybrid->theta = opt_theta_alpha / opt_theta_beta *
-                                   (0.6+0.8*legacy_rndu(thread_index));
+          snode->hybrid->theta = theta0;
           snode->hybrid->has_theta = 1;
-        }
-        else
-        {
-          snode->hybrid->theta = -1;
-          snode->hybrid->has_theta = 0;
         }
       }
       else
       {
-        /* bidirectional introgression */
-
-        if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-          snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                         (0.9 + 0.2 * legacy_rndu(thread_index));
-        else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-          snode->theta = opt_theta_alpha / opt_theta_beta *
-                         (0.6+0.8*legacy_rndu(thread_index));
+        /* bidirectional introgression: the mirrored nodes do not have a theta */
+        snode->theta = theta0;
         snode->has_theta = 1;
-
-        /* the mirrored nodes do not have a theta */
-        snode->hybrid->theta = -1;
-        snode->hybrid->has_theta = 0;
       }
     }
     else
@@ -2684,14 +2630,10 @@ static void stree_init_theta(stree_t * stree,
          case of inner nodes that have an incoming number of lineages equal to 1
          whether they should have a theta or not, and decided to keep it for
          code simplicity */
-      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
-        snode->theta = opt_theta_beta / (opt_theta_alpha - 1) *
-                      (0.9 + 0.2 * legacy_rndu(thread_index));
-      else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-        snode->theta = opt_theta_alpha / opt_theta_beta *
-                       (0.6+0.8*legacy_rndu(thread_index));
+      snode->theta = theta0;
     }
   }
+  init_theta_stepsize(stree);
 
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
   {
@@ -3120,9 +3062,7 @@ void stree_init(stree_t * stree,
   stree_reset_leaves(stree);
 
   if (opt_msci)
-  {
     msci_validate(stree);
-  }
 
   /* label each inner node of the species tree with the concatenated labels of
      its two children */
@@ -3137,9 +3077,8 @@ void stree_init(stree_t * stree,
     stree_init_tau(stree, thread_index, tau_ctl);
   }
   else
-  {
     stree->nodes[0]->tau = 0;
-  }
+
   //ANNA
   //stree->nodes[2]->tau = 1.4;
   /*stree->nodes[4]->tau = .1; 
@@ -3649,7 +3588,7 @@ static int propose_theta_gibbs(stree_t * stree,
 
       for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
       {
-        C2h_sum += stree->nodes[j]->C2ji[msa_index];
+        C2h_sum += stree->nodes[j]->C2ji[msa_index]/locus[msa_index]->heredity[0];
         coal_sum += stree->nodes[j]->coal_count[msa_index];
       }
     }
@@ -3659,7 +3598,7 @@ static int propose_theta_gibbs(stree_t * stree,
     for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
     {
       coal_sum += snode->coal_count[msa_index];
-      C2h_sum += snode->C2ji[msa_index];
+      C2h_sum += snode->C2ji[msa_index]/locus[msa_index]->heredity[0];
     }
   }
 
@@ -3716,8 +3655,8 @@ static int propose_theta_gibbs(stree_t * stree,
         gtree_update_logprob_contrib_mig(x, stree, gtree[i], locus[i]->heredity[0],i,thread_index);
       #else
       x->old_logpr_contrib[i] = x->logpr_contrib[i];
-      x->logpr_contrib[i] += x->C2ji[i]/oldtheta;
-      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] += x->C2ji[i]/(oldtheta*locus[i]->heredity[0]);
+      x->logpr_contrib[i] -= x->C2ji[i]/(x->theta*locus[i]->heredity[0]);
       x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*oldtheta));
       x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
       #endif
@@ -3881,8 +3820,8 @@ static int propose_theta_slide(stree_t * stree,
         gtree_update_logprob_contrib(x, locus[i]->heredity[0],i,thread_index);
       #else
       x->old_logpr_contrib[i] = x->logpr_contrib[i];
-      x->logpr_contrib[i] += x->C2ji[i]/thetaold;
-      x->logpr_contrib[i] -= x->C2ji[i]/x->theta;
+      x->logpr_contrib[i] += x->C2ji[i]/(thetaold*locus[i]->heredity[0]);
+      x->logpr_contrib[i] -= x->C2ji[i]/(x->theta*locus[i]->heredity[0]);
       x->logpr_contrib[i] -= x->coal_count[i]*log(2./(locus[i]->heredity[0]*thetaold));
       x->logpr_contrib[i] += x->coal_count[i]*log(2./(locus[i]->heredity[0]*x->theta));
       #endif
@@ -3933,7 +3872,8 @@ void stree_propose_theta(gtree_t ** gtree,
                          stree_t * stree,
                          double * acceptvec_gibbs,
                          double * acceptvec_slide,
-                         long * acceptvec_movetype)
+                         long * acceptvec_movetype,
+                         long * ft_round_theta_bits)
 {
   unsigned int i;
   long slide_tip_count = 0;
@@ -3946,13 +3886,16 @@ void stree_propose_theta(gtree_t ** gtree,
 
   long thread_index = 0;
 
-  /* reset acceptance vector */
+  /* reset acceptance vector and ft_rounds */
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
     acceptvec_gibbs[i] = 0;
     acceptvec_slide[i] = 0;
-    acceptvec_movetype[i] = -1;
+    acceptvec_movetype[i] = BPP_THETA_MOVE_NONE;
+
+    ft_round_theta_bits[i] = 0;
   }
+  ft_round_theta_bits[opt_finetune_theta_count] = 0;  /* gibbs */
 
   /* propose theta for each node */
   for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
@@ -3963,6 +3906,7 @@ void stree_propose_theta(gtree_t ** gtree,
       if (opt_theta_slide_prob>0 && legacy_rndu(thread_index) < opt_theta_slide_prob) /* slide */
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_SLIDE;
+        ft_round_theta_bits[snode->theta_step_index] = 1;
         av = acceptvec_slide;
         av[snode->theta_step_index] += propose_theta_slide(stree,
                                                            gtree,
@@ -3977,6 +3921,9 @@ void stree_propose_theta(gtree_t ** gtree,
       else                                                  /* gibbs */
       {
         acceptvec_movetype[snode->theta_step_index] = BPP_THETA_MOVE_GIBBS;
+        
+        /* last element in ft_round_theta_bits corresponds to gibbs sampler */
+        ft_round_theta_bits[opt_finetune_theta_count] = 1;
         av = acceptvec_gibbs;
         av[snode->theta_step_index] += propose_theta_gibbs(stree,
                                                            gtree,
@@ -5783,7 +5730,7 @@ static long propose_tau(locus_t ** loci,
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          C2j_old += snodes[jj]->C2ji[ii];
+          C2j_old += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
 
           #if 0
           double dbg_shortC2j = 0;
@@ -5821,7 +5768,7 @@ static long propose_tau(locus_t ** loci,
                                    ii,
                                    thread_index);
           else
-            C2j_new += snodes[jj]->C2ji[ii];
+            C2j_new += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
         }
       }
 
@@ -6841,7 +6788,7 @@ static long propose_tau_mig(locus_t ** loci,
         for (ii = 0; ii < opt_locus_count; ++ii)
         {
           coal_count_sum += snodes[jj]->coal_count[ii];
-          C2j_old += snodes[jj]->C2ji[ii];
+          C2j_old += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
 
           if (snodes[jj]->flag & SN_AFFECT)
           {
@@ -6858,7 +6805,7 @@ static long propose_tau_mig(locus_t ** loci,
                                            thread_index);
           }
           else
-            C2j_new += snodes[jj]->C2ji[ii];
+            C2j_new += snodes[jj]->C2ji[ii]/loci[ii]->heredity[0];
         }
 
         /* change migration rate */
