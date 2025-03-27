@@ -3196,27 +3196,80 @@ static FILE * init(stree_t ** ptr_stree,
   msa_summary(stdout, msa_list, msa_count);
   msa_summary(fp_out, msa_list, msa_count);
 
+
 #if(0)
-  /*** ziheng-2025.1.3 print the number of heterozygotes at each site in heliconius-HCM data. ***/
+  /*** ziheng-2025.1.3 print the number of heterozygotes at each site in diploid data (heliconius-HCM). ***/
   FILE* ftmp = xopen("heliconius-HCM-summary.txt", "w");
   fprintf(ftmp, "length_li\txi_C\txi_H\txi_M\n");
   assert(pll_map['A'] == 1 && pll_map['C'] == 2 && pll_map['G'] == 4 && pll_map['T'] == 8);
   for (long locus = 0; locus < msa_count; ++locus) {
-    fprintf(ftmp, "%d", msa_list[locus]->original_length);
-    for (long seq = 0; seq < msa_list[locus]->count; ++seq) {
-      int diff = 0;
-      for (long site = 0; site < msa_list[locus]->length; ++site) {
-        int b = pll_map[(int)msa_list[locus]->sequence[seq][site]];
-        int nallele = ((b & 1) > 0) + ((b & 2) > 0) + ((b & 4) > 0) + ((b & 8) > 0);
-        assert(nallele == 1 || nallele == 2);
-        if (nallele==2) diff += weights[locus][site];
-      }
-      fprintf(ftmp, "\t%d", diff);
+     fprintf(ftmp, "%d", msa_list[locus]->original_length);
+     for (long seq = 0; seq < msa_list[locus]->count; ++seq) {
+        int diff = 0;
+        for (long site = 0; site < msa_list[locus]->length; ++site) {
+           int b = pll_map[(int)msa_list[locus]->sequence[seq][site]];
+           int nallele = ((b & 1) > 0) + ((b & 2) > 0) + ((b & 4) > 0) + ((b & 8) > 0);
+           assert(nallele == 1 || nallele == 2);
+           if (nallele == 2) diff += weights[locus][site];
+        }
+        fprintf(ftmp, "\t%d", diff);
+     }
+     fprintf(ftmp, "\n");
+  }
+  fclose(ftmp);
+#elif(0)
+  /*** ziheng-2025.1.26 count pairwise differences for smith-hahn data. ***/
+  FILE* ftmp = xopen("diffs-pairwise.txt", "w");
+  long detailed = 1, ii, jj, kk, loc, b1, b2;
+  long nloci = msa_count, nseq = msa_list[0]->count, seqlen = msa_list[0]->original_length;
+  double diff, pi, averagepi;
+  fprintf(ftmp, "Number of differences between sequences at %d loci and average over loci (pi)\n", nloci);
+  fprintf(ftmp, "%4d loci, %4d sequences per locus, %4d sites\n", nloci, nseq, seqlen);
+
+  if (detailed) {
+    fprintf(ftmp, "\n%10s", "");
+    for (loc = 0; loc < nloci; ++loc)
+        if ((loc + 1) % 10 == 0)  fprintf(ftmp, "%3d", loc + 1);
+        else                      fprintf(ftmp, "%3s", ".");
+  }
+  for (ii = 0; ii < nseq; ++ii) {
+    if (!detailed) fprintf(ftmp, "%4d  ", ii + 1);
+    for (jj = 0; jj < ii; ++jj) {
+        if (detailed) fprintf(ftmp, "%4d%4d  ", ii + 1, jj + 1);
+        averagepi = 0;
+        for (loc = 0; loc < nloci; ++loc) {
+          for (kk = 0, diff = 0; kk < msa_list[loc]->length; ++kk)
+              if (msa_list[loc]->sequence[ii][kk] != msa_list[loc]->sequence[jj][kk])
+                diff += weights[loc][kk];
+          averagepi += diff / nloci / seqlen;
+          if (detailed) fprintf(ftmp, " %2.0f", diff);
+        }
+        if (detailed) fprintf(ftmp, "%9.5f\n", averagepi);
+        else         fprintf(ftmp, "%9.5f", averagepi);
     }
     fprintf(ftmp, "\n");
   }
   fclose(ftmp);
-  /*** ziheng-2025.1.3  ***/
+#elif(0)
+  /*** ziheng-2025.3.27 print the number of differences between two haploid sequences (heliconius-HCM-chr21). ***/
+  FILE* ftmp = xopen("heliconius-HCM-chr21-summary.txt", "w");
+  fprintf(ftmp, "length_li\txi_HC\txi_CM\txi_HM\n");  /* seqs occur in the order C H M */
+  for (long ii = 0; ii < stree->tip_count; ++ii)
+    printf("species %ld: %s\n", ii + 1, stree->nodes[ii]->label);
+  for (long locus = 0; locus < msa_count; ++locus) {
+    assert(msa_list[locus]->count == 3);
+    fprintf(ftmp, "%d", msa_list[locus]->original_length);
+    for (long ii = 0; ii < msa_list[locus]->count; ++ii) {
+      for (long jj = 0; jj < ii; ++jj) {
+        int diff = 0;
+        for (long site = 0; site < msa_list[locus]->length; ++site)
+          diff += (msa_list[locus]->sequence[ii][site] != msa_list[locus]->sequence[jj][site]) * weights[locus][site];
+        fprintf(ftmp, "\t%d", diff);
+      }
+    }
+    fprintf(ftmp, "\n");
+  }
+  fclose(ftmp);
 #endif
 
   /* parse map file */
