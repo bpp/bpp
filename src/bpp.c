@@ -152,6 +152,7 @@ double opt_alpha_alpha;
 double opt_alpha_beta;
 double opt_bfbeta;
 double opt_clock_vbar;
+double opt_clock_alpha;
 double opt_finetune_alpha;
 double opt_finetune_branchrate;
 double opt_finetune_freqs;
@@ -450,6 +451,7 @@ void args_init(int argc, char ** argv)
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
   opt_clock_vbar = 0;
+  opt_clock_alpha = -1;
 
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;

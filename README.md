@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/bpp/bpp.svg?branch=master)](https://travis-ci.org/bpp/bpp)
 [![License](https://img.shields.io/badge/license-AGPL-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/molbev/msy147.svg)](https://doi.org/10.1093/molbev/msy147)
-[![Version](https://img.shields.io/badge/version-4.8.4-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.8.4)
+[![Version](https://img.shields.io/badge/version-4.8.5-blue.svg)](https://github.com/bpp/bpp/releases/tag/v4.8.5)
 
 ## Introduction
 
@@ -79,47 +79,47 @@ Download the appropriate executable for your system using the following
 commands if you are using a Linux x86_64 system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-linux-x86_64.tar.gz
-tar zxvf bpp-4.8.4-linux-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-linux-x86_64.tar.gz
+tar zxvf bpp-4.8.5-linux-x86_64.tar.gz
 ```
 
 Or these commands if you are using a Linux ppc64le system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-linux-ppc64le.tar.gz
-tar zxvf bpp-4.8.4-linux-ppc64le.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-linux-ppc64le.tar.gz
+tar zxvf bpp-4.8.5-linux-ppc64le.tar.gz
 ```
 
 Or these commands if you are using a Linux aarch64 (arm64) system:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-linux-aarch64.tar.gz
-tar zxvf bpp-4.8.4-linux-aarch64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-linux-aarch64.tar.gz
+tar zxvf bpp-4.8.5-linux-aarch64.tar.gz
 ```
 
 Or these commands if you are using a Mac with an Apple Silicon CPU (e.g. M1/M2/M3):
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-macos-aarch64.tar.gz
-tar zxvf bpp-4.8.4-macos-aarch64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-macos-aarch64.tar.gz
+tar zxvf bpp-4.8.5-macos-aarch64.tar.gz
 ```
 
 Or these commands if you are using a Mac with an Intel CPU:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-macos-x86_64.tar.gz
-tar zxvf bpp-4.8.4-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-macos-x86_64.tar.gz
+tar zxvf bpp-4.8.5-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
 
 ```
-https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-win-x86_64.zip
+https://github.com/bpp/bpp/releases/download/v4.8.5/bpp-4.8.5-win-x86_64.zip
 ```
 
-Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.8.4-linux-x86_64` or `bpp-4.8.4-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
+Linux and Mac: You will now have the binary distribution in a folder called `bpp-4.8.5-linux-x86_64` or `bpp-4.8.5-macos-x86_64`. The binary file is located in the `bin` subfolder, i.e. `bin/bpp`. We recommend making a copy or a symbolic link to the binary in a folder included in your `$PATH`. 
 
-Windows: You will now have the binary distribution in a folder called `bpp-4.8.4-win-x86_64`. The bpp executable is called `bpp.exe`.
+Windows: You will now have the binary distribution in a folder called `bpp-4.8.5-win-x86_64`. The bpp executable is called `bpp.exe`.
 
 
 **Compiling from source** You can either download the *source distribution* for a particular version or *clone the repository*.
@@ -127,9 +127,9 @@ Windows: You will now have the binary distribution in a folder called `bpp-4.8.4
 **Source distribution** To download the source distribution from a [release](https://github.com/bpp/bpp/releases) and build the executable and documentation, use the following commands:
 
 ```
-wget https://github.com/bpp/bpp/archive/v4.8.4.tar.gz
-tar zxvf v4.8.4.tar.gz
-cd bpp-4.8.4/src
+wget https://github.com/bpp/bpp/archive/v4.8.5.tar.gz
+tar zxvf v4.8.5.tar.gz
+cd bpp-4.8.5/src
 make
 ```
 
@@ -210,13 +210,13 @@ bpp --summary [CONTROL-FILE]
 ```
 
 
-For an example of a DEFS-FILE see the [MSci generator notes](https://github.com/bpp/bpp/releases/download/v4.8.4/msci-create.pdf)
+For an example of a DEFS-FILE see the [MSci generator notes](https://github.com/bpp/bpp/releases/download/v4.8.5/msci-create.pdf)
 
 More documentation regarding control files, will be available soon on the [wiki](https://github.com/bpp/bpp/wiki).
 
 ## Documentation
 
-The most up-to-date documentation for BPP is now available through the [BPP Documentation Project](https://bpp.github.io/bpp-manual/). The original manual [bpp4DOC.pdf](https://github.com/bpp/bpp/releases/download/v4.8.4/bpp4DOC.pdf) is found in the current BPP distribution.
+The most up-to-date documentation for BPP is now available through the [BPP Documentation Project](https://bpp.github.io/bpp-manual/). The original manual [bpp4DOC.pdf](https://github.com/bpp/bpp/releases/download/v4.8.5/bpp4DOC.pdf) is found in the current BPP distribution.
 
 A tutorial on BPP was recently published as a book chapter:
 [A Tutorial on the Use of BPP for Species Tree Estimation and Species Delimitation](https://hal.inria.fr/PGE/hal-02536475)

@@ -628,6 +628,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'vbar_beta'");
   if (!LOAD(&opt_vi_alpha,1,fp))
     fatal("Cannot read 'vi_alpha'");
+  if (!LOAD(&opt_clock_alpha,1,fp))
+    fatal("Cannot read 'clock_alpha'");
   if (!LOAD(&opt_rate_prior,1,fp))
     fatal("Cannot read rate prior");
   if (!LOAD(&opt_locusrate_prior,1,fp))
@@ -710,6 +712,7 @@ static void load_chk_section_1(FILE * fp,
   double stree_locusrate_mubar = 0;
   double stree_locusrate_nubar = 0;
   double stree_nui_sum = 0;
+  double lnprior_rates_simple = 0;
 
   if (!LOAD(&stree_locusrate_mubar,1,fp))
     fatal("Cannot read locusrate_mubar value");
@@ -717,6 +720,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read locusrate_nubar value");
   if (!LOAD(&stree_nui_sum,1,fp))
     fatal("Cannot read nui_sum value");
+  if (!LOAD(&lnprior_rates_simple,1,fp))
+    fatal("Cannot read lnprior_rates_simple value");
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(long));
@@ -1063,6 +1068,7 @@ static void load_chk_section_1(FILE * fp,
   stree->locusrate_mubar = stree_locusrate_mubar;
   stree->locusrate_nubar = stree_locusrate_nubar;
   stree->nui_sum = stree_nui_sum;
+  stree->lnprior_rates_simple = lnprior_rates_simple;
 
   stree->mi_tbuffer = NULL;
   if (opt_migration)
@@ -1366,8 +1372,10 @@ void load_chk_section_2(FILE * fp)
       if (!valid) continue;
 
       snode_t * node = stree->nodes[i];
-      node->brate = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
-      if (!LOAD(node->brate,opt_locus_count,fp))
+      size_t brate_count;
+      brate_count = (opt_clock == BPP_CLOCK_SIMPLE) ? 1 : opt_locus_count;
+      node->brate = (double *)xmalloc(brate_count * sizeof(double));
+      if (!LOAD(node->brate,brate_count,fp))
         fatal("Cannot read branch rates");
     }
   }

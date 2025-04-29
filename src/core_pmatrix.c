@@ -716,39 +716,10 @@ void bpp_core_update_pmatrix(locus_t * locus,
     else
     {
       /* relaxed clock */
-      node->length = 0;
-      t = node->time;
-      snode_t * start = node->pop;
-      snode_t * end   = node->parent->pop;
-
-      while (start != end)
-      {
-        snode_t * pop = start;
-        assert(start && start->parent);
-        start = start->parent;
-
-        if (start->hybrid)
-        {
-          assert(!node_is_mirror(start));
-
-          unsigned int hindex = GET_HINDEX(stree,start);
-          assert(hindex < stree->hybrid_count);
-
-          /* find correct parent node according to hpath flag */
-          assert(node->hpath[hindex] != BPP_HPATH_NONE);
-          assert(start->left);
-          if (node->hpath[hindex] == BPP_HPATH_RIGHT)
-            start = start->hybrid;
-        }
-
-        /* skip using branch rates on horizontal edges in hybridization events */
-        if (!(pop->hybrid && pop->htau == 0))
-          node->length += (start->tau - t)*pop->brate[msa_index];
-        t = start->tau;
-      }
-      node->length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
-
-      t = node->length;
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     assert(t >= 0);

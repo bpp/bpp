@@ -382,8 +382,15 @@ static void print_mcmc_headerline(FILE * fp,
     fprintf(fp, "  mu_i: locus rate (mu_i) proposal\n");
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    fprintf(fp, "  nu_i: locus rate variance (nu_i) proposal\n");
-    fprintf(fp, "  brte: per-locus species tree Branch rate proposal\n");
+    if (opt_clock != BPP_CLOCK_SIMPLE)
+    {
+      fprintf(fp, "  nu_i: locus rate variance (nu_i) proposal\n");
+      fprintf(fp, "  brte: per-locus species tree Branch rate proposal\n");
+    }
+    else
+    {
+      fprintf(fp, "  brte: species tree lineage rate proposal\n");
+    }
   }
   if (enabled_mubar)
     fprintf(fp, "  mubr: average locus rate (mu_bar) proposal\n");
@@ -504,7 +511,10 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += enabled_hrdt ? 5 : 0;
   ap_width += enabled_lrht ? 5 : 0;
   ap_width += enabled_mui ? 5 : 0;
-  ap_width += opt_clock != BPP_CLOCK_GLOBAL ? 10 : 0;
+  if (opt_clock != BPP_CLOCK_GLOBAL)
+  {
+    ap_width += opt_clock == BPP_CLOCK_SIMPLE ? 5 : 10;
+  }
   ap_width += enabled_mubar ? 5 : 0;
   ap_width += enabled_nubar ? 5 : 0;
   if (opt_msci)
@@ -585,7 +595,10 @@ static void print_mcmc_headerline(FILE * fp,
   }
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    fprintf(fp," nu_i");    linewidth += 5;
+    if (opt_clock != BPP_CLOCK_SIMPLE)
+    {
+      fprintf(fp," nu_i");  linewidth += 5;
+    }
     fprintf(fp," brte");    linewidth += 5;
   }
   if (opt_migration && !opt_est_geneflow)
@@ -790,14 +803,16 @@ static void active_pjumps_alloc()
                opt_est_mubar) ||
               (opt_est_locusrate == MUTRATE_ONLY);
 
-  int nubar = (opt_clock != BPP_CLOCK_GLOBAL &&
+  int nubar = (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
                opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL);
 
   int mui = (opt_est_locusrate == MUTRATE_ESTIMATE &&
             (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL ||
              opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR));
 
-  int nuibr = (opt_clock != BPP_CLOCK_GLOBAL);
+  int nui = (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE);
+
+  int brte  = (opt_clock != BPP_CLOCK_GLOBAL);
 
   k = 0;
 
@@ -894,13 +909,16 @@ static void active_pjumps_alloc()
     ++k;
   }
 
-  if (nuibr)
+  if (nui)
   {
     active_pjump_titles[k] = xstrdup("nu_i");
     active_pjump_values[k] = &g_pj_nui;
     finetune_values_ptr[k] = &opt_finetune_nui;
     ++k;
+  }
 
+  if (brte)
+  {
     active_pjump_titles[k] = xstrdup("brte");
     active_pjump_values[k] = &g_pj_brate;
     finetune_values_ptr[k] = &opt_finetune_branchrate;
@@ -1568,14 +1586,15 @@ static void status_print_pjump(FILE * fp,
     fprintf(fp, " %4.2f", g_pj_mui);
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    fprintf(fp, " %4.2f", g_pj_nui);
+    if (opt_clock != BPP_CLOCK_SIMPLE)
+      fprintf(fp, " %4.2f", g_pj_nui);
     fprintf(fp, " %4.2f", g_pj_brate);
   }
   if ((opt_est_locusrate == MUTRATE_ESTIMATE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL &&
       opt_est_mubar )|| opt_est_locusrate == MUTRATE_ONLY )
     fprintf(fp, " %4.2f", g_pj_mubar);
-  if (opt_clock != BPP_CLOCK_GLOBAL &&
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     fprintf(fp, " %4.2f", g_pj_nubar);
 
@@ -1728,10 +1747,31 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
     
   if (opt_clock != BPP_CLOCK_GLOBAL)
   {
-    if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
-      fprintf(fp, "\tnu_bar");
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+    {
+      for (i = 0; i < snodes_total; ++i)
+      {
+        snode_t * node = stree->nodes[i];
+        /* Mirror nodes in bidirectional introgression */
+        if (opt_msci && node->hybrid)
+        {
+          if (node_is_hybridization(node) && !node->htau) continue;
+          if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+        }
+
+        fprintf(fp,
+                "\tr:%d:%s",
+                i+1,
+                stree->nodes[i]->label);
+      }
+    }
     else
-      fprintf(fp, "\tnu");
+    {
+      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+        fprintf(fp, "\tnu_bar");
+      else
+        fprintf(fp, "\tnu");
+    }
   }
 
   if (opt_migration)
@@ -1817,7 +1857,8 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
       tab_required = 1;
     }
     /* print nu_i header */
-    if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
+    if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
+        opt_print_rates)
     {
       fprintf(fp_locus[i],
               "%snu_%d",
@@ -1825,7 +1866,8 @@ static void mcmc_printheader_rates(FILE ** fp_locus,
       tab_required = 1;
     }
     /* print species tree branch rates header */
-    if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
+    if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
+        opt_print_rates)
     {
       fprintf(fp_locus[i],
               "%sr_%s",
@@ -1968,23 +2010,31 @@ static void print_rates(FILE ** fp_locus,
         fprintf(fp_locus[i], "%s%.6f", tab_required ? "\t" : "", gtree[i]->rate_mui);
         tab_required = 1;
       }
-      if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
+      if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
+          opt_print_rates)
       {
-        fprintf(fp_locus[i], "%s%.6f", tab_required ? "\t" : "", gtree[i]->rate_nui);
+        fprintf(fp_locus[i],
+                "%s%.6f",
+                tab_required ? "\t" : "",
+                gtree[i]->rate_nui);
         tab_required = 1;
       }
 
       /* print r_i */
-      if (opt_clock != BPP_CLOCK_GLOBAL && opt_print_rates)
+      if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
+          opt_print_rates)
       {
         /* first one is tip, it always have a branch rate */
         fprintf(fp_locus[i],
                 "%s%.6f",
-                tab_required ? "\t" : "", stree->nodes[0]->brate[i]);
+                tab_required ? "\t" : "",
+                stree->nodes[0]->brate[i]);
         tab_required = 1;
         for (j = 1; j < total_nodes; ++j)
           if (stree->nodes[j]->brate)
-            fprintf(fp_locus[i], "\t%.6f", stree->nodes[j]->brate[i]);
+            fprintf(fp_locus[i],
+                    "\t%.6f",
+                    stree->nodes[j]->brate[i]);
       }
 
       if (opt_print_qmatrix)
@@ -3781,7 +3831,7 @@ static FILE * init(stree_t ** ptr_stree,
     else
       stree->locusrate_mubar = 1;
   }
-  if (opt_clock != BPP_CLOCK_GLOBAL)
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE)
     stree->locusrate_nubar = opt_vbar_alpha / opt_vbar_beta;
 
   stree->nui_sum = 0;
@@ -3871,7 +3921,7 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* set rate of evolution and heredity scalar for each locus */
     if (opt_est_locusrate == MUTRATE_ONLY)
-	    locusrate[i] = stree->locusrate_mubar; 
+      locusrate[i] = stree->locusrate_mubar; 
     gtree[i]->rate_mui = locusrate[i];
     if (opt_datefile)
       gtree[i]->rate_mui = 1;
@@ -3922,7 +3972,7 @@ static FILE * init(stree_t ** ptr_stree,
         gtree[i]->rate_mui *= (.9 + .2*legacy_rndu(thread_index));
     }
 
-    if (opt_clock != BPP_CLOCK_GLOBAL)
+    if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE)
     {
       long thread_index = 0;
 
@@ -3959,6 +4009,34 @@ static FILE * init(stree_t ** ptr_stree,
       gtree[i]->lnprior_rates   = lnprior_rates(gtree[i],stree,i);
 
       stree->nui_sum += gtree[i]->rate_nui;
+    }
+    else if (opt_clock == BPP_CLOCK_SIMPLE && i == 0)
+    {
+      stree->lnprior_rates_simple = 0;
+      long rates_count = 0;
+      double a = opt_clock_alpha;
+      double b = opt_clock_alpha;
+      for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
+      {
+        snode_t * node = stree->nodes[j];
+
+        /* Mirror nodes in bidirectional introgression */
+        if (opt_msci && node->hybrid)
+        {
+          if (node_is_hybridization(node) && !node->htau) continue;
+          if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+        }
+
+        double r = 1;
+        if (opt_debug_rates)
+          node->brate[0] = r;
+        else
+          node->brate[0] = r;
+
+        stree->lnprior_rates_simple += (a-1)*log(r) - b*r;
+        ++rates_count;
+      }
+      stree->lnprior_rates_simple += (a*log(b) - lgamma(a))*rates_count;
     }
 
     /* compute the conditional probabilities for each inner node */
@@ -4119,8 +4197,6 @@ static FILE * init(stree_t ** ptr_stree,
       for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
       {
         snode_t * x = stree->nodes[i];
-
-        if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
 
         if (x->theta >= 0 && !x->linked_theta)
           fprintf(fp_a1b1, "\ttheta:%d_a1:%s_a1\ttheta:%d_b1:%s_b1", x->node_index+1,x->label,x->node_index+1,x->label);
@@ -4336,18 +4412,52 @@ static void check_logl(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long
 #ifdef CHECK_LNPRIOR
 static void check_lnprior(stree_t * stree, gtree_t ** gtree, long iter, const char * move)
 {
-  long i;
+  long i,j;
 
   if (opt_clock == BPP_CLOCK_GLOBAL) return;
   /* */
-  for (i = 0; i < opt_locus_count; ++i)
+  if (opt_clock != BPP_CLOCK_SIMPLE)
   {
-    double debug_new_prior_rates = lnprior_rates(gtree[i], stree, i);
-    if (fabs(debug_new_prior_rates - gtree[i]->lnprior_rates) > 1e-5)
+    for (i = 0; i < opt_locus_count; ++i)
     {
-      printf("[FATAL iter %ld locus %ld] lnPrior: %f   OLD lnPrior: %f\n", iter, i, debug_new_prior_rates, gtree[i]->lnprior_rates);
-      fatal("Invalid lnprior iter: %ld locus: %ld move: %s    correct lnprior: %f   wrong lnprior: %f", iter, i, move, debug_new_prior_rates, gtree[i]->lnprior_rates);
+      double debug_new_prior_rates = lnprior_rates(gtree[i], stree, i);
+      if (fabs(debug_new_prior_rates - gtree[i]->lnprior_rates) > 1e-5)
+      {
+        printf("[FATAL iter %ld locus %ld] lnPrior: %f   OLD lnPrior: %f\n", iter, i, debug_new_prior_rates, gtree[i]->lnprior_rates);
+        fatal("Invalid lnprior iter: %ld locus: %ld move: %s    correct lnprior: %f   wrong lnprior: %f", iter, i, move, debug_new_prior_rates, gtree[i]->lnprior_rates);
+      }
     }
+  }
+  else
+  {
+    double debug_new_prior = 0;
+    long rates_count = 0;
+    double a = opt_clock_alpha;
+    double b = opt_clock_alpha;
+    for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
+    {
+      snode_t * node = stree->nodes[j];
+
+      /* Mirror nodes in bidirectional introgression */
+      if (opt_msci && node->hybrid)
+      {
+        if (node_is_hybridization(node) && !node->htau) continue;
+        if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+      }
+
+      double r = node->brate[0];
+
+      debug_new_prior += (a-1)*log(r) - b*r;
+      ++rates_count;
+    }
+    debug_new_prior += (a*log(b) - lgamma(a))*rates_count;
+
+    if (fabs(debug_new_prior_rates - stree->lnprior_rates_simple) > 1e-5)
+    {
+      printf("[FATAL iter %ld] lnPrior: %f   OLD lnPrior: %f\n", iter, debug_new_prior_rates, stree->lnprior_rates_simple);
+      fatal("Invalid lnprior iter: %ld move: %s    correct lnprior: %f   wrong lnprior: %f", iter, move, debug_new_prior_rates, stree->lnprior_rates_simple);
+    }
+
   }
 }
 #endif
@@ -4416,9 +4526,6 @@ static void log_a1b1(FILE * fp_a1b1,
   for (i = 0; i < total_nodes; ++i)
   {
     snode = stree->nodes[i];
-
-    /* no identifiable theta for tip pops with < 2 sequences */
-    if (i < stree->tip_count && opt_sp_seqcount[i] < 2) continue;
 
     if (snode->linked_theta || snode->theta < 0) continue;
 
@@ -4791,7 +4898,7 @@ void cmd_run()
     enabled_mubar = 1;
   if (opt_est_locusrate == MUTRATE_ONLY && opt_datefile)
     enabled_mubar = 1;
-  if (opt_clock != BPP_CLOCK_GLOBAL &&
+  if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE &&
       opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
     enabled_nubar = 1;
 
@@ -5395,42 +5502,50 @@ void cmd_run()
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
     {
-      ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
-      g_pj_nui = (g_pj_nui*(ft_round-1)+ratio) / (double)ft_round;
-      #ifdef CHECK_LOGL
-      check_logl(stree, gtree, locus, i, "NUI");
-      #endif
-      #ifdef CHECK_LNPRIOR
-      check_lnprior(stree, gtree, i, "NUI");
-      #endif
-
-      if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+      if (opt_clock != BPP_CLOCK_SIMPLE)
       {
-        ratio = prop_locusrate_nubar(stree,gtree);
-        g_pj_nubar = (g_pj_nubar*(ft_round-1)+ratio) / (double)ft_round;
-      #ifdef CHECK_LOGL
-      check_logl(stree, gtree, locus, i, "NUBAR");
-      #endif
-      #ifdef CHECK_LNPRIOR
-      check_lnprior(stree, gtree, i, "NUBAR");
-      #endif
-      }
+        ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
+        g_pj_nui = (g_pj_nui*(ft_round-1)+ratio) / (double)ft_round;
+        #ifdef CHECK_LOGL
+        check_logl(stree, gtree, locus, i, "NUI");
+        #endif
+        #ifdef CHECK_LNPRIOR
+        check_lnprior(stree, gtree, i, "NUI");
+        #endif
 
-      if (opt_threads == 1)
-        ratio = prop_branch_rates_serial(gtree,stree,locus);
+        if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
+        {
+          ratio = prop_locusrate_nubar(stree,gtree);
+          g_pj_nubar = (g_pj_nubar*(ft_round-1)+ratio) / (double)ft_round;
+        #ifdef CHECK_LOGL
+        check_logl(stree, gtree, locus, i, "NUBAR");
+        #endif
+        #ifdef CHECK_LNPRIOR
+        check_lnprior(stree, gtree, i, "NUBAR");
+        #endif
+        }
+
+        if (opt_threads == 1)
+          ratio = prop_branch_rates_serial(gtree,stree,locus);
+        else
+        {
+          td.locus = locus; td.gtree = gtree; td.stree = stree;
+          threads_wakeup(THREAD_WORK_BRATE,&td);
+          ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
+        }
+        g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
+        #ifdef CHECK_LOGL
+        check_logl(stree, gtree, locus, i, "BRATE");
+        #endif
+        #ifdef CHECK_LNPRIOR
+        check_lnprior(stree, gtree, i, "BRATE");
+        #endif
+      }
       else
       {
-        td.locus = locus; td.gtree = gtree; td.stree = stree;
-        threads_wakeup(THREAD_WORK_BRATE,&td);
-        ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
+        ratio = prop_branch_rates_simple(gtree,stree,locus);
+        g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
       }
-      g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
-      #ifdef CHECK_LOGL
-      check_logl(stree, gtree, locus, i, "BRATE");
-      #endif
-      #ifdef CHECK_LNPRIOR
-      check_lnprior(stree, gtree, i, "BRATE");
-      #endif
     }
 
     /* log sample into file (dparam_count is only used in method 10) */

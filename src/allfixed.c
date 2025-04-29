@@ -1210,7 +1210,6 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
       {
         if (prevbad || (line_count == 0))
         {
-          printf("i = %ld\n", i);
           if (line_count == 0)
             fprintf(stderr,
                     "ERROR: First record has mismatching number of columns (expected %ld)\n",cols);
@@ -1661,7 +1660,24 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
 
   /* column for vbar (or nu for Gamma-Dirichlet) */
   if (opt_clock != BPP_CLOCK_GLOBAL)
-    ++col_count;
+  {
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+    {
+      for (i = 0; i < snodes_total; ++i)
+      {
+        snode_t * node = stree->nodes[i];
+        /* Mirror nodes in bidirectional introgression */
+        if (opt_msci && node->hybrid)
+        {
+          if (node_is_hybridization(node) && !node->htau) continue;
+          if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+        }
+        ++col_count;
+      }
+    }
+    else
+      ++col_count;
+  }
 
   /* number of columns including converted Ms (from Ws) */
   long cols = opt_migration ?

@@ -418,6 +418,7 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
 {
   unsigned int i;
   unsigned int msa_count = clone_stree->locus_count;
+  size_t brate_count;
 
   if (clone->label)
     free(clone->label);
@@ -492,9 +493,11 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   /* branch rate (per locus) */
   if (snode->brate)
   {
+    brate_count = (opt_clock == BPP_CLOCK_SIMPLE) ? 1 : msa_count;
+
     if (!clone->brate)
-      clone->brate = (double *)xmalloc(msa_count * sizeof(double));
-    memcpy(clone->brate, snode->brate, msa_count * sizeof(double));
+      clone->brate = (double *)xmalloc(brate_count * sizeof(double));
+    memcpy(clone->brate, snode->brate, brate_count * sizeof(double));
   }
     
   /* linked theta models */
@@ -687,6 +690,8 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->locusrate_mubar = stree->locusrate_mubar;
   clone->locusrate_nubar = stree->locusrate_nubar;
   clone->nui_sum = stree->nui_sum;
+
+  clone->lnprior_rates_simple = stree->lnprior_rates_simple;
 
   if (opt_migration)
   {
@@ -3052,6 +3057,7 @@ void stree_init(stree_t * stree,
   long ** migcount_sum = NULL;
 
   long thread_index = 0;
+  size_t brate_count = 0;
 
   /* safety check */
   assert(msa_count > 0);
@@ -3209,7 +3215,10 @@ void stree_init(stree_t * stree,
         if (node_is_hybridization(snode) && !snode->htau) continue;
         if (node_is_bidirection(snode) && node_is_mirror(snode)) continue;
       }
-      snode->brate = (double *)xmalloc((size_t)msa_count*sizeof(double));
+      
+      brate_count = (opt_clock == BPP_CLOCK_SIMPLE) ? 1 : msa_count;
+      
+      snode->brate = (double *)xmalloc((size_t)brate_count*sizeof(double));
     }
   }
 
@@ -8726,7 +8735,7 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
   
   long total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
 
-  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR);
+  assert(opt_clock == BPP_CLOCK_IND || opt_clock == BPP_CLOCK_CORR); 
 
   /* TODO: Implement autocorrelated clock */
   if (opt_clock == BPP_CLOCK_CORR && opt_rate_prior == BPP_BRATE_PRIOR_GAMMA)
@@ -8866,6 +8875,8 @@ double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index)
     }
     logpr -= 0.5*log(2*BPP_PI*nui) * rates_count;
   }
+  else
+    fatal("Internal error when calculating rates prior for clock %ld", opt_clock);
 
   return logpr;
 }
@@ -8890,6 +8901,7 @@ double prop_locusrate_nui(gtree_t ** gtree,
   gnode_t ** gnodeptr;
 
   assert(thread_index == 0);
+  assert(opt_clock != BPP_CLOCK_SIMPLE);
 
   /* TODO: opt_finetune_locusrate */
   alpha = opt_vi_alpha;
@@ -9088,9 +9100,11 @@ double prop_locusrate_mui(gtree_t ** gtree,
 
   for (i = 0; i < opt_locus_count; ++i)
   {
-    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
+    if (opt_clock == BPP_CLOCK_GLOBAL ||
+        opt_clock == BPP_CLOCK_CORR ||
+        opt_clock == BPP_CLOCK_SIMPLE)
     {
-      /* if molecular clock then swap pmatrices */
+      /* if molecular,correlated or lineage rate clock then swap pmatrices */
 
       gnodeptr = gtree[i]->nodes;
       total_nodes = gtree[i]->tip_count+gtree[i]->inner_count;
@@ -9134,7 +9148,9 @@ double prop_locusrate_mui(gtree_t ** gtree,
       assert(0);
     }
 
-    if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
+    if (opt_clock == BPP_CLOCK_GLOBAL ||
+        opt_clock == BPP_CLOCK_CORR ||
+        opt_clock == BPP_CLOCK_SIMPLE)
     {
       if (opt_clock == BPP_CLOCK_CORR)
         stree->root->brate[i] = gtree[i]->rate_mui;
@@ -9164,7 +9180,7 @@ double prop_locusrate_mui(gtree_t ** gtree,
       lnacceptance += logl - gtree[i]->logl;
     }
 
-    if (opt_clock != BPP_CLOCK_GLOBAL)
+    if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE)
     {
       /* if relaxed clock then update rates prior */
 
@@ -9177,13 +9193,15 @@ double prop_locusrate_mui(gtree_t ** gtree,
       /* accepted */
       accepted++;
 
-      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
+      if (opt_clock == BPP_CLOCK_GLOBAL ||
+          opt_clock == BPP_CLOCK_CORR ||
+          opt_clock == BPP_CLOCK_SIMPLE)
       {
         /* update log-likelihood */
         gtree[i]->logl = logl;
       }
 
-      if (opt_clock != BPP_CLOCK_GLOBAL)
+      if (opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE)
       {
         /* relaxed clock */
 
@@ -9201,7 +9219,9 @@ double prop_locusrate_mui(gtree_t ** gtree,
       if (opt_clock == BPP_CLOCK_CORR)
         stree->root->brate[i] = old_mui;
 
-      if (opt_clock == BPP_CLOCK_GLOBAL || opt_clock == BPP_CLOCK_CORR)
+      if (opt_clock == BPP_CLOCK_GLOBAL ||
+          opt_clock == BPP_CLOCK_CORR ||
+          opt_clock == BPP_CLOCK_SIMPLE)
       {
         /* reset selected locus */
         gnodeptr = gtree[i]->nodes;
@@ -9897,6 +9917,182 @@ static long fill_travbuffer_and_mark(gtree_t * gtree,
   return count;
 }
 
+long prop_branch_rates_simple(gtree_t ** gtree,
+                              stree_t * stree,
+                              locus_t ** locus)
+{
+  long i,j,k;
+  long accepted = 0;
+  long proposal_count = 0;
+  double diff;
+  double old_rate, new_rate;
+  double old_lograte, new_lograte;
+  double lnacceptance = 0;
+  double alpha;
+  double beta;
+  snode_t * node;
+
+  assert(opt_clock == BPP_CLOCK_SIMPLE);
+
+  unsigned int partials_count;
+  gnode_t ** partials = NULL;
+  gnode_t ** updatelist;
+
+  /* TODO: get rid of mem allocation */
+  unsigned int * pcount_list;
+  pcount_list = (unsigned int *)xmalloc((size_t)opt_locus_count*sizeof(unsigned int));
+
+  static const long thread_index_zero = 0;
+
+  for (j = 0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
+  {
+    node = stree->nodes[j];
+
+    /* Mirror nodes in bidirectional introgression */
+    if (opt_msci && node->hybrid)
+    {
+      if (node_is_hybridization(node) && !node->htau) continue;
+      if (node_is_bidirection(node) && node_is_mirror(node)) continue;
+    }
+    proposal_count++;
+
+    old_rate = node->brate[0];
+    old_lograte = log(old_rate);
+
+    double r = old_lograte + opt_finetune_branchrate *
+               legacy_rnd_symmetrical(thread_index_zero);
+    new_lograte = reflect(r,-99,99,thread_index_zero);
+    node->brate[0] = new_rate = exp(new_lograte);
+
+    lnacceptance = new_lograte - old_lograte;
+
+    if (opt_usedata)
+    {
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        updatelist = __gt_nodes + __gt_nodes_index[i];
+
+        gtree[i]->old_logl = gtree[i]->logl;
+
+        /* obtain a list of edges (represented by nodes) that intersect with
+           species tree node and mark nodes whose CLV need update */
+        gtree[i]->tb_count = fill_travbuffer_and_mark(gtree[i],
+                                                      stree,
+                                                      updatelist,
+                                                      node);
+        if (gtree[i]->tb_count)
+        {
+          /* swap pmatrices */
+          for (k = 0; k < gtree[i]->tb_count; ++k)
+          {
+            gnode_t * x = updatelist[k];
+            x->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                               x->pmatrix_index);
+          }
+
+          /* update necessary p-matrices */
+          locus_update_matrices(locus[i],
+                                gtree[i],
+                                updatelist,
+                                stree,
+                                i,
+                                gtree[i]->tb_count);
+
+          /* get the list of nodes for which CLVs must be reverted, i.e. all marked
+             nodes and all nodes whose left or right subtree has at least one marked
+             node */
+          gtree_return_partials(gtree[i]->root,
+                                gtree[i]->travbuffer,
+                                &partials_count);
+          partials = gtree[i]->travbuffer;
+          pcount_list[i] = partials_count;
+
+          /* remove flags */
+          for (k = 0 ; k < gtree[i]->tb_count; ++k)
+            updatelist[k]->parent->mark = 0;
+
+          for (k = 0; k < partials_count; ++k)
+          {
+            partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                    partials[k]->clv_index);
+            if (opt_scaling)
+              partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                            partials[k]->scaler_index);
+          }
+
+          /* update partials */
+          locus_update_partials(locus[i], partials, partials_count);
+
+          /* evaulate log-likelihood */
+          double logl = locus_root_loglikelihood(locus[i],
+                                                 gtree[i]->root,
+                                                 locus[i]->param_indices,
+                                                 NULL);
+          
+          lnacceptance += logl - gtree[i]->logl;
+
+          gtree[i]->logl = logl;
+        }
+      }
+    }
+
+    alpha = beta = opt_clock_alpha;
+    diff = (alpha-1)*(new_lograte-old_lograte) - beta*(new_rate-old_rate);
+
+    lnacceptance += diff;
+    
+    if (opt_debug_br)
+      printf("[Debug] (br) lnacceptance = %f\n", lnacceptance);
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index_zero) < exp(lnacceptance))
+    {
+      /* accepted */
+      accepted++;
+      stree->lnprior_rates_simple += diff;
+    }
+    else
+    {
+      /* rejected */
+
+      for (i = 0; i < opt_locus_count; ++i)
+      {
+        updatelist = __gt_nodes + __gt_nodes_index[i];
+
+        /* restore old log-l */
+        gtree[i]->logl = gtree[i]->old_logl;
+
+        /* swap pmatrices */
+        for (k = 0; k < gtree[i]->tb_count; ++k)
+        {
+          gnode_t * x = updatelist[k];
+          x->pmatrix_index = SWAP_PMAT_INDEX(gtree[i]->edge_count,
+                                             x->pmatrix_index);
+        }
+
+        /* need to reset clv indices to point to the old clv buffer */
+        if (gtree[i]->tb_count)
+        {
+          partials = gtree[i]->travbuffer;
+          partials_count = pcount_list[i];
+          for (k = 0; k < partials_count; ++k)
+          {
+            partials[k]->clv_index = SWAP_CLV_INDEX(gtree[i]->tip_count,
+                                                     partials[k]->clv_index);
+            if (opt_scaling)
+              partials[k]->scaler_index = SWAP_SCALER_INDEX(gtree[i]->tip_count,
+                                                            partials[k]->scaler_index);
+          }
+        }
+      }
+
+      /* now reset rate and pmatrices */
+      node->brate[0] = old_rate;
+    }
+  }
+  free(pcount_list);
+  return ((double)accepted/proposal_count);
+}
+
 static long prop_branch_rates(gtree_t * gtree,
                               stree_t * stree,
                               locus_t * locus,
@@ -9914,7 +10110,7 @@ static long prop_branch_rates(gtree_t * gtree,
   double lnacceptance = 0;
   snode_t * node;
 
-  assert(opt_clock != BPP_CLOCK_GLOBAL);
+  assert(opt_clock != BPP_CLOCK_GLOBAL && opt_clock != BPP_CLOCK_SIMPLE);
 
   unsigned int partials_count;
   gnode_t ** partials = NULL;

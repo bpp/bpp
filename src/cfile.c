@@ -817,6 +817,7 @@ static long parse_clock(const char * line)
   char * p = s;
 
   long count;
+  double a;
 
   count = get_long(p, &opt_clock);
   if (!count) goto l_unwind;
@@ -832,15 +833,27 @@ static long parse_clock(const char * line)
 
   /* the only other choice is local clock in which mutation rate drifts over
      branches independently among loci */
-  if (opt_clock != BPP_CLOCK_IND && opt_clock != BPP_CLOCK_CORR) goto l_unwind;
+  if (opt_clock != BPP_CLOCK_IND &&
+      opt_clock != BPP_CLOCK_CORR &&
+      opt_clock != BPP_CLOCK_SIMPLE) goto l_unwind;
 
   /* read vbar alpha and vbar beta */
 
   /* get a_vbar */
-  count = get_double(p, &opt_vbar_alpha);
+  count = get_double(p, &a);
   if (!count) goto l_unwind;
 
   p += count;
+
+  if (opt_clock == BPP_CLOCK_SIMPLE)
+  {
+    opt_clock_alpha = a;
+    if (is_emptyline(p)) ret = 1;
+    goto l_unwind;
+  }
+
+  opt_vbar_alpha = a;
+
 
   /* get b_vbar */
   count = get_double(p, &opt_vbar_beta);
@@ -2897,7 +2910,9 @@ void load_cfile()
           fatal("Erroneous format of 'clock' (line %ld)\n"
                 "Syntax:\n"
                 "  clock = 1                                # strict clock\n"
-                "  clock = 2 a_vbar b_vbar a_vi prior dist  # relaxed clock",
+                "  clock = 2 a_vbar b_vbar a_vi prior dist  # independent rates\n"
+                "  clock = 3 a_vbar b_vbar a_vi prior dist  # correlated rates\n"
+                "  clock = 4 a_vbar b_vbar                  # 'simple' rates\n",
                 line_count);
         valid = 1;
       }

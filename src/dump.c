@@ -377,6 +377,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_vbar_alpha,1,fp);
   DUMP(&opt_vbar_beta,1,fp);
   DUMP(&opt_vi_alpha,1,fp);
+  DUMP(&opt_clock_alpha,1,fp);
   DUMP(&opt_rate_prior,1,fp);
   DUMP(&opt_locusrate_prior,1,fp);
 
@@ -415,6 +416,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
   DUMP(&(stree->nui_sum),1,fp);
+  DUMP(&(stree->lnprior_rates_simple),1,fp);
 
   /* write diploid */
   if (opt_diploid)
@@ -671,7 +673,10 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       {
         valid = 1;
         DUMP(&valid,1,fp);
-        DUMP(stree->nodes[i]->brate,opt_locus_count,fp);
+        if (opt_clock == BPP_CLOCK_SIMPLE)
+          DUMP(stree->nodes[i]->brate,1,fp);
+        else
+          DUMP(stree->nodes[i]->brate,opt_locus_count,fp);
       }
       else
       {

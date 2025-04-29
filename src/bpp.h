@@ -156,9 +156,9 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 4
+#define VERSION_PATCH 5
 
-#define PVER_SHA1 "8b31bd5c0b7b5881ee361e995d87b8c868678181"
+#define PVER_SHA1 "eb6e8ab5b5817dc11767a317a276d89994004284"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -198,7 +198,8 @@
 #define BPP_CLOCK_GLOBAL                1
 #define BPP_CLOCK_IND                   2
 #define BPP_CLOCK_CORR                  3
-#define BPP_CLOCK_MAX                   3
+#define BPP_CLOCK_SIMPLE                4
+#define BPP_CLOCK_MAX                   4
 
 #define BPP_HPATH_NONE                  0
 #define BPP_HPATH_LEFT                  1
@@ -626,6 +627,9 @@ typedef struct stree_s
   double locusrate_nubar;
   double nui_sum;
 
+  /* lineage rate model */
+  double lnprior_rates_simple;
+
   /* migration related elements */
   miginfo_t ** mi_tbuffer;
   long ** migcount_sum;      /* migrations across loci */
@@ -701,6 +705,7 @@ typedef struct gtree_s
   gnode_t * root;
 
   gnode_t ** travbuffer;
+  long tb_count;
 
   /* auxiliary space for traversals */
   double logl;
@@ -1245,6 +1250,7 @@ extern double opt_theta_slide_prob;
 extern double opt_theta_q;
 extern double opt_vbar_alpha;
 extern double opt_vbar_beta;
+extern double opt_clock_alpha;
 extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
@@ -1578,6 +1584,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
                                    long thread_index);
 
 double lnprior_rates(gtree_t * gtree, stree_t * stree, long msa_index);
+double lnprior_rates_simple(stree_t * stree);
 
 void stree_reset_leaves(stree_t * stree);
 
@@ -1849,6 +1856,9 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
                         int tipDateArrayLen, 
 			int tau_ctl);
 
+long prop_branch_rates_simple(gtree_t ** gtree,
+                              stree_t * stree,
+                              locus_t ** locus);
 double prop_branch_rates_serial(gtree_t ** gtree,
                                 stree_t * stree,
                                 locus_t ** locus);
@@ -2024,6 +2034,12 @@ void locus_propose_freqs_parallel(stree_t * stree,
                                   long * p_proposal_count,
                                   long * p_accepted);
 
+double update_branchlength_relaxed_clock_simple(stree_t * stree,
+                                                gnode_t * node,
+                                                double locusrate);
+double update_branchlength_relaxed_clock(stree_t * stree,
+                                         gnode_t * node,
+                                         long msa_index);
 /* functions in compress.c */
 
 unsigned int * compress_site_patterns(char ** sequence,
