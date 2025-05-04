@@ -318,21 +318,21 @@ void stree_destroy(stree_t * tree,
       free(node->coalevent);
     }
 
-    if (opt_datefile && !opt_simulate && node->epoch_count) {
-	if (node->node_index < tree->tip_count + opt_seqAncestral) {
-		for (j = 0; j < opt_locus_count; j++) {
-	
-			if (node->epoch_count[j]) {
-				free(node->date_count[j]);
-				free(node->tip_date[j]);
-			}	
-		} 
-		free(node->epoch_count);
-		free(node->tip_date);
-		free(node->date_count);
-	
-	}
-
+    if (opt_datefile && !opt_simulate && node->epoch_count)
+    {
+      if (node->node_index < tree->tip_count + opt_seqAncestral)
+      {
+        for (j = 0; j < opt_locus_count; j++) {
+      
+          if (node->epoch_count[j]) {
+            free(node->date_count[j]);
+            free(node->tip_date[j]);
+          }
+        }
+        free(node->epoch_count);
+        free(node->tip_date);
+        free(node->date_count);
+      }
     }
 
     if (opt_migration)
@@ -494,6 +494,9 @@ void stree_destroy(stree_t * tree,
   	free(tree->u_constraint);
   if (tree->l_constraint)
   	free(tree->l_constraint);
+
+  trait_destroy(tree);  //Chi
+
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);

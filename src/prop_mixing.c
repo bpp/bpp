@@ -635,6 +635,18 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   if (!opt_est_theta)
     lnacceptance += logpr - stree->notheta_logpr;
 
+  if (opt_traitfile)  //Chi
+  {
+    /* update the contrasts (continuous) or conditional probs (discrete)
+       as node age (tau) has been changed */
+    trait_update(stree);
+    
+    /* then calculate the log likelihood difference */
+    for (i = 0; i < stree->trait_count; ++i)
+      lnacceptance -= stree->trait_old_logl[i];
+    lnacceptance += loglikelihood_trait(stree);
+  }
+
   if (opt_debug_mix)
     printf("[Debug] (mixing) lnacceptance = %f\n", lnacceptance);
 
@@ -645,9 +657,15 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
     if (!opt_est_theta)
       stree->notheta_logpr = logpr;
+
+    if (opt_traitfile)  //Chi
+      trait_store(stree);
   }
   else
   {
+    if (opt_traitfile)  //Chi
+      trait_restore(stree);
+
     /* revert thetas and logpr contributions */
     if (opt_est_theta)
     {
