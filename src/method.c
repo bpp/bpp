@@ -6222,7 +6222,7 @@ void cmd_run()
   if (opt_method == METHOD_00)
   {
     allfixed_summary(fp_out,stree);
-    if (!opt_msci)
+    if (!opt_msci && stree->tip_count > 1)
       stree_export_pdf(stree);
     for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
     {
