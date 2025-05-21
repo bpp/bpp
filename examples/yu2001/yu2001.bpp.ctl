@@ -22,9 +22,12 @@
  thetaprior = gamma 2 2000   
  
  # auto (0 or 1): finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
- finetune = 1: 2 0.00001 0.0001  0.0005 0.5 0.2 1.0  
+ #finetune = 1: 2 0.00001 0.0001  0.0005 0.5 0.2 1.0  
+ finetune = 1
 
  print = 1 0 0 0  * MCMC samples, locusrate, heredityscalars, Genetrees
- burnin = 4000
- sampfreq = 2
- nsample = 10000
+ #burnin = 4000
+ burnin = 20
+ #sampfreq = 2
+ #nsample = 10000
+ nsample = 10

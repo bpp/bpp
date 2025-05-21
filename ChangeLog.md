@@ -2,13 +2,14 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [4.8.5] - 2025-04-29
+## [4.8.5] - 2025-05-21
 ## Added
  - clock 4 (lineage rate model)
 ## Fixed
  - processing of A1B1 crash due to missing columns (some thetas that cannot be
    estimated, i.e. there is one or no sequence at the species) are still
    required for converting W to M, but they were skipped.
+ - disabled PDF visualization for the single population coalescent model
 
 ## [4.8.4] - 2025-02-11
 ## Added
