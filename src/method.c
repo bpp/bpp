@@ -37,6 +37,8 @@
 #define MAX_TAU_OUTPUT          3
 #define MAX_PHI_OUTPUT          4
 
+#define RMEAN_UPDATE(m,r,c) (m) = ((m)*((r)-1)+(c)) / (double)(r);
+
 static const int rate_matrices = 1;
 static const long thread_index_zero = 0;
 
@@ -117,6 +119,27 @@ static void timer_print(const char * prefix, const char * suffix, FILE * fp)
   }
 
 }
+
+static double xfloor1(double x)
+{
+  double r = floor(x);
+  if (r < 1) r = 1;
+  return r;
+}
+static char * center(const char * s, int space)
+{
+  char * r;
+  int len = (int)strlen(s);
+  int left,right;
+
+  left  = (space-len)/2;
+  right = space-len-left;
+
+  xasprintf(&r, "%*s%s%*s", left, "", s, right, "");
+
+  return r;
+}
+
 
 long dbg_get_mig_idx(stree_t * stree)
 {
@@ -369,6 +392,44 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, "   mix: mixing proposal\n");
   if (opt_migration && !opt_est_geneflow)
   {
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    if (opt_finetune_mrate_mode == 1)
+    {
+      if (opt_mrate_slide_prob > 0)
+        fprintf(fp, "%*s: migration rates proposal (sliding window)\n",6,"wr1");
+      if (opt_mrate_slide_prob < 1)
+        fprintf(fp, "%*s: migration rates proposal (gibbs sampler)\n",6,"wrg");
+    }
+    else
+    {
+      assert(opt_finetune_mrate_mode == 2);
+
+      for (k = 0; k < slots; ++k)
+      {
+        if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+        {
+          char * sth = NULL;
+          xasprintf(&sth, "wr%ld", k+1);
+
+          if (opt_mrate_gibbs_showall_eps)
+            fprintf(fp, "%*s: migration rates proposal (format: slide:gibbs)\n",
+                    6, sth);
+          else
+            fprintf(fp, "%*s: migration rates proposal (sliding window)\n",6,sth);
+          free(sth);
+        }
+        else
+        {
+          if (opt_mrate_slide_prob == 0)
+            fprintf(fp, "%*s: migration rates proposal (gibbs sampler)\n",6,"wrg");
+          else
+            fprintf(fp, "%*s: migration rates proposal (sliding window)\n",6,"wr1");
+
+        }
+      }
+    }
+
     fprintf(fp, "  mrte: migration rates proposal\n");
     if (opt_mig_vrates_exist)
       fprintf(fp, "  mr_i: variable migration rates across loci proposal\n");
@@ -529,7 +590,19 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += opt_method == METHOD_01 ? 7*(1+!!opt_prob_snl) : 0;
   ap_width += opt_method == METHOD_10 ? 7 : 0;
   ap_width += opt_method == METHOD_11 ? 7*(2+!!opt_prob_snl) : 0;
-  ap_width += (opt_migration && !opt_est_geneflow) ? 5 : 0;
+  if (opt_migration && !opt_est_geneflow)
+  {
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+    if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+    {
+      if (opt_mrate_gibbs_showall_eps)
+        ap_width += slots * 10;
+      else
+        ap_width += (slots+1)*5;
+    }
+    else
+      ap_width += slots*5;
+  }
   ap_width += opt_mig_vrates_exist ? 5 : 0;
   ap_width += 1;
   
@@ -558,24 +631,29 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp," Gspr");      linewidth += 5;
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
-    int spacing = 5;
+    int spacing = 4;
     if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1 && opt_theta_gibbs_showall_eps)
-      spacing = 10;
+      spacing = 9;
     char * sth = NULL;
     if (opt_theta_slide_prob == 0)
     {
       assert(opt_finetune_theta_count == 1);
-      xasprintf(&sth, "thg");
+      xasprintf(&sth, " thg");
     }
     else 
-      xasprintf(&sth, "th%ld", i+1);
-    fprintf(fp, "%*s", spacing, sth);
-    linewidth += spacing;
+    {
+      xasprintf(&sth, " th%ld", i+1);
+      char * s = center(sth,spacing);
+      free(sth);
+      sth = s;
+    }
+    fprintf(fp, " %*s", spacing, sth);
+    linewidth += spacing+1;
     free(sth);
   }
   if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1 && !opt_theta_gibbs_showall_eps)
   {
-    fprintf(fp, "%*s", 5, "thg");
+    fprintf(fp, " %*s", 4, "thg");
     linewidth += 5;
   }
   //fprintf(fp," thet");    linewidth += 5;
@@ -601,15 +679,93 @@ static void print_mcmc_headerline(FILE * fp,
     }
     fprintf(fp," brte");    linewidth += 5;
   }
+
   if (opt_migration && !opt_est_geneflow)
   {
-    fprintf(fp," mrte");    linewidth += 5;
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    if (opt_finetune_mrate_mode == 1)
+    {
+      if (opt_mrate_slide_prob > 0)
+      {
+        fprintf(fp, " wr1 ");
+        linewidth += 5;
+      }
+      if (opt_mrate_slide_prob < 1)
+      {
+        fprintf(fp, " wrg ");
+        linewidth += 5;
+      }
+    }
+    else
+    {
+      assert(opt_finetune_mrate_mode == 2);
+      int spacing = 4;
+      if (opt_mrate_slide_prob < 1 && opt_mrate_gibbs_showall_eps)
+        spacing = 9;
+      for (i = 0; i < slots; ++i)
+      {
+        char * sth = NULL;
+        xasprintf(&sth, " wr%ld", i+1);
+        char * s = center(sth,spacing);
+        free(sth);
+        sth = s;
+        fprintf(fp, " %*s", spacing, sth);
+        linewidth += spacing+1;
+        free(sth);
+      }
+      if (opt_mrate_slide_prob < 1 && !opt_mrate_gibbs_showall_eps)
+      {
+        fprintf(fp, "%*s", 5, "wrg");
+        linewidth += 5;
+      }
+    }
     if (opt_mig_vrates_exist)
     {
-      fprintf(fp," mr_i");  linewidth += 5;
+      fprintf(fp," wr_i");  linewidth += 5;
     }
-
   }
+
+  #if 0
+  if (opt_migration && !opt_est_geneflow)
+  {
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    for (i = 0; i < slots; ++i)
+    {
+      int spacing = 4;
+      if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1 && opt_mrate_gibbs_showall_eps)
+        spacing = 9;
+      char * sth = NULL;
+      if (opt_mrate_slide_prob == 0)
+      {
+        assert(slots == 1);
+        xasprintf(&sth, " wrg");
+      }
+      else
+      {
+        xasprintf(&sth, " wr%ld", i+1);
+        char * s = center(sth,spacing);
+        free(sth);
+        sth = s;
+      }
+      fprintf(fp, " %*s", spacing, sth);
+      linewidth += spacing+1;
+      free(sth);
+    }
+    if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1 && !opt_mrate_gibbs_showall_eps)
+    {
+      fprintf(fp, "%*s", 5, "wrg");
+      linewidth += 5;
+    }
+    if (opt_mig_vrates_exist)
+    {
+      fprintf(fp," wr_i");  linewidth += 5;
+    }
+  }
+  #endif
+
+
   if (enabled_mubar)
   {
     fprintf(fp," mubr");    linewidth += 5;
@@ -924,20 +1080,38 @@ static void active_pjumps_alloc()
     finetune_values_ptr[k] = &opt_finetune_branchrate;
     ++k;
   }
+  #if 0
+  for (i = 0; i < opt_finetune_theta_count; ++i)
+  {
+    xasprintf(active_pjump_titles+k, "th%ld", i+1);
+    active_pjump_values[k] = g_pj_theta_slide+i;
+    finetune_values_ptr[k] = opt_finetune_theta+i;
+    ++k;
+  }
+  #endif
 
   if (opt_migration && !opt_est_geneflow)
   {
-    active_pjump_titles[k] = xstrdup("mrte");
-    active_pjump_values[k] = &g_pj_mrate;
-    finetune_values_ptr[k] = &opt_finetune_migrates;
-    ++k;
-
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+    if (opt_mrate_slide_prob > 0 || opt_mig_vrates_exist)
+    {
+      for (i = 0; i < slots; ++i)
+      {
+        xasprintf(active_pjump_titles+k,"wr%ld", i+1);
+        active_pjump_values[k] = g_pj_mrate_slide+i;
+        finetune_values_ptr[k] = opt_finetune_migrates+i;
+        ++k;
+      }
+    }
     if (opt_mig_vrates_exist)
     {
-      active_pjump_titles[k] = xstrdup("mr_i");
-      active_pjump_values[k] = &g_pj_migvr;
-      finetune_values_ptr[k] = &opt_finetune_mig_Mi;
-      ++k;
+      for (i = 0; i < slots; ++i)
+      {
+        active_pjump_titles[k] = xstrdup("wi%ld");
+        active_pjump_values[k] = g_pj_migvr+i;
+        finetune_values_ptr[k] = opt_finetune_mig_Mi+i;
+        ++k;
+      }
     }
   }
 
@@ -959,26 +1133,6 @@ static void reset_finetune_onestep(double pjump, double * param)
     *param = MIN(maxstep, *param);
   }
   
-}
-
-static double xfloor1(double x)
-{
-  double r = floor(x);
-  if (r < 1) r = 1;
-  return r;
-}
-static char * center(const char * s, int space)
-{
-  char * r;
-  int len = (int)strlen(s);
-  int left,right;
-
-  left  = (space-len)/2;
-  right = space-len-left;
-
-  xasprintf(&r, "%*s%s%*s", left, "", s, right, "");
-
-  return r;
 }
 
 static void reset_finetune(FILE * fp_out)
@@ -1610,9 +1764,69 @@ static void status_print_pjump(FILE * fp,
     fprintf(fp, " %4.2f", g_pj_alpha);
   if (opt_migration)
   {
-    fprintf(fp, " %4.2f", g_pj_mrate);
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    if (opt_mrate_slide_prob == 1)
+    {
+      for (k = 0; k < slots; ++k)
+        fprintf(fp, " %4.2f", g_pj_mrate_slide[k]);
+    }
+    else if (opt_mrate_slide_prob == 0)
+    {
+      assert(slots == 1);
+      for (k = 0; k < slots; ++k)
+        fprintf(fp, " %4.2f", g_pj_mrate_gibbs[k]);
+    }
+    else
+    {
+      if (opt_finetune_mrate_mode == 1)
+      {
+        fprintf(fp, " %4.2f %4.2f", g_pj_mrate_slide[0], g_pj_mrate_gibbs[0]);
+      }
+      else if (opt_finetune_mrate_mode == 2)
+      {
+        if (opt_mrate_gibbs_showall_eps)
+        {
+          for (k = 0; k < slots; ++k)
+          {
+            if (g_pj_mrate_gibbs[k] < 0)
+              fprintf(fp, " %.2f:N/A", g_pj_mrate_slide[k]);
+            else
+              fprintf(fp, " %.2f:%.2f", g_pj_mrate_slide[k], g_pj_mrate_gibbs[k]);
+          }
+        }
+        else
+        {
+          double gavg = 0;
+          long gentries = 0;
+          for (k = 0; k < slots; ++k)
+          {
+            fprintf(fp, " %4.2f", g_pj_mrate_slide[k]);
+            if (g_pj_mrate_gibbs[k] >= 0)
+            {
+              gavg += g_pj_mrate_gibbs[k];
+              gentries++;
+            }
+          }
+          if (gentries)
+          {
+            gavg /= slots;
+            fprintf(fp, " %4.2f", gavg);
+          }
+          else
+            fprintf(fp, " N/A ");
+        }
+      }
+      else
+        fatal("Internal error (opt_mrate_mode = %ld)", opt_finetune_mrate_mode);
+    }
     if (opt_mig_vrates_exist)
-      fprintf(fp, " %4.2f", g_pj_migvr);
+    {
+      long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+      for (k = 0; k < slots; ++k)
+        if (g_pj_migvr[k] >= 0)
+          fprintf(fp, " %4.2f", g_pj_migvr[k]);
+    }
   }
 
   /* print pjump for species tree SPR */
@@ -2601,7 +2815,10 @@ static FILE * resume(stree_t ** ptr_stree,
                      long * ptr_ft_round_rj,
                      long * ptr_ft_round_spr,
                      long * ptr_ft_round_snl,
-                     long ** ptr_ft_round_theta,
+                     long ** ptr_ft_round_theta_gibbs,
+                     long ** ptr_ft_round_theta_slide,
+                     long ** ptr_ft_round_mrate_gibbs,
+                     long ** ptr_ft_round_mrate_slide,
                      double * ptr_mean_logl,
                      long ** ptr_mrate_row,
                      long ** ptr_mrate_col,
@@ -2666,7 +2883,10 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_ft_round_rj,
                   ptr_ft_round_spr,
                   ptr_ft_round_snl,
-                  ptr_ft_round_theta,
+                  ptr_ft_round_theta_gibbs,
+                  ptr_ft_round_theta_slide,
+                  ptr_ft_round_mrate_gibbs,
+                  ptr_ft_round_mrate_slide,
                   ptr_mean_logl,
                   ptr_mrate_row,
                   ptr_mrate_col,
@@ -2997,7 +3217,10 @@ static FILE * init(stree_t ** ptr_stree,
                    long * ptr_ft_round_rj,
                    long * ptr_ft_round_spr,
                    long * ptr_ft_round_snl,
-                   long ** ptr_ft_round_theta,
+                   long ** ptr_ft_round_theta_gibbs,
+                   long ** ptr_ft_round_theta_slide,
+                   long ** ptr_ft_round_mrate_gibbs,
+                   long ** ptr_ft_round_mrate_slide,
                    double * ptr_mean_logl,
                    stree_t ** ptr_sclone,
                    gtree_t *** ptr_gclones,
@@ -4170,6 +4393,32 @@ static FILE * init(stree_t ** ptr_stree,
   g_pj_theta_slide = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
   g_pj_theta_gibbs = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
 
+  /* initialize pjump array for mrate */
+  if (opt_finetune_mrate_mode == 1)
+  {
+    assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+    g_pj_mrate_slide = (opt_mrate_slide_prob == 0) ?
+                         NULL : (double *)xcalloc(1,sizeof(double));
+    g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
+                         NULL : (double *)xcalloc(1,sizeof(double));
+    
+    if (opt_mig_vrates_exist)
+      g_pj_migvr = (double *)xcalloc(1,sizeof(double));
+  }
+  else if (opt_finetune_mrate_mode == 2)
+  {
+    assert(opt_mrate_slide_prob > 0 && opt_mrate_slide_prob <= 1);
+
+    g_pj_mrate_slide = (double *)xcalloc((size_t)opt_migration_count,sizeof(double));
+    g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
+                         NULL : (double *)xcalloc((size_t)opt_migration_count,sizeof(double));
+
+    if (opt_mig_vrates_exist)
+      g_pj_migvr = (double *)xcalloc(opt_migration_count,sizeof(double));
+  }
+  else
+    fatal("Internal error: opt_finetune_mrate_mode (%ld)", opt_finetune_mrate_mode);
+
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
 
@@ -4290,8 +4539,34 @@ static FILE * init(stree_t ** ptr_stree,
   *ptr_mean_logl = 0;
 
   /* keeping track of theta rounds (+1 for gibbs) for adjusting step lengths */
-  *ptr_ft_round_theta = (long *)xcalloc((size_t)opt_finetune_theta_count+1,
-                                        sizeof(long));
+  *ptr_ft_round_theta_slide = (long *)xcalloc((size_t)opt_finetune_theta_count,
+                                              sizeof(long));
+  *ptr_ft_round_theta_gibbs = (long *)xcalloc((size_t)opt_finetune_theta_count,
+                                              sizeof(long));
+
+  if (opt_migration)
+  {
+    assert(opt_finetune_mrate_mode == 1 || opt_finetune_mrate_mode == 2);
+
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+    if (opt_mrate_slide_prob == 0)
+    {
+      *ptr_ft_round_mrate_gibbs = (long *)xcalloc(slots,sizeof(long));
+      *ptr_ft_round_mrate_slide = NULL;
+    }
+    else if (opt_mrate_slide_prob == 1)
+    {
+      *ptr_ft_round_mrate_slide = (long *)xcalloc(slots,sizeof(long));
+      *ptr_ft_round_mrate_gibbs = NULL;
+    }
+    else
+    {
+      assert(opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1);
+      *ptr_ft_round_mrate_gibbs = (long *)xcalloc(slots,sizeof(long));
+      *ptr_ft_round_mrate_slide = (long *)xcalloc(slots,sizeof(long));
+    }
+
+  }
 
   *ptr_sclone = sclone;
   *ptr_gclones = gclones;
@@ -4478,7 +4753,7 @@ static void fill_mean_mrate_indices(stree_t * stree, long * row, long * col, lon
 
 static void pjump_reset()
 {
-  long i;
+  long i,k;
 
   g_pj_gage = 0;
   g_pj_gspr = 0;
@@ -4494,8 +4769,18 @@ static void pjump_reset()
   g_pj_mui = 0;
   g_pj_nui = 0;
   g_pj_brate = 0;
-  g_pj_mrate = 0;
-  g_pj_migvr = 0;
+
+  k = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+  for (i = 0; i < k; ++i)
+  {
+    if (g_pj_mrate_slide)
+      g_pj_mrate_slide[i] = 0;
+    if (g_pj_mrate_gibbs && g_pj_mrate_gibbs[i] >= 0)
+      g_pj_mrate_gibbs[i] = 0;
+    if (g_pj_migvr && g_pj_migvr[i] >= 0)
+      g_pj_migvr[i] = 0;
+  }
+
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
     g_pj_theta_slide[i] = 0;
@@ -4622,14 +4907,13 @@ void cmd_run()
   /* common variables for all methods */
   long i,j,k;
   long ft_round;
-  long * ft_round_theta = NULL;
-  long * ft_round_theta_bits = NULL;
+  long * ft_round_theta_slide = NULL;
+  long * ft_round_theta_gibbs = NULL;
+  long * ft_round_mrate_gibbs = NULL;
+  long * ft_round_mrate_slide = NULL;
   double logl_sum = 0;
   long * phi_av = NULL;
   long * phi_av_count = NULL;
-  double * theta_av_gibbs = NULL;
-  double * theta_av_slide = NULL;
-  long * theta_av_movetype = NULL;
   FILE * fp_mcmc;
   FILE * fp_out;
   FILE * fp_a1b1 = NULL;
@@ -4715,7 +4999,10 @@ void cmd_run()
                      &ft_round_rj,
                      &ft_round_spr,
                      &ft_round_snl,
-                     &ft_round_theta,
+                     &ft_round_theta_gibbs,
+                     &ft_round_theta_slide,
+                     &ft_round_mrate_gibbs,
+                     &ft_round_mrate_slide,
                      &mean_logl,
                      &mean_mrate_row,
                      &mean_mrate_col,
@@ -4749,7 +5036,10 @@ void cmd_run()
                    &ft_round_rj,
                    &ft_round_spr,
                    &ft_round_snl,
-                   &ft_round_theta,
+                   &ft_round_theta_gibbs,
+                   &ft_round_theta_slide,
+                   &ft_round_mrate_gibbs,
+                   &ft_round_mrate_slide,
                    &mean_logl,
                    &sclone, 
                    &gclones,
@@ -4793,10 +5083,6 @@ void cmd_run()
     if (opt_method == METHOD_11)
       pspecies = (double *)xcalloc((size_t)(stree->tip_count),sizeof(double));
   }
-
-  /* initialize theta finetune bits (+1 for gibbs) */
-  ft_round_theta_bits = (long *)xcalloc((size_t)opt_finetune_theta_count+1,
-                                        sizeof(long));
 
   if (opt_migration && opt_msci)
     fatal("Cannot use both MSci and IM models together");
@@ -5012,10 +5298,6 @@ void cmd_run()
   /*** ziheng 2023.9.15 ***/
   double model_count[4] = { 0 }, flipping_success[4] = {0};
 
-  theta_av_gibbs = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
-  theta_av_slide = (double *)xmalloc((size_t)opt_finetune_theta_count*sizeof(double));
-  theta_av_movetype = (long *)xmalloc((size_t)opt_finetune_theta_count*sizeof(long));
-
   if (opt_msci)
   {
     phi_av = (long *)xmalloc(2*sizeof(long));
@@ -5080,8 +5362,22 @@ void cmd_run()
         mig_model_count[j] = 0;
       #endif
 
-      for (j = 0; j <= opt_finetune_theta_count; ++j)
-        ft_round_theta[j] = 0;
+      for (j = 0; j < opt_finetune_theta_count; ++j)
+      {
+        ft_round_theta_gibbs[j] = 0;
+        ft_round_theta_slide[j] = 0;
+      }
+
+      if (opt_migration)
+      {
+        long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+        if (ft_round_mrate_slide)
+          for (j = 0; j < slots; ++j)
+            ft_round_mrate_slide[j] = 0;
+        if (ft_round_mrate_gibbs)
+          for (j = 0; j < slots; ++j)
+            ft_round_mrate_gibbs[j] = 0;
+      }
     }
 
     ++ft_round;
@@ -5162,7 +5458,7 @@ void cmd_run()
       threads_wakeup(THREAD_WORK_GTAGE,&td);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
-    g_pj_gage = (g_pj_gage*(ft_round-1)+ratio) / (double)ft_round;
+    RMEAN_UPDATE(g_pj_gage, ft_round, ratio);
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "GAGE");
       #endif
@@ -5196,7 +5492,7 @@ void cmd_run()
       threads_wakeup(THREAD_WORK_GTSPR,&td);
       ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
     }
-    g_pj_gspr = (g_pj_gspr*(ft_round-1)+ratio) / (double)ft_round;
+    RMEAN_UPDATE(g_pj_gspr, ft_round, ratio);
 #endif
 
       #ifdef CHECK_LOGL
@@ -5218,43 +5514,8 @@ void cmd_run()
       
     if (opt_est_theta)
     {
-      stree_propose_theta(gtree,locus,stree, theta_av_gibbs, theta_av_slide, theta_av_movetype,ft_round_theta_bits);
+      stree_propose_theta(gtree,locus,stree, ft_round_theta_gibbs, ft_round_theta_slide);
 
-      /* increase ft_round for corresponding step lengths */
-      for (j = 0; j <= opt_finetune_theta_count; ++j)
-      {
-        ft_round_theta[j] += ft_round_theta_bits[j];
-      }
-
-      if (opt_theta_slide_prob == 1)
-      {
-        for (j = 0; j < opt_finetune_theta_count; ++j)
-        {
-          if (theta_av_movetype[j] != BPP_THETA_MOVE_NONE)
-            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
-        }
-      }
-      else if (opt_theta_slide_prob == 0)
-      {
-        /* gibbs sampler */
-        long round_gibbs = ft_round_theta[opt_finetune_theta_count];
-        for (j = 0; j < opt_finetune_theta_count; ++j)
-          g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(round_gibbs-1)+theta_av_gibbs[j]) / (double)round_gibbs;
-        
-      }
-      else  /* ziheng-note-2024.12.28: is this block correct?  It does not look right to use ft_round? */
-      {
-        long round_gibbs = ft_round_theta[opt_finetune_theta_count];
-        for (j = 0; j < opt_finetune_theta_count; ++j)
-          if (theta_av_movetype[j] == BPP_THETA_MOVE_SLIDE)
-            g_pj_theta_slide[j] = (g_pj_theta_slide[j]*(ft_round_theta[j]-1)+theta_av_slide[j]) / (double)ft_round_theta[j];
-          else if (theta_av_movetype[j] == BPP_THETA_MOVE_GIBBS)
-          {
-            g_pj_theta_gibbs[j] = (g_pj_theta_gibbs[j]*(round_gibbs-1)+theta_av_gibbs[j]) / (double)round_gibbs;
-          }
-          else
-            assert(theta_av_movetype[j] == BPP_THETA_MOVE_NONE);
-      }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "THETA");
       #endif
@@ -5275,7 +5536,7 @@ void cmd_run()
         ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
       else if (!opt_usedata_fix_gtree)
         ratio = stree_propose_tau(gtree,stree,locus);
-      g_pj_tau = (g_pj_tau*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_tau, ft_round, ratio);
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "TAU");
       #endif
@@ -5291,16 +5552,7 @@ void cmd_run()
 
     /* propose migration rates */      
     if (opt_migration)
-    {
-      ratio = prop_migrates(stree,gtree,locus);
-      g_pj_mrate = (g_pj_mrate*(ft_round-1)+ratio) / (double)ft_round;
-
-      if (opt_mig_vrates_exist)
-      {
-        ratio = prop_mig_vrates(stree,gtree,locus);
-        g_pj_migvr = (g_pj_migvr*(ft_round-1)+ratio) / (double)ft_round;
-      }
-    }
+      prop_migrates(stree,gtree,locus,ft_round_mrate_gibbs,ft_round_mrate_slide);
     
     if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
     {
@@ -5311,7 +5563,7 @@ void cmd_run()
     if (!opt_datefile && !opt_usedata_fix_gtree)
     {
       ratio = proposal_mixing(gtree, stree, locus);
-      g_pj_mix = (g_pj_mix * (ft_round - 1) + ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_mix, ft_round, ratio);
     }
     #ifdef CHECK_LOGL
     check_logl(stree, gtree, locus, i, "MIXING");
@@ -5329,7 +5581,7 @@ void cmd_run()
          opt_est_heredity == HEREDITY_ESTIMATE)
     {
       ratio = prop_locusrate_and_heredity(gtree,stree,locus,thread_index_zero);
-      g_pj_lrht = (g_pj_lrht*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_lrht, ft_round, ratio);
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "LRHT");
       #endif
@@ -5349,12 +5601,12 @@ void cmd_run()
       if (phi_av_count[BPP_PHI_MOVE_SLIDE])
       {
         ratio = (double)phi_av[BPP_PHI_MOVE_SLIDE] / phi_av_count[BPP_PHI_MOVE_SLIDE];
-        g_pj_phi_slide = (g_pj_phi_slide*(ft_round-1)+ratio) / (double)ft_round;
+        RMEAN_UPDATE(g_pj_phi_slide, ft_round, ratio);
       }
       if (phi_av_count[BPP_PHI_MOVE_GIBBS])
       {
         ratio = (double)phi_av[BPP_PHI_MOVE_GIBBS] / phi_av_count[BPP_PHI_MOVE_GIBBS];
-        g_pj_phi_gibbs = (g_pj_phi_gibbs*(ft_round-1)+ratio) / (double)ft_round;
+        RMEAN_UPDATE(g_pj_phi_gibbs, ft_round, ratio);
       }
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "PHI");
@@ -5417,7 +5669,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_FREQS,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      g_pj_freqs = (g_pj_freqs*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_freqs, ft_round, ratio);
     }
 
     if (enabled_prop_qrates)
@@ -5430,7 +5682,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_RATES,&td);
         ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      g_pj_qmat = (g_pj_qmat*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_qmat, ft_round, ratio);
     }
 
     if (enabled_prop_alpha)
@@ -5443,7 +5695,7 @@ void cmd_run()
         threads_wakeup(THREAD_WORK_ALPHA,&td);
         ratio = td.accepted ? ((double)(td.accepted)/td.proposals) : 0;
       }
-      g_pj_alpha = (g_pj_alpha*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_alpha, ft_round, ratio);
     }
 
     /* TODO: Delete after debugging */
@@ -5458,7 +5710,7 @@ void cmd_run()
          opt_locusrate_prior == BPP_LOCRATE_PRIOR_GAMMADIR))
     {
       ratio = prop_locusrate_mui(gtree,stree,locus,thread_index_zero);
-      g_pj_mui = (g_pj_mui*(ft_round-1)+ratio) / (double)ft_round;
+      RMEAN_UPDATE(g_pj_mui, ft_round, ratio);
 
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "MUI");
@@ -5473,7 +5725,7 @@ void cmd_run()
       if (opt_est_mubar)
       {
         ratio = prop_locusrate_mubar(stree,gtree);
-       g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) / (double)ft_round;
+        RMEAN_UPDATE(g_pj_mubar, ft_round, ratio);
         #ifdef CHECK_LOGL
         check_logl(stree, gtree, locus, i, "MUBAR");
         #endif
@@ -5495,9 +5747,7 @@ void cmd_run()
 	    else {
 		    fatal("Mutation rate proposal not implemented for one population\n");
 	    }
-
-        g_pj_mubar = (g_pj_mubar*(ft_round-1)+ratio) /
-                                       (double)ft_round;
+        RMEAN_UPDATE(g_pj_mubar, ft_round, ratio);
     }
 
     if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -5505,7 +5755,7 @@ void cmd_run()
       if (opt_clock != BPP_CLOCK_SIMPLE)
       {
         ratio = prop_locusrate_nui(gtree,stree,locus,thread_index_zero);
-        g_pj_nui = (g_pj_nui*(ft_round-1)+ratio) / (double)ft_round;
+        RMEAN_UPDATE(g_pj_nui, ft_round, ratio);
         #ifdef CHECK_LOGL
         check_logl(stree, gtree, locus, i, "NUI");
         #endif
@@ -5516,7 +5766,7 @@ void cmd_run()
         if (opt_locusrate_prior == BPP_LOCRATE_PRIOR_HIERARCHICAL)
         {
           ratio = prop_locusrate_nubar(stree,gtree);
-          g_pj_nubar = (g_pj_nubar*(ft_round-1)+ratio) / (double)ft_round;
+          RMEAN_UPDATE(g_pj_nubar, ft_round, ratio);
         #ifdef CHECK_LOGL
         check_logl(stree, gtree, locus, i, "NUBAR");
         #endif
@@ -5533,19 +5783,18 @@ void cmd_run()
           threads_wakeup(THREAD_WORK_BRATE,&td);
           ratio = td.proposals ? ((double)(td.accepted)/td.proposals) : 0;
         }
-        g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
-        #ifdef CHECK_LOGL
-        check_logl(stree, gtree, locus, i, "BRATE");
-        #endif
-        #ifdef CHECK_LNPRIOR
-        check_lnprior(stree, gtree, i, "BRATE");
-        #endif
       }
       else
       {
         ratio = prop_branch_rates_simple(gtree,stree,locus);
-        g_pj_brate = (g_pj_brate*(ft_round-1)+ratio) / (double)ft_round;
       }
+      RMEAN_UPDATE(g_pj_brate, ft_round, ratio);
+      #ifdef CHECK_LOGL
+      check_logl(stree, gtree, locus, i, "BRATE");
+      #endif
+      #ifdef CHECK_LNPRIOR
+      check_lnprior(stree, gtree, i, "BRATE");
+      #endif
     }
 
     /* log sample into file (dparam_count is only used in method 10) */
@@ -5608,9 +5857,8 @@ void cmd_run()
     if (opt_method != METHOD_00)    /* species tree inference or delimitation */
     {
       if (opt_est_theta)
-        mean_theta[0] = (mean_theta[0]*(ft_round-1)+stree->root->theta)/ft_round;
-
-      mean_tau[0] = (mean_tau[0]*(ft_round-1)+stree->root->tau)/ft_round;
+        RMEAN_UPDATE(mean_theta[0],ft_round,stree->root->theta);
+      RMEAN_UPDATE(mean_tau[0],ft_round,stree->root->tau);
 
       mean_theta_count = 1;
       mean_tau_count = 1;
@@ -5634,8 +5882,7 @@ void cmd_run()
           if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta) 
             continue;
 
-          mean_theta[k] = (mean_theta[k]*(ft_round-1)+stree->nodes[j]->theta) /
-                          ft_round;
+          RMEAN_UPDATE(mean_theta[k],ft_round,stree->nodes[j]->theta);
           if (++k == max_param_count) break;
         }
       }
@@ -5652,7 +5899,7 @@ void cmd_run()
       {
         if (stree->nodes[j]->tau == 0) continue;
 
-        mean_tau[k] = (mean_tau[k]*(ft_round-1) + stree->nodes[j]->tau)/ft_round;
+        RMEAN_UPDATE(mean_tau[k],ft_round,stree->nodes[j]->tau);
 
         if (++k == max_param_count) break;
       }
@@ -5667,7 +5914,7 @@ void cmd_run()
           if (!tmpnode->has_phi)
             tmpnode = tmpnode->hybrid;
 
-          mean_phi[j] = (mean_phi[j]*(ft_round-1) + tmpnode->hphi)/ft_round;
+          RMEAN_UPDATE(mean_phi[j],ft_round,tmpnode->hphi);
         }
       }
 
@@ -5700,7 +5947,7 @@ void cmd_run()
     {
       for (logl_sum = 0, j = 0; j < opt_locus_count; ++j)
         logl_sum += gtree[j]->logl;
-      mean_logl = (mean_logl * (ft_round-1) + logl_sum / opt_bfbeta)/ft_round;
+      RMEAN_UPDATE(mean_logl, ft_round, logl_sum/opt_bfbeta)
     }
 
     if (opt_est_geneflow)
@@ -5709,7 +5956,7 @@ void cmd_run()
       double t = gtree[0]->root->time;
 
       mig_model_count[dbg_mig_idx]++;
-      mig_gtree_root_mean[dbg_mig_idx] = (mig_gtree_root_mean[dbg_mig_idx] * (mig_model_count[dbg_mig_idx] - 1) + t) / mig_model_count[dbg_mig_idx];
+      RMEAN_UPDATE(mig_gtree_root_mean[dbg_mig_idx],mig_model_count[dbg_mig_idx],t);
       dbg_fill_mig_mean_M(stree);
 
       if (i >= 0)
@@ -5951,7 +6198,10 @@ void cmd_run()
                         ft_round_rj,
                         ft_round_spr,
                         ft_round_snl,
-                        ft_round_theta,
+                        ft_round_theta_gibbs,
+                        ft_round_theta_slide,
+                        ft_round_mrate_gibbs,
+                        ft_round_mrate_slide,
                         mean_logl,
                         mean_mrate_row,
                         mean_mrate_col,
@@ -5968,6 +6218,7 @@ void cmd_run()
                         prec_logl, 
 			printLocusIndex);
         //printf(" [CHKP %ld]", opt_checkpoint_current);
+
       }
     }
     if (opt_debug_abort == opt_debug_counter)
@@ -5982,11 +6233,18 @@ void cmd_run()
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
-  free(theta_av_gibbs);
-  free(theta_av_slide);
-  free(theta_av_movetype);
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);
+  if (opt_migration)
+  {
+    if (g_pj_mrate_slide)
+      free(g_pj_mrate_slide);
+    if (g_pj_mrate_gibbs)
+      free(g_pj_mrate_gibbs);
+    if (g_pj_migvr)
+      free(g_pj_migvr);
+  }
+
 
   if (opt_msci)
   {
@@ -6263,10 +6521,17 @@ void cmd_run()
         free(opt_mig_specs[i].Mi);
     }
     free(opt_mig_specs);
+
+    if (ft_round_mrate_slide)
+      free(ft_round_mrate_slide);
+    if (ft_round_mrate_gibbs)
+      free(ft_round_mrate_gibbs);
   }
 
-  free(ft_round_theta);
-  free(ft_round_theta_bits);
+  if (ft_round_theta_slide)
+    free(ft_round_theta_slide);
+  if (ft_round_theta_gibbs)
+    free(ft_round_theta_gibbs);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

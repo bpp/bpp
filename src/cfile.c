@@ -78,8 +78,8 @@ static const long ft_labels_count = 16;
 
 static const char * ft_labels[] = 
  {
-   "Gage", "Gspr", "tau",  "mix",  "lrht", "phis", "pi",   "qmat",
-   "alfa", "mubr", "nubr", "mu_i", "nu_i", "brte", "mrte", "mr_i"
+   "Gage", "Gspr", "tau",  "mix",  "lrht", "phis", "pi",
+   "qmat", "alfa", "mubr", "nubr", "mu_i", "nu_i", "brte", 
  };
 
 static double * ft_ptr[] = 
@@ -98,17 +98,18 @@ static double * ft_ptr[] =
    &opt_finetune_mui,           /* 12 */
    &opt_finetune_nui,           /* 13 */
    &opt_finetune_branchrate,    /* 14 */
-   &opt_finetune_migrates,      /* 15 */
-   &opt_finetune_mig_Mi         /* 16 */
  };
 
-typedef struct theta_eps_pair_s
+typedef struct eps_pair_s
 {
   long indexm1;
   double eps;
-} theta_eps_pair_t;
+} eps_pair_t;
 
 static list_t * theta_eps_list = NULL;
+
+static list_t * wr_eps_list = NULL;
+static list_t * wi_eps_list = NULL;
 
 static void reallocline(size_t newmaxsize)
 {
@@ -1842,6 +1843,19 @@ static long parse_finetune(const char * line, long line_count)
   }
   theta_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
 
+  if (wr_eps_list)
+  {
+    list_clear(wr_eps_list,free);
+    free(wr_eps_list);
+  }
+  if (wi_eps_list)
+  {
+    list_clear(wi_eps_list,free);
+    free(wi_eps_list);
+  }
+  wr_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
+  wi_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
+
   /* skip all white-space */
   ws = strspn(p, " \t\r\n");
 
@@ -1908,11 +1922,73 @@ static long parse_finetune(const char * line, long line_count)
       count = get_double(sval, &val);
       if (!count) goto l_unwind;
 
-      theta_eps_pair_t * pair = (theta_eps_pair_t *)xmalloc(sizeof(theta_eps_pair_t));
+      eps_pair_t * pair = (eps_pair_t *)xmalloc(sizeof(eps_pair_t));
       pair->indexm1 = indexm1;
       pair->eps = val;
 
       list_append(theta_eps_list,(void *)pair);
+    }
+    else if (strlen(token) > 2 &&
+             (token[0] == 'w' || token[0] == 'W') &&
+             (token[1] == 'r' || token[1] == 'R') &&
+             (token[2] >= '0' && token[2] <= '9'))
+    {
+      /* parse w */
+
+      /* split token into label, index, value */
+      sindex = token+2;
+      sval = strchr(sindex,':');
+      if (!sval || sval[1] == '\0')
+      {
+        goto l_unwind;
+      }
+
+      sindex = xstrndup(sindex,sval-sindex);
+      if (!get_long(sindex, &indexm1))
+        goto l_unwind;
+      --indexm1;
+
+      ++sval;
+      double val;
+      count = get_double(sval, &val);
+      if (!count) goto l_unwind;
+
+      eps_pair_t * pair = (eps_pair_t *)xmalloc(sizeof(eps_pair_t));
+      pair->indexm1 = indexm1;
+      pair->eps = val;
+
+      list_append(wr_eps_list,(void *)pair);
+    }
+    else if (strlen(token) > 2 &&
+             (token[0] == 'w' || token[0] == 'W') &&
+             (token[1] == 'i' || token[1] == 'I') &&
+             (token[2] >= '0' && token[2] <= '9'))
+    {
+      /* parse w */
+
+      /* split token into label, index, value */
+      sindex = token+2;
+      sval = strchr(sindex,':');
+      if (!sval || sval[1] == '\0')
+      {
+        goto l_unwind;
+      }
+
+      sindex = xstrndup(sindex,sval-sindex);
+      if (!get_long(sindex, &indexm1))
+        goto l_unwind;
+      --indexm1;
+
+      ++sval;
+      double val;
+      count = get_double(sval, &val);
+      if (!count) goto l_unwind;
+
+      eps_pair_t * pair = (eps_pair_t *)xmalloc(sizeof(eps_pair_t));
+      pair->indexm1 = indexm1;
+      pair->eps = val;
+
+      list_append(wi_eps_list,(void *)pair);
     }
     else
     {
@@ -1940,7 +2016,6 @@ static long parse_finetune(const char * line, long line_count)
 
       if (*ft_ptr[i] == 0)
         *ft_ptr[i] = ft_eps;
-
     }
 
     if (token)
@@ -1991,7 +2066,7 @@ l_unwind:
   list_item_t * li = theta_eps_list->head;
   while (li)
   {
-    theta_eps_pair_t * pair = (theta_eps_pair_t *)(li->data);
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
     printf("(%ld,%.6f)\n", pair->indexm1, pair->eps);
     li = li->next;
   }
@@ -2302,6 +2377,9 @@ l_deallocline:
     
     free(ss);
 
+    assert(opt_finetune_mrate_mode == 1 || opt_finetune_mrate_mode == 2);
+    opt_mig_specs[i].index = (opt_finetune_mrate_mode == 1) ? 0 : i;
+
     opt_mig_specs[i].params       = params;
     switch (params)
     {
@@ -2507,7 +2585,7 @@ static void update_theta_finetunes()
   list_item_t * li = theta_eps_list->head;
   while (li)
   {
-    theta_eps_pair_t * pair = (theta_eps_pair_t *)(li->data);
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
     #if 0
     printf("(%ld,%.6f)\n", pair->indexm1, pair->eps);
     #endif
@@ -2522,7 +2600,7 @@ static void update_theta_finetunes()
       opt_finetune_theta_mode = 1;
 
       if (pair->indexm1 != 0)
-        fatal("Error: The --theta-mode 1 option defines a single step length (th0) "
+        fatal("Error: The --theta-mode 1 option defines a single step length (th1) "
               "for all theta parameters.\nHowever the specified finetune option in "
               "file %s specifies th%ld.\n", opt_cfile, pair->indexm1+1);
     }
@@ -2552,6 +2630,84 @@ static void update_theta_finetunes()
   }
   list_clear(theta_eps_list,free);
   free(theta_eps_list);
+}
+
+static void update_wr_finetunes()
+{
+  long i;
+
+  if (opt_finetune_mrate_mode == 2)
+  {
+    free(opt_finetune_migrates);
+
+    opt_finetune_migrates = (double *)xmalloc((size_t)opt_migration_count *
+                                              sizeof(double));
+
+    /* -1 indicates user didn't specify eps */
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      opt_finetune_migrates[i] = -1;
+    }
+  }
+  else if (opt_finetune_mrate_mode != 1)
+  {
+    fatal("Internal error: opt_finetune_mrate_mode = %ld",
+          opt_finetune_mrate_mode);
+  }
+
+  if (!wr_eps_list) return;
+
+  list_item_t * li = wr_eps_list->head;
+  while (li)
+  {
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
+
+    if (opt_finetune_mrate_mode == 1)
+
+    opt_finetune_migrates[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+    li = li->next;
+  }
+  list_clear(wr_eps_list,free);
+  free(wr_eps_list);
+}
+
+static void update_wi_finetunes()
+{
+  long i;
+
+  if (opt_finetune_mrate_mode == 2)
+  {
+    free(opt_finetune_mig_Mi);
+
+    opt_finetune_mig_Mi = (double *)xmalloc((size_t)opt_migration_count *
+                                            sizeof(double));
+
+    /* -1 indicates user didn't specify eps */
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      opt_finetune_mig_Mi[i] = -1;
+    }
+  }
+  else if (opt_finetune_mrate_mode != 1)
+  {
+    fatal("Internal error: opt_finetune_mrate_mode = %ld",
+          opt_finetune_mrate_mode);
+  }
+
+  if (!wi_eps_list) return;
+
+  list_item_t * li = wi_eps_list->head;
+  while (li)
+  {
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
+
+    if (opt_finetune_mrate_mode == 1)
+
+    opt_finetune_mig_Mi[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+    li = li->next;
+  }
+  list_clear(wi_eps_list,free);
+  free(wi_eps_list);
 }
 
 static void check_validity()
@@ -3300,6 +3456,11 @@ void load_cfile()
 
   update_locusrate_information();
   update_theta_finetunes();
+  if (opt_migration)
+  {
+    update_wr_finetunes();
+    update_wi_finetunes();
+  }
   check_validity();
   if (opt_migration)
   {

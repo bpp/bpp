@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 5
 
-#define PVER_SHA1 "eb6e8ab5b5817dc11767a317a276d89994004284"
+#define PVER_SHA1 "53e72289e0e2be4839a498f62118f445ecaee191"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -284,6 +284,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_PHI_MOVE_SLIDE              0
 #define BPP_PHI_MOVE_GIBBS              1
 
+#define BPP_MRATE_NONE                 -1
 #define BPP_MRATE_SLIDE                 0
 #define BPP_MRATE_GIBBS                 1
 
@@ -464,6 +465,7 @@ typedef struct migspec_s
   double * Mi;
 
   int mark;             /* used in rubberband to mark entry as affected */
+  long index;           /* pjump and current round index */
 
   char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
@@ -1136,6 +1138,7 @@ extern long opt_exp_imrb;
 extern long opt_exp_randomize;
 extern long opt_exp_theta;
 extern long opt_exp_sim;
+extern long opt_finetune_mrate_mode;
 extern long opt_finetune_reset;
 extern long opt_finetune_theta_count;
 extern long opt_finetune_theta_mode;
@@ -1154,6 +1157,7 @@ extern long opt_mig_vrates_exist;
 extern long opt_mix_theta_update;
 extern long opt_mix_w_update;
 extern long opt_model;
+extern long opt_mrate_gibbs_showall_eps;
 extern long opt_mrate_move;
 extern long opt_msci;
 extern long opt_onlysummary;
@@ -1181,7 +1185,7 @@ extern long opt_samplefreq;
 extern long opt_samples;
 extern long opt_scaling;
 extern long opt_seed;
-extern long  opt_simulate_read_depth;
+extern long opt_simulate_read_depth;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
@@ -1205,8 +1209,6 @@ extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
 extern double opt_finetune_locusrate;
 extern double opt_finetune_mix;
-extern double opt_finetune_migrates;
-extern double opt_finetune_mig_Mi;
 extern double opt_finetune_mubar;
 extern double opt_finetune_mui;
 extern double opt_finetune_phi;
@@ -1221,6 +1223,7 @@ extern double opt_snl_lambda_shrink;
 extern double opt_locusrate_mubar;      /* used only in simulation */
 extern double opt_mig_alpha;
 extern double opt_mig_beta;
+extern double opt_mrate_slide_prob;
 extern double opt_mubar_alpha;
 extern double opt_mubar_beta;
 extern double opt_mui_alpha;
@@ -1280,6 +1283,8 @@ extern char * opt_simulate;
 extern char * opt_streenewick;
 extern char * opt_treefile;
 extern double * opt_basefreqs_params;
+extern double * opt_finetune_migrates;
+extern double * opt_finetune_mig_Mi;
 extern double * opt_finetune_theta;
 extern double * opt_qrates_params;
 extern migspec_t * opt_mig_specs;
@@ -1376,8 +1381,9 @@ extern double g_pj_nubar;
 extern double g_pj_mui;
 extern double g_pj_nui;
 extern double g_pj_brate;
-extern double g_pj_mrate;
-extern double g_pj_migvr;
+extern double * g_pj_migvr;
+extern double * g_pj_mrate_slide;
+extern double * g_pj_mrate_gibbs;
 extern double * g_pj_theta_slide;
 extern double * g_pj_theta_gibbs;
 
@@ -1471,10 +1477,8 @@ hashtable_t * maplist_hash(list_t * maplist, hashtable_t * sht);
 void stree_propose_theta(gtree_t ** gtree,
                          locus_t ** locus,
                          stree_t * stree,
-                         double * acceptvec_gibbs,
-                         double * acceptvec_slide,
-                         long * acceptvec_movetype,
-                         long * ft_round_theta_bits);
+                         long * ft_round_gibbs,
+                         long * ft_round_slide);
 
 hashtable_t * datelist_hash(list_t * datelist);
 
@@ -1588,7 +1592,7 @@ double lnprior_rates_simple(stree_t * stree);
 
 void stree_reset_leaves(stree_t * stree);
 
-double prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
+void prop_migrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus, long * ft_round_gibbs, long * ft_round_slide);
 
 double prop_mig_vrates(stree_t * stree, gtree_t ** gtree, locus_t ** locus);
 
@@ -2120,7 +2124,10 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
-                    long * ft_round_theta,
+                    long * ft_round_theta_gibbs,
+                    long * ft_round_theta_slide,
+                    long * ft_round_mrate_gibbs,
+                    long * ft_round_mrate_slide,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -2158,7 +2165,10 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
-                    long ** ft_round_theta,
+                    long ** ft_round_theta_gibbs,
+                    long ** ft_round_theta_slide,
+                    long ** ft_round_mrate_gibbs,
+                    long ** ft_round_mrate_slide,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,
