@@ -1316,7 +1316,7 @@ static void network_init_tau_iterative(stree_t * stree,
           if (x->tau != 1)
             continue;
 
-          x->tau = MIN(age1,age2) * prop;
+          x->tau = MIN(age1,age2) * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index))) ;
           x->hybrid->tau = x->tau;
           if (x->htau == 0)
             x->parent->tau = x->tau;
@@ -1349,7 +1349,7 @@ static void network_init_tau_iterative(stree_t * stree,
                  x->right->tau == 1 &&
                  x->right->hybrid->tau == 1);
 
-          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau) * prop;
+          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau) * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
 
           x->tau                = age;
           x->hybrid->tau        = age;
@@ -1374,7 +1374,7 @@ static void network_init_tau_iterative(stree_t * stree,
             {
               if (x->prop_tau)
               {
-                x->tau = x->parent->tau * prop;
+                x->tau = x->parent->tau * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
               }
               else
               {
@@ -1419,7 +1419,8 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
   int index = node->node_index - stree->tip_count;
   if (node->tau && node->tau > 0) {
 
-    newage = tau_parent * prop;
+    newage = tau_parent * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
+
     if ((u_constraint[index] && newage > u_constraint[index]) 
      || (l_constraint[index] && newage < l_constraint[index])) {
       minage = l_constraint[index];
@@ -1458,7 +1459,7 @@ static void stree_init_tau_recursive(snode_t * node, double prop, long thread_in
     node->theta = -1;
 
   if (node->parent->tau && node->tau > 0)
-    node->tau = tau_parent * prop;
+    node->tau = tau_parent * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
   else
     node->tau = 0;
 
