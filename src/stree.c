@@ -3919,6 +3919,7 @@ void stree_propose_theta(gtree_t ** gtree,
   long slide_inner_accept = 0;
   long gibbs_tip_accept = 0;
   long gibbs_inner_accept = 0;
+  long total_slide,total_gibbs;
   double a1,b1;
   double ratio;
   snode_t * snode;
@@ -4013,8 +4014,8 @@ void stree_propose_theta(gtree_t ** gtree,
     case 1:
       /* one step size for all theta */
 
-      long total_slide = slide_tip_count+slide_inner_count;
-      long total_gibbs = gibbs_tip_count+gibbs_inner_count;
+      total_slide = slide_tip_count+slide_inner_count;
+      total_gibbs = gibbs_tip_count+gibbs_inner_count;
 
       if (total_slide)
       {
