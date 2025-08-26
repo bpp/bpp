@@ -74,7 +74,7 @@ static const char * rate_prior_name[] =
    "Gamma-Dirichlet", "Conditional iid"
  };
 
-static const long ft_labels_count = 16;
+static const long ft_labels_count = 14;
 
 static const char * ft_labels[] = 
  {
