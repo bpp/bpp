@@ -136,9 +136,10 @@ static double logPDFGamma(double x, double a, double b)
 {
    /* gamma density: mean=a/b; var=a/b^2
    */
-   if (x <= 0 || a <= 0 || b <= 0) {
-      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("[stree] x a b outside range in logPDFGamma()");
+   if (x <= 0 || a <= 0 || b <= 0)
+   {
+      fatal("[stree] x=%.15f a=%.15f b=%.15f outside range in logPDFGamma()",
+            x,a,b);
    }
    return a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
 }
@@ -5167,9 +5168,10 @@ static double logPDFInvG(double x, double a, double b)
 {
    /* inverse gamma density: mean=a/b; var=a/b^2
    */
-   if (x <= 0 || a <= 0 || b <= 0) {
-      printf("x=%.6f a=%.6f b=%.6f", x, a, b);
-      fatal("[stree] x a b outside range in logPDFInvG()");
+   if (x <= 0 || a <= 0 || b <= 0)
+   {
+      fatal("[stree] x=%.15f a=%.15f b=%.15f outside range in logPDFInvG()",
+            x,a,b);
    }
    return a * log(b) - lgamma(a) + (-a - 1) * log(x) - b / x;
 }
