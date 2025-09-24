@@ -2488,7 +2488,7 @@ static void update_sp_seqcount()
   long i;
 
   if (opt_diploid_size != species_count)
-    fatal("Number of digits in 'diploid' does not match number of species");
+    fatal("Number of digits in 'phase' does not match number of species");
 
   for (i = 0; i < species_count; ++i)
     if (opt_diploid[i])

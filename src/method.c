@@ -4394,30 +4394,37 @@ static FILE * init(stree_t ** ptr_stree,
   g_pj_theta_gibbs = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
 
   /* initialize pjump array for mrate */
-  if (opt_finetune_mrate_mode == 1)
+  if (opt_migration)
   {
-    assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
-    g_pj_mrate_slide = (opt_mrate_slide_prob == 0) ?
-                         NULL : (double *)xcalloc(1,sizeof(double));
-    g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
-                         NULL : (double *)xcalloc(1,sizeof(double));
-    
-    if (opt_mig_vrates_exist)
-      g_pj_migvr = (double *)xcalloc(1,sizeof(double));
-  }
-  else if (opt_finetune_mrate_mode == 2)
-  {
-    assert(opt_mrate_slide_prob > 0 && opt_mrate_slide_prob <= 1);
+    if (opt_finetune_mrate_mode == 1)
+    {
+      assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+      g_pj_mrate_slide = (opt_mrate_slide_prob == 0) ?
+                           NULL : (double *)xcalloc(1,sizeof(double));
+      g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
+                           NULL : (double *)xcalloc(1,sizeof(double));
+      
+      if (opt_mig_vrates_exist)
+        g_pj_migvr = (double *)xcalloc(1,sizeof(double));
+    }
+    else if (opt_finetune_mrate_mode == 2)
+    {
+      assert(opt_mrate_slide_prob > 0 && opt_mrate_slide_prob <= 1);
 
-    g_pj_mrate_slide = (double *)xcalloc((size_t)opt_migration_count,sizeof(double));
-    g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
-                         NULL : (double *)xcalloc((size_t)opt_migration_count,sizeof(double));
+      g_pj_mrate_slide = (double *)xcalloc((size_t)opt_migration_count,
+                                           sizeof(double));
+      g_pj_mrate_gibbs = NULL; 
+      if (opt_mrate_slide_prob == 1)
+        g_pj_mrate_gibbs = (double *)xcalloc((size_t)opt_migration_count,
+                                             sizeof(double));
 
-    if (opt_mig_vrates_exist)
-      g_pj_migvr = (double *)xcalloc(opt_migration_count,sizeof(double));
+      if (opt_mig_vrates_exist)
+        g_pj_migvr = (double *)xcalloc(opt_migration_count,sizeof(double));
+    }
+    else
+      fatal("Internal error: opt_finetune_mrate_mode (%ld)",
+            opt_finetune_mrate_mode);
   }
-  else
-    fatal("Internal error: opt_finetune_mrate_mode (%ld)", opt_finetune_mrate_mode);
 
   /* TODO: Method 10 has a commented call to 'delimit_resetpriors()' */
   //delimit_resetpriors();
@@ -5395,6 +5402,9 @@ void cmd_run()
         ft_round_rj++;
         g_pj_rj += j;
       }
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "RJD");
+      #endif
     }
 
     /* propose species tree topology using SPR */
@@ -5972,7 +5982,7 @@ void cmd_run()
       printf("\r%4.0f%% ", (i + 1.499) / printk * 100.);
 
       double mean_pjump_rj = 0;
-      if (opt_method == METHOD_10)
+      if (opt_method == METHOD_10 || opt_method == METHOD_11)
         mean_pjump_rj = ft_round_rj ? g_pj_rj / ft_round_rj : 0;
 
       /* print pjumps */

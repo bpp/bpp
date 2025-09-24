@@ -602,7 +602,10 @@ long prop_split(gtree_t ** gtree,
     if (opt_est_theta)
       logpr -= node->logpr_contrib[i];
     else
-      logpr -= node->notheta_logpr_contrib;
+    {
+      snode_t * master = node->linked_theta ? node->linked_theta : node;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node,
@@ -612,15 +615,32 @@ long prop_split(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->linked_theta ? node->linked_theta : node;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 
     if (opt_est_theta)
+    {
       logpr -= node->left->logpr_contrib[i];
+    }
     else
-      logpr -= node->left->notheta_logpr_contrib;
+    {
+      snode_t * master = node->left->linked_theta ?
+                           node->left->linked_theta : node->left;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node->left,
@@ -630,15 +650,33 @@ long prop_split(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node->left,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node->left,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node->left, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->left->linked_theta ?
+                             node->left->linked_theta : node->left;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 
     if (opt_est_theta)
+    {
       logpr -= node->right->logpr_contrib[i];
+    }
     else
-      logpr -= node->right->notheta_logpr_contrib;
+    {
+      snode_t * master = node->right->linked_theta ?
+                           node->right->linked_theta : node->right;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node->right,
@@ -648,10 +686,22 @@ long prop_split(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node->right,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node->right,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node->right, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->right->linked_theta ?
+                             node->right->linked_theta : node->right;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 #else
     if (opt_migration)
       logpr = gtree_logprob_mig(stree,gtree[i],locus[i]->heredity[0],i);
@@ -768,8 +818,14 @@ long prop_split(gtree_t ** gtree,
       if (opt_est_theta)
       {
         node->logpr_contrib[i] = node->old_logpr_contrib[i];
+        if (node->C2ji)
+          node->C2ji[i] = node->old_C2ji[i];
         node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
+        if (node->left->C2ji)
+          node->left->C2ji[i] = node->left->old_C2ji[i];
         node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+        if (node->right->C2ji)
+          node->right->C2ji[i] = node->right->old_C2ji[i];
       }
       else
       {
@@ -1070,7 +1126,10 @@ long prop_join(gtree_t ** gtree,
     if (opt_est_theta)
       logpr -= node->logpr_contrib[i];
     else
-      logpr -= node->notheta_logpr_contrib;
+    {
+      snode_t * master = node->linked_theta ? node->linked_theta : node;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node,
@@ -1080,15 +1139,32 @@ long prop_join(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->linked_theta ? node->linked_theta : node;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 
     if (opt_est_theta)
+    {
       logpr -= node->left->logpr_contrib[i];
+    }
     else
-      logpr -= node->left->notheta_logpr_contrib;
+    {
+      snode_t * master = node->left->linked_theta ?
+                           node->left->linked_theta : node->left;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node->left,
@@ -1098,15 +1174,33 @@ long prop_join(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node->left,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node->left,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node->left, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->left->linked_theta ?
+                             node->left->linked_theta : node->left;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 
     if (opt_est_theta)
+    {
       logpr -= node->right->logpr_contrib[i];
+    }
     else
-      logpr -= node->right->notheta_logpr_contrib;
+    {
+      snode_t * master = node->right->linked_theta ?
+                           node->right->linked_theta : node->right;
+      logpr -= master->notheta_logpr_contrib;
+    }
 
     if (opt_migration)
       logpr += gtree_update_logprob_contrib_mig(node->right,
@@ -1116,10 +1210,22 @@ long prop_join(gtree_t ** gtree,
                                                 i,
                                                 thread_index);
     else
-      logpr += gtree_update_logprob_contrib(node->right,
-                                            locus[i]->heredity[0],
-                                            i,
-                                            thread_index);
+    {
+      if (opt_est_theta)
+      {
+        logpr += gtree_update_logprob_contrib(node->right,
+                                              locus[i]->heredity[0],
+                                              i,
+                                              thread_index);
+      }
+      else
+      {
+        gtree_update_C2j(node->right, locus[i]->heredity[0], i, thread_index);
+        snode_t * master = node->right->linked_theta ?
+                             node->right->linked_theta : node->right;
+        logpr += update_logpg_contrib(stree,master);
+      }
+    }
 #else
     if (opt_migration)
       logpr = gtree_logprob_mig(stree,gtree[i],locus[i]->heredity[0],i);
@@ -1238,8 +1344,14 @@ long prop_join(gtree_t ** gtree,
       if (opt_est_theta)
       {
         node->logpr_contrib[i] = node->old_logpr_contrib[i];
+        if (node->C2ji)
+          node->C2ji[i] = node->old_C2ji[i];
         node->left->logpr_contrib[i] = node->left->old_logpr_contrib[i];
+        if (node->left->C2ji)
+          node->left->C2ji[i] = node->left->old_C2ji[i];
         node->right->logpr_contrib[i] = node->right->old_logpr_contrib[i];
+        if (node->right->C2ji)
+          node->right->C2ji[i] = node->right->old_C2ji[i];
       }
       else
       {
