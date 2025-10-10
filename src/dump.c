@@ -524,34 +524,33 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&ft_round_snl, 1, fp);
   DUMP(ft_round_theta_gibbs,opt_finetune_theta_count,fp);
   DUMP(ft_round_theta_slide,opt_finetune_theta_count,fp);
-  if (opt_finetune_mrate_mode == 1)
+  if (opt_migration)
   {
-    assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
-    if (ft_round_mrate_gibbs)
+    if (opt_finetune_mrate_mode == 1)
     {
-      DUMP(ft_round_mrate_gibbs,1,fp);
-      fprintf(stdout, "Dmped ft_round_mrate_gibbs: %ld\n", ft_round_mrate_gibbs[0]);
+      assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+      if (ft_round_mrate_gibbs)
+      {
+        DUMP(ft_round_mrate_gibbs,1,fp);
+      }
+      if (ft_round_mrate_slide)
+      {
+        DUMP(ft_round_mrate_slide,1,fp);
+      }
     }
-    if (ft_round_mrate_slide)
+    else if (opt_finetune_mrate_mode == 2)
     {
-      DUMP(ft_round_mrate_slide,1,fp);
-      fprintf(stdout,"Dumped ft_round_mrate_slide: %ld\n", ft_round_mrate_slide[0]);
+      assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+      if (ft_round_mrate_gibbs)
+        DUMP(ft_round_mrate_gibbs,opt_migration_count,fp);
+      if (ft_round_mrate_slide)
+        DUMP(ft_round_mrate_slide,opt_migration_count,fp);
     }
+    else
+      fatal("Invalid value for opt_finetune_mrate_mode (%ld)...",
+            opt_finetune_mrate_mode);
   }
-  else if (opt_finetune_mrate_mode == 2)
-  {
-    assert(opt_mrate_slide_prob > 0 && opt_mrate_slide_prob <= 1);
-    if (ft_round_mrate_gibbs)
-      DUMP(ft_round_mrate_gibbs,opt_migration_count,fp);
-    if (ft_round_mrate_slide)
-      DUMP(ft_round_mrate_slide,opt_migration_count,fp);
-  }
-  else
-    fatal("Invalid value for opt_finetune_mrate_mode (%ld)...", opt_finetune_mrate_mode);
   
-  /* DEBUG */
-  printf("ft_round_theta_gibbs[0] = %ld\n", ft_round_theta_gibbs[0]);
-  printf("ft_round_theta_slide[0] = %ld\n", ft_round_theta_slide[0]);
   DUMP(&g_pj_sspr, 1, fp);
   DUMP(&g_pj_ssnl,1,fp);
   DUMP(&mean_logl,1,fp);

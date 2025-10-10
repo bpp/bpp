@@ -3384,7 +3384,7 @@ int get_gamma_conditional_approx(double a, double b, long k, double T,
   m = (a1k + sqrt(a1k * a1k + 4 * b * T)) / (2 * b);  /* m is the mode of the posterior */
   dl = a1k - b * m + T / m;
   if (fabs(dl) > 1e-3)   /* dl should be 0 */
-    fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.6f) m = %9.6f\n", dl, k, T, m);
+    fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.15f) m = %9.15f\n", dl, k, T, m);
   ddl = -(a1k + 2 * T / m) / (m * m);
   v = -1 / ddl;
   mmv = m * m / v;

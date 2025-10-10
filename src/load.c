@@ -939,66 +939,66 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(*ft_round_theta_slide,opt_finetune_theta_count,fp))
     fatal("Cannot read finetune round for theta gibbs");
 
-  printf("ft_round_theta_gibbs[0] = %ld\n", *ft_round_theta_gibbs[0]);
-  printf("ft_round_theta_slide[0] = %ld\n", *ft_round_theta_slide[0]);
-  if (opt_finetune_mrate_mode == 1)
+  if (opt_migration)
   {
-    if (opt_mrate_slide_prob == 0)
+    if (opt_finetune_mrate_mode == 1)
     {
-      *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
-      *ft_round_mrate_slide = NULL;
-      if (!LOAD(*ft_round_mrate_gibbs,1,fp))
-        fatal("Cannot read ft_round_mrate_gibbs...");
+      if (opt_mrate_slide_prob == 0)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
+        *ft_round_mrate_slide = NULL;
+        if (!LOAD(*ft_round_mrate_gibbs,1,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+      }
+      else if (opt_mrate_slide_prob == 1)
+      {
+        *ft_round_mrate_gibbs = NULL;
+        *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
+        if (!LOAD(*ft_round_mrate_slide,1,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
+        *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
+        if (!LOAD(*ft_round_mrate_gibbs,1,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+        if (!LOAD(*ft_round_mrate_slide,1,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else
+        fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
+              opt_mrate_slide_prob);
     }
-    else if (opt_mrate_slide_prob == 1)
+    else if (opt_finetune_mrate_mode == 2)
     {
-      *ft_round_mrate_gibbs = NULL;
-      *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
-      if (!LOAD(*ft_round_mrate_slide,1,fp))
-        fatal("Cannot read ft_round_mrate_slide...");
-    }
-    else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
-    {
-      *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
-      *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
-      if (!LOAD(*ft_round_mrate_gibbs,1,fp))
-        fatal("Cannot read ft_round_mrate_gibbs...");
-      if (!LOAD(*ft_round_mrate_slide,1,fp))
-        fatal("Cannot read ft_round_mrate_slide...");
-      fprintf(stdout, "Loaded ft_round_mrate_gibbs: %ld\n", *ft_round_mrate_gibbs[0]);
-      fprintf(stdout, "Loaded ft_round_mrate_slide: %ld\n", *ft_round_mrate_slide[0]);
+      if (opt_mrate_slide_prob == 0)
+        fatal("Invalid combination of values for mrate_mode (%ld) and mrate_slide_prob (%ld)",
+              opt_finetune_mrate_mode, opt_mrate_slide_prob);
+      else if (opt_mrate_slide_prob == 1)
+      {
+        *ft_round_mrate_gibbs = NULL;
+        *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
+        if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(opt_migration_count*sizeof(long));
+        *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
+        if (!LOAD(*ft_round_mrate_gibbs,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+        if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else
+        fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
+              opt_mrate_slide_prob);
     }
     else
-      fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
-            opt_mrate_slide_prob);
+      fatal("Invalid value for opt_finetune_mrate_mode (%ld) loaded...",
+            opt_finetune_mrate_mode);
   }
-  else if (opt_finetune_mrate_mode == 2)
-  {
-    if (opt_mrate_slide_prob == 0)
-      fatal("Invalid combination of values for mrate_mode (%ld) and mrate_slide_prob (%ld)",
-            opt_finetune_mrate_mode, opt_mrate_slide_prob);
-    else if (opt_mrate_slide_prob == 1)
-    {
-      *ft_round_mrate_gibbs = NULL;
-      *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
-      if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
-        fatal("Cannot read ft_round_mrate_slide...");
-    }
-    else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
-    {
-      *ft_round_mrate_gibbs = (long *)xmalloc(opt_migration_count*sizeof(long));
-      *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
-      if (!LOAD(*ft_round_mrate_gibbs,opt_migration_count,fp))
-        fatal("Cannot read ft_round_mrate_gibbs...");
-      if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
-        fatal("Cannot read ft_round_mrate_slide...");
-    }
-    else
-      fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
-            opt_mrate_slide_prob);
-  }
-  else
-    fatal("Invalid value for opt_finetune_mrate_mode (%ld) loaded...", opt_finetune_mrate_mode);
 
   if (!LOAD(&g_pj_sspr, 1, fp))
     fatal("Cannot read species tree SPR pjump");

@@ -6226,8 +6226,7 @@ void cmd_run()
                         mean_phi_count,
                         prec_logpr,
                         prec_logl, 
-			printLocusIndex);
-        //printf(" [CHKP %ld]", opt_checkpoint_current);
+                        printLocusIndex);
 
       }
     }
