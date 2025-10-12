@@ -3366,7 +3366,6 @@ int get_gamma_conditional_approx(double a, double b, long k, double T,
 
   if (T == 0)
   {
-    
     if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
     {
       *a1 = a;
@@ -3382,12 +3381,32 @@ int get_gamma_conditional_approx(double a, double b, long k, double T,
 
   assert(opt_theta_prior == BPP_THETA_PRIOR_GAMMA);
   m = (a1k + sqrt(a1k * a1k + 4 * b * T)) / (2 * b);  /* m is the mode of the posterior */
+#if(0) /* dl is not used so these lines of code are useless. */
   dl = a1k - b * m + T / m;
   if (fabs(dl) > 1e-3)   /* dl should be 0 */
     fprintf(stderr, "\ndl = %12.5g != 0. (k=%4ld T=%9.15f) m = %9.15f\n", dl, k, T, m);
+#endif
+
   ddl = -(a1k + 2 * T / m) / (m * m);
   v = -1 / ddl;
   mmv = m * m / v;
+
+#if(0)  /* ziheng-2025.10.11, added code for calculating dl, but dl is not used anyway. */
+  if (1 || fabs(dl) > 1e-7) {
+     double lnscale = 0, signa1k = (a1k < 0 ? -1 : (a1k > 0 ? 1 : 0));
+
+     printf("old: k = %5d T = %15.9f m = %12.9f mmv = %15.9f dl = %15.9f\n", k, T, m, mmv, dl);
+     /* a-1-k can be positive/negative, b*m and T/m are positive */
+     lnscale = MAX(fabs(a1k), b * m);
+     lnscale = MAX(lnscale, T / m); 
+     lnscale = log(lnscale);
+     dl = signa1k * exp(log(fabs(a1k)) - lnscale)
+        - exp(log(b * m) - lnscale)
+        + exp(log(T / m) - lnscale);
+     dl = dl*exp(lnscale);
+     printf("new: k = %5d T = %15.9f m = %12.9f mmv = %15.9f dl = %15.9f\n", k, T, m, mmv, dl);
+  }
+#endif
 
   if (opt_theta_prop & BPP_THETA_PROP_MG_GAMMA) {
     if (gamma_method == 0) {
