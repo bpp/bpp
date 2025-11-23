@@ -4810,8 +4810,7 @@ static void pjump_reset()
     if (g_pj_mrate_slide)
       g_pj_mrate_slide[i] = 0;
     if (g_pj_mrate_gibbs && g_pj_mrate_gibbs[i] >= 0)
-      g_pj_brate_m = 0;
-  g_pj_mrate_gibbs[i] = 0;
+      g_pj_mrate_gibbs[i] = 0;
     if (g_pj_migvr && g_pj_migvr[i] >= 0)
       g_pj_migvr[i] = 0;
   }
