@@ -2,6 +2,39 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.8.6] - 2025-11-03
+## Added
+ - Option --wrate_mode and --wrate_showeps for different step lengths across
+   migration rates
+ - prelimiary version of clock 4 (lineage rate model) -- not tested yet
+ - jitter on tau initialization to avoid having identical taus on root daughter
+   nodes. This was preventing the SPR move from finding nodes for regrafting in
+   certain cases (when regrafted subtree A was a cherry and daughter of root)
+ - Ziheng's code for calculating dl dealing with cancellation errors, 
+## Changed
+ - Option --mrate_move to --wrate-slide-prob
+ - disabled PDF printing when species phylogeny consists of just one population
+## Fixed
+ - crash when summarizing the A1B1 file caused by missing theta columns (e.g.,
+   when some thetas cannot be estimated because there is only one or no
+   sequences at the species) which are still required for converting W to M
+ - pjump calculation for mixture of gibbs and sliding window sampling for
+   migration rates, wi and thetas
+ - parsing finetune for W and wi
+ - finetune option in yu2001 example control file
+ - incorrect number of finetune parameters when parsing
+ - incorrect laoding of data from checkpoint files causing a crash for the
+   migration model
+
+## [4.8.5] - 2025-05-21
+## Added
+ - clock 4 (lineage rate model)
+## Fixed
+ - processing of A1B1 crash due to missing columns (some thetas that cannot be
+   estimated, i.e. there is one or no sequence at the species) are still
+   required for converting W to M, but they were skipped.
+ - disabled PDF visualization for the single population coalescent model
+
 ## [4.8.4] - 2025-02-11
 ## Added
  - usedata=2 for using fixed gene trees as data instead of sequences

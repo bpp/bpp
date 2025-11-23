@@ -89,6 +89,7 @@ long opt_exp_imrb;
 long opt_exp_randomize;
 long opt_exp_theta;
 long opt_exp_sim;
+long opt_finetune_mrate_mode;
 long opt_finetune_reset;
 long opt_finetune_theta_count;
 long opt_finetune_theta_mode;
@@ -108,7 +109,7 @@ long opt_mig_vrates_exist;
 long opt_mix_theta_update;
 long opt_mix_w_update;
 long opt_model;
-long opt_mrate_move;
+long opt_mrate_gibbs_showall_eps;
 long opt_msci;
 long opt_onlysummary;
 long opt_partition_count;
@@ -155,6 +156,7 @@ double opt_brate_alpha;
 double opt_brate_beta;
 double opt_bfbeta;
 double opt_clock_vbar;
+double opt_clock_alpha;
 double opt_finetune_alpha;
 double opt_finetune_branchrate;
 double opt_finetune_brate_m;
@@ -162,8 +164,6 @@ double opt_finetune_freqs;
 double opt_finetune_gtage;
 double opt_finetune_gtspr;
 double opt_finetune_locusrate;
-double opt_finetune_migrates;
-double opt_finetune_mig_Mi;
 double opt_finetune_mix;
 double opt_finetune_mubar;
 double opt_finetune_mui;
@@ -177,6 +177,7 @@ double opt_heredity_beta;
 double opt_locusrate_mubar;
 double opt_mig_alpha;
 double opt_mig_beta;
+double opt_mrate_slide_prob;
 double opt_mubar_alpha;
 double opt_mubar_beta;
 double opt_mui_alpha;
@@ -228,6 +229,8 @@ char * opt_simulate;
 char * opt_streenewick;
 char * opt_treefile;
 double * opt_basefreqs_params;
+double * opt_finetune_migrates;
+double * opt_finetune_mig_Mi;
 double * opt_finetune_theta;
 double * opt_qrates_params;
 long * opt_diploid;
@@ -273,8 +276,9 @@ double g_pj_mui;
 double g_pj_nui;
 double g_pj_brate;
 double g_pj_brate_m;
-double g_pj_mrate;
-double g_pj_migvr;
+double * g_pj_migvr;
+double * g_pj_mrate_gibbs;
+double * g_pj_mrate_slide;
 double * g_pj_theta_gibbs;
 double * g_pj_theta_slide;
 
@@ -324,7 +328,7 @@ static struct option long_options[] =
   {"exp_imrb",             no_argument,       0, 0 },  /* 37 */
   {"bfdriver",             required_argument, 0, 0 },  /* 38 */
   {"points",               required_argument, 0, 0 },  /* 39 */
-  {"mrate-move",           required_argument, 0, 0 },  /* 40 */
+  {"wrate-slide-prob",     required_argument, 0, 0 },  /* 40 */
   {"theta-slide-prob",     required_argument, 0, 0 },  /* 41 */
   {"theta_mode",           required_argument, 0, 0 },  /* 42 */
   {"no-pin",               no_argument,       0, 0 },  /* 43 */
@@ -337,6 +341,8 @@ static struct option long_options[] =
   {"extend",               required_argument, 0, 0 },  /* 50 */
   {"phi-slide-prob",       required_argument, 0, 0 },  /* 51 */
   {"keep-labels",          no_argument,       0, 0 },  /* 52 */
+  {"wrate_mode",           required_argument, 0, 0 },  /* 53 */
+  {"wrate-showeps",        no_argument,       0, 0 },  /* 54 */
   { 0, 0, 0, 0 }
 };
 
@@ -458,6 +464,7 @@ void args_init(int argc, char ** argv)
   opt_cfile = NULL;
   opt_clock = BPP_CLOCK_GLOBAL;
   opt_clock_vbar = 0;
+  opt_clock_alpha = -1;
 
   opt_checkpoint = 0;
   opt_checkpoint_initial = 0;
@@ -524,8 +531,11 @@ void args_init(int argc, char ** argv)
   opt_finetune_gtspr = 0.001;
   opt_finetune_locusrate = 0.33;
   opt_finetune_mix = 0.3;
-  opt_finetune_migrates = 0.1;
-  opt_finetune_mig_Mi = 0.1;
+  opt_finetune_migrates = (double *)xmalloc(sizeof(double));
+  opt_finetune_migrates[0] = 0.1;
+  opt_finetune_mig_Mi = (double *)xmalloc(sizeof(double));
+  opt_finetune_mig_Mi[0] = 0.1;
+  opt_finetune_mrate_mode = 1;
   opt_finetune_mui = 0.1;
   opt_finetune_mubar = 0.1;
   opt_finetune_phi = 0.001;
@@ -571,8 +581,9 @@ void args_init(int argc, char ** argv)
   opt_mix_theta_update = 1;
   opt_mix_w_update = 1;
   opt_model = -1;
+  opt_mrate_gibbs_showall_eps = 0;
+  opt_mrate_slide_prob = 0.1;
   opt_modelparafile = NULL;
-  opt_mrate_move = BPP_MRATE_GIBBS;
   opt_traitfile = NULL;
   opt_msafile = NULL;
   opt_msci = 0;
@@ -663,8 +674,9 @@ void args_init(int argc, char ** argv)
   g_pj_nui = 0;
   g_pj_brate = 0;
   g_pj_brate_m = 0;
-  g_pj_mrate = 0;
-  g_pj_migvr = 0;
+  g_pj_mrate_gibbs = NULL;
+  g_pj_mrate_slide = NULL;
+  g_pj_migvr = NULL;
   g_pj_theta_gibbs = NULL;
   g_pj_theta_slide = NULL;
   g_pj_sspr = 0;
@@ -874,12 +886,7 @@ void args_init(int argc, char ** argv)
         break;
 
       case 40:
-        if (!strcasecmp(optarg,"slide"))
-          opt_mrate_move = BPP_MRATE_SLIDE;
-        else if (!strcasecmp(optarg,"gibbs"))
-          opt_mrate_move = BPP_MRATE_GIBBS;
-        else
-          fatal("Invalid mrate move (%s)", optarg);
+        opt_mrate_slide_prob = atof(optarg);
         break;
 
       case 41:
@@ -937,6 +944,16 @@ void args_init(int argc, char ** argv)
         opt_keep_labels = 1;
         break;
 
+      case 53:
+        opt_finetune_mrate_mode = atol(optarg);
+        if (opt_finetune_mrate_mode < 1 || opt_finetune_mrate_mode > 2)
+          fatal("Invalid mrate mode (%s)", optarg);
+        break;
+
+      case 54:
+        opt_mrate_gibbs_showall_eps = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -987,13 +1004,30 @@ void args_init(int argc, char ** argv)
   if (opt_prob_snl_shrink <= 0 || opt_prob_snl_shrink >= 1)
     fatal("Proportion of SHRINK moves must be between 0 and 1");
 
+  if (opt_mrate_slide_prob < 0 || opt_mrate_slide_prob > 1)
+    fatal("Proportion of sliding window proposals must be between 0 and 1");
+  if (opt_mrate_slide_prob == 0 && opt_finetune_mrate_mode == 2)
+  {
+    fatal("mrate_mode=2 and mrate_slide_prob=0 is equivalent to mrate_mode=1");
+
+    /* TODO: to change to mrate_mode=1 without error, do the following:
+    opt_finetune_mrate_mode = 1;
+    for (i = 0; i < opt_migration_count; ++i)
+      opt_mig_specs[i].index = 0;
+    */
+  }
+
   if (opt_theta_slide_prob < 0 || opt_theta_slide_prob > 1)
     fatal("Proportion of sliding window proposals must be between 0 and 1");
-
   if (opt_theta_slide_prob == 0)
   {
     opt_finetune_theta_count = 1;
     opt_finetune_theta_mode = 1;
+  }
+
+  if (opt_est_geneflow && opt_finetune_mrate_mode > 1)
+  {
+    fatal("Gene flow inference with mrate_mode > 1 not implemented..");
   }
 
   /* if no command specified, turn on --help */
@@ -1058,13 +1092,16 @@ void cmd_help()
           "  --bfdriver FILENAME      create control files to calculate marginal likelihood\n"
           "  --points INTEGER         number of G-L quadrature points (used with --bfdriver)\n"
           "  --no-pin                 do not pin threads to cores\n"
-          "  --theta-eps-mode INTEGER step lengths for theta proposals (default: 1)\n"
+          "  --theta_mode INTEGER     definition of theta step lengths (default: 2)\n"
           "  --theta-prop STRING      prop. dist. for theta gibbs move ('mg_invg' or 'mg_gamma')\n"
-          "  --theta-showeps BOOLEAN  show all step lengths for theta move (default: 1)\n"
+          "  --theta-showeps          show individual step lengths/pjumps for each theta\n"
           "  --theta-slide-prob FLOAT frequency for theta sliding window move (default: 0.1)\n"
           "  --phi-slide-prob FLOAT   frequency for phi sliding window move (default: 0.1)\n"
-          "  --mrate-move STRING      'gibbs' or 'slide' sampling of migration rate W\n"
+          "  --wrate_mode INTEGER     definition of W step lengths (default: 1)\n"
+          "  --wrate-slide-prob FLOAT frequency for W sliding window move (default: 0.1)\n"
+          "  --wrate-showeps          show individual step lengths/pjumps for each W\n"
           "  --extend INTEGER         extend resumed analysis by number of MCMC samples\n"
+          "  --keep-labels            keep original node labels when summarizing results\n"
           "\n"
          );
 
@@ -1165,6 +1202,8 @@ int main (int argc, char * argv[])
     cmd_bfdriver();
   }
 
+  free(opt_finetune_migrates);
+  free(opt_finetune_mig_Mi);
   free(opt_finetune_theta);
   free(opt_finetune_theta_mask);
   legacy_fini();

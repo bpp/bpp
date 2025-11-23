@@ -253,7 +253,10 @@ static void load_chk_section_1(FILE * fp,
                                long * ft_round_rj,
                                long * ft_round_spr,
                                long * ft_round_snl,
-                               long ** ft_round_theta,
+                               long ** ft_round_theta_gibbs,
+                               long ** ft_round_theta_slide,
+                               long ** ft_round_mrate_gibbs,
+                               long ** ft_round_mrate_slide,
                                double * mean_logl,
                                long ** mean_mrate_row,
                                long ** mean_mrate_col,
@@ -557,6 +560,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read theta slide prob");
   if (!LOAD(&opt_phi_slide_prob,1,fp))
     fatal("Cannot read phi slide prob");
+  if (!LOAD(&opt_mrate_slide_prob,1,fp))
+    fatal("Cannot read mrate slide prob");
   #if 0
   printf(" theta: %f %f %ld\n", opt_theta_alpha, opt_theta_beta, opt_est_theta);
   #endif
@@ -628,6 +633,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read 'vbar_beta'");
   if (!LOAD(&opt_vi_alpha,1,fp))
     fatal("Cannot read 'vi_alpha'");
+  if (!LOAD(&opt_clock_alpha,1,fp))
+    fatal("Cannot read 'clock_alpha'");
   if (!LOAD(&opt_rate_prior,1,fp))
     fatal("Cannot read rate prior");
   if (!LOAD(&opt_locusrate_prior,1,fp))
@@ -645,9 +652,14 @@ static void load_chk_section_1(FILE * fp,
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
-  if (!LOAD(&opt_finetune_migrates,1,fp))
+  long slots = opt_finetune_mrate_mode == 1 ? 1 : opt_migration_count;
+  free(opt_finetune_migrates);
+  free(opt_finetune_mig_Mi);
+  opt_finetune_migrates = (double *)xmalloc((size_t)slots*sizeof(double));
+  opt_finetune_mig_Mi = (double *)xmalloc((size_t)slots*sizeof(double));
+  if (!LOAD(opt_finetune_migrates,slots,fp))
     fatal("Cannot read migration rates finetune parameter");
-  if (!LOAD(&opt_finetune_mig_Mi,1,fp))
+  if (!LOAD(opt_finetune_mig_Mi,slots,fp))
     fatal("Cannot read migration rates Mi finetune parameter");
   if (!LOAD(&opt_finetune_phi,1,fp))
     fatal("Cannot read gene tree phi finetune parameter");
@@ -710,6 +722,7 @@ static void load_chk_section_1(FILE * fp,
   double stree_locusrate_mubar = 0;
   double stree_locusrate_nubar = 0;
   double stree_nui_sum = 0;
+  double lnprior_rates_simple = 0;
 
   if (!LOAD(&stree_locusrate_mubar,1,fp))
     fatal("Cannot read locusrate_mubar value");
@@ -717,6 +730,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read locusrate_nubar value");
   if (!LOAD(&stree_nui_sum,1,fp))
     fatal("Cannot read nui_sum value");
+  if (!LOAD(&lnprior_rates_simple,1,fp))
+    fatal("Cannot read lnprior_rates_simple value");
 
   /* read diploid */
   opt_diploid = (long *)xmalloc((size_t)stree_tip_count*sizeof(long));
@@ -772,6 +787,12 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_theta_gibbs");
   if (!(LOAD(g_pj_theta_slide, opt_finetune_theta_count, fp)))
     fatal("Cannot read g_pj_theta_slide");
+  /* DEBUG */
+  printf("g_pj_theta_gibbs[0] = %f\n", g_pj_theta_gibbs[0]);
+  printf("g_pj_theta_slide[0] = %f\n", g_pj_theta_slide[0]);
+  printf("opt_finetune_theta_count: %ld\n", opt_finetune_theta_count);
+  printf("g_pj_gage = %f\n", g_pj_gage);
+  printf("g_pj_gspr = %f\n", g_pj_gspr);
   if (!(LOAD(&g_pj_tau, 1, fp)))
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))
@@ -798,10 +819,36 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_nui");
   if (!(LOAD(&g_pj_brate, 1, fp)))
     fatal("Cannot read g_pj_brate");
-  if (!(LOAD(&g_pj_mrate, 1, fp)))
-    fatal("Cannot read g_pj_mrate");
-  if (!(LOAD(&g_pj_migvr, 1, fp)))
-    fatal("Cannot read g_pj_migvr");
+
+  if (opt_migration && !opt_est_geneflow)
+  {
+    printf("opt_mrate_slide_prob: %f\n", opt_mrate_slide_prob);
+    assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    g_pj_mrate_slide = g_pj_mrate_gibbs = g_pj_migvr = NULL;
+
+    if (opt_mrate_slide_prob > 0)
+    {
+      g_pj_mrate_slide = (double *)xmalloc((size_t)slots * sizeof(double));
+      if (!LOAD(g_pj_mrate_slide,slots,fp))
+        fatal("Cannot read g_pj_mrate_slide...");
+      printf("g_pj_mrate_slide: %f\n", g_pj_mrate_slide[0]);
+    }
+    if (opt_mrate_slide_prob < 1)
+    {
+      g_pj_mrate_gibbs = (double *)xmalloc((size_t)slots * sizeof(double));
+      if (!LOAD(g_pj_mrate_gibbs,slots,fp))
+        fatal("Cannot read g_pj_mrate_gibbs...");
+    }
+    if (opt_mig_vrates_exist)
+    {
+      g_pj_migvr = (double *)xmalloc((size_t)slots * sizeof(double));
+      if (!(LOAD(&g_pj_migvr, slots, fp)))
+        fatal("Cannot read g_pj_migvr");
+    }
+  }
 
   if (!LOAD(mcmc_offset,1,fp))
     fatal("Cannot read MCMC file offset");
@@ -883,10 +930,75 @@ static void load_chk_section_1(FILE * fp,
   if (!LOAD(ft_round_snl, 1, fp))
     fatal("Cannot read finetune round for species tree SNL");
 
-  *ft_round_theta = (long *)xmalloc((size_t)(opt_finetune_theta_count+1) *
-                                    sizeof(long));
-  if (!LOAD(*ft_round_theta,opt_finetune_theta_count+1,fp))
-    fatal("Cannot read finetune round for thetas");
+  *ft_round_theta_gibbs = (long *)xmalloc((size_t)opt_finetune_theta_count *
+                                          sizeof(long));
+  *ft_round_theta_slide = (long *)xmalloc((size_t)opt_finetune_theta_count *
+                                          sizeof(long));
+  if (!LOAD(*ft_round_theta_gibbs,opt_finetune_theta_count,fp))
+    fatal("Cannot read finetune round for theta slide");
+  if (!LOAD(*ft_round_theta_slide,opt_finetune_theta_count,fp))
+    fatal("Cannot read finetune round for theta gibbs");
+
+  if (opt_migration)
+  {
+    if (opt_finetune_mrate_mode == 1)
+    {
+      if (opt_mrate_slide_prob == 0)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
+        *ft_round_mrate_slide = NULL;
+        if (!LOAD(*ft_round_mrate_gibbs,1,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+      }
+      else if (opt_mrate_slide_prob == 1)
+      {
+        *ft_round_mrate_gibbs = NULL;
+        *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
+        if (!LOAD(*ft_round_mrate_slide,1,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(sizeof(long));
+        *ft_round_mrate_slide = (long *)xmalloc(sizeof(long));
+        if (!LOAD(*ft_round_mrate_gibbs,1,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+        if (!LOAD(*ft_round_mrate_slide,1,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else
+        fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
+              opt_mrate_slide_prob);
+    }
+    else if (opt_finetune_mrate_mode == 2)
+    {
+      if (opt_mrate_slide_prob == 0)
+        fatal("Invalid combination of values for mrate_mode (%ld) and mrate_slide_prob (%ld)",
+              opt_finetune_mrate_mode, opt_mrate_slide_prob);
+      else if (opt_mrate_slide_prob == 1)
+      {
+        *ft_round_mrate_gibbs = NULL;
+        *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
+        if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else if (opt_mrate_slide_prob > 0 && opt_mrate_slide_prob < 1)
+      {
+        *ft_round_mrate_gibbs = (long *)xmalloc(opt_migration_count*sizeof(long));
+        *ft_round_mrate_slide = (long *)xmalloc(opt_migration_count*sizeof(long));
+        if (!LOAD(*ft_round_mrate_gibbs,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_gibbs...");
+        if (!LOAD(*ft_round_mrate_slide,opt_migration_count,fp))
+          fatal("Cannot read ft_round_mrate_slide...");
+      }
+      else
+        fatal("Incorrect value for opt_mrate_slide_prob (%ld) loaded...",
+              opt_mrate_slide_prob);
+    }
+    else
+      fatal("Invalid value for opt_finetune_mrate_mode (%ld) loaded...",
+            opt_finetune_mrate_mode);
+  }
 
   if (!LOAD(&g_pj_sspr, 1, fp))
     fatal("Cannot read species tree SPR pjump");
@@ -1035,6 +1147,8 @@ static void load_chk_section_1(FILE * fp,
         fatal("Cannot read list of migrations (migration %ld - params)", i+1);
       if (!LOAD(&(spec->M), 1, fp))
         fatal("Cannot read list of migrations (migration %ld - M)", i+1);
+      if (!LOAD(&(spec->index), 1, fp))
+        fatal("Cannot read list of migrations (migration %ld - index)", i+1);
       if (spec->params == 1 || spec->params == 3 || spec->params == 5)
       {
         spec->Mi = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
@@ -1063,6 +1177,7 @@ static void load_chk_section_1(FILE * fp,
   stree->locusrate_mubar = stree_locusrate_mubar;
   stree->locusrate_nubar = stree_locusrate_nubar;
   stree->nui_sum = stree_nui_sum;
+  stree->lnprior_rates_simple = lnprior_rates_simple;
 
   stree->mi_tbuffer = NULL;
   if (opt_migration)
@@ -1366,8 +1481,10 @@ void load_chk_section_2(FILE * fp)
       if (!valid) continue;
 
       snode_t * node = stree->nodes[i];
-      node->brate = (double *)xmalloc((size_t)opt_locus_count * sizeof(double));
-      if (!LOAD(node->brate,opt_locus_count,fp))
+      size_t brate_count;
+      brate_count = (opt_clock == BPP_CLOCK_SIMPLE) ? 1 : opt_locus_count;
+      node->brate = (double *)xmalloc(brate_count * sizeof(double));
+      if (!LOAD(node->brate,brate_count,fp))
         fatal("Cannot read branch rates");
     }
   }
@@ -2046,7 +2163,10 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * ft_round_rj,
                     long * ft_round_spr,
                     long * ft_round_snl,
-                    long ** ft_round_theta,
+                    long ** ft_round_theta_gibbs,
+                    long ** ft_round_theta_slide,
+                    long ** ft_round_mrate_gibbs,
+                    long ** ft_round_mrate_slide,
                     double * mean_logl,
                     long ** mean_mrate_row,
                     long ** mean_mrate_col,
@@ -2101,7 +2221,10 @@ int checkpoint_load(gtree_t *** gtreep,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
-                     ft_round_theta,
+                     ft_round_theta_gibbs,
+                     ft_round_theta_slide,
+                     ft_round_mrate_gibbs,
+                     ft_round_mrate_slide,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,

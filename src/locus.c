@@ -1102,9 +1102,9 @@ void locus_set_heredity_scalers(locus_t * locus, const double * heredity)
   memcpy(locus->heredity, heredity, locus->rate_matrices*sizeof(double));
 }
 
-static double update_branchlength_relaxed_clock(stree_t * stree,
+double update_branchlength_relaxed_clock_simple(stree_t * stree,
                                                 gnode_t * node,
-                                                long msa_index)
+                                                double locusrate)
 {
   /* relaxed clock */
   double t = node->time;
@@ -1112,6 +1112,52 @@ static double update_branchlength_relaxed_clock(stree_t * stree,
   snode_t * start = node->pop;
   snode_t * end   = node->parent->pop;
   assert(end);
+  assert(opt_clock == BPP_CLOCK_SIMPLE);
+
+  length = 0;
+
+  while (start != end)
+  {
+    snode_t * pop = start;
+    assert(start && start->parent);
+    start = start->parent;
+
+    if (start->hybrid)
+    {
+      assert(!node_is_mirror(start));
+
+      unsigned int hindex = GET_HINDEX(stree,start);
+      assert(hindex < stree->hybrid_count);
+
+      /* find correct parent node according to hpath flag */
+      assert(node->hpath[hindex] != BPP_HPATH_NONE);
+      assert(start->left);
+      if (node->hpath[hindex] == BPP_HPATH_RIGHT)
+        start = start->hybrid;
+    }
+
+    /* skip using branch rates on horizontal edges in hybridization events */
+    if (!(pop->hybrid && pop->htau == 0))
+    {
+      length += (start->tau - t)*pop->brate[0]*locusrate;
+    }
+    t = start->tau;
+  }
+  length += (node->parent->time - t) * node->parent->pop->brate[0]*locusrate;
+
+  return length;
+}
+double update_branchlength_relaxed_clock(stree_t * stree,
+                                         gnode_t * node,
+                                         long msa_index)
+{
+  /* relaxed clock */
+  double t = node->time;
+  double length = 0;
+  snode_t * start = node->pop;
+  snode_t * end   = node->parent->pop;
+  assert(end);
+  assert(opt_clock != BPP_CLOCK_SIMPLE);
 
   length = 0;
 
@@ -1138,6 +1184,7 @@ static double update_branchlength_relaxed_clock(stree_t * stree,
     /* skip using branch rates on horizontal edges in hybridization events */
     if (!(pop->hybrid && pop->htau == 0))
       length += (start->tau - t)*pop->brate[msa_index];
+
     t = start->tau;
   }
   length += (node->parent->time - t) * node->parent->pop->brate[msa_index];
@@ -1154,9 +1201,12 @@ void gtree_update_branchlengths(stree_t * stree, gtree_t * gtree)
     gnode_t * x = gtree->nodes[j];
     if (!x->parent) continue;
 
-    x->length = (opt_clock == BPP_CLOCK_GLOBAL) ?
-                  (x->parent->time - x->time) * gtree->rate_mui :
-                  update_branchlength_relaxed_clock(stree,x,gtree->msa_index);
+    if (opt_clock == BPP_CLOCK_GLOBAL)
+      x->length = (x->parent->time - x->time)*gtree->rate_mui;
+    else if (opt_clock == BPP_CLOCK_SIMPLE)
+      x->length = update_branchlength_relaxed_clock_simple(stree,x,gtree->rate_mui);
+    else
+      x->length = update_branchlength_relaxed_clock(stree,x,gtree->msa_index);
   }
 }
 
@@ -1197,7 +1247,10 @@ static void locus_update_all_matrices_generic_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = update_branchlength_relaxed_clock(stree,node,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+    else
+      t = update_branchlength_relaxed_clock(stree,node,msa_index);
   }
 
   assert(t >= 0);
@@ -1356,7 +1409,10 @@ static void locus_update_all_matrices_t92_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = root->length = update_branchlength_relaxed_clock_simple(stree,root,gtree->rate_mui);
+    else
+      t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
   }
 
   for (n = 0; n < locus->rate_cats; ++n)
@@ -1457,7 +1513,10 @@ static void locus_update_all_matrices_tn93_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = root->length = update_branchlength_relaxed_clock_simple(stree,root,gtree->rate_mui);
+    else
+      t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
   }
 
   for (n = 0; n < locus->rate_cats; ++n)
@@ -1582,7 +1641,10 @@ static void locus_update_all_matrices_f81_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = root->length = update_branchlength_relaxed_clock_simple(stree,root,gtree->rate_mui);
+    else
+      t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
   }
 
   for (n = 0; n < locus->rate_cats; ++n)
@@ -1665,7 +1727,10 @@ static void locus_update_all_matrices_k80_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = root->length = update_branchlength_relaxed_clock_simple(stree,root,gtree->rate_mui);
+    else
+      t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
   }
 
   for (n = 0; n < locus->rate_cats; ++n)
@@ -1763,7 +1828,10 @@ static void locus_update_all_matrices_jc69_recursive(locus_t * locus,
   else
   {
     /* relaxed clock */
-    t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
+    if (opt_clock == BPP_CLOCK_SIMPLE)
+      t = root->length = update_branchlength_relaxed_clock_simple(stree,root,gtree->rate_mui);
+    else
+      t = root->length = update_branchlength_relaxed_clock(stree,root,msa_index);
   }
 
   for (n = 0; n < locus->rate_cats; ++n)
@@ -1949,7 +2017,10 @@ static void locus_update_matrices_t92(locus_t * locus,
     else
     {
       /* relaxed clock */
-      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     for (n = 0; n < locus->rate_cats; ++n)
@@ -2026,7 +2097,10 @@ static void locus_update_matrices_tn93(locus_t * locus,
     else
     {
       /* relaxed clock */
-      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     for (n = 0; n < locus->rate_cats; ++n)
@@ -2132,7 +2206,10 @@ static void locus_update_matrices_f81(locus_t * locus,
     else
     {
       /* relaxed clock */
-      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     for (n = 0; n < locus->rate_cats; ++n)
@@ -2194,7 +2271,10 @@ static void locus_update_matrices_k80(locus_t * locus,
     else
     {
       /* relaxed clock */
-      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     for (n = 0; n < locus->rate_cats; ++n)
@@ -2272,7 +2352,10 @@ static void locus_update_matrices_jc69(locus_t * locus,
     else
     {
       /* relaxed clock */
-      t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
+      if (opt_clock == BPP_CLOCK_SIMPLE)
+        t = node->length = update_branchlength_relaxed_clock_simple(stree,node,gtree->rate_mui);
+      else
+        t = node->length = update_branchlength_relaxed_clock(stree,node,msa_index);
     }
 
     for (n = 0; n < locus->rate_cats; ++n)

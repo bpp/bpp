@@ -189,7 +189,10 @@ static void dump_chk_section_1(FILE * fp,
                                long ft_round_rj,
                                long ft_round_spr,
                                long ft_round_snl,
-                               long * ft_round_theta,
+                               long * ft_round_theta_gibbs,
+                               long * ft_round_theta_slide,
+                               long * ft_round_mrate_gibbs,
+                               long * ft_round_mrate_slide,
                                double mean_logl,
                                long * mean_mrate_row,
                                long * mean_mrate_col,
@@ -337,6 +340,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_theta_gibbs_showall_eps,1,fp);
   DUMP(&opt_theta_slide_prob,1,fp);
   DUMP(&opt_phi_slide_prob,1,fp);
+  DUMP(&opt_mrate_slide_prob,1,fp);
 
   /* write tau prior */
   DUMP(&opt_tau_dist,1,fp);
@@ -377,6 +381,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_vbar_alpha,1,fp);
   DUMP(&opt_vbar_beta,1,fp);
   DUMP(&opt_vi_alpha,1,fp);
+  DUMP(&opt_clock_alpha,1,fp);
   DUMP(&opt_rate_prior,1,fp);
   DUMP(&opt_locusrate_prior,1,fp);
 
@@ -384,8 +389,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_theta_count,1,fp);
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
-  DUMP(&opt_finetune_migrates,1,fp);
-  DUMP(&opt_finetune_mig_Mi,1,fp);
+  long slots = opt_finetune_mrate_mode == 1 ? 1 : opt_migration_count;
+  DUMP(opt_finetune_migrates,slots,fp);
+  DUMP(opt_finetune_mig_Mi,slots,fp);
   DUMP(&opt_finetune_phi,1,fp);
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
@@ -415,6 +421,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&(stree->locusrate_mubar),1,fp);
   DUMP(&(stree->locusrate_nubar),1,fp);
   DUMP(&(stree->nui_sum),1,fp);
+  DUMP(&(stree->lnprior_rates_simple),1,fp);
 
   /* write diploid */
   if (opt_diploid)
@@ -438,8 +445,14 @@ static void dump_chk_section_1(FILE * fp,
   /* pjumps */
   DUMP(&g_pj_gage, 1, fp);
   DUMP(&g_pj_gspr, 1, fp);
-  DUMP(&g_pj_theta_gibbs, opt_finetune_theta_count, fp);
-  DUMP(&g_pj_theta_slide, opt_finetune_theta_count, fp);
+  DUMP(g_pj_theta_gibbs, opt_finetune_theta_count, fp);
+  DUMP(g_pj_theta_slide, opt_finetune_theta_count, fp);
+  /* DEBUG */
+  printf("g_pj_theta_gibbs[0] = %f\n", g_pj_theta_gibbs[0]);
+  printf("g_pj_theta_slide[0] = %f\n", g_pj_theta_slide[0]);
+  printf("opt_finetune_theta_count: %ld\n", opt_finetune_theta_count);
+  printf("g_pj_gage = %f\n", g_pj_gage);
+  printf("g_pj_gspr = %f\n", g_pj_gspr);
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
@@ -453,8 +466,17 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_mui, 1, fp);
   DUMP(&g_pj_nui, 1, fp);
   DUMP(&g_pj_brate, 1, fp);
-  DUMP(&g_pj_mrate, 1, fp);
-  DUMP(&g_pj_migvr, 1, fp);
+  if (opt_migration && !opt_est_geneflow)
+  {
+    long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
+    if (g_pj_mrate_slide)
+      DUMP(g_pj_mrate_slide, slots, fp);
+    if (g_pj_mrate_gibbs)
+      DUMP(g_pj_mrate_gibbs, slots, fp);
+    if (opt_mig_vrates_exist)
+      DUMP(g_pj_migvr, slots, fp);
+  }
 
   /* write MCMC file offset */
   DUMP(&mcmc_offset,1,fp);
@@ -500,7 +522,35 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_rj,1,fp);
   DUMP(&ft_round_spr,1,fp);
   DUMP(&ft_round_snl, 1, fp);
-  DUMP(ft_round_theta,opt_finetune_theta_count+1,fp);
+  DUMP(ft_round_theta_gibbs,opt_finetune_theta_count,fp);
+  DUMP(ft_round_theta_slide,opt_finetune_theta_count,fp);
+  if (opt_migration)
+  {
+    if (opt_finetune_mrate_mode == 1)
+    {
+      assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+      if (ft_round_mrate_gibbs)
+      {
+        DUMP(ft_round_mrate_gibbs,1,fp);
+      }
+      if (ft_round_mrate_slide)
+      {
+        DUMP(ft_round_mrate_slide,1,fp);
+      }
+    }
+    else if (opt_finetune_mrate_mode == 2)
+    {
+      assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
+      if (ft_round_mrate_gibbs)
+        DUMP(ft_round_mrate_gibbs,opt_migration_count,fp);
+      if (ft_round_mrate_slide)
+        DUMP(ft_round_mrate_slide,opt_migration_count,fp);
+    }
+    else
+      fatal("Invalid value for opt_finetune_mrate_mode (%ld)...",
+            opt_finetune_mrate_mode);
+  }
+  
   DUMP(&g_pj_sspr, 1, fp);
   DUMP(&g_pj_ssnl,1,fp);
   DUMP(&mean_logl,1,fp);
@@ -566,6 +616,7 @@ static void dump_chk_section_1(FILE * fp,
       DUMP(&(spec->pseudo_b), 1, fp);
       DUMP(&(spec->params), 1, fp);
       DUMP(&(spec->M), 1, fp);
+      DUMP(&(spec->index), 1, fp);
       if (spec->params == 1 || spec->params == 3 || spec->params == 5)
         DUMP(spec->Mi, opt_locus_count, fp);
     }
@@ -671,7 +722,10 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       {
         valid = 1;
         DUMP(&valid,1,fp);
-        DUMP(stree->nodes[i]->brate,opt_locus_count,fp);
+        if (opt_clock == BPP_CLOCK_SIMPLE)
+          DUMP(stree->nodes[i]->brate,1,fp);
+        else
+          DUMP(stree->nodes[i]->brate,opt_locus_count,fp);
       }
       else
       {
@@ -1034,7 +1088,10 @@ int checkpoint_dump(stree_t * stree,
                     long ft_round_rj,
                     long ft_round_spr,
                     long ft_round_snl,
-                    long * ft_round_theta,
+                    long * ft_round_theta_gibbs,
+                    long * ft_round_theta_slide,
+                    long * ft_round_mrate_gibbs,
+                    long * ft_round_mrate_slide,
                     double mean_logl,
                     long * mean_mrate_row,
                     long * mean_mrate_col,
@@ -1090,7 +1147,10 @@ int checkpoint_dump(stree_t * stree,
                      ft_round_rj,
                      ft_round_spr,
                      ft_round_snl,
-                     ft_round_theta,
+                     ft_round_theta_gibbs,
+                     ft_round_theta_slide,
+                     ft_round_mrate_gibbs,
+                     ft_round_mrate_slide,
                      mean_logl,
                      mean_mrate_row,
                      mean_mrate_col,
