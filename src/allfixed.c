@@ -1841,7 +1841,10 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         assert(tgt_index[1]);
 
         char * nodestr;
-        xasprintf(&nodestr, "theta:%s", tgt_index+1);
+        long ni = atol(tgt_index+1)-1;
+        if (stree->nodes[ni]->linked_theta)
+          ni = stree->nodes[ni]->linked_theta->node_index;
+        xasprintf(&nodestr, "theta:%ld", ni+1);
         for (j = 0; j < col_count; ++j)
         {
           if (!strcmp(tokens[j],nodestr))
