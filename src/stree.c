@@ -4885,6 +4885,15 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   if (!opt_est_theta)
     fatal("Integrating out thetas not yet implemented for IM model");
 
+  #if 1
+  snode_t ** original_affected;
+  if (opt_linkedtheta)
+  {
+    original_affected = (snode_t **)xmalloc(paffected_count * sizeof(snode_t *));
+    for (i = 0; i < paffected_count; ++i)
+      original_affected[i] = affected[i];
+  }
+  #endif
   unsigned int original_count = paffected_count;
   if (opt_exp_imrb)
   {
@@ -5015,8 +5024,18 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     }
     /* TODO: 2024-07-01 Debugging check, does the pafffected_count ever get an increase? */
     //assert(paffected_count == new_affected_count); // does this hold?
-    
-
+    if (opt_linkedtheta)
+    {
+      /* make sure original affected nodes are still first in the list */
+      for (j = 0; j < new_affected_count; ++j)
+        affected[j]->mark[thread_index] = 1;
+      for (j = 0; j < original_count; ++j)
+        if (!original_affected[j]->mark[thread_index])
+          affected[new_affected_count++] = original_affected[j];
+      for (j = 0; j < new_affected_count; ++j)
+        affected[j]->mark[thread_index] = 0;
+    }
+          
     paffected_count = new_affected_count;
     for (j = 0; j < stree->tip_count+stree->inner_count; ++j)
       stree->nodes[j]->mark[thread_index] = 0;
@@ -5181,6 +5200,9 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
   *ret_logl_diff = logl_diff;
   *ret_count_above = count_above;
   *ret_count_below = count_below;
+
+  if (opt_linkedtheta)
+    free(original_affected);
 }
 
 static double logPDFInvG(double x, double a, double b)
@@ -7426,7 +7448,7 @@ double stree_propose_tau_mig(stree_t ** streeptr,
       events_clone(original_stree, stree, gtree);
       
       if (opt_debug)
-        debug_validate_logpg(stree, gtree, loci, "TAU");
+        debug_validate_logpg(stree, gtree, loci, "TAU-M");
       rc = propose_tau_mig(loci,
                            stree->nodes[i],
                            gtree,
