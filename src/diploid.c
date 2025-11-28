@@ -464,7 +464,7 @@ static unsigned long * diploid_resolve_locus(msa_t * msa,
         /* update singleton indices */
         if (sitehets[site] == 0)
         {
-          memmove(single_indices+i,single_indices+i+1,(size_t)(k-(i+1)));
+          memmove(single_indices+i,single_indices+i+1,(size_t)(k-(i+1))*sizeof(long));
           --k;
         }
         break;
