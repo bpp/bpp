@@ -2152,16 +2152,16 @@ static void simulate(stree_t * stree)
         rate[3][3] = -(rate[3][0] + rate[3][1] + rate[3][2]);
 
         double diag, weightSum = 0;
-        for (i = 0; i < 4; i++) {
-          diag = -rate[i][i];
-          weightSum = diag * freqs[i] + weightSum;
+        for (k = 0; k < 4; k++) {
+          diag = -rate[k][k];
+          weightSum = diag * freqs[k] + weightSum;
 
         }
 
         /* Rescales the instantaneous rate matrix so that the average substitution rate is equal to mu */
-        for (i = 0; i < 4; i++)
+        for (k = 0; k < 4; k++)
           for (j = 0; j < 4; j++)
-            rate[i][j] = rate[i][j] / weightSum;
+            rate[k][j] = rate[k][j] / weightSum;
 
         int * mutPresent = xcalloc(opt_locus_simlen, sizeof(int));
         list_t * mutList = xcalloc(gtree[i]->inner_count+gtree[i]->tip_count, sizeof(list_t));
