@@ -207,6 +207,8 @@
 
 #define BPP_DATA_DNA                    0
 #define BPP_DATA_AA                     1
+#define BPP_DATA_CONT                   2
+#define BPP_DATA_DISC                   3
 
 #define BPP_DNA_MODEL_MIN               0
 #define BPP_DNA_MODEL_DEFAULT           0
@@ -253,7 +255,7 @@ extern const char * global_freqs_strings[28];
 #define BPP_LOCRATE_PRIOR_MIN           0
 #define BPP_LOCRATE_PRIOR_GAMMADIR      0
 #define BPP_LOCRATE_PRIOR_HIERARCHICAL  1
-#define BPP_LOCRATE_PRIOR_NONE  	2
+#define BPP_LOCRATE_PRIOR_NONE          2
 #define BPP_LOCRATE_PRIOR_MAX           3
 #define BPP_LOCRATE_PRIOR_DIR           3
 
@@ -480,6 +482,24 @@ typedef struct migbuffer_s
   long donors_count;
 } migbuffer_t;
 
+/* shared by both continuous and discrete traits (for now),
+   but each data type also has its own set of variables */
+typedef struct trait_s
+{
+  double brate;      // branch rate (r_k)
+  double old_brate;
+  
+  /* for continuous traits */
+  double brlen;      // transformed branch length (v_k')
+  double * state_m;  // (ancestral) state values (m_k')
+  double * contrast; // independent contrasts (x_k)
+  
+  /* for discrete traits */
+  int    * state_d;  // discrete state values
+  double **condprob; // conditional probabilities (L)
+  double **tranprob; // transition probabilities
+} trait_t;
+
 typedef struct snode_s
 {
   char * label;
@@ -563,8 +583,8 @@ typedef struct snode_s
   dlist_t ** mig_target;
 
   /* tip dating */
-  int * epoch_count; /*Number of sampling epochs */
-  double ** tip_date; /* Date at time of epoch*/
+  int * epoch_count;  /* Number of sampling epochs */
+  double ** tip_date; /* Date at time of epoch */
   int ** date_count;  /* Number of sequences sampled at the epoch */
 
   /* linked theta model */
@@ -576,6 +596,11 @@ typedef struct snode_s
   /* total coalescent waiting time for pop j at locus i */
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
+
+  /* trait related things (per partition): branch length, rate, trait values;
+     for discrete traits, it contains transition & conditional probabilities;
+     for continuous traits, it contains phylogenetic indepandent contrasts */
+  trait_t ** trait;
 
   long flag;
 } snode_t;
@@ -641,6 +666,18 @@ typedef struct stree_s
   double * u_constraint;
   double * l_constraint;
 
+  /* morphological traits //Chi */
+  int      trait_count;         /* number of trait partitions */
+  int    * trait_dim;  /* dimension of trait vector of each partition */
+  int    * trait_type;   /* data type: continuous or discrete */
+  double * trait_logl;    /* log likelihood of each partition */
+  double * trait_old_logl; /* store old log likelihood values */
+  double * trait_logpr;        /* log prior of each partition */
+  double * trait_old_logpr;     /* store old log prior values */
+  int   ** trait_nstate;   /* # states for each discrete character */
+  double * trait_v_pop;         /* within population variance */
+  double * trait_ldetRs;  /* log determinant of shrinkage estimate of
+                             correlation matrix, i.e. log(det(R*)) */
 } stree_t;
 
 typedef struct mutation_s
@@ -764,6 +801,22 @@ typedef struct ntree_s
   node_t ** leaves;
   node_t ** inner;
 } ntree_t;
+
+typedef struct morph_s
+{
+  int ntaxa;        // number of species (populations)
+  int length;       // number of characters
+
+  double ** conti;  // continuous trait matrix
+  int    ** discr;  // discrete trait matrix
+  char   ** label;  // species labels
+
+  double v_pop;     // population variance
+  double ldetRs;    // log determinant of R*
+
+  int dtype;        // data type: continuous or discrete
+  int model;
+} morph_t;
 
 typedef struct msa_s
 {
@@ -1148,6 +1201,7 @@ extern long opt_linkedtheta;
 extern long opt_load_balance;
 extern long opt_locusrate_prior;
 extern long opt_locus_count;
+extern long opt_trait_count;
 extern long opt_locus_simlen;
 extern long opt_max_species_count;
 extern long opt_method;
@@ -1201,9 +1255,12 @@ extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
+extern double opt_brate_alpha;
+extern double opt_brate_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
+extern double opt_finetune_brate_m;
 extern double opt_finetune_freqs;
 extern double opt_finetune_gtage;
 extern double opt_finetune_gtspr;
@@ -1272,6 +1329,7 @@ extern char * opt_jobname;
 extern char * opt_mapfile;
 extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
+extern char * opt_traitfile;
 extern char * opt_msafile;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
@@ -1381,6 +1439,7 @@ extern double g_pj_nubar;
 extern double g_pj_mui;
 extern double g_pj_nui;
 extern double g_pj_brate;
+extern double g_pj_brate_m;
 extern double * g_pj_migvr;
 extern double * g_pj_mrate_slide;
 extern double * g_pj_mrate_gibbs;
@@ -1442,6 +1501,20 @@ msa_t * phylip_parse_interleaved(phylip_t * fd);
 msa_t * phylip_parse_sequential(phylip_t * fd);
 
 msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
+
+/* functions in morph.c //Chi */
+
+morph_t ** parse_traitfile(const char * traitfile, int * count);
+void morph_destroy(morph_t * morph);
+
+void trait_init(stree_t * stree, morph_t ** morph_list, int count);
+void trait_destroy(stree_t * stree);
+void trait_store(stree_t * stree);
+void trait_restore(stree_t * stree);
+void trait_update(stree_t * stree);
+
+double loglikelihood_trait(stree_t * stree);
+double logprior_trait(stree_t * stree);
 
 /* functions in rtree.c */
 
@@ -1532,7 +1605,7 @@ void stree_init(stree_t * stree,
                 msa_t ** msa,
                 list_t * maplist,
                 int msa_count,
-		int * tau_ctl,
+                int * tau_ctl,
                 FILE * fp_out);
 
 void stree_init_pptable(stree_t * stree);
@@ -1874,6 +1947,8 @@ void prop_branch_rates_parallel(gtree_t ** gtree,
                                 long thread_index,
                                 long * p_proposal_count,
                                 long * p_accepted);
+
+double prop_branch_rates_trait(stree_t * stree);
 
 long prop_locusrate_mubar(stree_t * stree, gtree_t ** gtree);
 long prop_locusrate_nubar(stree_t * stree, gtree_t ** gtree);
