@@ -966,7 +966,7 @@ static void gtree_clone(gtree_t * gtree,
 gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
 {
   unsigned int i;
-  unsigned nodes_count = gtree->tip_count + gtree->inner_count;
+  unsigned int nodes_count = gtree->tip_count + gtree->inner_count;
   gtree_t * clone;
   long ** migcount = NULL;
   snode_t ** migpops = NULL;
@@ -1003,8 +1003,11 @@ gtree_t * gtree_clone_init(gtree_t * gtree, stree_t * clone_stree)
     migpops = (snode_t **)xcalloc((size_t)(total_nodes),sizeof(snode_t *));
 
     if (opt_exp_imrb)
-      clone->rb_linked = (snode_t **)xmalloc((size_t)(nodes_count+1) *
+    {
+      unsigned int snodes_count = clone_stree->tip_count + clone_stree->inner_count;
+      clone->rb_linked = (snode_t **)xmalloc((size_t)(snodes_count+1) *
                                              sizeof(snode_t *));
+    }
   }
   clone->migcount = migcount;
   clone->migpops = migpops;
@@ -4886,7 +4889,7 @@ void propose_tau_update_gtrees_mig(locus_t ** loci,
     fatal("Integrating out thetas not yet implemented for IM model");
 
   #if 1
-  snode_t ** original_affected;
+  snode_t ** original_affected = NULL;
   if (opt_linkedtheta)
   {
     original_affected = (snode_t **)xmalloc(paffected_count * sizeof(snode_t *));
