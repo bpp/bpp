@@ -267,7 +267,7 @@ static morph_t * parse_trait_part(FILE * fp)
   return morph;
 }
 
-morph_t ** parse_traitfile(const char * traitfile, int * count)
+morph_t ** parse_traitfile(const char * traitfile, long * count)
 {
   int c, i, m_slotalloc = 10, m_maxcount = 10;
   

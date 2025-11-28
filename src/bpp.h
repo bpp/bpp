@@ -1504,7 +1504,7 @@ msa_t ** phylip_parse_multisequential(phylip_t * fd, long * count);
 
 /* functions in morph.c //Chi */
 
-morph_t ** parse_traitfile(const char * traitfile, int * count);
+morph_t ** parse_traitfile(const char * traitfile, long * count);
 void morph_destroy(morph_t * morph);
 
 void trait_init(stree_t * stree, morph_t ** morph_list, int count);
