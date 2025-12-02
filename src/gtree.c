@@ -398,7 +398,7 @@ static char * print_migration(const gnode_t * root) {
 			/* if not last event */
 			if (count < maxCount || (pop->parent && root->parent && pop->parent->tau < root->parent->time)) {
 				free(part1);
-				size_alloced = xasprintf(&part1,"%s,", part2);
+				size_alloced = xasprintf(&part1,"%s$", part2);
 				free(part2);
 
 			} 

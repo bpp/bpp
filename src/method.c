@@ -3252,6 +3252,7 @@ static FILE * init(stree_t ** ptr_stree,
   msa_t** msa_list;
   gtree_t** gtree;
   locus_t** locus;
+  morph_t **morph_list;
 
   const long thread_index = 0;
 
@@ -3556,11 +3557,11 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
   if (opt_datefile) {
-        printf("Parsing date file...");
-        if (! (date_list = parse_date_mapfile(opt_datefile)))
-                fatal("Failed to parse date file %s", opt_datefile);
-        else
-                printf(" Done\n");
+    printf("Parsing date file...");
+    if (! (date_list = parse_date_mapfile(opt_datefile)))
+      fatal("Failed to parse date file %s", opt_datefile);
+    else
+      printf(" Done\n");
   }
 
   #if 0
@@ -3892,6 +3893,24 @@ static FILE * init(stree_t ** ptr_stree,
   {
     assert(opt_msci == 0);
     partition_fast(stree->tip_count);
+  }
+
+  if (opt_traitfile)  //Chi
+  {
+    /* parse the trait file */
+    printf("Parsing trait file...");
+    morph_list = parse_traitfile(opt_traitfile, &opt_trait_count);
+    assert(morph_list);
+    printf(" Done\n");
+
+    /* initialize trait values and contrasts */
+    trait_init(stree, morph_list, opt_trait_count);
+    
+    /* calculate log likelihood for morphological traits */
+    logl_sum += loglikelihood_trait(stree);
+    
+    /* store current values for later use */
+    trait_store(stree);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -4590,6 +4609,13 @@ static FILE * init(stree_t ** ptr_stree,
     msa_destroy(msa_list[i]);
   free(msa_list);
 
+  if (opt_traitfile)
+  {
+    for (i = 0; i < opt_trait_count; ++i)
+      morph_destroy(morph_list[i]);
+    free(morph_list);
+  }
+  
   return fp_mcmc;
 }
 
@@ -4776,6 +4802,7 @@ static void pjump_reset()
   g_pj_mui = 0;
   g_pj_nui = 0;
   g_pj_brate = 0;
+  g_pj_brate_m = 0;
 
   k = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
   for (i = 0; i < k; ++i)
@@ -5807,6 +5834,14 @@ void cmd_run()
       #endif
     }
 
+    /* propose branch rates for traits */
+    if (opt_traitfile)  //Chi
+    {
+      ratio = prop_branch_rates_trait(stree);
+      g_pj_brate_m = (g_pj_brate_m*(ft_round-1)+ratio) / ft_round;
+    }
+
+
     /* log sample into file (dparam_count is only used in method 10) */
     if ((i + 1) % (opt_samplefreq*5) == 0)
        fflush(NULL);
@@ -6161,31 +6196,31 @@ void cmd_run()
           for (j = 0; j < opt_locus_count; ++j) {
             if (!printLocusIndex || printLocusIndex[j])
               gtree_offset[j] = ftell(fp_gtree[j]);
-	    else 
+            else 
               gtree_offset[j] = 0;
-	  }
-	}
+          }
+        }
 
         /* if gene tree printing is enabled get current file offsets */
         if (printLocusIndex) {
           for (j = 0; j < opt_locus_count; ++j) {
             if (printLocusIndex[j]) {
-		    fflush(stdout);
+              fflush(stdout);
               mig_offset[j] = ftell(fp_mig[j]);
-	    }
-	    else 
+            }
+            else 
               mig_offset[j] = 0;
-	  }
-	}
+          }
+        }
 
         /* if relaxed clock is enabled get offsets for rates files */
         if (opt_print_locusfile)
           for (j = 0; j < opt_locus_count; ++j) {
             if (!printLocusIndex || printLocusIndex[j])
               rates_offset[j] = ftell(fp_locus[j]);
-	    else 
+            else 
               rates_offset[j] = 0;
-	  }
+          }
 
         checkpoint_dump(stree,
                         gtree,
