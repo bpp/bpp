@@ -491,9 +491,9 @@ void stree_destroy(stree_t * tree,
   }
 
   if (tree->u_constraint)
-  	free(tree->u_constraint);
+    free(tree->u_constraint);
   if (tree->l_constraint)
-  	free(tree->l_constraint);
+    free(tree->l_constraint);
 
   trait_destroy(tree);  //Chi
 
