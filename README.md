@@ -107,8 +107,8 @@ tar zxvf bpp-4.8.6-macos-aarch64.tar.gz
 Or these commands if you are using a Mac with an Intel CPU:
 
 ```bash
-wget https://github.com/bpp/bpp/releases/download/v4.8.6/bpp-4.8.6-macos-x86_64.tar.gz
-tar zxvf bpp-4.8.6-macos-x86_64.tar.gz
+wget https://github.com/bpp/bpp/releases/download/v4.8.4/bpp-4.8.4-macos-x86_64.tar.gz
+tar zxvf bpp-4.8.4-macos-x86_64.tar.gz
 ```
 
 Or if you are using Windows, download and extract (unzip) the contents of this file:
