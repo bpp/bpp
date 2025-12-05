@@ -1616,8 +1616,15 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   char * header = xstrdup(line);
 
   long token_count;
+  long numeric_token_count;
   char ** tokens = header_explode(header,&token_count);
+  char ** numeric_tokens = (char **)xmalloc((size_t)token_count*sizeof(char *));
+  for (i = 0; i < token_count; ++i)
+    numeric_tokens[i] = xstrdup(tokens[i]);
   header_tokens_shorten(tokens,opt_keep_labels,token_count);
+  /* the following is required for finding theta indices associated with Ws */
+  header_tokens_shorten(numeric_tokens,0,token_count);
+  numeric_token_count = token_count;
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -1836,7 +1843,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       if (strlen(tokens[i]) > 2 && tokens[i][0] == 'W' && tokens[i][1] == ':')
       {
         w_indices[w_count++] = i;
-        char * tgt_index = strchr(tokens[i],'>');
+        char * tgt_index = strchr(numeric_tokens[i],'>');
         assert(tgt_index);
         assert(tgt_index[1]);
 
@@ -1847,7 +1854,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         xasprintf(&nodestr, "theta:%ld", ni+1);
         for (j = 0; j < col_count; ++j)
         {
-          if (!strcmp(tokens[j],nodestr))
+          if (!strcmp(numeric_tokens[j],nodestr))
           {
             theta_indices[theta_count++] = j;
             break;
@@ -2148,6 +2155,9 @@ l_unwind:
   for (i = 0; i < token_count; ++i)
     free(tokens[i]);
   free(tokens);
+  for (i = 0; i < numeric_token_count; ++i)
+    free(numeric_tokens[i]);
+  free(numeric_tokens);
   free(header);
 
   for (i = 0; i < col_count; ++i)
