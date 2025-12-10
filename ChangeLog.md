@@ -2,6 +2,12 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.8.7] - 2025-12-10
+## Fixed
+ - segfault when converting W to M in summary with --keep-labels option
+ - properly print a dash in summary for W and M parameters for which
+   all recorded values are nan (i.e. migration is not possible)
+
 ## [4.8.6] - 2025-12-03
 ## Added
  - Option --wrate_mode and --wrate_showeps for different step lengths across
