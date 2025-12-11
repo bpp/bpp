@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   # and automatically on pushes to main
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
 
 jobs:
   macos-arm64:
