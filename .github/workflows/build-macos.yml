@@ -33,7 +33,7 @@ jobs:
 
   macos-x86_64:
     name: Build macOS (x86_64)
-    runs-on: macos-13     # Intel runner (while available)
+    runs-on: macos-15-intel     # Intel runner (while available)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
