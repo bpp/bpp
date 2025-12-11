@@ -1,0 +1,54 @@
+name: Build BPP macOS binaries
+
+on:
+  # Trigger manually from the Actions tab
+  workflow_dispatch:
+  # and automatically on pushes to main
+  push:
+    branches: [ main ]
+
+jobs:
+  macos-arm64:
+    name: Build macOS (arm64)
+    runs-on: macos-15     # Apple Silicon runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build (ARM64)
+        run: |
+          cd src
+          make -f Makefile.ARM64 -j"$(sysctl -n hw.ncpu)"
+
+      - name: Inspect binary
+        run: |
+          # Adjust this if your binary lives somewhere else
+          file src/bpp || ls -R
+
+      - name: Upload artifact (arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpp-macos-aarch64
+          path: src/bpp
+
+  macos-x86_64:
+    name: Build macOS (x86_64)
+    runs-on: macos-13     # Intel runner (while available)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build (x86_64)
+        run: |
+          cd src
+          make -f Makefile -j"$(sysctl -n hw.ncpu)"
+
+      - name: Inspect binary
+        run: |
+          file src/bpp || ls -R
+
+      - name: Upload artifact (x86_64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpp-macos-x86_64
+          path: src/bpp
