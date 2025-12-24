@@ -78,9 +78,8 @@ static gnode_t ** gtarget_space;
 
 static snode_t ** snode_contrib_space;
 static unsigned int * snode_contrib_count;
-/* TODO: REMOVE */
-static gnode_t * pruned_nodes[10000];
-static gnode_t * gsources_list[10000];
+static gnode_t ** pruned_nodes;
+static gnode_t ** gsources_list;
 
 static long * ts_indicator = NULL;
 
@@ -2896,6 +2895,8 @@ void stree_alloc_internals(stree_t * stree, long * locus_seqcount, unsigned int 
       //    gtarget_space = (gnode_t **)xmalloc(sum_inner * sizeof(gnode_t *));
       moved_space = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
       gtarget_space = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
+      pruned_nodes = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
+      gsources_list = (gnode_t **)xmalloc(gtree_inner_sum * sizeof(gnode_t *));
 
       //    unsigned int sum_nodes = 2*sum_inner + msa_count;
       gtarget_temp_space = (gnode_t **)xmalloc(sum_nodes * sizeof(gnode_t *));
@@ -3310,6 +3311,8 @@ void stree_fini()
     free(moved_space);
     free(gtarget_temp_space);
     free(gtarget_space);
+    free(pruned_nodes);
+    free(gsources_list);
     free(snode_contrib_space);
     free(snode_contrib_count);
   }
