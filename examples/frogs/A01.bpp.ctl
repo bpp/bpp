@@ -27,7 +27,8 @@
 *     heredity = 1 4 4
 *    locusrate = 1 5
 
-      finetune =  1: 5 0.001 0.001  0.001 0.3 0.33 1.0  # finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+# finetune: auto-adjust step lengths during burnin
+      finetune = 1
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
         burnin = 8000

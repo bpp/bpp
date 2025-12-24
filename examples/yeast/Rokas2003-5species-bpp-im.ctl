@@ -29,7 +29,8 @@
 *      heredity = 0 heredity.txt   # (0: No variation, 1: estimate, 2: from file) & a_gamma b_gamma (if 1)
 *     locusrate = 1 5.0   # (0: No variation, 1: estimate, 2: from file) & a_Dirichlet (if 1)
 
-       finetune = 1:  3 0.01 0.003 0.001 0.01 0.11 .012 .013 # auto (0 or 1): finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+# finetune: auto-adjust step lengths during burnin
+       finetune = 1
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars Genetrees
         burnin = 10000

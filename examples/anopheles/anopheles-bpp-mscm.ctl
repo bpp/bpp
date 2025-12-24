@@ -30,7 +30,8 @@
 	              A b
                       R Q
 
-      finetune =  1: 3 0.003 0.002 0.00002 0.005 0.9 0.001 0.001 # finetune for GBtj, GBspr, theta, tau, mix
+# finetune: auto-adjust step lengths during burnin
+      finetune = 1
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
         burnin = 32000
