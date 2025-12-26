@@ -3889,6 +3889,24 @@ static FILE * init(stree_t ** ptr_stree,
 
   stree_show_pptable(stree, BPP_FALSE);
 
+  /* check ancestor-descendant constraints */
+  if (opt_migration)
+  {
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      migspec_t * spec = opt_mig_specs+i;
+      if (stree->pptable[spec->si][spec->ti] ||
+          stree->pptable[spec->ti][spec->si])
+        fatal("[ERROR] "
+              "Migration specified between ancestor-descendant species: "
+              "%s -> %s",
+              stree->pptable[spec->si][spec->ti] ?
+                stree->nodes[spec->ti]->label : stree->nodes[spec->si]->label,
+              stree->pptable[spec->si][spec->ti] ?
+                stree->nodes[spec->si]->label : stree->nodes[spec->ti]->label);
+    }
+  }
+
   if (opt_method == METHOD_11)
   {
     assert(opt_msci == 0);
