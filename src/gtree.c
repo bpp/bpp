@@ -62,14 +62,37 @@ __THREAD gnode_t * dbg_msci_a = NULL;
 __THREAD gnode_t * dbg_msci_s = NULL;
 __THREAD gnode_t * dbg_msci_t = NULL;
 
-static int cb_cmp_nodelabel(void * a, void * b) 
-{ 
-  snode_t * node = (snode_t *)a; 
-  char * label = (char * )b; 
- 
-  return (!strcmp(node->label,label)); 
+static int cb_cmp_nodelabel(void * a, void * b)
+{
+  snode_t * node = (snode_t *)a;
+  char * label = (char * )b;
+
+  return (!strcmp(node->label,label));
 }
 
+/* returns the theta value for a population at a given time.
+   For simulation with variable population size (piecewise-constant theta),
+   this function determines which interval the time falls into and returns
+   the corresponding theta value. The last (oldest) interval extends to infinity. */
+static double get_theta_for_time(snode_t * snode, double t)
+{
+  int k;
+
+  /* if no interval-specific theta, return the single theta value */
+  if (snode->theta_nintervals <= 0 || !snode->theta_intv || !snode->theta_intv_bounds)
+    return snode->theta;
+
+  /* find the interval that contains time t
+     intervals: [0, t1), [t1, t2), ..., [t_{K-1}, infinity) */
+  for (k = 0; k < snode->theta_nintervals - 1; k++)
+  {
+    if (t < snode->theta_intv_bounds[k + 1])
+      return snode->theta_intv[k];
+  }
+
+  /* time is in the last interval (extends to infinity) */
+  return snode->theta_intv[snode->theta_nintervals - 1];
+}
 
 static long propose_spr_sim(locus_t * locus,
                             gtree_t * gtree,
@@ -2474,7 +2497,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
      it might change the structure of the randomly generated gene trees */
 
   /* loop until we are left with only 1 lineage in one ancestral population */
-  int updateSamples = 0; 
+  int updateSamples = 0;
 
   for (; ; --pop_count)
   {
@@ -2500,7 +2523,7 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
 
         if (k >= 2)
         {
-          ci[j] = k*(k-1)/pop[j].snode->theta;
+          ci[j] = k*(k-1)/get_theta_for_time(pop[j].snode, t);
           csum += ci[j];
         }
         else
@@ -3933,17 +3956,127 @@ double gtree_update_logprob_contrib(snode_t * snode,
   /* now distinguish between estimating theta and analytical computation */
   if (opt_est_theta)
   {
-    /* This is the 2/theta in the product over coalescent events */
-    if (snode->coal_count[msa_index])
-      logpr += snode->coal_count[msa_index] * log(2.0 / (heredity*snode->theta));
-
-    /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
-    if (T2h)
+    /* check if using interval-specific theta */
+    if (snode->theta_nintervals > 0)
     {
-      logpr -= T2h / (snode->theta*heredity);
+      /* interval-specific theta computation */
+      int intv;
+      int K = snode->theta_nintervals;
+      double * bounds = snode->theta_intv_bounds;
+
+      /* reset interval statistics */
+      for (intv = 0; intv < K; intv++)
+      {
+        snode->C2ji_intv[msa_index][intv] = 0;
+        snode->coal_count_intv[msa_index][intv] = 0;
+      }
+
+      /* partition waiting times by interval */
+      n = snode->seqin_count[msa_index];
+      nextDateInd = -1;
+      if (opt_datefile && (!snode->left || opt_seqAncestral))
+        if (snode->epoch_count[msa_index])
+          nextDateInd = 0;
+
+      for (k = 1; k < j; ++k)
+      {
+        double t_start = sortbuffer[k - 1];
+        double t_end = sortbuffer[k];
+        double t_lo, t_hi;
+
+        /* distribute this segment's waiting time across intervals */
+        for (intv = 0; intv < K; intv++)
+        {
+          /* last interval extends to infinity for waiting time calculation */
+          double upper = (intv == K - 1) ? t_end : bounds[intv + 1];
+
+          if (t_end <= bounds[intv] || t_start >= upper)
+            continue;  /* segment doesn't overlap this interval */
+
+          t_lo = (t_start > bounds[intv]) ? t_start : bounds[intv];
+          t_hi = (t_end < upper) ? t_end : upper;
+
+          snode->C2ji_intv[msa_index][intv] += n * (n - 1) * (t_hi - t_lo);
+        }
+
+        /* handle date file adjustments */
+        if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k])
+        {
+          n += 1 + snode->date_count[msa_index][nextDateInd];
+          if (nextDateInd + 1 < snode->epoch_count[msa_index])
+            nextDateInd++;
+          else
+            nextDateInd = -1;
+        }
+        else
+        {
+          --n;  /* coalescent event reduces lineage count */
+        }
+      }
+
+      /* count coalescent events per interval */
+      for (coalevent = snode->coalevent[msa_index]->head; coalevent; coalevent = coalevent->next)
+      {
+        gnode_t * gnode = (gnode_t *)(coalevent->data);
+        double t = gnode->time;
+
+        /* find interval containing this coalescent event */
+        for (intv = 0; intv < K; intv++)
+        {
+          if (t >= bounds[intv] && t < bounds[intv + 1])
+          {
+            snode->coal_count_intv[msa_index][intv]++;
+            break;
+          }
+        }
+        /* handle times beyond last boundary: assign to last interval */
+        if (intv == K)
+          snode->coal_count_intv[msa_index][K - 1]++;
+      }
+
+      /* compute log probability as sum over intervals */
+      for (intv = 0; intv < K; intv++)
+      {
+        double theta_i = snode->theta_intv[intv];
+        int k_i = snode->coal_count_intv[msa_index][intv];
+        double C2_i = snode->C2ji_intv[msa_index][intv];
+        double logpr_i = 0;
+
+        /* skip pseudo intervals in variable tau mode (Carlin-Chib) */
+        if (snode->theta_intv_real && !snode->theta_intv_real[intv])
+        {
+          snode->logpr_intv[msa_index][intv] = 0;
+          continue;
+        }
+
+        if (k_i > 0)
+          logpr_i += k_i * log(2.0 / (heredity * theta_i));
+        if (C2_i > 0)
+          logpr_i -= C2_i / (theta_i * heredity);
+
+        snode->logpr_intv[msa_index][intv] = logpr_i;
+        logpr += logpr_i;
+      }
+
+      /* also update aggregate statistics for compatibility */
+      snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
+      snode->C2ji[msa_index] = T2h;
     }
-    snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
-    snode->C2ji[msa_index] = T2h; // / heredity;
+    else
+    {
+      /* standard single-theta computation */
+      /* This is the 2/theta in the product over coalescent events */
+      if (snode->coal_count[msa_index])
+        logpr += snode->coal_count[msa_index] * log(2.0 / (heredity*snode->theta));
+
+      /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
+      if (T2h)
+      {
+        logpr -= T2h / (snode->theta*heredity);
+      }
+      snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
+      snode->C2ji[msa_index] = T2h; // / heredity;
+    }
 
     /* TODO: Be careful about which functions update the logpr contribution
        and which do not */

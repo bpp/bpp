@@ -1221,8 +1221,15 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
 
   /* compute number of theta parameters */
   for (i = 0; i < snodes_total; ++i)
+  {
     if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-      cols += 2;
+    {
+      if (stree->nodes[i]->theta_nintervals > 0)
+        cols += 2 * stree->nodes[i]->theta_nintervals;  /* a1,b1 for each interval */
+      else
+        cols += 2;
+    }
+  }
 
 #if  1
   if (opt_migration && !opt_est_geneflow)

@@ -21,6 +21,9 @@
 
 #include "bpp.h"
 
+/* forward declaration for interval-specific theta initialization */
+static void stree_init_theta_intervals(stree_t * stree, int msa_count);
+
 #define PROP_THRESHOLD 10
 
 #define SWAP_CLV_INDEX(n,i) ((n)+((i)-1)%(2*(n)-2))
@@ -2692,10 +2695,185 @@ static void stree_init_theta(stree_t * stree,
       stree->nodes[i]->theta = stree->nodes[i]->linked_theta->theta;
   }
 
+  /* initialize interval-specific theta if enabled */
+  if (opt_theta_nintervals > 0)
+    stree_init_theta_intervals(stree, msa_count);
+
   /* deallocate seqcount */
   for (i = 0; i < stree->tip_count + opt_seqAncestral; ++i)
     free(seqcount[i]);
   free(seqcount);
+}
+
+/* find which interval index k contains tau value (for Carlin-Chib model switching)
+   Returns: interval index k where tau falls in [bounds[k], bounds[k+1])
+   Note: uses root node bounds as they are shared across all populations */
+static int get_model_k(stree_t * stree, double tau)
+{
+  int k;
+  int K = (int)opt_theta_nintervals;
+  double * bounds = stree->root->theta_intv_bounds;
+
+  if (K <= 0 || !bounds)
+    return 0;
+
+  for (k = 0; k < K; ++k)
+  {
+    if (tau < bounds[k + 1])
+      return k;
+  }
+  /* tau >= last boundary, return last interval */
+  return K - 1;
+}
+
+/* update real/pseudo status for theta intervals of a single node
+   For tip populations: real = intervals 0 to k (where parent->tau is in interval k)
+   For root population: all intervals are real
+   For inner (non-root) populations: real = intervals k to K-1 (where node->tau in interval k) */
+static void update_theta_real_pseudo_status(stree_t * stree, snode_t * snode)
+{
+  int k, intv;
+  int K = snode->theta_nintervals;
+
+  if (K <= 0 || !snode->theta_intv_real)
+    return;
+
+  /* determine which interval the relevant tau falls into */
+  if (!snode->parent)
+  {
+    /* root node: all intervals are real */
+    snode->theta_intv_first_real = 0;
+    snode->theta_intv_last_real = K - 1;
+    for (intv = 0; intv < K; ++intv)
+      snode->theta_intv_real[intv] = 1;
+  }
+  else if (snode->left == NULL && snode->right == NULL)
+  {
+    /* tip population: exists on [0, parent->tau)
+       real intervals are 0 to k where parent->tau is in interval k */
+    k = get_model_k(stree, snode->parent->tau);
+    snode->theta_intv_first_real = 0;
+    snode->theta_intv_last_real = k;
+    for (intv = 0; intv < K; ++intv)
+      snode->theta_intv_real[intv] = (intv <= k) ? 1 : 0;
+  }
+  else
+  {
+    /* inner node (not root): exists on [node->tau, parent->tau)
+       real intervals are k1 to k2 where node->tau in interval k1 and
+       parent->tau in interval k2 */
+    int k1 = get_model_k(stree, snode->tau);
+    int k2 = get_model_k(stree, snode->parent->tau);
+    snode->theta_intv_first_real = k1;
+    snode->theta_intv_last_real = k2;
+    for (intv = 0; intv < K; ++intv)
+      snode->theta_intv_real[intv] = (intv >= k1 && intv <= k2) ? 1 : 0;
+  }
+}
+
+/* update real/pseudo status for all nodes and set current model indicator */
+static void update_all_theta_real_pseudo_status(stree_t * stree)
+{
+  unsigned int i;
+
+  if (opt_theta_nintervals <= 0 || !opt_theta_variable_tau)
+    return;
+
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+    if (snode->has_theta && snode->theta_nintervals > 0)
+      update_theta_real_pseudo_status(stree, snode);
+  }
+
+  /* update current model indicator based on root->tau if it exists,
+     or first inner node tau for 2-species case */
+  if (stree->inner_count > 0)
+  {
+    snode_t * inner_node = stree->nodes[stree->tip_count];
+    if (inner_node && inner_node->tau > 0)
+      stree->current_model_k = get_model_k(stree, inner_node->tau);
+    else
+      stree->current_model_k = 0;
+  }
+}
+
+/* initialize interval-specific theta arrays for variable population size */
+static void stree_init_theta_intervals(stree_t * stree, int msa_count)
+{
+  unsigned int i, j, k;
+  int K = (int)opt_theta_nintervals;
+
+  printf("Initializing %d theta intervals per population...\n", K);
+
+  for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; ++i)
+  {
+    snode_t * snode = stree->nodes[i];
+
+    /* skip nodes without theta */
+    if (!snode->has_theta || snode->theta < 0)
+      continue;
+
+    snode->theta_nintervals = K;
+
+    /* allocate interval boundaries (K+1 values) */
+    snode->theta_intv_bounds = (double *)xmalloc((K + 1) * sizeof(double));
+
+    /* copy user-specified boundaries or create equal intervals */
+    if (opt_theta_intv_bounds)
+    {
+      for (k = 0; k <= (unsigned int)K; ++k)
+        snode->theta_intv_bounds[k] = opt_theta_intv_bounds[k];
+    }
+    else
+    {
+      /* equal intervals from 0 to infinity - user must specify bounds */
+      fatal("theta_intervals requires explicit time boundaries");
+    }
+
+    /* allocate theta values for each interval */
+    snode->theta_intv = (double *)xmalloc(K * sizeof(double));
+    snode->theta_intv_old = (double *)xmalloc(K * sizeof(double));
+
+    /* allocate real/pseudo status array for Carlin-Chib (if variable tau mode) */
+    if (opt_theta_variable_tau)
+      snode->theta_intv_real = (int *)xmalloc(K * sizeof(int));
+    else
+      snode->theta_intv_real = NULL;
+
+    /* initialize all intervals with the same theta (from single-theta init) */
+    for (k = 0; k < (unsigned int)K; ++k)
+      snode->theta_intv[k] = snode->theta;
+
+    /* allocate per-locus, per-interval arrays */
+    snode->C2ji_intv = (double **)xmalloc(msa_count * sizeof(double *));
+    snode->C2ji_intv_old = (double **)xmalloc(msa_count * sizeof(double *));
+    snode->coal_count_intv = (int **)xmalloc(msa_count * sizeof(int *));
+    snode->logpr_intv = (double **)xmalloc(msa_count * sizeof(double *));
+
+    for (j = 0; j < (unsigned int)msa_count; ++j)
+    {
+      snode->C2ji_intv[j] = (double *)xcalloc(K, sizeof(double));
+      snode->C2ji_intv_old[j] = (double *)xcalloc(K, sizeof(double));
+      snode->coal_count_intv[j] = (int *)xcalloc(K, sizeof(int));
+      snode->logpr_intv[j] = (double *)xcalloc(K, sizeof(double));
+    }
+  }
+
+  /* initialize model counting and real/pseudo status for variable tau mode */
+  if (opt_theta_variable_tau)
+  {
+    stree->model_count = (long *)xcalloc(K, sizeof(long));
+    stree->current_model_k = 0;
+    update_all_theta_real_pseudo_status(stree);
+
+    printf("Variable tau mode enabled: Carlin-Chib model switching with %d models\n", K);
+  }
+  else
+  {
+    stree->model_count = NULL;
+    stree->current_model_k = 0;
+  }
 }
 
 /* bottom up filling of pptable */
@@ -3262,6 +3440,20 @@ void stree_init(stree_t * stree,
 
     snode->old_C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
     snode->C2ji = (double *)xcalloc((size_t)msa_count, sizeof(double));
+
+    /* initialize interval-specific theta arrays to NULL if not already set up
+       by stree_init_theta_intervals() */
+    if (opt_theta_nintervals == 0)
+    {
+      snode->theta_nintervals = 0;
+      snode->theta_intv_bounds = NULL;
+      snode->theta_intv = NULL;
+      snode->theta_intv_old = NULL;
+      snode->C2ji_intv = NULL;
+      snode->C2ji_intv_old = NULL;
+      snode->coal_count_intv = NULL;
+      snode->logpr_intv = NULL;
+    }
   }
 
   if (opt_clock != BPP_CLOCK_GLOBAL)
@@ -3957,6 +4149,159 @@ static int propose_theta_slide(stree_t * stree,
 
   return 0;
 }
+
+/* Gibbs proposal for interval-specific theta values */
+static int propose_theta_intv_gibbs(stree_t * stree,
+                                    gtree_t ** gtree,
+                                    locus_t ** locus,
+                                    snode_t * snode,
+                                    long thread_index)
+{
+  int intv;
+  long msa_index;
+  int K = snode->theta_nintervals;
+  long * coal_sum = (long *)xcalloc(K, sizeof(long));
+  double * C2h_sum = (double *)xcalloc(K, sizeof(double));
+  double * oldtheta = (double *)xmalloc(K * sizeof(double));
+  double lnacceptance = 0;
+  long i;
+
+  /* accumulate sufficient statistics for each interval across all loci */
+  for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+  {
+    double h = locus[msa_index]->heredity[0];
+    for (intv = 0; intv < K; intv++)
+    {
+      coal_sum[intv] += snode->coal_count_intv[msa_index][intv];
+      C2h_sum[intv] += snode->C2ji_intv[msa_index][intv] / h;
+    }
+  }
+
+  /* save old theta values */
+  for (intv = 0; intv < K; intv++)
+    oldtheta[intv] = snode->theta_intv[intv];
+
+  /* sample new theta for each interval from inverse-gamma posterior */
+  for (intv = 0; intv < K; intv++)
+  {
+    double newtheta;
+
+    /* check if this is a pseudo interval (Carlin-Chib variable tau mode) */
+    if (snode->theta_intv_real && !snode->theta_intv_real[intv])
+    {
+      /* pseudo interval: sample from pseudo-prior (= prior) */
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        newtheta = 1 / (legacy_rndgamma(thread_index, opt_theta_alpha) / opt_theta_beta);
+      else
+        newtheta = legacy_rndgamma(thread_index, opt_theta_alpha) / opt_theta_beta;
+    }
+    else
+    {
+      /* real interval: sample from conjugate posterior */
+      double a1 = opt_theta_alpha + coal_sum[intv];
+      double b1 = opt_theta_beta + C2h_sum[intv];
+
+      if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+        newtheta = 1 / (legacy_rndgamma(thread_index, a1) / b1);
+      else
+        newtheta = legacy_rndgamma(thread_index, a1) / b1;
+    }
+
+    snode->theta_intv[intv] = newtheta;
+  }
+
+  /* compute acceptance ratio for log probability change */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    lnacceptance -= gtree[i]->logpr;
+
+    /* update log probability contributions for this locus */
+    snode->old_logpr_contrib[i] = snode->logpr_contrib[i];
+    double new_logpr = 0;
+    double h = locus[i]->heredity[0];
+
+    for (intv = 0; intv < K; intv++)
+    {
+      double theta_i = snode->theta_intv[intv];
+      int k_i = snode->coal_count_intv[i][intv];
+      double C2_i = snode->C2ji_intv[i][intv];
+      double logpr_i = 0;
+
+      /* skip pseudo intervals in variable tau mode (Carlin-Chib) */
+      if (snode->theta_intv_real && !snode->theta_intv_real[intv])
+      {
+        snode->logpr_intv[i][intv] = 0;
+        continue;
+      }
+
+      if (k_i > 0)
+        logpr_i += k_i * log(2.0 / (h * theta_i));
+      if (C2_i > 0)
+        logpr_i -= C2_i / (theta_i * h);
+
+      snode->logpr_intv[i][intv] = logpr_i;
+      new_logpr += logpr_i;
+    }
+
+    gtree[i]->logpr -= snode->logpr_contrib[i];
+    snode->logpr_contrib[i] = new_logpr;
+    gtree[i]->logpr += snode->logpr_contrib[i];
+    lnacceptance += gtree[i]->logpr;
+  }
+
+  /* for gamma prior, need MH acceptance step */
+  if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+  {
+    for (intv = 0; intv < K; intv++)
+    {
+      /* skip pseudo intervals for MH acceptance computation */
+      if (snode->theta_intv_real && !snode->theta_intv_real[intv])
+        continue;
+
+      double a1 = opt_theta_alpha + coal_sum[intv];
+      double b1 = opt_theta_beta + C2h_sum[intv];
+      double old_t = oldtheta[intv];
+      double new_t = snode->theta_intv[intv];
+
+      /* prior ratio */
+      lnacceptance += (opt_theta_alpha - 1) * log(new_t / old_t) -
+                      opt_theta_beta * (new_t - old_t);
+      /* proposal ratio (gamma) */
+      lnacceptance += (a1 - 1) * log(old_t / new_t) - b1 * (old_t - new_t);
+    }
+
+    if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    {
+      free(coal_sum);
+      free(C2h_sum);
+      free(oldtheta);
+      return 1;  /* accept */
+    }
+
+    /* reject: restore old theta values and log probabilities */
+    for (intv = 0; intv < K; intv++)
+      snode->theta_intv[intv] = oldtheta[intv];
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      gtree[i]->logpr -= snode->logpr_contrib[i];
+      snode->logpr_contrib[i] = snode->old_logpr_contrib[i];
+      gtree[i]->logpr += snode->logpr_contrib[i];
+    }
+
+    free(coal_sum);
+    free(C2h_sum);
+    free(oldtheta);
+    return 0;
+  }
+
+  /* inverse-gamma prior: always accept (conjugate) */
+  free(coal_sum);
+  free(C2h_sum);
+  free(oldtheta);
+  return 1;
+}
+
 void stree_propose_theta(gtree_t ** gtree,
                          locus_t ** locus,
                          stree_t * stree,
@@ -3986,7 +4331,23 @@ void stree_propose_theta(gtree_t ** gtree,
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (opt_theta_slide_prob > 0 && 
+      /* check if using interval-specific theta */
+      if (snode->theta_nintervals > 0)
+      {
+        /* use interval-specific Gibbs proposal */
+        accepted = propose_theta_intv_gibbs(stree,
+                                            gtree,
+                                            locus,
+                                            snode,
+                                            thread_index_zero);
+        if (i < stree->tip_count)
+          gibbs_tip_accept += accepted;
+        else
+          gibbs_inner_accept += accepted;
+        continue;
+      }
+
+      if (opt_theta_slide_prob > 0 &&
           legacy_rndu(thread_index_zero) < opt_theta_slide_prob)
       {
         /* sliding window */
@@ -6291,6 +6652,10 @@ static long propose_tau(locus_t ** loci,
     /* accepted */
     accepted++;
 
+    /* update real/pseudo status for Carlin-Chib variable tau mode */
+    if (opt_theta_variable_tau && opt_theta_nintervals > 0)
+      update_all_theta_real_pseudo_status(stree);
+
     if (opt_traitfile)  //Chi
       trait_store(stree);
 
@@ -7366,6 +7731,10 @@ static long propose_tau_mig(locus_t ** loci,
   {
     /* accepted */
     accepted++;
+
+    /* update real/pseudo status for Carlin-Chib variable tau mode */
+    if (opt_theta_variable_tau && opt_theta_nintervals > 0)
+      update_all_theta_real_pseudo_status(stree);
 
     for (i = 0; i < stree->locus_count; ++i)
     {

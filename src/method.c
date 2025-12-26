@@ -498,6 +498,16 @@ static void print_mcmc_headerline(FILE * fp,
     for (i = 0; i < mean_theta_count; ++i)
       fprintf(fp, "theta%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]+1);
   }
+  if (opt_print_theta_intv && opt_theta_nintervals > 0)
+  {
+    fprintf(fp, "   |  : separator for interval-specific theta means\n");
+    fprintf(fp, "       (K=%ld intervals per population)\n", opt_theta_nintervals);
+  }
+  if (opt_theta_variable_tau && opt_theta_nintervals > 0)
+  {
+    fprintf(fp, " Mk:pp: current model (tau interval) and its posterior probability\n");
+    fprintf(fp, "       (M1 = tau in [t0,t1), M2 = tau in [t1,t2), etc.)\n");
+  }
   if (mean_tau_count == 1)
     fprintf(fp, "  tau1: root node mean tau\n");
   else
@@ -1877,10 +1887,25 @@ static void mcmc_printheader(FILE * fp, stree_t * stree)
       /* TODO: Is the 'has_theta' check also necessary ? */
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
       {
-        if (print_labels)
-          fprintf(fp, "\ttheta:%d:%s", i+1, stree->nodes[i]->label);
+        /* check if using interval-specific theta */
+        if (stree->nodes[i]->theta_nintervals > 0)
+        {
+          int k;
+          for (k = 0; k < stree->nodes[i]->theta_nintervals; k++)
+          {
+            if (print_labels)
+              fprintf(fp, "\ttheta:%d:%s_%d", i+1, stree->nodes[i]->label, k+1);
+            else
+              fprintf(fp, "\ttheta:%d_%d", i+1, k+1);
+          }
+        }
         else
-          fprintf(fp, "\ttheta:%d", i+1);
+        {
+          if (print_labels)
+            fprintf(fp, "\ttheta:%d:%s", i+1, stree->nodes[i]->label);
+          else
+            fprintf(fp, "\ttheta:%d", i+1);
+        }
       }
     }
   }
@@ -2387,14 +2412,42 @@ static void mcmc_logsample(FILE * fp,
   {
     /* first print thetas for tips */
     for (i = 0; i < stree->tip_count; ++i)
+    {
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-        fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
+      {
+        /* check if using interval-specific theta */
+        if (stree->nodes[i]->theta_nintervals > 0)
+        {
+          int k;
+          for (k = 0; k < stree->nodes[i]->theta_nintervals; k++)
+            fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta_intv[k]);
+        }
+        else
+        {
+          fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
+        }
+      }
+    }
 
     /* then for inner nodes */
     /* TODO: Is the 'has_theta' check also necessary ? */
     for (i = stree->tip_count; i < snodes_total; ++i)
+    {
       if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
-        fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
+      {
+        /* check if using interval-specific theta */
+        if (stree->nodes[i]->theta_nintervals > 0)
+        {
+          int k;
+          for (k = 0; k < stree->nodes[i]->theta_nintervals; k++)
+            fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta_intv[k]);
+        }
+        else
+        {
+          fprintf(fp, "\t%.*f", prec, stree->nodes[i]->theta);
+        }
+      }
+    }
   }
 
   /* 2. Print taus for inner nodes */
@@ -4474,7 +4527,22 @@ static FILE * init(stree_t ** ptr_stree,
         snode_t * x = stree->nodes[i];
 
         if (x->theta >= 0 && !x->linked_theta)
-          fprintf(fp_a1b1, "\ttheta:%d_a1:%s_a1\ttheta:%d_b1:%s_b1", x->node_index+1,x->label,x->node_index+1,x->label);
+        {
+          if (x->theta_nintervals > 0)
+          {
+            /* output columns for each interval */
+            int intv;
+            for (intv = 0; intv < x->theta_nintervals; ++intv)
+              fprintf(fp_a1b1, "\ttheta:%d_a1:%s_%d_a1\ttheta:%d_b1:%s_%d_b1",
+                      x->node_index+1, x->label, intv+1,
+                      x->node_index+1, x->label, intv+1);
+          }
+          else
+          {
+            fprintf(fp_a1b1, "\ttheta:%d_a1:%s_a1\ttheta:%d_b1:%s_b1",
+                    x->node_index+1, x->label, x->node_index+1, x->label);
+          }
+        }
       }
       if (opt_msci)
       {
@@ -4848,38 +4916,62 @@ static void log_a1b1(FILE * fp_a1b1,
 
     if (snode->linked_theta || snode->theta < 0) continue;
 
-    coal_sum = C2h_sum = 0;
-
-    if (opt_linkedtheta)
+    /* check if using interval-specific theta */
+    if (snode->theta_nintervals > 0)
     {
-      size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
-      for (j = 0; j < totnodes; ++j)
+      int intv;
+      for (intv = 0; intv < snode->theta_nintervals; ++intv)
       {
-        if (stree->nodes[j]->linked_theta != snode && stree->nodes[j] != snode) continue;
-
+        coal_sum = C2h_sum = 0;
         for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
         {
-          C2h_sum += stree->nodes[j]->C2ji[msa_index]/locus[msa_index]->heredity[0];
-          coal_sum += stree->nodes[j]->coal_count[msa_index];
+          coal_sum += snode->coal_count_intv[msa_index][intv];
+          C2h_sum += snode->C2ji_intv[msa_index][intv] / locus[msa_index]->heredity[0];
         }
+
+        a1 = opt_theta_alpha + coal_sum;
+        b1 = opt_theta_beta + C2h_sum;
+        if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+          get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
+
+        fprintf(fp_a1b1, "\t%.1f\t%.5f", a1, b1);
       }
     }
     else
     {
-      for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
-      {
-        coal_sum += snode->coal_count[msa_index];
-        C2h_sum += snode->C2ji[msa_index]/locus[msa_index]->heredity[0];
-      }
-    }
+      coal_sum = C2h_sum = 0;
 
-    /* MSC and MSC-I models */
-    a1 = opt_theta_alpha + coal_sum;
-    b1 = opt_theta_beta + C2h_sum;
-    if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
-      get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
-       
-    fprintf(fp_a1b1, "\t%.1f\t%.5f", a1, b1);
+      if (opt_linkedtheta)
+      {
+        size_t totnodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+        for (j = 0; j < totnodes; ++j)
+        {
+          if (stree->nodes[j]->linked_theta != snode && stree->nodes[j] != snode) continue;
+
+          for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+          {
+            C2h_sum += stree->nodes[j]->C2ji[msa_index]/locus[msa_index]->heredity[0];
+            coal_sum += stree->nodes[j]->coal_count[msa_index];
+          }
+        }
+      }
+      else
+      {
+        for (msa_index = 0; msa_index < opt_locus_count; ++msa_index)
+        {
+          coal_sum += snode->coal_count[msa_index];
+          C2h_sum += snode->C2ji[msa_index]/locus[msa_index]->heredity[0];
+        }
+      }
+
+      /* MSC and MSC-I models */
+      a1 = opt_theta_alpha + coal_sum;
+      b1 = opt_theta_beta + C2h_sum;
+      if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+        get_gamma_conditional_approx(opt_theta_alpha, opt_theta_beta, coal_sum, C2h_sum, &a1, &b1);
+
+      fprintf(fp_a1b1, "\t%.1f\t%.5f", a1, b1);
+    }
   }
 
   /* W */
@@ -5000,6 +5092,9 @@ void cmd_run()
   double * mean_tau = NULL;
   double * mean_theta = NULL;
   double * mean_phi = NULL;
+  double ** mean_theta_intv = NULL;   /* [node_index][interval] means */
+  long * mean_theta_intv_idx = NULL;  /* node indices for theta_intv */
+  long mean_theta_intv_count = 0;     /* number of nodes with intervals */
 
   long mean_mrate_count = 0;
   long mean_theta_count = 0;
@@ -5100,6 +5195,33 @@ void cmd_run()
     }
     if (opt_est_theta)
       mean_theta = (double *)xcalloc(MAX_THETA_OUTPUT, sizeof(double));
+
+    /* allocate storage for interval-specific theta means if enabled */
+    if (opt_print_theta_intv && opt_theta_nintervals > 0 && opt_est_theta)
+    {
+      long total_nodes = stree->tip_count + stree->inner_count;
+      long max_nodes = MIN(total_nodes, MAX_THETA_OUTPUT);
+
+      mean_theta_intv = (double **)xmalloc((size_t)max_nodes * sizeof(double *));
+      mean_theta_intv_idx = (long *)xmalloc((size_t)max_nodes * sizeof(long));
+
+      long n = 0;
+      for (j = 0; j < stree->tip_count + stree->inner_count; ++j)
+      {
+        if (stree->nodes[j]->theta >= 0 &&
+            stree->nodes[j]->linked_theta == NULL &&
+            stree->nodes[j]->theta_nintervals > 0)
+        {
+          mean_theta_intv[n] = (double *)xcalloc((size_t)opt_theta_nintervals,
+                                                  sizeof(double));
+          mean_theta_intv_idx[n] = j;
+          n++;
+          if (n >= max_nodes) break;
+        }
+      }
+      mean_theta_intv_count = n;
+    }
+
     mean_tau   = (double *)xcalloc(MAX_TAU_OUTPUT, sizeof(double));
 
     if (opt_msci)
@@ -5864,6 +5986,10 @@ void cmd_run()
       /* log rates */
       if (opt_print_locusfile)
         print_rates(fp_locus, stree, gtree, locus, printLocusIndex);
+
+      /* model counting for Carlin-Chib variable tau mode */
+      if (opt_theta_variable_tau && opt_theta_nintervals > 0 && stree->model_count)
+        stree->model_count[stree->current_model_k]++;
     }
 
     if (opt_method == METHOD_10)
@@ -5932,6 +6058,21 @@ void cmd_run()
         }
       }
       mean_theta_count = k;
+
+      /* update interval-specific theta means if enabled */
+      if (mean_theta_intv_count > 0)
+      {
+        for (k = 0; k < mean_theta_intv_count; ++k)
+        {
+          snode_t * snode = stree->nodes[mean_theta_intv_idx[k]];
+          int intv;
+          for (intv = 0; intv < snode->theta_nintervals; ++intv)
+          {
+            RMEAN_UPDATE(mean_theta_intv[k][intv], ft_round,
+                         snode->theta_intv[intv]);
+          }
+        }
+      }
 
       /* compute mean taus */
 
@@ -6088,6 +6229,44 @@ void cmd_run()
           for (j = 0; j < mean_theta_count; ++j)
             fprintf(fp_out, " %6.4f", mean_theta[j]);
           fprintf(fp_out, " ");
+        }
+
+        /* print interval-specific theta means if enabled */
+        if (mean_theta_intv_count > 0)
+        {
+          printf("|");
+          if (print_newline)
+            fprintf(fp_out, "|");
+          for (k = 0; k < mean_theta_intv_count; ++k)
+          {
+            snode_t * snode = stree->nodes[mean_theta_intv_idx[k]];
+            int intv;
+            for (intv = 0; intv < snode->theta_nintervals; ++intv)
+            {
+              printf(" %6.4f", mean_theta_intv[k][intv]);
+              if (print_newline)
+                fprintf(fp_out, " %6.4f", mean_theta_intv[k][intv]);
+            }
+            printf(" ");
+            if (print_newline)
+              fprintf(fp_out, " ");
+          }
+        }
+
+        /* print current model and PP for variable tau mode */
+        if (opt_theta_variable_tau && stree->model_count && i >= 0)
+        {
+          long total_model_samples = 0;
+          for (k = 0; k < opt_theta_nintervals; ++k)
+            total_model_samples += stree->model_count[k];
+
+          if (total_model_samples > 0)
+          {
+            double model_pp = (double)stree->model_count[stree->current_model_k] / total_model_samples;
+            printf("M%d:%.2f ", stree->current_model_k + 1, model_pp);
+            if (print_newline)
+              fprintf(fp_out, "M%d:%.2f ", stree->current_model_k + 1, model_pp);
+          }
         }
       }
 
@@ -6524,6 +6703,28 @@ void cmd_run()
   if (opt_method == METHOD_00)
   {
     allfixed_summary(fp_out,stree);
+
+    /* print model posterior probabilities for Carlin-Chib variable tau mode */
+    if (opt_theta_variable_tau && opt_theta_nintervals > 0 && stree->model_count)
+    {
+      long K = opt_theta_nintervals;
+      long total_samples = opt_samples;
+      double * bounds = opt_theta_intv_bounds;
+
+      fprintf(stdout, "\nModel Posterior Probabilities (tau interval):\n");
+      fprintf(fp_out, "\nModel Posterior Probabilities (tau interval):\n");
+      for (k = 0; k < K; k++)
+      {
+        double prob = (double)stree->model_count[k] / total_samples;
+        fprintf(stdout, "  Model %ld [%.6f, %.6f): P = %.4f (samples = %ld)\n",
+                k+1, bounds[k], bounds[k+1], prob, stree->model_count[k]);
+        fprintf(fp_out, "  Model %ld [%.6f, %.6f): P = %.4f (samples = %ld)\n",
+                k+1, bounds[k], bounds[k+1], prob, stree->model_count[k]);
+      }
+      fprintf(stdout, "\n");
+      fprintf(fp_out, "\n");
+    }
+
     if (!opt_msci && stree->tip_count > 1)
       stree_export_pdf(stree);
     for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
@@ -6612,6 +6813,16 @@ void cmd_run()
 
   if (opt_est_theta)
     free(mean_theta);
+
+  /* free interval-specific theta means */
+  if (mean_theta_intv)
+  {
+    for (k = 0; k < mean_theta_intv_count; ++k)
+      free(mean_theta_intv[k]);
+    free(mean_theta_intv);
+    free(mean_theta_intv_idx);
+  }
+
   free(mean_tau);
   if (opt_msci)
     free(mean_phi);

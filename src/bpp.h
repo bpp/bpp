@@ -597,6 +597,21 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
+  /* interval-specific theta (variable population size) */
+  int theta_nintervals;           /* K = number of intervals (0 = disabled) */
+  double * theta_intv_bounds;     /* K+1 time boundaries */
+  double * theta_intv;            /* K interval-specific theta values */
+  double * theta_intv_old;        /* backup for rollback */
+  double ** C2ji_intv;            /* [locus][interval] waiting times */
+  double ** C2ji_intv_old;        /* backup for rollback */
+  int ** coal_count_intv;         /* [locus][interval] coalescent events */
+  double ** logpr_intv;           /* [locus][interval] log-prob contributions */
+
+  /* variable tau with theta intervals (Carlin-Chib model switching) */
+  int * theta_intv_real;          /* [K] boolean: 1=real param, 0=pseudo param */
+  int theta_intv_first_real;      /* first real interval index */
+  int theta_intv_last_real;       /* last real interval index */
+
   /* trait related things (per partition): branch length, rate, trait values;
      for discrete traits, it contains transition & conditional probabilities;
      for continuous traits, it contains phylogenetic indepandent contrasts */
@@ -678,6 +693,10 @@ typedef struct stree_s
   double * trait_v_pop;         /* within population variance */
   double * trait_ldetRs;  /* log determinant of shrinkage estimate of
                              correlation matrix, i.e. log(det(R*)) */
+
+  /* variable tau with theta intervals (Carlin-Chib model switching) */
+  long * model_count;             /* [K] samples per model */
+  int current_model_k;            /* current model indicator */
 } stree_t;
 
 typedef struct mutation_s
@@ -781,6 +800,8 @@ typedef struct node_s
   char * attr;
   double length;
   double theta;
+  int theta_nintervals;       /* for parsing theta vectors */
+  double * theta_intv;        /* interval-specific theta values */
   struct node_s ** children;
   struct node_s * parent;
   int children_count;
@@ -1246,6 +1267,10 @@ extern long opt_tau_dist;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_prior;
 extern long opt_theta_prop;
+extern long opt_theta_nintervals;        /* number of theta intervals (0=off) */
+extern double * opt_theta_intv_bounds;   /* interval boundaries (user-specified) */
+extern long opt_print_theta_intv;        /* print running means for theta intervals */
+extern long opt_theta_variable_tau;      /* variable tau with theta intervals (Carlin-Chib) */
 extern long opt_threads;
 extern long opt_threads_start;
 extern long opt_threads_step;

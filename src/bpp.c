@@ -143,6 +143,10 @@ long opt_tau_dist;
 long opt_theta_gibbs_showall_eps;
 long opt_theta_prior;
 long opt_theta_prop;
+long opt_theta_nintervals = 0;
+double * opt_theta_intv_bounds = NULL;
+long opt_print_theta_intv = 0;
+long opt_theta_variable_tau = 0;
 long opt_threads;
 long opt_threads_start;
 long opt_threads_step;
@@ -343,6 +347,7 @@ static struct option long_options[] =
   {"keep-labels",          no_argument,       0, 0 },  /* 52 */
   {"wrate_mode",           required_argument, 0, 0 },  /* 53 */
   {"wrate-showeps",        no_argument,       0, 0 },  /* 54 */
+  {"pop_int",              no_argument,       0, 0 },  /* 55 */
   { 0, 0, 0, 0 }
 };
 
@@ -954,6 +959,10 @@ void args_init(int argc, char ** argv)
         opt_mrate_gibbs_showall_eps = 1;
         break;
 
+      case 55:
+        opt_print_theta_intv = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1102,6 +1111,7 @@ void cmd_help()
           "  --wrate-showeps          show individual step lengths/pjumps for each W\n"
           "  --extend INTEGER         extend resumed analysis by number of MCMC samples\n"
           "  --keep-labels            keep original node labels when summarizing results\n"
+          "  --pop_int                print running means for interval-specific thetas\n"
           "\n"
          );
 

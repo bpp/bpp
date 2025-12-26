@@ -426,6 +426,43 @@ void stree_destroy(stree_t * tree,
     if (node->C2ji)
       free(node->C2ji);
 
+    /* free interval-specific theta arrays */
+    if (node->theta_nintervals > 0)
+    {
+      if (node->theta_intv_bounds)
+        free(node->theta_intv_bounds);
+      if (node->theta_intv)
+        free(node->theta_intv);
+      if (node->theta_intv_old)
+        free(node->theta_intv_old);
+      if (node->theta_intv_real)
+        free(node->theta_intv_real);
+      if (node->C2ji_intv)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+          free(node->C2ji_intv[j]);
+        free(node->C2ji_intv);
+      }
+      if (node->C2ji_intv_old)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+          free(node->C2ji_intv_old[j]);
+        free(node->C2ji_intv_old);
+      }
+      if (node->coal_count_intv)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+          free(node->coal_count_intv[j]);
+        free(node->coal_count_intv);
+      }
+      if (node->logpr_intv)
+      {
+        for (j = 0; j < tree->locus_count; ++j)
+          free(node->logpr_intv[j]);
+        free(node->logpr_intv);
+      }
+    }
+
     free(node);
   }
 
@@ -494,6 +531,10 @@ void stree_destroy(stree_t * tree,
     free(tree->u_constraint);
   if (tree->l_constraint)
     free(tree->l_constraint);
+
+  /* free model counting array for Carlin-Chib variable tau mode */
+  if (tree->model_count)
+    free(tree->model_count);
 
   /* TODO: For Chi to fix
 
@@ -1868,13 +1909,68 @@ static ntree_t * syntax_parse(list_t * token_list)
             break;
 
           case TOKEN_HASH:
-            if (!get_double(token->data,&value))
-              fatal("ERROR: Expected floating point number (theta) but got: %s",
-                    token->data);
-            if (value < 0)
-              fatal("ERROR: Found negative theta (%f)", value);
+            /* check for vector syntax: {val1|val2|...} using curly braces and
+               pipe separators (parentheses and commas would conflict with tree
+               structure since they are not valid string characters) */
+            if (token->data[0] == '{')
+            {
+              /* parse theta vector */
+              char * p = token->data + 1;  /* skip opening brace */
+              int k = 0;
+              int n;
+              double * theta_vals = (double *)xmalloc(opt_theta_nintervals * sizeof(double));
 
-            node->theta = value;
+              if (opt_theta_nintervals <= 0)
+                fatal("ERROR: theta_intervals must be specified before using theta vectors");
+
+              for (k = 0; k < opt_theta_nintervals; k++)
+              {
+                /* skip whitespace */
+                while (*p == ' ' || *p == '\t') p++;
+
+                /* parse the double value using sscanf */
+                if (sscanf(p, "%lf%n", &value, &n) != 1)
+                  fatal("ERROR: Expected %ld theta values in vector but got %d",
+                        opt_theta_nintervals, k);
+                if (value < 0)
+                  fatal("ERROR: Found negative theta in vector (%f)", value);
+                theta_vals[k] = value;
+                p += n;
+
+                /* skip whitespace */
+                while (*p == ' ' || *p == '\t') p++;
+
+                /* expect pipe separator between values, closing brace after last */
+                if (k < opt_theta_nintervals - 1)
+                {
+                  if (*p != '|')
+                    fatal("ERROR: Expected '|' separator in theta vector at position %d "
+                          "(got '%c', remaining: '%s')", k, *p, p);
+                  p++;
+                }
+              }
+              /* check for closing brace */
+              while (*p == ' ' || *p == '\t') p++;
+              if (*p != '}')
+                fatal("ERROR: Expected closing brace '}' in theta vector");
+
+              node->theta_nintervals = opt_theta_nintervals;
+              node->theta_intv = theta_vals;
+              node->theta = theta_vals[0];  /* use first interval for compatibility */
+            }
+            else
+            {
+              /* standard single theta value */
+              if (!get_double(token->data,&value))
+                fatal("ERROR: Expected floating point number (theta) but got: %s",
+                      token->data);
+              if (value < 0)
+                fatal("ERROR: Found negative theta (%f)", value);
+
+              node->theta = value;
+              node->theta_nintervals = 0;
+              node->theta_intv = NULL;
+            }
             break;
 
           default:
@@ -1913,6 +2009,9 @@ static void node_destroy(node_t * root, void (*cb_data_destroy)(void *))
 
   if (root->attr)
     free(root->attr);
+
+  if (root->theta_intv)
+    free(root->theta_intv);
 
   free(root->label);
   free(root);
@@ -2020,6 +2119,21 @@ static snode_t * snode_from_node_recursive(node_t * node, snode_t * parent)
 
   if (node->attr)
     snode->attrib = xstrdup(node->attr);
+
+  /* copy theta vector for simulation with variable population size */
+  if (node->theta_nintervals > 0 && node->theta_intv)
+  {
+    snode->theta_nintervals = node->theta_nintervals;
+    snode->theta_intv = (double *)xmalloc(node->theta_nintervals * sizeof(double));
+    memcpy(snode->theta_intv, node->theta_intv, node->theta_nintervals * sizeof(double));
+
+    /* copy interval boundaries from global opt_theta_intv_bounds */
+    if (opt_theta_intv_bounds)
+    {
+      snode->theta_intv_bounds = (double *)xmalloc((node->theta_nintervals + 1) * sizeof(double));
+      memcpy(snode->theta_intv_bounds, opt_theta_intv_bounds, (node->theta_nintervals + 1) * sizeof(double));
+    }
+  }
 
   return snode;
 }

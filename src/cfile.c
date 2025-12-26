@@ -1576,6 +1576,71 @@ l_unwind:
   return ret;
 }
 
+static long parse_theta_intervals(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long count;
+  long nintervals;
+  double * bounds = NULL;
+  long i;
+  double prev_bound;
+
+  /* first, read the number of intervals */
+  count = get_long(p, &nintervals);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (nintervals < 2 || nintervals > 100)
+  {
+    fprintf(stderr, "theta_intervals: number of intervals must be between 2 and 100\n");
+    goto l_unwind;
+  }
+
+  opt_theta_nintervals = nintervals;
+
+  /* now read the interval boundaries (nintervals + 1 values) */
+  bounds = (double *)xmalloc((nintervals + 1) * sizeof(double));
+
+  for (i = 0; i <= nintervals; i++)
+  {
+    count = get_double(p, &bounds[i]);
+    if (!count)
+    {
+      fprintf(stderr, "theta_intervals: expected %ld boundary values\n", nintervals + 1);
+      free(bounds);
+      goto l_unwind;
+    }
+    p += count;
+
+    /* check monotonicity */
+    if (i > 0 && bounds[i] <= prev_bound)
+    {
+      fprintf(stderr, "theta_intervals: boundaries must be strictly increasing\n");
+      free(bounds);
+      goto l_unwind;
+    }
+    prev_bound = bounds[i];
+  }
+
+  /* check that first boundary is 0 or close to it */
+  if (bounds[0] < 0)
+  {
+    fprintf(stderr, "theta_intervals: first boundary must be >= 0\n");
+    free(bounds);
+    goto l_unwind;
+  }
+
+  opt_theta_intv_bounds = bounds;
+  ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_threads(const char * line)
 {
   long ret = 0;
@@ -3415,6 +3480,16 @@ void load_cfile()
                 "(line %ld)", line_count);
         valid = 1;
       }
+      if (!strncasecmp(token, "theta_intervals", 15))
+      {
+        if (!parse_theta_intervals(value))
+          fatal("Option 'theta_intervals' (line %ld) expects the syntax:\n"
+                "  theta_intervals = K t0 t1 t2 ... tK\n"
+                "where K is the number of intervals (2-100) and t0 < t1 < ... < tK\n"
+                "are the K+1 time boundaries (t0 should be 0 for present)",
+                line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 17)
     {
@@ -3428,6 +3503,17 @@ void load_cfile()
                 "(line %ld)",
                 BPP_SPECIES_PRIOR_MIN, BPP_SPECIES_PRIOR_MAX, line_count);
 
+        valid = 1;
+      }
+    }
+    else if (token_len == 18)
+    {
+      if (!strncasecmp(token,"theta_variable_tau",18))
+      {
+        if (!parse_long(value,&opt_theta_variable_tau) ||
+            (opt_theta_variable_tau < 0 || opt_theta_variable_tau > 1))
+          fatal("Option 'theta_variable_tau' expects 0 or 1 (line %ld)",
+                line_count);
         valid = 1;
       }
     }
