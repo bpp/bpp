@@ -3387,7 +3387,7 @@ static FILE * init(stree_t ** ptr_stree,
     int deleted = msa_remove_missing_sequences(msa_list[i]);
     if (deleted == -1)
       fatal("[ERROR]: Locus %ld contains missing sequences only.\n"
-        "Please remove the locus and restart the analysis.\n");
+        "Please remove the locus and restart the analysis.\n", i);
 
     if (deleted)
     {
