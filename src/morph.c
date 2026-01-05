@@ -6,7 +6,7 @@
 
 #define LABEL_LEN 99
 
-// #define DEBUG_Chi 1
+#define DEBUG_Chi 1
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
@@ -16,8 +16,7 @@ static int get_nb_char(FILE *fp)
   return c;
 }
 
-static int parse_header(FILE * fp, int * nrow, int * ncol, int * type,
-                        double * v_pop, double * ldetRs)
+static int parse_header(FILE * fp, int * nrow, int * ncol, int * type)
 {
   int t;
   
@@ -39,12 +38,7 @@ static int parse_header(FILE * fp, int * nrow, int * ncol, int * type,
   {
     *type = BPP_DATA_CONT;
     
-    /* also read in here v_pop and ldetRs, which have been obtained when
-       preprocessing the trait data */
-    if (fscanf(fp, "%lf %lf", v_pop, ldetRs) != 2) {
-      fprintf(stderr, "Expecting population variance and log(det(R*))\n");
-      return 0;
-    }
+    /* TODO: also read in correlation matrix */
   }
   else if (t == 'D' || t == 'd')
   {
@@ -94,20 +88,42 @@ static int parse_value_c(FILE * fp, double * trait, int len)
     {
       return 0;
     }
-    else if (c == '-') // negative value
+    else if (c == '-')
     {
-      if(fscanf(fp, "%lf", &trait[j]) != 1)
+      c = fgetc(fp);
+      if (isspace(c) || c == EOF)
+        trait[j] = NAN;    // inapplicable value
+      else
+      {
+        ungetc(c, fp);
+        if(fscanf(fp, "%lf", &trait[j]) != 1)
+          return 0;
+        trait[j] = -trait[j];  // negative value
+      }
+    }
+    else if (c == '?')
+    {
+      trait[j] = INFINITY;      // missing value
+    }
+    else if (c == 'N' || c == 'n')
+    {
+      c = fgetc(fp);
+      if(c != 'A' && c != 'a')
         return 0;
-      trait[j] = -trait[j];
+      else
+      {
+        c = fgetc(fp);
+        if (isspace(c) || c == EOF)
+          trait[j] = INFINITY;  // missing value
+        else if (c == 'N' || c == 'n')
+          trait[j] = NAN;  // inapplicable value
+        else
+          return 0;
+      }
     }
-    else if (c == '?') // missing value
+    else
     {
-      // TODO: deal with missing data
-      trait[j] = sqrt(-1); // nan
-    }
-    else // positive value
-    {
-      ungetc(c, fp);
+      ungetc(c, fp);           // positive value
       if(fscanf(fp, "%lf", &trait[j]) != 1)
         return 0;
     }
@@ -192,8 +208,7 @@ static morph_t * parse_trait_part(FILE * fp)
   parse_comment(fp);
   
   /* read header */
-  if (!parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype),
-                        &(morph->v_pop), &(morph->ldetRs)))
+  if (!parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype)))
   {
     fprintf(stderr, "Error in header\n");
     return NULL;
@@ -247,11 +262,7 @@ static morph_t * parse_trait_part(FILE * fp)
   }
   
 #ifdef DEBUG_Chi
-  printf("\n%d %d  %d\t", morph->ntaxa, morph->length, morph->dtype);
-  if (morph->dtype == BPP_DATA_CONT)
-    printf("%lf %lf\n", morph->v_pop, morph->ldetRs);
-  else
-    printf("\n");
+  printf("\n%d %d  %d\n", morph->ntaxa, morph->length, morph->dtype);
   for (i = 0; i < morph->ntaxa; ++i) {
     printf("%s\t", morph->label[i]);
     if (morph->dtype == BPP_DATA_CONT)
@@ -442,7 +453,7 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
     /* the trait matrix has been standardized so that all characters have the
        same variance and the population noise has variance of v_pop (1.0).
        Alvarez-Carretero et al. 2019. p.970. */
-    v_pop = stree->trait_v_pop[idx];
+    v_pop = 1.0;  //TODO: deal with stree->trait_v_pop[idx];
     assert(v_k > 0 || v_pop > 0);
     snode->trait[idx]->brlen = v_k + v_pop;
   }
@@ -495,8 +506,8 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
   /* calculate the transition probabilities */
   trait_trprob_mk(snode->trait[idx]->tranprob, v, max_state);
 
-  // TODO: this can be optimized by grouping characters by patterns
   /* pruning algorithm */
+  /* TODO: this can be optimized by grouping characters by patterns */
   if (snode->left && snode->right)  /* internal node */
   {
     trait_update_cpl_part(idx, snode->left, stree);
@@ -891,7 +902,9 @@ static double loglikelihood_trait_c_bm(int idx, stree_t * stree)
   double v_k1, v_k2, zz, ldetRs, logl;
   snode_t * snode;
 
-  ldetRs = stree->trait_ldetRs[idx];
+  /* log determinant of shrinkage estimate of the correlation matrix,
+      i.e. log(det(R*)) */
+  ldetRs = 0.0;  //TODO: stree->trait_ldetRs[idx];
   p = stree->trait_dim[idx];
 
   logl = 0.0;
