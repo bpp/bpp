@@ -1639,16 +1639,19 @@ static int propose_phi_gibbs(stree_t * stree,
   phinew = pnode->hphi = legacy_rndbeta(thread_index,a1,b1);
   pnode->hybrid->hphi = 1 - pnode->hphi;
 
-  if (snode == pnode)
-  {
-    aratio = lnphiratio = log(phinew / phiold);
-    bratio = lnphiratio1 = log((1-phinew) / (1-phiold));
+  /**** ziheng-2026.1.3 *
+    aratio and bratio may be inf when phi is 1, as may occur when there is no gene flow
+    in the data and opt_phi_alpha < 1 or opt_phi_betaa < 1.
+  */
+  aratio = log(phinew / phiold);
+  bratio = log((1 - phinew) / (1 - phiold));
+  if (isinf(bratio)) {
+     /* printf("\nphi old new: %12.10g %12.10g in propose_phi_gibbs().\n", phiold, phinew); */
+     if (phiold != 1 && phinew != 1) fatal("i expect phiold | phinew to be 1 here.");
+     bratio = (phinew == 1 ? -1e300 : 1e300);
   }
-  else
-  {
-    aratio = lnphiratio1 = log(phinew / phiold);
-    bratio = lnphiratio  = log((1-phinew) / (1-phiold));
-  }
+  if (snode == pnode) { lnphiratio = aratio, lnphiratio1 = bratio; }
+  else                { lnphiratio1 = aratio, lnphiratio = bratio; }
 
   /* update logpr */
   if (opt_est_theta)
@@ -1667,8 +1670,7 @@ static int propose_phi_gibbs(stree_t * stree,
 
       /* update log-density contributions for the two populations */
       snode->logpr_contrib[i] += sequp_count*lnphiratio;
-      snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] *
-                                         lnphiratio1;
+      snode->hybrid->logpr_contrib[i] += snode->hybrid->seqin_count[i] * lnphiratio1;
 
       /* add to the gene tree log-density the new phi contributions */
       gtree[i]->logpr += snode->logpr_contrib[i] +
@@ -1745,8 +1747,7 @@ static int propose_phi_gibbs(stree_t * stree,
       snode->hybrid->hphi_sum -= snode->hybrid->notheta_phi_contrib[i];
 
       snode->notheta_phi_contrib[i] += sequp_count*lnphiratio;
-      snode->hybrid->notheta_phi_contrib[i] += snode->hybrid->seqin_count[i] *
-                                              lnphiratio1;
+      snode->hybrid->notheta_phi_contrib[i] += snode->hybrid->seqin_count[i] * lnphiratio1;
 
       snode->hphi_sum += snode->notheta_phi_contrib[i];
       snode->hybrid->hphi_sum += snode->hybrid->notheta_phi_contrib[i];
@@ -1855,16 +1856,19 @@ static int propose_phi_slide(stree_t * stree,
 
   /* new correct code after the introduciton of has_phi flag
      determine the right ratios for each node */
-  if (snode == pnode)
-  {
-    aratio = lnphiratio = log(phinew / phiold);
-    bratio = lnphiratio1 = log((1-phinew) / (1-phiold));
+  /**** ziheng-2026.1.3 *
+    aratio and bratio may be inf when phinew is 0 or 1, as may occur when
+    there is no gene flow in the data and opt_phi_alpha < 1 or opt_phi_betaa < 1.
+  */
+  aratio = log(phinew / phiold);
+  bratio = log((1 - phinew) / (1 - phiold));
+  if (isinf(bratio)) {
+     /* printf("\nphi old new: %12.10g %12.10g in propose_phi_gibbs().\n", phiold, phinew); */
+     if (phiold != 1 && phinew != 1) fatal("i expect phiold | phinew to be 1 here.");
+     bratio = (phinew == 1 ? -1e300 : 1e300);
   }
-  else
-  {
-    aratio = lnphiratio1 = log(phinew / phiold);
-    bratio = lnphiratio  = log((1-phinew) / (1-phiold));
-  }
+  if (snode == pnode) { lnphiratio = aratio, lnphiratio1 = bratio; }
+  else                { lnphiratio1 = aratio, lnphiratio = bratio; }
 
   if (opt_est_theta)
   {
@@ -7294,7 +7298,7 @@ static long propose_tau_mig(locus_t ** loci,
         bmodel = !(p < b || a > q);
 
         /* flip = -1 if no flip, 1: migration appearing or 0: disappearing */
-        long flip = (amodel == bmodel) ? -1 : bmodel;
+        long flip = (amodel == bmodel) ? -1 : (long)bmodel;
 
         if (flip == 0)
         {
@@ -10258,7 +10262,7 @@ long prop_branch_rates_simple(gtree_t ** gtree,
     }
   }
   free(pcount_list);
-  return ((double)accepted/proposal_count);
+  return ((long)(accepted / (double)proposal_count));
 }
 
 static long prop_branch_rates(gtree_t * gtree,
@@ -11982,8 +11986,7 @@ void prop_migrates(stree_t * stree,
     {
       /* sliding window */
       mt_slide = 1;
-      accepted = (spec->am) ?
-                   migrate_mbar_slide(spec) : migrate_slide(stree,gtree,spec);
+      accepted = (long)(spec->am ? migrate_mbar_slide(spec) : migrate_slide(stree,gtree,spec));
 
       if (opt_finetune_mrate_mode == 2)
       {
@@ -12002,7 +12005,7 @@ void prop_migrates(stree_t * stree,
       /* gibbs sampler */
       mt_gibbs = 1;
       assert(movetype == BPP_MRATE_GIBBS);
-      accepted = migrate_gibbs(stree,gtree,spec);
+      accepted = (long)migrate_gibbs(stree,gtree,spec);
       if (opt_finetune_mrate_mode == 2)
       {
         ft_round_gibbs[spec->index]++;
