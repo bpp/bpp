@@ -1208,6 +1208,9 @@ static void load_chk_section_1(FILE * fp,
     stree->nodes[i]->node_index = i;
     stree->nodes[i]->data = NULL;
     stree->nodes[i]->hybrid = NULL;
+
+    /* TODO: For Chi to fix */
+    stree->nodes[i]->trait = NULL;
   }
 
   /* allocate coalescent events */

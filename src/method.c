@@ -2782,7 +2782,7 @@ static void create_mig_bitmatrix(stree_t * stree)
     }
 
     /* 2024-07-31 -- Decided that setting W to 1 is best */
-    spec->M = 1;
+    spec->M = 50;
     if(opt_usedata_fix_gtree)
       spec->M = spec->alpha / spec->beta;
 
@@ -3888,6 +3888,24 @@ static FILE * init(stree_t ** ptr_stree,
   stree_init(stree,msa_list,map_list,msa_count, &tau_ctl, fp_out);
 
   stree_show_pptable(stree, BPP_FALSE);
+
+  /* check ancestor-descendant constraints */
+  if (opt_migration)
+  {
+    for (i = 0; i < opt_migration_count; ++i)
+    {
+      migspec_t * spec = opt_mig_specs+i;
+      if (stree->pptable[spec->si][spec->ti] ||
+          stree->pptable[spec->ti][spec->si])
+        fatal("[ERROR] "
+              "Migration specified between ancestor-descendant species: "
+              "%s -> %s",
+              stree->pptable[spec->si][spec->ti] ?
+                stree->nodes[spec->ti]->label : stree->nodes[spec->si]->label,
+              stree->pptable[spec->si][spec->ti] ?
+                stree->nodes[spec->si]->label : stree->nodes[spec->ti]->label);
+    }
+  }
 
   if (opt_method == METHOD_11)
   {

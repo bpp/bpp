@@ -937,48 +937,93 @@ static void update_col_sizes(int * label_size,
   int digits;
 
   /* mean */
-  digits = (int)floor(log10(xfloor1(mean))+1);
-  digits += prec+1;
+  if (mean == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(mean))+1);
+    digits += prec+1;
+  }
   label_size[0] = MAX(label_size[0],digits);
 
   /* standard deviation */
-  digits = (int)floor(log10(xfloor1(stdev))+1);
-  digits += prec+1;
+  if (stdev == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(stdev))+1);
+    digits += prec+1;
+  }
   label_size[1] = MAX(label_size[1],digits);
 
   /* 2.5% */
-  digits = (int)floor(log10(xfloor1(et025))+1);
-  digits += prec+1;
+  if (et025 == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(et025))+1);
+    digits += prec+1;
+  }
   label_size[2] = MAX(label_size[2],digits);
 
   /* 97.5% */
-  digits = (int)floor(log10(xfloor1(et975))+1);
-  digits += prec+1;
+  if (et975 == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(et975))+1);
+    digits += prec+1;
+  }
   label_size[3] = MAX(label_size[3],digits);
 
   /* 2.5% HPD */
-  digits = (int)floor(log10(xfloor1(hpd025))+1);
-  digits += prec+1;
+  if (hpd025 == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(hpd025))+1);
+    digits += prec+1;
+  }
   label_size[4] = MAX(label_size[4],digits);
 
   /* 97.5% HPD */
-  digits = (int)floor(log10(xfloor1(hpd975))+1);
-  digits += prec+1;
+  if (hpd975 == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(hpd975))+1);
+    digits += prec+1;
+  }
   label_size[5] = MAX(label_size[5],digits);
 
   /* Effu */
-  digits = (int)floor(log10(xfloor1(effu))+1);
-  digits += prec+1;
+  if (effu == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(effu))+1);
+    digits += prec+1;
+  }
   label_size[6] = MAX(label_size[6],digits);
 
   /* Effy */
-  digits = (int)floor(log10(xfloor1(effy))+1);
-  digits += prec+1;
+  if (effy == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(effy))+1);
+    digits += prec+1;
+  }
   label_size[7] = MAX(label_size[7],digits);
 
   /* c */
-  digits = (int)floor(log10(xfloor1(c))+1);
-  digits += prec+1;
+  if (c == -1)
+    digits = 1;
+  else
+  {
+    digits = (int)floor(log10(xfloor1(c))+1);
+    digits += prec+1;
+  }
   label_size[8] = MAX(label_size[8],digits);
 
   /* get column name */
@@ -1010,7 +1055,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* mean */
-  xasprintf(&s, "%.*f", prec, mean);
+  if (mean == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, mean);
   fprintf(stdout, "%*s", label_size[0], s);
   fprintf(fp_out, "%*s", label_size[0], s);
   free(s);
@@ -1019,7 +1067,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* S.D */
-  xasprintf(&s, "%.*f", prec, stdev);
+  if (stdev == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, stdev);
   fprintf(stdout, "%*s", label_size[1], s);
   fprintf(fp_out, "%*s", label_size[1], s);
   free(s);
@@ -1028,7 +1079,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* 2.5% */
-  xasprintf(&s, "%.*f", prec, et025);
+  if (et025 == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, et025);
   fprintf(stdout, "%*s", label_size[2], s);
   fprintf(fp_out, "%*s", label_size[2], s);
   free(s);
@@ -1037,7 +1091,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* 97.5% */
-  xasprintf(&s, "%.*f", prec, et975);
+  if (et975 == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, et975);
   fprintf(stdout, "%*s", label_size[3], s);
   fprintf(fp_out, "%*s", label_size[3], s);
   free(s);
@@ -1046,7 +1103,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* 2.5% HPD */
-  xasprintf(&s, "%.*f", prec, hpd025);
+  if (hpd025 == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, hpd025);
   fprintf(stdout, "%*s", label_size[4], s);
   fprintf(fp_out, "%*s", label_size[4], s);
   free(s);
@@ -1055,7 +1115,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* 97.5% HPD */
-  xasprintf(&s, "%.*f", prec, hpd975);
+  if (hpd975 == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, hpd975);
   fprintf(stdout, "%*s", label_size[5], s);
   fprintf(fp_out, "%*s", label_size[5], s);
   free(s);
@@ -1064,7 +1127,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* Effu */
-  xasprintf(&s, "%.*f", prec, effu);
+  if (effu == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, effu);
   fprintf(stdout, "%*s", label_size[6], s);
   fprintf(fp_out, "%*s", label_size[6], s);
   free(s);
@@ -1073,7 +1139,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* Effy */
-  xasprintf(&s, "%.*f", prec, effy);
+  if (effy == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, effy);
   fprintf(stdout, "%*s", label_size[7], s);
   fprintf(fp_out, "%*s", label_size[7], s);
   free(s);
@@ -1082,7 +1151,10 @@ static void print_a1b1_summary_line(FILE * fp_out,
   fprintf(fp_out, "  ");
 
   /* c */
-  xasprintf(&s, "%.*f", prec, c);
+  if (c == -1)
+    xasprintf(&s, "%s", "-");
+  else
+    xasprintf(&s, "%.*f", prec, c);
   fprintf(stdout, "%*s", label_size[8], s);
   fprintf(fp_out, "%*s", label_size[8], s);
   free(s);
@@ -1616,8 +1688,15 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   char * header = xstrdup(line);
 
   long token_count;
+  long numeric_token_count;
   char ** tokens = header_explode(header,&token_count);
+  char ** numeric_tokens = (char **)xmalloc((size_t)token_count*sizeof(char *));
+  for (i = 0; i < token_count; ++i)
+    numeric_tokens[i] = xstrdup(tokens[i]);
   header_tokens_shorten(tokens,opt_keep_labels,token_count);
+  /* the following is required for finding theta indices associated with Ws */
+  header_tokens_shorten(numeric_tokens,0,token_count);
+  numeric_token_count = token_count;
 
   /* compute number of columns in the file */
   long col_count = 0;
@@ -1836,7 +1915,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
       if (strlen(tokens[i]) > 2 && tokens[i][0] == 'W' && tokens[i][1] == ':')
       {
         w_indices[w_count++] = i;
-        char * tgt_index = strchr(tokens[i],'>');
+        char * tgt_index = strchr(numeric_tokens[i],'>');
         assert(tgt_index);
         assert(tgt_index[1]);
 
@@ -1847,7 +1926,7 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
         xasprintf(&nodestr, "theta:%ld", ni+1);
         for (j = 0; j < col_count; ++j)
         {
-          if (!strcmp(tokens[j],nodestr))
+          if (!strcmp(numeric_tokens[j],nodestr))
           {
             theta_indices[theta_count++] = j;
             break;
@@ -2148,6 +2227,9 @@ l_unwind:
   for (i = 0; i < token_count; ++i)
     free(tokens[i]);
   free(tokens);
+  for (i = 0; i < numeric_token_count; ++i)
+    free(numeric_tokens[i]);
+  free(numeric_tokens);
   free(header);
 
   for (i = 0; i < col_count; ++i)

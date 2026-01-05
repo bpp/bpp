@@ -154,10 +154,24 @@ void conditional_to_marginal_M(double * ai1_full,
   }
   nsamples = k;
 
+  if (nsamples == 0)
+  {
+    *out_c = -1;
+    *out_mean = -1;
+    *out_sd = -1;
+    *out_et025 = -1;
+    *out_et975 = -1;
+    *out_hpd025 = -1;
+    *out_hpd975 = -1;
+    *out_effu = -1;
+    *out_effy = -1;
+
+    goto l_unwind;
+  }
+
 
   npoints = nbins * nbins;
   ui1 = (double*)xmalloc((3 * nsamples + 4 * nbins + 2 * npoints)*sizeof(double));
-  //if (ui1 == NULL) fatal("oom");
   ui2 = ui1 + nsamples;
   ui = ui2 + nsamples;
   y1 = ui + nsamples;
@@ -354,6 +368,7 @@ void conditional_to_marginal_M(double * ai1_full,
 
   free(ui1);
   free(pdfy);
+l_unwind:
   free(ai1);
   free(bi1);
   free(ai2);
@@ -413,6 +428,21 @@ void conditional_to_marginal(double * ai_full,
     ++k;
   }
   nsamples = k;
+
+  if (nsamples == 0)
+  {
+    *out_mean = -1;
+    *out_sd = -1;
+    *out_hpd025 = -1;
+    *out_hpd975 = -1;
+    *out_et025 = -1;
+    *out_et975 = -1;
+    *out_effu = -1;
+    *out_effy = -1;
+    *out_c = -1;
+
+    goto l_unwind;
+  }
 
   /* start calculations */
   ui = (double*)xmalloc((nsamples + 4 * nbins) * sizeof(double));
@@ -553,6 +583,8 @@ void conditional_to_marginal(double * ai_full,
   *out_c = c;
 
   free(ui);
+
+l_unwind:
   free(ai);
   free(bi);
 }

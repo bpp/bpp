@@ -2,7 +2,13 @@
 All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [4.8.6] - 2025-11-03
+## [4.8.7] - 2025-12-10
+## Fixed
+ - segfault when converting W to M in summary with --keep-labels option
+ - properly print a dash in summary for W and M parameters for which
+   all recorded values are nan (i.e. migration is not possible)
+
+## [4.8.6] - 2025-12-03
 ## Added
  - Option --wrate_mode and --wrate_showeps for different step lengths across
    migration rates
@@ -11,9 +17,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
    nodes. This was preventing the SPR move from finding nodes for regrafting in
    certain cases (when regrafted subtree A was a cherry and daughter of root)
  - Ziheng's code for calculating dl dealing with cancellation errors, 
+ - Merged morphological data code
 ## Changed
  - Option --mrate_move to --wrate-slide-prob
  - disabled PDF printing when species phylogeny consists of just one population
+ - disabled migration rate change during tau proposal
 ## Fixed
  - crash when summarizing the A1B1 file caused by missing theta columns (e.g.,
    when some thetas cannot be estimated because there is only one or no
@@ -25,6 +33,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
  - incorrect number of finetune parameters when parsing
  - incorrect laoding of data from checkpoint files causing a crash for the
    migration model
+ - theta label for W to M conversion when summarizing MCMC file and linked
+   theta models are used
+ - update logpr_contrib of all affected populations in rubberband move when
+   using linked theta models with MSC-M
 
 ## [4.8.5] - 2025-05-21
 ## Added

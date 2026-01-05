@@ -440,6 +440,9 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->constraint_lineno = snode->constraint_lineno;
   clone->theta_step_index = snode->theta_step_index;
 
+  /* TODO: For Chi to fix */
+  clone->trait = NULL;
+
   if (!clone->mark)
     clone->mark = (int *)xmalloc((size_t)opt_threads*sizeof(int));
   memcpy(clone->mark, snode->mark, (size_t)opt_threads*sizeof(int));
@@ -695,6 +698,18 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->nui_sum = stree->nui_sum;
 
   clone->lnprior_rates_simple = stree->lnprior_rates_simple;
+
+  /* TODO: For Chi to fix */
+  clone->trait_count = 0;
+  clone->trait_dim = NULL;
+  clone->trait_type = NULL;
+  clone->trait_logl = NULL;
+  clone->trait_old_logl = NULL;
+  clone->trait_logpr = NULL;
+  clone->trait_old_logpr = NULL;
+  clone->trait_nstate = NULL;
+  clone->trait_v_pop = NULL;
+  clone->trait_ldetRs = NULL;
 
   if (opt_migration)
   {
@@ -3134,6 +3149,19 @@ void stree_init(stree_t * stree,
   stree->migcount_sum = NULL;
   stree->Wsji = NULL;
   stree->old_Wsji = NULL;
+
+  /* init trait evolution parameters */
+  stree->trait_count = 0;
+  stree->trait_dim = NULL;
+  stree->trait_type = NULL;
+  stree->trait_logl = NULL;
+  stree->trait_old_logl = NULL;
+  stree->trait_logpr = NULL;
+  stree->trait_old_logpr = NULL;
+  stree->trait_nstate = NULL;
+  stree->trait_v_pop = NULL;
+  stree->trait_ldetRs = NULL;
+
   if (opt_migration)
   {
     /* reset the number of migration events associated with each population */
@@ -6734,6 +6762,9 @@ static long propose_tau_mig(locus_t ** loci,
   if (opt_mig_vrates_exist)
     mig_method = 0;
 
+  #if 1
+  mig_method = 0;
+  #endif
   /* compute minage and maxage bounds */
   if (snode->left)
     minage = MAX(snode->left->tau, snode->right->tau);

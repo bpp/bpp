@@ -156,9 +156,9 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 6
+#define VERSION_PATCH 7
 
-#define PVER_SHA1 "862bdd0db5adda6d41bf94fbb993ae71a060470c"
+#define PVER_SHA1 "a84db12a15c6d7350cc3f9510a6d790972400af1"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
