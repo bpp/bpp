@@ -675,6 +675,7 @@ typedef struct stree_s
   double * trait_logpr;        /* log prior of each partition */
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
+  int    * trait_missing;    /* partition has missing states? */
   double * trait_v_pop;         /* within population variance */
   double * trait_ldetRs;  /* log determinant of shrinkage estimate of
                              correlation matrix, i.e. log(det(R*)) */
@@ -1255,8 +1256,8 @@ extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
-extern double opt_brate_alpha;
-extern double opt_brate_beta;
+extern double opt_brate_m_alpha;
+extern double opt_brate_m_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
