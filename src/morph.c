@@ -6,7 +6,7 @@
 
 #define LABEL_LEN 99
 
-#define DEBUG_Chi 1
+// #define DEBUG_Morph_BM     1
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
@@ -423,15 +423,15 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_old_logpr);
 }
 
-static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
+static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
 {
   int j;
   double v_pop, v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
-    trait_update_pic_part(idx, snode->left, stree);
-    trait_update_pic_part(idx, snode->right, stree);
+    trait_update_ic(idx, snode->left, stree);
+    trait_update_ic(idx, snode->right, stree);
     
     if (snode->parent)
       v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
@@ -472,6 +472,12 @@ static void trait_update_pic_part(int idx, snode_t * snode, stree_t * stree)
 #endif
 }
 
+static void trait_update_lmr(int idx, snode_t * snode, stree_t * stree)
+{
+  
+
+}
+
 static void trait_trprob_mk(double ** p, double v, int max_state)
 {
   int k;
@@ -484,7 +490,7 @@ static void trait_trprob_mk(double ** p, double v, int max_state)
   }
 }
 
-static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
+static void trait_update_cp(int idx, snode_t * snode, stree_t * stree)
 {
   int h, j, k, a, x, y, z;
   int * nstate, nchar, max_state;
@@ -512,8 +518,8 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
   /* TODO: this can be optimized by grouping characters by patterns */
   if (snode->left && snode->right)  /* internal node */
   {
-    trait_update_cpl_part(idx, snode->left, stree);
-    trait_update_cpl_part(idx, snode->right, stree);
+    trait_update_cp(idx, snode->left, stree);
+    trait_update_cp(idx, snode->right, stree);
 
     for (h = 0; h < nchar; ++h)
     {
@@ -624,26 +630,30 @@ static void trait_update_cpl_part(int idx, snode_t * snode, stree_t * stree)
 #endif
 }
 
-void trait_update(stree_t * stree)
+static void trait_update_part(int idx, stree_t * stree)
 {
-  int n;
-  
-  /* TODO: this can be optimized. Instead of updating all nodes,
-     update the modified node and its ancestors all the way to the root. */
-  
 #ifdef DEBUG_Chi
   // stree->nodes[3]->tau = 0.13;
   // stree->nodes[4]->tau = 0.08;
 #endif
 
-  /* loop over the trait partitions */
+  if (stree->trait_type[idx] == BPP_DATA_DISC)
+    trait_update_cp(idx, stree->root, stree);
+  else if (stree->trait_type[idx] == BPP_DATA_CONT &&
+           stree->trait_missing[idx])
+    trait_update_lmr(idx, stree->root, stree);
+  else
+    trait_update_ic(idx, stree->root, stree);
+}
+
+void trait_update(stree_t * stree)
+{
+  int n;
+
+  /* TODO: this can be optimized. Instead of updating all nodes,
+     update the modified node and its ancestors all the way to the root. */
   for (n = 0; n < stree->trait_count; ++n)
-  {
-    if (stree->trait_type[n] == BPP_DATA_CONT)
-      trait_update_pic_part(n, stree->root, stree);
-    else
-      trait_update_cpl_part(n, stree->root, stree);
-  }
+    trait_update_part(n, stree);
 }
 
 static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
@@ -929,7 +939,7 @@ static double loglikelihood_trait_AC(int idx, stree_t * stree)
   
   stree->trait_logl[idx] = logl;
 
-#ifdef DEBUG_Morph_Like
+#ifdef DEBUG_Morph_BM
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
@@ -993,7 +1003,7 @@ static double loglikelihood_trait_Mkv(int idx, stree_t * stree)
 
   stree->trait_logl[idx] = logl;
 
-#ifdef DEBUG_Morph_Like
+#ifdef DEBUG_Morph_Mkv
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
@@ -1114,24 +1124,10 @@ static double prop_branch_rates_relax(stree_t * stree)
       lnacceptance += (a - 1) * log(new_rate / old_rate)
                              - b * (new_rate - old_rate);
       
-      if (stree->trait_type[n] == BPP_DATA_CONT)
-      {
-        /* update the contrasts as branch rate has been changed */
-        trait_update_pic_part(n, stree->root, stree);
-        
-        /* then calculate the log likelihood difference */
-        lnacceptance += loglikelihood_trait_part(n, stree)
-                         - stree->trait_old_logl[n];
-      }
-      else
-      {
-        /* update conditional probs as branch rate has been changed */
-        trait_update_cpl_part(n, stree->root, stree);
-        
-        /* then calculate the log likelihood difference */
-        lnacceptance += loglikelihood_trait_part(n, stree)
-                         - stree->trait_old_logl[n];
-      }
+      /* then calculate the log likelihood difference */
+      trait_update_part(n, stree);
+      lnacceptance += loglikelihood_trait_part(n, stree)
+                       - stree->trait_old_logl[n];
       
       if (lnacceptance >= -1e-10 ||
           legacy_rndu(thread_index) < exp(lnacceptance))
@@ -1193,24 +1189,10 @@ static double prop_branch_rates_strict(stree_t * stree)
       snode->trait[n]->brate = new_rate;
     }
       
-    if (stree->trait_type[n] == BPP_DATA_CONT)
-    {
-      /* update the contrasts as branch rate has been changed */
-      trait_update_pic_part(n, stree->root, stree);
-      
-      /* then calculate the log likelihood difference */
-      lnacceptance += loglikelihood_trait_part(n, stree)
-                       - stree->trait_old_logl[n];
-    }
-    else
-    {
-      /* update conditional probs as branch rate has been changed */
-      trait_update_cpl_part(n, stree->root, stree);
-      
-      /* then calculate the log likelihood difference */
-      lnacceptance += loglikelihood_trait_part(n, stree)
-                       - stree->trait_old_logl[n];
-    }
+    /* then calculate the log likelihood difference */
+    trait_update_part(n, stree);
+    lnacceptance += loglikelihood_trait_part(n, stree)
+                     - stree->trait_old_logl[n];
     
     if (lnacceptance >= -1e-10 ||
         legacy_rndu(thread_index) < exp(lnacceptance))
