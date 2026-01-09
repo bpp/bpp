@@ -1409,6 +1409,10 @@ static long parse_loadbalance(const char * line)
   ret = 1;
   if (!strcasecmp(lb, "zigzag"))
     opt_load_balance = BPP_LB_ZIGZAG;
+  else if (!strcasecmp(lb, "weighted"))
+    opt_load_balance = BPP_LB_WEIGHTED;
+  else if (!strcasecmp(lb, "dynamic"))
+    opt_load_balance = BPP_LB_DYNAMIC;
   else if (!strcasecmp(lb, "none"))
     opt_load_balance = BPP_LB_NONE;
   else

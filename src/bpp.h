@@ -299,6 +299,8 @@ extern const char * global_freqs_strings[28];
 
 #define BPP_LB_NONE                     0
 #define BPP_LB_ZIGZAG                   1
+#define BPP_LB_WEIGHTED                 2   /* weighted by sites^(2/3) and tips */
+#define BPP_LB_DYNAMIC                  3   /* dynamic load balancing with work queue */
 
 #define BPP_PI  3.1415926535897932384626433832795
 
@@ -311,6 +313,7 @@ extern const char * global_freqs_strings[28];
 #define THREAD_WORK_RATES               7
 #define THREAD_WORK_FREQS               8
 #define THREAD_WORK_BRATE               9
+#define THREAD_WORK_COUNT               10  /* total work types (0=none, 1-9=work) */
 
 #define BPP_MOVE_INDEX_MIN              0
 #define BPP_MOVE_GTAGE_INDEX            0
@@ -1068,7 +1071,7 @@ typedef struct thread_info_s
   pthread_t thread;
   pthread_mutex_t mutex;
   pthread_cond_t cond;
-  
+
   /* type of work (0 no work) */
   volatile int work;
 
@@ -1077,6 +1080,11 @@ typedef struct thread_info_s
   long locus_count;
 
   thread_data_t td;
+
+  /* timing instrumentation for load balancing analysis */
+  double elapsed_us;                          /* elapsed time for last work (microseconds) */
+  double total_time_us[THREAD_WORK_COUNT];    /* cumulative time per work type */
+  long   call_count[THREAD_WORK_COUNT];       /* number of calls per work type */
 
 } thread_info_t;
 
@@ -2998,6 +3006,8 @@ void threads_exit(void);
 void threads_pin_master(void);
 thread_info_t * threads_ti(void);
 void threads_set_ti(thread_info_t * tip);
+void threads_reset_timing(void);
+void threads_print_timing_summary(FILE * fp_out, int detailed);
 
 /* functions in treeparse.c */
 

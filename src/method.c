@@ -6277,6 +6277,10 @@ void cmd_run()
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
+  /* print thread load balancing statistics */
+  if (opt_threads > 1 && !opt_onlysummary)
+    threads_print_timing_summary(fp_out, 1);
+
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);
   if (opt_migration)
