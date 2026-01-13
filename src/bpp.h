@@ -493,7 +493,7 @@ typedef struct trait_s
   double brlen;      // transformed branch length (v_k')
   double * state_m;  // (ancestral) state values (m_k')
   double * contrast; // independent contrasts (x_k)
-  
+  int    * active;   // indicator for active coordinates
   /* for discrete traits */
   int    * state_d;  // discrete state values
   double **condprob; // conditional probabilities (L)

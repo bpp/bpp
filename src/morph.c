@@ -267,7 +267,7 @@ static morph_t * parse_trait_part(FILE * fp)
     printf("%s\t", morph->label[i]);
     if (morph->dtype == BPP_DATA_CONT)
       for (j = 0; j < morph->length; ++j)
-        printf("%+lf\t", morph->conti[i][j]);
+        printf("%+.3lf\t", morph->conti[i][j]);
     else
       for (j = 0; j < morph->length; ++j)
         printf("%4d ", morph->discr[i][j]);
@@ -385,6 +385,8 @@ void trait_destroy(stree_t * stree)
             free(trait->state_m);
           if (trait->contrast)
             free(trait->contrast);
+          if (trait->active)
+            free(trait->active);
           free(trait);
         }
       }
@@ -659,6 +661,7 @@ void trait_update(stree_t * stree)
 static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
 {
   int n, i, j, k, l, nchar, state, max_state;
+  double value;
   snode_t * snode;
   morph_t * morph;
   
@@ -691,12 +694,13 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
   }
   
-  /* check whether all discrete characters are variable */
   for (n = 0; n < stree->trait_count; ++n)
   {
+    nchar = stree->trait_dim[n];
+
     if (morph_list[n]->dtype == BPP_DATA_DISC)
     {
-      nchar = stree->trait_dim[n];
+      /* check whether all discrete characters are variable */
       for (j = 0; j < nchar; ++j)
       {
         k = l = max_state = 0;
@@ -704,6 +708,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         {
           state = stree->nodes[i]->trait[n]->state_d[j];
           if (state >= 1023) { // ? or -
+            stree->trait_missing[n] = 1;
             l++;
             if (k == i) k++;
           }
@@ -727,6 +732,30 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
           stree->trait_nstate[n][nchar] = k;
       }
     }
+    else // (morph_list[n]->dtype == BPP_DATA_CONT)
+    {
+      /* update the vector for the active coordinates */
+      for (i = 0; i < stree->tip_count; ++i)
+      {
+        for (j = 0; j < nchar; ++j)
+        {
+          value = stree->nodes[i]->trait[n]->state_m[j];
+          if (isnan(value))  // inapplicable value
+          {
+            stree->trait_missing[n] = 1;
+            stree->nodes[i]->trait[n]->active[j] = -1;
+          }
+          else if (isinf(value))  // missing value
+          {
+            stree->trait_missing[n] = 1;
+            stree->nodes[i]->trait[n]->active[j] = 0;
+          }
+          else {
+            stree->nodes[i]->trait[n]->active[j] = 1;
+          }
+        }
+      }
+    }
   }
   
 #ifdef DEBUG_Morph_Matrix
@@ -742,7 +771,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
           printf("%4d ", snode->trait[n]->state_d[j]);
       else
         for (j = 0; j < stree->trait_dim[n]; ++j)
-          printf("%+lf\t", snode->trait[n]->state_m[j]);
+          printf("%+.3lf\t", snode->trait[n]->state_m[j]);
       printf("\n");
     }
     if (stree->trait_type[n] == BPP_DATA_DISC)
@@ -752,7 +781,16 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         printf("%4d ", stree->trait_nstate[n][j]);
       printf(" states\n");
     }
-    else {
+    else
+    {
+      for (i = 0; i < stree->tip_count; ++i)
+      {
+        snode = stree->nodes[i];
+        printf("%s\t", snode->label);
+        for (j = 0; j < stree->trait_dim[n]; ++j)
+          printf("%4d ", snode->trait[n]->active[j]);
+        printf("\n");
+      }
       printf("\n");
     }
   }
@@ -798,6 +836,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
       {
         trait->state_m  = (double *)xcalloc(nchar, sizeof(double));
         trait->contrast = (double *)xcalloc(nchar, sizeof(double));
+        trait->active   = (int *)xcalloc(nchar, sizeof(int));
       }
       else
       {
