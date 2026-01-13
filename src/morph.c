@@ -6,7 +6,7 @@
 
 #define LABEL_LEN 99
 
-// #define DEBUG_Morph_BM     1
+#define DEBUG_Morph_BM     1
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
@@ -476,8 +476,24 @@ static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
 
 static void trait_update_lmr(int idx, snode_t * snode, stree_t * stree)
 {
+  int j;
+
+  /* calculate omega, Phi, V for this node */
+
+  /* calculate A, b, C, d, E, f */
+
+  /* calculate L, m, r */
+
+  if (snode->left && snode->right)  /* internal node */
+  {
+    trait_update_lmr(idx, snode->left, stree);
+    trait_update_lmr(idx, snode->right, stree);  
+  
+    /* sum over all daughters L, m, r */
+  }
   
 
+  
 }
 
 static void trait_trprob_mk(double ** p, double v, int max_state)
@@ -877,11 +893,6 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   for (n = 0; n < n_part; ++n) {
     stree->trait_dim[n] = morph_list[n]->length;
     stree->trait_type[n] = morph_list[n]->dtype;
-    if (morph_list[n]->dtype == BPP_DATA_CONT)
-    {
-      stree->trait_v_pop[n] = morph_list[n]->v_pop;
-      stree->trait_ldetRs[n] = morph_list[n]->ldetRs;
-    }
   }
   
   /* fill the trait values for the tip nodes */
@@ -996,6 +1007,11 @@ static double loglikelihood_trait_Mitov(int idx, stree_t * stree)
 
   
   stree->trait_logl[idx] = logl;
+
+#ifdef DEBUG_Morph_BM
+  printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
+         stree->trait_logl[idx], stree->trait_old_logl[idx]);
+#endif
 
   return logl;
 }

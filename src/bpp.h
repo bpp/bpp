@@ -807,15 +807,16 @@ typedef struct morph_s
 {
   int ntaxa;        // number of species (populations)
   int length;       // number of characters
+  int dtype;        // data type: continuous or discrete
 
   double ** conti;  // continuous trait matrix
   int    ** discr;  // discrete trait matrix
   char   ** label;  // species labels
 
+  /* TODO: correlation matrix, etc */
   double v_pop;     // population variance
   double ldetRs;    // log determinant of R*
 
-  int dtype;        // data type: continuous or discrete
   int model;
 } morph_t;
 
