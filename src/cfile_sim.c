@@ -1525,6 +1525,23 @@ void load_cfile_sim()
         }
         valid = 1;
       }
+      else if (!strncasecmp(token,"migrateparam",12))
+      {
+        char * param = NULL;
+        if (!get_string(value, &param))
+          fatal("Option 'migrateparam' expects 'M' or 'W' (line %ld)", line_count);
+
+        if (!strcasecmp(param, "M"))
+          opt_mig_wrate = 0;
+        else if (!strcasecmp(param, "W"))
+          opt_mig_wrate = 1;
+        else
+          fatal("Option 'migrateparam' expects 'M' or 'W', got '%s' (line %ld)",
+                param, line_count);
+
+        free(param);
+        valid = 1;
+      }
     }
     else if (token_len == 13)
     {

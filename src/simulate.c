@@ -1441,6 +1441,18 @@ static void set_migration_rates(stree_t * stree)
             stree->nodes[s]->label, stree->nodes[t]->label);
     }
 
+    /* If W parameterization, convert to M: M = theta_target * W / 4 */
+    if (opt_mig_wrate)
+    {
+      double theta_target = stree->nodes[t]->theta;
+      double W = spec->M;  /* Currently holds W value */
+      spec->M = theta_target * W / 4.0;
+
+      fprintf(stdout, "Migration %s -> %s: W=%.6f converted to M=%.6f "
+                      "(theta_target=%.6f)\n",
+              spec->source, spec->target, W, spec->M, theta_target);
+    }
+
     opt_migration_matrix[s][t] = i;
     opt_mig_bitmatrix[s][t] = 1;
 
@@ -1465,7 +1477,8 @@ static void set_migration_rates(stree_t * stree)
   }
 
   /* print migration matrix on screen */
-  fprintf(stdout, "\nMigration matrix:\n");
+  fprintf(stdout, "\nMigration matrix (M values%s):\n",
+          opt_mig_wrate ? ", converted from W" : "");
   for (i = 0; i < nodes_count; ++i)
   {
     for (j = 0; j < nodes_count; ++j)

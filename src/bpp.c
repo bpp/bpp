@@ -106,6 +106,7 @@ long opt_method;
 long opt_migration;
 long opt_migration_count;
 long opt_mig_vrates_exist;
+long opt_mig_wrate = 0;
 long opt_mix_theta_update;
 long opt_mix_w_update;
 long opt_model;

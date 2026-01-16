@@ -1208,6 +1208,7 @@ extern long opt_method;
 extern long opt_migration;
 extern long opt_migration_count;
 extern long opt_mig_vrates_exist;
+extern long opt_mig_wrate;
 extern long opt_mix_theta_update;
 extern long opt_mix_w_update;
 extern long opt_model;
