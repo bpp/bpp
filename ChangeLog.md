@@ -3,6 +3,11 @@ All notable changes to `bpp` will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [4.8.7] - 2025-12-10
+## Added
+ - Option `migrateparam` in simulation control file to specify migration rate
+   parameterization: `migrateparam = M` (default) for population migration rate,
+   or `migrateparam = W` for mutation-scaled migration rate. When W is used,
+   values are converted to M using M = theta_target * W / 4.
 ## Fixed
  - segfault when converting W to M in summary with --keep-labels option
  - properly print a dash in summary for W and M parameters for which
