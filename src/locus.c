@@ -140,6 +140,26 @@ static void dealloc_locus_data(locus_t * locus)
     free(locus->likelihood_vector);
   }
 
+  /* free site repeats structures */
+  if (locus->repeats)
+  {
+    unsigned int inner_count = locus->tips - 1;
+    for (i = 0; i < inner_count; i++)
+    {
+      free(locus->repeats[i].site_id);
+      free(locus->repeats[i].id_site);
+    }
+    free(locus->repeats);
+  }
+
+  /* free identical sequence groups */
+  if (locus->seqgroup_id)
+    free(locus->seqgroup_id);
+
+  /* free ARG structure if present */
+  if (locus->arg)
+    arg_destroy(locus->arg);
+
   free(locus);
 }
 
@@ -409,12 +429,17 @@ static int create_charmap(locus_t * locus, const unsigned int * usermap)
   //memcpy(map, partition->map, PLL_ASCII_SIZE * sizeof(unsigned int));
   memcpy(map, usermap, ASCII_SIZE * sizeof(unsigned int));
 
-  if (!(locus->charmap = (unsigned char *)xcalloc(ASCII_SIZE,
-                                                  sizeof(unsigned char))))
+  locus->charmap = (unsigned char *)xcalloc(ASCII_SIZE, sizeof(unsigned char));
+  if (!locus->charmap)
+    return BPP_FAILURE;
 
-  if (!(locus->tipmap = (unsigned int *)xcalloc(ASCII_SIZE,
-                                                sizeof(unsigned int))))
-
+  locus->tipmap = (unsigned int *)xcalloc(ASCII_SIZE, sizeof(unsigned int));
+  if (!locus->tipmap)
+  {
+    free(locus->charmap);
+    locus->charmap = NULL;
+    return BPP_FAILURE;
+  }
 
   /* create charmap (remapped table of ASCII characters to range 0,|states|)
      and tipmap which is a (1,|states|) -> state */
@@ -865,6 +890,27 @@ locus_t * locus_create(unsigned int dtype,
     locus->scale_buffer[i] = (unsigned int *)xcalloc(scaler_size,
                                                      sizeof(unsigned int));
   }
+
+  /* Allocate site repeats structures for internal nodes */
+  unsigned int inner_count = tips - 1;  /* binary tree */
+  locus->repeats = (site_repeats_t *)xcalloc(inner_count, sizeof(site_repeats_t));
+  for (i = 0; i < inner_count; i++)
+  {
+    locus->repeats[i].site_id = (unsigned int *)xmalloc(sites * sizeof(unsigned int));
+    locus->repeats[i].id_site = (unsigned int *)xmalloc(sites * sizeof(unsigned int));
+    locus->repeats[i].count = 0;
+    locus->repeats[i].valid = 0;
+    locus->repeats[i].left_tip = UINT_MAX;   /* invalid tip index */
+    locus->repeats[i].right_tip = UINT_MAX;  /* invalid tip index */
+  }
+
+  /* Initialize identical sequence groups to disabled */
+  locus->seqgroup_id = NULL;
+  locus->identical_seqgroups = 0;
+
+  /* Initialize recombination fields to disabled (set up later if needed) */
+  locus->has_recombination = 0;
+  locus->arg = NULL;
 
   return locus;
 }
@@ -2527,6 +2573,47 @@ void locus_update_all_partials(locus_t * locus, gtree_t * gtree)
   locus_update_all_partials_recursive(locus,gtree->root);
 }
 
+static void compute_repeats_tt(locus_t * locus,
+                               site_repeats_t * rep,
+                               unsigned int left_tip,
+                               unsigned int right_tip)
+{
+  unsigned int sites = locus->sites;
+  unsigned char * lchars = locus->tipchars[left_tip];
+  unsigned char * rchars = locus->tipchars[right_tip];
+
+  /* Hash table: key = (left_char << 8 | right_char), value = class_id */
+  unsigned int * hashtable = (unsigned int *)xcalloc(65536, sizeof(unsigned int));
+  unsigned int class_count = 0;
+
+  for (unsigned int s = 0; s < sites; s++)
+  {
+    unsigned int key = ((unsigned int)lchars[s] << 8) | rchars[s];
+
+    if (hashtable[key] == 0)  /* new class */
+    {
+      class_count++;
+      hashtable[key] = class_count;  /* 1-indexed */
+      rep->id_site[class_count - 1] = s;
+    }
+    rep->site_id[s] = hashtable[key] - 1;
+  }
+
+  rep->count = class_count;
+  rep->valid = 1;
+  rep->left_tip = left_tip;
+  rep->right_tip = right_tip;
+  free(hashtable);
+}
+
+void locus_invalidate_repeats(locus_t * locus)
+{
+  if (!locus->repeats) return;
+  unsigned int inner_count = locus->tips - 1;
+  for (unsigned int i = 0; i < inner_count; i++)
+    locus->repeats[i].valid = 0;
+}
+
 void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int count)
 {
   unsigned int i;
@@ -2555,18 +2642,108 @@ void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int c
     rscaler = (rnode->scaler_index == PLL_SCALE_BUFFER_NONE) ?
                 NULL : locus->scale_buffer[rnode->scaler_index];
 
-    pll_core_update_partial_ii(locus->states,
-                               locus->sites,
-                               locus->rate_cats,
-                               locus->clv[node->clv_index],
-                               scaler,
-                               locus->clv[lnode->clv_index],
-                               locus->clv[rnode->clv_index],
+    /* Determine if children are tips or inner nodes */
+    int left_is_tip = (lnode->left == NULL);
+    int right_is_tip = (rnode->left == NULL);
+
+    /* Check if PLL_ATTRIB_PATTERN_TIP is set (tipchars mode) */
+    int use_tipchars = (locus->attributes & PLL_ATTRIB_PATTERN_TIP) &&
+                       locus->tipchars;
+
+    if (left_is_tip && right_is_tip)
+    {
+      /* TT case: both children are tips */
+      if (use_tipchars)
+      {
+        /* Create lookup table for this TT case using the pmatrices */
+        pll_core_create_lookup(locus->states, locus->rate_cats,
+                               locus->ttlookup,
                                locus->pmatrix[lnode->pmatrix_index],
                                locus->pmatrix[rnode->pmatrix_index],
-                               lscaler,
-                               rscaler,
+                               locus->tipmap, locus->maxstates,
                                locus->attributes);
+
+        /* Use standard TT function (repeats optimization temporarily disabled) */
+        pll_core_update_partial_tt(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->tipchars[lnode->clv_index],
+                                   locus->tipchars[rnode->clv_index],
+                                   locus->tipmap, locus->maxstates,
+                                   locus->ttlookup, locus->attributes);
+      }
+      else
+      {
+        /* CLV-based TT (tips have CLVs allocated) */
+        pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->clv[lnode->clv_index],
+                                   locus->clv[rnode->clv_index],
+                                   locus->pmatrix[lnode->pmatrix_index],
+                                   locus->pmatrix[rnode->pmatrix_index],
+                                   lscaler, rscaler, locus->attributes);
+      }
+    }
+    else if (left_is_tip && !right_is_tip)
+    {
+      /* TI case: left is tip, right is inner */
+      if (use_tipchars)
+      {
+        pll_core_update_partial_ti(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->tipchars[lnode->clv_index],
+                                   locus->clv[rnode->clv_index],
+                                   locus->pmatrix[lnode->pmatrix_index],
+                                   locus->pmatrix[rnode->pmatrix_index],
+                                   rscaler, locus->tipmap, locus->maxstates,
+                                   locus->attributes);
+      }
+      else
+      {
+        pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->clv[lnode->clv_index],
+                                   locus->clv[rnode->clv_index],
+                                   locus->pmatrix[lnode->pmatrix_index],
+                                   locus->pmatrix[rnode->pmatrix_index],
+                                   lscaler, rscaler, locus->attributes);
+      }
+    }
+    else if (!left_is_tip && right_is_tip)
+    {
+      /* IT case: left is inner, right is tip - swap and use TI */
+      if (use_tipchars)
+      {
+        pll_core_update_partial_ti(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->tipchars[rnode->clv_index],
+                                   locus->clv[lnode->clv_index],
+                                   locus->pmatrix[rnode->pmatrix_index],
+                                   locus->pmatrix[lnode->pmatrix_index],
+                                   lscaler, locus->tipmap, locus->maxstates,
+                                   locus->attributes);
+      }
+      else
+      {
+        pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats,
+                                   locus->clv[node->clv_index], scaler,
+                                   locus->clv[lnode->clv_index],
+                                   locus->clv[rnode->clv_index],
+                                   locus->pmatrix[lnode->pmatrix_index],
+                                   locus->pmatrix[rnode->pmatrix_index],
+                                   lscaler, rscaler, locus->attributes);
+      }
+    }
+    else
+    {
+      /* II case: both children are inner nodes */
+      pll_core_update_partial_ii(locus->states, locus->sites, locus->rate_cats,
+                                 locus->clv[node->clv_index], scaler,
+                                 locus->clv[lnode->clv_index],
+                                 locus->clv[rnode->clv_index],
+                                 locus->pmatrix[lnode->pmatrix_index],
+                                 locus->pmatrix[rnode->pmatrix_index],
+                                 lscaler, rscaler, locus->attributes);
+    }
   }
 }
 

@@ -1037,11 +1037,36 @@ static void dump_locus(FILE * fp, gtree_t * gtree, locus_t * locus)
   {
     unsigned int clv_index = gtree->nodes[i]->clv_index;
     long span = locus->sites * locus->states * locus->rate_cats;
-    
+
     DUMP(locus->clv[clv_index],span,fp);
   }
 
   DUMP(&(locus->original_index),1,fp);
+
+  /* write recombination/ARG data if enabled */
+  DUMP(&(locus->has_recombination),1,fp);
+  if (locus->has_recombination && locus->arg)
+  {
+    arg_t * arg = locus->arg;
+
+    DUMP(&(arg->num_breakpoints),1,fp);
+    DUMP(&(arg->max_breakpoints),1,fp);
+    DUMP(&(arg->recomb_rate),1,fp);
+
+    /* write breakpoints */
+    if (arg->num_breakpoints > 0)
+    {
+      for (i = 0; i < arg->num_breakpoints; ++i)
+      {
+        DUMP(&(arg->breakpoints[i].position),1,fp);
+        DUMP(&(arg->breakpoints[i].lineage),1,fp);
+        DUMP(&(arg->breakpoints[i].recomb_time),1,fp);
+        DUMP(&(arg->breakpoints[i].target_pop),1,fp);
+        DUMP(&(arg->breakpoints[i].coal_time),1,fp);
+        DUMP(&(arg->breakpoints[i].target_node),1,fp);
+      }
+    }
+  }
 }
 
 static void dump_chk_section_3(FILE * fp, gtree_t ** gtree_list, stree_t * stree, long msa_count)

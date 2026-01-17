@@ -1734,6 +1734,35 @@ l_unwind:
   return ret;
 }
 
+static long parse_rhoprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+
+  long count;
+
+  /* rhoprior = alpha beta
+     Sets opt_rho_alpha and opt_rho_beta for Gamma prior on rho */
+
+  count = get_double(p, &opt_rho_alpha);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  count = get_double(p, &opt_rho_beta);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (is_emptyline(p))
+    ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_wprior(const char * line)
 {
   long ret = 0;
@@ -3227,6 +3256,13 @@ void load_cfile()
           fatal("Erroneous format of option %s (line %ld)", token, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"rhoprior",8))
+      {
+        if (!parse_rhoprior(value))
+          fatal("Option 'rhoprior' expects two doubles alpha beta (line %ld)",
+                line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 9)
     {
@@ -3389,6 +3425,14 @@ void load_cfile()
         fatal("Not implemented (%s)", token);
         valid = 1;
       }
+      else if (!strncasecmp(token,"recombination",13))
+      {
+        if (!parse_long(value, &opt_recombination))
+          fatal("Option 'recombination' expects 0 or 1 (line %ld)", line_count);
+        if (opt_recombination != 0 && opt_recombination != 1)
+          fatal("Option 'recombination' expects 0 or 1 (line %ld)", line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 14)
     {
@@ -3396,6 +3440,13 @@ void load_cfile()
       {
         if (!get_string(value,&opt_constraintfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"maxbreakpoints",14))
+      {
+        if (!parse_long(value, &opt_max_breakpoints) || opt_max_breakpoints < 0)
+          fatal("Option 'maxbreakpoints' expects a non-negative integer (line %ld)",
+                line_count);
         valid = 1;
       }
     }

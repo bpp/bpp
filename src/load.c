@@ -2135,6 +2135,56 @@ static void load_locus(FILE * fp, long index)
 
   if (!LOAD(&(locus[index]->original_index),1,fp))
     fatal("Cannot read locus original index");
+
+  /* load recombination/ARG data if present */
+  if (!LOAD(&(locus[index]->has_recombination),1,fp))
+    fatal("Cannot read locus recombination flag");
+
+  if (locus[index]->has_recombination)
+  {
+    unsigned int num_breakpoints, max_breakpoints;
+    double recomb_rate;
+
+    if (!LOAD(&num_breakpoints,1,fp))
+      fatal("Cannot read ARG num_breakpoints");
+    if (!LOAD(&max_breakpoints,1,fp))
+      fatal("Cannot read ARG max_breakpoints");
+    if (!LOAD(&recomb_rate,1,fp))
+      fatal("Cannot read ARG recomb_rate");
+
+    /* Create ARG structure */
+    locus[index]->arg = arg_create(max_breakpoints, gtree[index],
+                                   locus[index]->sites);
+    locus[index]->arg->recomb_rate = recomb_rate;
+    locus[index]->arg->num_breakpoints = num_breakpoints;
+
+    /* load breakpoints */
+    if (num_breakpoints > 0)
+    {
+      for (i = 0; i < num_breakpoints; ++i)
+      {
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].position),1,fp))
+          fatal("Cannot read breakpoint position");
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].lineage),1,fp))
+          fatal("Cannot read breakpoint lineage");
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].recomb_time),1,fp))
+          fatal("Cannot read breakpoint recomb_time");
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].target_pop),1,fp))
+          fatal("Cannot read breakpoint target_pop");
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].coal_time),1,fp))
+          fatal("Cannot read breakpoint coal_time");
+        if (!LOAD(&(locus[index]->arg->breakpoints[i].target_node),1,fp))
+          fatal("Cannot read breakpoint target_node");
+      }
+    }
+
+    /* Update blocks based on loaded breakpoints */
+    update_blocks(locus[index]->arg, locus[index]);
+  }
+  else
+  {
+    locus[index]->arg = NULL;
+  }
 }
 
 void load_chk_section_4(FILE * fp)

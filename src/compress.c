@@ -545,3 +545,35 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
 
   return mapping;
 }
+
+unsigned int * detect_identical_sequences(char ** sequences,
+                                          unsigned int count,
+                                          unsigned int length,
+                                          unsigned int * num_groups)
+{
+  unsigned int i, j;
+  unsigned int * group_id = (unsigned int *)xmalloc(count * sizeof(unsigned int));
+  *num_groups = 0;
+
+  for (i = 0; i < count; i++)
+  {
+    unsigned int found = 0;
+
+    /* Check if identical to any previous sequence */
+    for (j = 0; j < i && !found; j++)
+    {
+      if (memcmp(sequences[i], sequences[j], length) == 0)
+      {
+        group_id[i] = group_id[j];  /* same group as j */
+        found = 1;
+      }
+    }
+
+    if (!found)
+    {
+      group_id[i] = (*num_groups)++;  /* new group */
+    }
+  }
+
+  return group_id;
+}

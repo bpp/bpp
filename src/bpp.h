@@ -860,6 +860,16 @@ typedef struct partition_s
   long model;
 } partition_t;
 
+typedef struct site_repeats_s
+{
+  unsigned int count;           /* number of unique repeat classes */
+  unsigned int * site_id;       /* site index -> repeat class id */
+  unsigned int * id_site;       /* repeat class id -> representative site */
+  int valid;                    /* 1 if computed for current tree, 0 otherwise */
+  unsigned int left_tip;        /* left tip index when repeats were computed */
+  unsigned int right_tip;       /* right tip index when repeats were computed */
+} site_repeats_t;
+
 typedef struct locus_s
 {
   unsigned int tips;
@@ -917,7 +927,53 @@ typedef struct locus_s
 
   int original_index;
 
+  /* site repeats optimization */
+  site_repeats_t * repeats;     /* per-node repeat info, size = inner_nodes */
+
+  /* identical sequence groups */
+  unsigned int * seqgroup_id;        /* tip index -> group id */
+  unsigned int identical_seqgroups;  /* number of groups (0 = disabled) */
+
+  /* recombination (ARG) related */
+  int has_recombination;             /* 1 if recombination enabled for this locus */
+  struct arg_s * arg;                /* ARG structure (NULL if disabled) */
+
 } locus_t;
+
+/* Recombination breakpoint structure */
+typedef struct breakpoint_s
+{
+  unsigned int position;         /* site position (1 to sites-1) */
+  unsigned int lineage;          /* which lineage recombines (gnode index) */
+  double recomb_time;            /* time of recombination event */
+  unsigned int target_pop;       /* population where re-coalescence occurs */
+  double coal_time;              /* time of re-coalescence */
+  unsigned int target_node;      /* node in local tree where lineage reattaches */
+} breakpoint_t;
+
+/* Block structure for recombination */
+typedef struct block_s
+{
+  unsigned int start;            /* start site (inclusive) */
+  unsigned int end;              /* end site (exclusive) */
+  gtree_t * local_tree;          /* local gene tree for this block */
+  double logl;                   /* cached log-likelihood for this block */
+} block_t;
+
+/* Ancestral Recombination Graph (ARG) structure */
+typedef struct arg_s
+{
+  unsigned int num_breakpoints;  /* number of recombination breakpoints */
+  breakpoint_t * breakpoints;    /* array sorted by position */
+  unsigned int max_breakpoints;  /* allocated size */
+
+  unsigned int num_blocks;       /* num_breakpoints + 1 */
+  block_t * blocks;              /* array of blocks */
+
+  gtree_t * base_tree;           /* backbone tree (leftmost block) */
+  double recomb_rate;            /* rho = 4*N*r per site */
+  double log_recomb_prior;       /* cached log prior */
+} arg_t;
 
 /* Simple structure for handling PHYLIP parsing */
 
@@ -1229,6 +1285,8 @@ extern long opt_pseudop_exist;
 extern long opt_qrates_fixed;
 extern long opt_quiet;
 extern long opt_rate_prior;
+extern long opt_recombination;
+extern long opt_max_breakpoints;
 extern long opt_rb_w_update;
 extern long opt_rb_theta_update;
 extern long opt_revolutionary_spr_method;
@@ -1291,6 +1349,8 @@ extern double opt_prob_snl;            /* probability for SNL move, with 1 - opt
 extern double opt_prob_snl_shrink;
 extern double opt_pseudo_alpha;
 extern double opt_pseudo_beta;
+extern double opt_rho_alpha;
+extern double opt_rho_beta;
 extern double opt_rjmcmc_alpha;
 extern double opt_rjmcmc_mean;
 extern double opt_rjmcmc_epsilon;
@@ -2069,6 +2129,8 @@ void locus_update_partials(locus_t * locus, gnode_t ** traversal, unsigned int c
 
 void locus_update_all_partials(locus_t * locus, gtree_t * gtree);
 
+void locus_invalidate_repeats(locus_t * locus);
+
 void pll_set_pattern_weights(locus_t * locus,
                              const unsigned int * pattern_weights);
 
@@ -2133,6 +2195,12 @@ unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                int * length,
                                                unsigned int ** wptr,
                                                int attrib);
+
+unsigned int * detect_identical_sequences(char ** sequences,
+                                          unsigned int count,
+                                          unsigned int length,
+                                          unsigned int * num_groups);
+
 /* functions in allfixed.c */
 
 void allfixed_summary(FILE * fp_out, stree_t * stree);
@@ -2272,6 +2340,16 @@ void pll_core_update_partial_tt_4x4(unsigned int sites,
                                     const unsigned char * right_tipchars,
                                     const double * lookup,
                                     unsigned int attrib);
+
+void pll_core_update_partial_tt_4x4_repeats(unsigned int sites,
+                                            unsigned int rate_cats,
+                                            double * parent_clv,
+                                            unsigned int * parent_scaler,
+                                            const unsigned char * left_tipchars,
+                                            const unsigned char * right_tipchars,
+                                            const double * lookup,
+                                            const site_repeats_t * rep,
+                                            unsigned int attrib);
 
 void pll_core_update_partial_tt(unsigned int states,
                                 unsigned int sites,
@@ -2488,6 +2566,44 @@ int parsefile_doubles(const char * filename,
                       double * outbuffer,
                       long * errcontext);
 long parse_printlocus(const char * line, long * lcount);
+
+/* functions in recomb.c */
+
+arg_t * arg_create(unsigned int max_bp, gtree_t * base, unsigned int sites);
+void arg_destroy(arg_t * arg);
+void arg_reset(arg_t * arg, unsigned int sites);
+double arg_log_prior(arg_t * arg, stree_t * stree, locus_t * locus);
+double smc_transition_logprob(arg_t * arg, breakpoint_t * bp, stree_t * stree);
+void construct_local_tree(gtree_t * local, gtree_t * base, breakpoint_t * bp,
+                          stree_t * stree);
+void insert_breakpoint(arg_t * arg, breakpoint_t * bp);
+void remove_breakpoint(arg_t * arg, unsigned int idx);
+void update_blocks(arg_t * arg, locus_t * locus);
+void merge_blocks(arg_t * arg, unsigned int idx);
+double locus_root_loglikelihood_blocks(locus_t * locus, gtree_t * gtree);
+double compute_block_likelihood(locus_t * locus, gtree_t * gtree,
+                                unsigned int start, unsigned int end);
+
+/* functions in prop_recomb.c */
+
+long propose_add_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree,
+                            long thread_index);
+long propose_remove_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree,
+                               long thread_index);
+long propose_move_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree,
+                             long thread_index);
+long propose_modify_recomb_event(locus_t * locus, gtree_t * gtree, stree_t * stree,
+                                 long thread_index);
+long propose_rho(locus_t ** locus, long locus_count, stree_t * stree,
+                 long thread_index);
+
+/* functions in gtree.c (recombination helpers) */
+
+void gtree_clone_for_recomb(gtree_t * dest, gtree_t * src, stree_t * stree);
+gnode_t * gtree_prune_for_smc(gtree_t * gtree, gnode_t * node, double time);
+void gtree_regraft_for_smc(gtree_t * gtree, gnode_t * node, gnode_t * parent,
+                           gnode_t * target, double time);
+void gtree_reset_clv_indices(gtree_t * gtree);
 
 #ifdef HAVE_NEON
 

@@ -7956,6 +7956,9 @@ double gtree_propose_spr_serial(locus_t ** locus,
 
   for (i = 0; i < stree->locus_count; ++i)
   {
+    /* Invalidate site repeats before SPR proposals (topology may change) */
+    locus_invalidate_repeats(locus[i]);
+
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->edge_count;
     #ifdef DEBUG_THREADS
@@ -7996,6 +7999,9 @@ void gtree_propose_spr_parallel(locus_t ** locus,
 
   for (i = locus_start; i < locus_start+locus_count; ++i)
   {
+    /* Invalidate site repeats before SPR proposals (topology may change) */
+    locus_invalidate_repeats(locus[i]);
+
     /* TODO: Fix this to account mcmc.moveinnode in original bpp */
     proposal_count += gtree[i]->edge_count;
     if (!opt_exp_sim && !opt_migration)
@@ -9469,5 +9475,249 @@ static long propose_spr_sim(locus_t * locus,
     }
   }
   return accepted;
+}
+
+/*
+ * Recombination helper functions
+ */
+
+/**
+ * Clone a gene tree structure for use in recombination.
+ *
+ * @param dest   Destination tree (pre-allocated)
+ * @param src    Source tree to copy from
+ * @param stree  Species tree (for population references)
+ */
+void gtree_clone_for_recomb(gtree_t * dest, gtree_t * src, stree_t * stree)
+{
+  unsigned int i;
+  unsigned int nodes_count = src->tip_count + src->inner_count;
+
+  if (!dest || !src) return;
+
+  /* Copy basic structure */
+  dest->tip_count = src->tip_count;
+  dest->inner_count = src->inner_count;
+  dest->edge_count = src->edge_count;
+  dest->original_index = src->original_index;
+  dest->msa_index = src->msa_index;
+  dest->logl = src->logl;
+  dest->logpr = src->logpr;
+  dest->old_logpr = src->old_logpr;
+  dest->old_logl = src->old_logl;
+  dest->rate_mui = src->rate_mui;
+  dest->rate_nui = src->rate_nui;
+  dest->lnprior_rates = src->lnprior_rates;
+  dest->old_lnprior_rates = src->old_lnprior_rates;
+
+  /* Copy node data */
+  for (i = 0; i < nodes_count; i++)
+  {
+    gnode_t * snode = src->nodes[i];
+    gnode_t * dnode = dest->nodes[i];
+
+    dnode->time = snode->time;
+    dnode->old_time = snode->old_time;
+    dnode->length = snode->length;
+    dnode->clv_valid = snode->clv_valid;
+    dnode->clv_index = snode->clv_index;
+    dnode->scaler_index = snode->scaler_index;
+    dnode->pmatrix_index = snode->pmatrix_index;
+    dnode->mark = snode->mark;
+
+    /* Set population pointers */
+    if (snode->pop && stree)
+      dnode->pop = stree->nodes[snode->pop->node_index];
+
+    /* Set parent/child pointers using node indices */
+    if (snode->left)
+      dnode->left = dest->nodes[snode->left->node_index];
+    else
+      dnode->left = NULL;
+
+    if (snode->right)
+      dnode->right = dest->nodes[snode->right->node_index];
+    else
+      dnode->right = NULL;
+
+    if (snode->parent)
+      dnode->parent = dest->nodes[snode->parent->node_index];
+    else
+      dnode->parent = NULL;
+  }
+
+  /* Set root pointer */
+  dest->root = dest->nodes[src->root->node_index];
+}
+
+/**
+ * Prune a lineage and prepare for regrafting (SMC-style).
+ * Returns the parent node which can be reused for regrafting.
+ *
+ * This follows BPP's SPR pattern: the parent node is detached but saved
+ * for reuse as the coalescence point in the regraft.
+ *
+ * @param gtree   Gene tree
+ * @param node    Node whose lineage to prune
+ * @param time    Recombination time (for future use in updating times)
+ * @return        The detached parent node (to use in regraft)
+ */
+gnode_t * gtree_prune_for_smc(gtree_t * gtree, gnode_t * node, double time)
+{
+  gnode_t * parent;
+  gnode_t * sibling;
+  gnode_t * grandparent;
+
+  if (!gtree || !node || !node->parent)
+    return NULL;
+
+  parent = node->parent;
+  grandparent = parent->parent;
+
+  /* Find sibling */
+  sibling = (parent->left == node) ? parent->right : parent->left;
+  if (!sibling)
+    return NULL;
+
+  /* Bypass parent: connect sibling directly to grandparent */
+  /* This follows the pattern from BPP's perform_spr */
+  if (grandparent)
+  {
+    if (grandparent->left == parent)
+      grandparent->left = sibling;
+    else
+      grandparent->right = sibling;
+    sibling->parent = grandparent;
+
+    /* Update leaf counts up to root */
+    gnode_t * temp;
+    for (temp = grandparent; temp; temp = temp->parent)
+      temp->leaves = temp->left->leaves + temp->right->leaves;
+  }
+  else
+  {
+    /* Parent was root, sibling becomes new root */
+    sibling->parent = NULL;
+    sibling->leaves = gtree->root->leaves;
+    gtree->root = sibling;
+  }
+
+  /* Clear parent's links - it's now a "floating" node */
+  parent->left = NULL;
+  parent->right = NULL;
+  parent->parent = NULL;
+
+  /* The node is still connected to parent but parent is detached */
+  node->parent = parent;
+  parent->right = node;  /* Keep node attached to parent for regraft */
+
+  /* Mark for CLV update */
+  node->clv_valid = 0;
+  sibling->clv_valid = 0;
+  parent->clv_valid = 0;
+
+  return parent;
+}
+
+/**
+ * Regraft a pruned lineage onto a target branch (SMC-style).
+ *
+ * Uses the parent node from pruning as the new internal coalescence node.
+ * This follows BPP's SPR pattern.
+ *
+ * @param gtree     Gene tree
+ * @param node      The pruned node (still attached to its old parent)
+ * @param parent    The detached parent node from pruning
+ * @param target    Target node (regraft onto branch above this node)
+ * @param time      Coalescence time (new parent node time)
+ */
+void gtree_regraft_for_smc(gtree_t * gtree, gnode_t * node, gnode_t * parent,
+                           gnode_t * target, double time)
+{
+  gnode_t * target_parent;
+  gnode_t * oldroot;
+
+  if (!gtree || !node || !parent || !target)
+    return;
+
+  oldroot = gtree->root;
+  target_parent = target->parent;
+
+  /* Set up the regraft: parent becomes coalescence of node and target */
+  parent->time = time;
+  parent->left = target;
+  parent->right = node;
+  parent->leaves = target->leaves + node->leaves;
+
+  node->parent = parent;
+  target->parent = parent;
+
+  /* Insert parent into tree above target */
+  if (target_parent)
+  {
+    parent->parent = target_parent;
+    if (target_parent->left == target)
+      target_parent->left = parent;
+    else
+      target_parent->right = parent;
+
+    /* Update leaf counts up to root */
+    gnode_t * temp;
+    for (temp = target_parent; temp; temp = temp->parent)
+      temp->leaves = temp->left->leaves + temp->right->leaves;
+  }
+  else
+  {
+    /* Target was root, parent becomes new root */
+    parent->parent = NULL;
+    gtree->root = parent;
+  }
+
+  /* Handle root change if needed (swap node indices to preserve root semantics) */
+  if (gtree->root != oldroot && gtree->root != parent)
+  {
+    /* Complex case - need to handle like BPP's perform_spr */
+    SWAP(gtree->root->pop, oldroot->pop);
+    SWAP(gtree->root->time, oldroot->time);
+  }
+
+  /* Mark for CLV update */
+  node->clv_valid = 0;
+  target->clv_valid = 0;
+  parent->clv_valid = 0;
+}
+
+/* Legacy wrappers for backward compatibility */
+void gtree_prune_at_time(gtree_t * gtree, gnode_t * node, double time)
+{
+  gtree_prune_for_smc(gtree, node, time);
+}
+
+void gtree_regraft_at_time(gtree_t * gtree, gnode_t * node,
+                           gnode_t * target, double time)
+{
+  /* This legacy interface doesn't work well - need parent from prune */
+  (void)gtree; (void)node; (void)target; (void)time;
+}
+
+/**
+ * Reset CLV indices for a gene tree after topology changes.
+ *
+ * @param gtree  Gene tree
+ */
+void gtree_reset_clv_indices(gtree_t * gtree)
+{
+  unsigned int i;
+  unsigned int nodes_count;
+
+  if (!gtree)
+    return;
+
+  nodes_count = gtree->tip_count + gtree->inner_count;
+
+  for (i = 0; i < nodes_count; i++)
+  {
+    gtree->nodes[i]->clv_valid = 0;
+  }
 }
 

@@ -79,6 +79,49 @@ void pll_core_update_partial_tt_4x4(unsigned int sites,
   }
 }
 
+void pll_core_update_partial_tt_4x4_repeats(unsigned int sites,
+                                            unsigned int rate_cats,
+                                            double * parent_clv,
+                                            unsigned int * parent_scaler,
+                                            const unsigned char * left_tipchars,
+                                            const unsigned char * right_tipchars,
+                                            const double * lookup,
+                                            const site_repeats_t * rep,
+                                            unsigned int attrib)
+{
+  unsigned int j,k,c,s;
+  unsigned int states = 4;
+  unsigned int span = states * rate_cats;
+  const double * offset;
+
+  size_t scaler_size = (attrib & PLL_ATTRIB_RATE_SCALERS) ?
+                                                        sites*rate_cats : sites;
+
+  /* Clear scalers */
+  if (parent_scaler)
+    memset(parent_scaler, 0, sizeof(unsigned int) * scaler_size);
+
+  /* Compute CLV only for representative sites */
+  for (c = 0; c < rep->count; c++)
+  {
+    s = rep->id_site[c];
+    j = (unsigned int)(left_tipchars[s]);
+    k = (unsigned int)(right_tipchars[s]);
+
+    offset = lookup + ((j << 4) + k) * span;
+    memcpy(parent_clv + s * span, offset, span * sizeof(double));
+  }
+
+  /* Copy to non-representative sites */
+  for (s = 0; s < sites; s++)
+  {
+    unsigned int rep_site = rep->id_site[rep->site_id[s]];
+    if (s != rep_site)
+      memcpy(parent_clv + s * span, parent_clv + rep_site * span,
+             span * sizeof(double));
+  }
+}
+
 void pll_core_update_partial_tt(unsigned int states,
                                 unsigned int sites,
                                 unsigned int rate_cats,

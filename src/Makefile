@@ -61,7 +61,7 @@ OBJS=bpp.o rtree.o util.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
      gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o visual.o \
      pdfgen.o constraint.o debug.o lswitch.o miginfo.o ming2.o a1b1.o \
-     bfdriver.o morph.o $(AVXOBJ) $(AVX2OBJ)
+     bfdriver.o morph.o recomb.o prop_recomb.o $(AVXOBJ) $(AVX2OBJ)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

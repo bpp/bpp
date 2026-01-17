@@ -4134,6 +4134,11 @@ static FILE * init(stree_t ** ptr_stree,
       fatal("Internal error when setting states for locus %ld", i);
 
     /* create the locus structure */
+    /* Note: PLL_ATTRIB_PATTERN_TIP is disabled because the overhead of creating
+       the lookup table for each TT node currently outweighs the benefits.
+       The site repeats infrastructure is in place for future optimization. */
+    unsigned int locus_attrib = (unsigned int)opt_arch;
+
     locus[i] = locus_create((unsigned int)(msa_list[i]->dtype),        /* data type */
                             (unsigned int)(msa_list[i]->model),        /* subst model */
                             gtree[i]->tip_count,        /* # tip sequence */
@@ -4144,7 +4149,7 @@ static FILE * init(stree_t ** ptr_stree,
                             pmatrix_count,              /* # prob matrices */
                             opt_alpha_cats,             /* # rate categories */
                             scale_buffers,              /* # scale buffers */
-                            (unsigned int)opt_arch);    /* attributes */
+                            locus_attrib);              /* attributes */
 
     locus[i]->original_index = msa_list[i]->original_index;
     /* set frequencies and substitution rates */
@@ -4168,6 +4173,21 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_datefile)
       gtree[i]->rate_mui = 1;
     locus_set_heredity_scalers(locus[i],heredity+i);
+
+    /* Initialize ARG for recombination if enabled */
+    if (opt_recombination)
+    {
+      locus[i]->has_recombination = 1;
+      locus[i]->arg = arg_create((unsigned int)opt_max_breakpoints,
+                                 gtree[i],
+                                 locus[i]->sites);
+      locus[i]->arg->recomb_rate = opt_rho_alpha / opt_rho_beta;  /* Prior mean */
+    }
+    else
+    {
+      locus[i]->has_recombination = 0;
+      locus[i]->arg = NULL;
+    }
 
     /* set pattern weights and free the weights array */
     if (locus[i]->diploid)
@@ -4293,11 +4313,14 @@ static FILE * init(stree_t ** ptr_stree,
                           gtree[i]->inner_count);
 
     /* now that we computed the CLVs, calculate the log-likelihood for the
-       current gene tree */
-    logl = locus_root_loglikelihood(locus[i],
-                                    gtree[i]->root,
-                                    locus[i]->param_indices,
-                                    NULL);
+       current gene tree. Use block likelihood if recombination is enabled. */
+    if (locus[i]->has_recombination && locus[i]->arg)
+      logl = locus_root_loglikelihood_blocks(locus[i], gtree[i]);
+    else
+      logl = locus_root_loglikelihood(locus[i],
+                                      gtree[i]->root,
+                                      locus[i]->param_indices,
+                                      NULL);
     logl_sum += logl;
     if (isinf(logl))
       fatal("\n[ERROR] log-L for locus %d is -inf.\n"
@@ -5542,13 +5565,38 @@ void cmd_run()
       check_lnprior(stree, gtree, i, "GSPR");
       #endif
       if (opt_debug_bruce)
-        debug_bruce(stree,gtree,"GSPR", i, fp_debug); 
+        debug_bruce(stree,gtree,"GSPR", i, fp_debug);
 
-    /* propose population sizes on species tree */     
-      
+    /* propose recombination breakpoints (ARG) */
+    if (opt_recombination)
+    {
+      long j;
+      for (j = 0; j < opt_locus_count; j++)
+      {
+        if (locus[j]->has_recombination && locus[j]->arg)
+        {
+          /* Reversible-jump moves: add or remove breakpoints */
+          if (legacy_rndu(0) < 0.5)
+            propose_add_breakpoint(locus[j], gtree[j], stree, 0);
+          else
+            propose_remove_breakpoint(locus[j], gtree[j], stree, 0);
+
+          /* Within-model moves */
+          propose_move_breakpoint(locus[j], gtree[j], stree, 0);
+          propose_modify_recomb_event(locus[j], gtree[j], stree, 0);
+        }
+      }
+
+      /* Global rho proposal (every 10 iterations) */
+      if ((i + 1) % 10 == 0)
+        propose_rho(locus, opt_locus_count, stree, 0);
+    }
+
+    /* propose population sizes on species tree */
+
     if (opt_a1b1file && fp_a1b1 && i >= 0 && (i+1)%opt_samplefreq == 0)
       fprintf(fp_a1b1,"%ld", i+1);
-      
+
     if (opt_est_theta)
     {
       stree_propose_theta(gtree,locus,stree, ft_round_theta_gibbs, ft_round_theta_slide);
