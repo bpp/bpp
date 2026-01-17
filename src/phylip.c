@@ -355,6 +355,10 @@ msa_t * phylip_parse_interleaved(phylip_t * fd)
 
   msa_t * msa = (msa_t *)xmalloc(sizeof(msa_t));
 
+  /* Initialize fields that may not be set elsewhere */
+  msa->freqs = NULL;
+  msa->site_pattern_map = NULL;
+
   while (emptyline(fd->line)) getnextline(fd);
 
   /* read header */

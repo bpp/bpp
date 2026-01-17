@@ -329,6 +329,9 @@ void msa_destroy(msa_t * msa)
   if (msa->freqs)
     free(msa->freqs);
 
+  if (msa->site_pattern_map)
+    free(msa->site_pattern_map);
+
   free(msa);
 }
 

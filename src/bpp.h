@@ -835,6 +835,8 @@ typedef struct msa_s
   int model;
   int original_index;
 
+  unsigned int * site_pattern_map;  /* maps original site -> pattern index (for recombination) */
+
 } msa_t;
 
 /* used for creating FigTree.tre */
@@ -937,6 +939,8 @@ typedef struct locus_s
   /* recombination (ARG) related */
   int has_recombination;             /* 1 if recombination enabled for this locus */
   struct arg_s * arg;                /* ARG structure (NULL if disabled) */
+  unsigned int original_sites;       /* original sequence length before compression */
+  unsigned int * site_pattern_map;   /* maps original site -> pattern index */
 
 } locus_t;
 
@@ -2187,7 +2191,8 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
-                                      int attrib);
+                                      int attrib,
+                                      unsigned int ** site_pattern_map);
 
 unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                const unsigned int * map,
@@ -2583,6 +2588,8 @@ void merge_blocks(arg_t * arg, unsigned int idx);
 double locus_root_loglikelihood_blocks(locus_t * locus, gtree_t * gtree);
 double compute_block_likelihood(locus_t * locus, gtree_t * gtree,
                                 unsigned int start, unsigned int end);
+double compute_block_likelihood_with_map(locus_t * locus, double * persite_lnl,
+                                         unsigned int start, unsigned int end);
 
 /* functions in prop_recomb.c */
 

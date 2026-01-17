@@ -80,7 +80,7 @@ long propose_add_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree,
     return 0;
 
   arg = locus->arg;
-  sites = locus->sites;
+  sites = locus->original_sites;
   k = arg->num_breakpoints;
 
   /* Check if we can add more breakpoints */
@@ -189,7 +189,7 @@ long propose_remove_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree
     return 0;
 
   arg = locus->arg;
-  sites = locus->sites;
+  sites = locus->original_sites;
   k = arg->num_breakpoints;
 
   /* Can't remove if there are no breakpoints */
@@ -269,7 +269,7 @@ long propose_move_breakpoint(locus_t * locus, gtree_t * gtree, stree_t * stree,
     return 0;
 
   arg = locus->arg;
-  sites = locus->sites;
+  sites = locus->original_sites;
   k = arg->num_breakpoints;
 
   /* Need at least one breakpoint */

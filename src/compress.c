@@ -219,13 +219,16 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
-                                      int attrib)
+                                      int attrib,
+                                      unsigned int ** site_pattern_map)
 {
   int i,j;
   char * memptr;
   char ** column;
   unsigned int * weight;
   unsigned char ** jc69_invmaps = NULL;
+  unsigned int * site_map = NULL;
+  int original_length;
 
   unsigned char charmap[ASCII_SIZE];
   unsigned char inv_charmap[ASCII_SIZE];
@@ -235,6 +238,9 @@ unsigned int * compress_site_patterns(char ** sequence,
 
   /* a map must be given */
   if (!map) return NULL;
+
+  /* store original length for site-pattern mapping */
+  original_length = *length;
 
   /* a zero can never be used as a state */
   if (map[0]) return NULL;
@@ -297,6 +303,12 @@ unsigned int * compress_site_patterns(char ** sequence,
   /* sort the columns and keep original indices */
   ssort1(column, *length, 0, oi);
 
+  /* allocate site-pattern mapping if requested */
+  if (site_pattern_map)
+  {
+    site_map = (unsigned int *)xmalloc(original_length * sizeof(unsigned int));
+  }
+
   /* we have at least one unique site with weight 1 (the first site) */
   int compressed_length = 1;
   size_t ref = 0;
@@ -306,6 +318,11 @@ unsigned int * compress_site_patterns(char ** sequence,
   int * compressed_oi = (int *)xmalloc(*length * sizeof(int));
 
   compressed_oi[0] = oi[0];
+
+  /* map first sorted position to pattern 0 */
+  if (site_map)
+    site_map[oi[0]] = 0;
+
   for (i = 1; i < *length; ++i)
   {
     if (strcmp(column[i],column[i-1]))
@@ -318,6 +335,10 @@ unsigned int * compress_site_patterns(char ** sequence,
     }
     else
       weight[ref]++;
+
+    /* map this original position to current pattern index */
+    if (site_map)
+      site_map[oi[i]] = (unsigned int)ref;
   }
 
   /* decode the jc69 encoding */
@@ -371,6 +392,10 @@ unsigned int * compress_site_patterns(char ** sequence,
 
   free(oi);
   free(compressed_oi);
+
+  /* return site-pattern mapping if requested */
+  if (site_pattern_map)
+    *site_pattern_map = site_map;
 
   return weight;
 }

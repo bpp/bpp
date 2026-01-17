@@ -3452,11 +3452,13 @@ static FILE * init(stree_t ** ptr_stree,
 
     /* NOTE: Original length is the length after opt_cleandata is applied */
     msa_list[i]->original_length = msa_list[i]->length;
+    msa_list[i]->site_pattern_map = NULL;
     weights[i] = compress_site_patterns(msa_list[i]->sequence,
       pll_map,
       msa_list[i]->count,
       &(msa_list[i]->length),
-      compress_method);
+      compress_method,
+      opt_recombination ? &msa_list[i]->site_pattern_map : NULL);
 
     /* compute base frequencies */
     compute_base_freqs(msa_list[i], weights[i], pll_map);
@@ -4178,14 +4180,19 @@ static FILE * init(stree_t ** ptr_stree,
     if (opt_recombination)
     {
       locus[i]->has_recombination = 1;
+      locus[i]->original_sites = (unsigned int)msa_list[i]->original_length;
+      locus[i]->site_pattern_map = msa_list[i]->site_pattern_map;
+      msa_list[i]->site_pattern_map = NULL;  /* transfer ownership */
       locus[i]->arg = arg_create((unsigned int)opt_max_breakpoints,
                                  gtree[i],
-                                 locus[i]->sites);
+                                 locus[i]->original_sites);  /* use original length */
       locus[i]->arg->recomb_rate = opt_rho_alpha / opt_rho_beta;  /* Prior mean */
     }
     else
     {
       locus[i]->has_recombination = 0;
+      locus[i]->original_sites = 0;
+      locus[i]->site_pattern_map = NULL;
       locus[i]->arg = NULL;
     }
 

@@ -369,7 +369,7 @@ void update_blocks(arg_t * arg, locus_t * locus)
 
   /* Get sites from locus if available, otherwise use current last block end */
   if (locus)
-    sites = locus->sites;
+    sites = locus->original_sites;
   else
     sites = arg->blocks[arg->num_blocks - 1].end;
 
@@ -440,12 +440,20 @@ void merge_blocks(arg_t * arg, unsigned int idx)
 /**
  * Compute the log-likelihood across all blocks.
  *
+ * When k=0 (no breakpoints), this is equivalent to the standard likelihood.
+ * When k>0, each block's likelihood is computed using its local tree and
+ * the site_pattern_map to determine which patterns contribute to each block.
+ *
  * @param locus  Locus data
  * @param gtree  Gene tree (used for base tree reference)
  * @return       Total log-likelihood
  */
 double locus_root_loglikelihood_blocks(locus_t * locus, gtree_t * gtree)
 {
+  double total_logl = 0.0;
+  unsigned int b;
+  arg_t * arg;
+
   /* If no recombination, use standard likelihood computation */
   if (!locus->has_recombination || !locus->arg)
   {
@@ -453,27 +461,91 @@ double locus_root_loglikelihood_blocks(locus_t * locus, gtree_t * gtree)
                                     locus->param_indices, NULL);
   }
 
+  arg = locus->arg;
+
+  /* For k=0 breakpoints (single block), use standard likelihood */
+  if (arg->num_breakpoints == 0)
+  {
+    return locus_root_loglikelihood(locus, gtree->root,
+                                    locus->param_indices, NULL);
+  }
+
   /*
-   * TODO: Proper block-wise likelihood requires handling the mapping between
-   * original sequence positions (breakpoint coordinates) and compressed site
-   * patterns (persite_lnl indices). For now, use the full sequence likelihood.
-   *
-   * With this simplification:
-   * - The likelihood is computed correctly using the base tree
-   * - The prior (Poisson on k, SMC transitions) still affects proposal acceptance
-   * - Actual topology changes from recombination are not reflected in likelihood
-   *
-   * To implement proper block-wise likelihood:
-   * 1. Track mapping from original positions to pattern indices
-   * 2. Construct distinct local trees for each block
-   * 3. Compute partials only for patterns in each block's range
+   * For k>0, compute block-wise likelihood using site_pattern_map.
+   * Currently all blocks use the base tree (topology changes not yet implemented).
+   * The likelihood is split correctly across blocks using the pattern mapping.
    */
-  return locus_root_loglikelihood(locus, gtree->root,
-                                  locus->param_indices, NULL);
+
+  /*
+   * For diploid loci, per-pattern likelihoods aren't computed correctly by
+   * locus_root_loglikelihood. Fall back to standard likelihood for now.
+   * TODO: Implement proper handling for diploid recombination.
+   */
+  if (locus->diploid)
+  {
+    return locus_root_loglikelihood(locus, gtree->root,
+                                    locus->param_indices, NULL);
+  }
+
+  /* Get per-pattern log-likelihoods (using base tree for now) */
+  double * persite_lnl = (double *)xmalloc(locus->sites * sizeof(double));
+  locus_root_loglikelihood(locus, gtree->root, locus->param_indices, persite_lnl);
+
+  /* Sum log-likelihood over all blocks */
+  for (b = 0; b < arg->num_blocks; b++)
+  {
+    block_t * block = &arg->blocks[b];
+    block->logl = compute_block_likelihood_with_map(locus, persite_lnl,
+                                                     block->start, block->end);
+    total_logl += block->logl;
+  }
+
+  free(persite_lnl);
+  return total_logl;
+}
+
+/**
+ * Compute the log-likelihood for a single block using the site-pattern mapping.
+ *
+ * This function uses the site_pattern_map to sum per-pattern log-likelihoods
+ * for all original sites in the block range [start, end).
+ *
+ * @param locus       Locus data (must have site_pattern_map set)
+ * @param persite_lnl Per-pattern log-likelihoods (size = locus->sites)
+ * @param start       Start site in original sequence (inclusive)
+ * @param end         End site in original sequence (exclusive)
+ * @return            Log-likelihood for this block
+ */
+double compute_block_likelihood_with_map(locus_t * locus, double * persite_lnl,
+                                         unsigned int start, unsigned int end)
+{
+  double logl = 0.0;
+  unsigned int s;
+  unsigned int pattern_idx;
+
+  if (!locus || !persite_lnl || !locus->site_pattern_map)
+    return 0.0;
+
+  if (start >= end || start >= locus->original_sites)
+    return 0.0;
+
+  /* Clamp end to original sequence length */
+  if (end > locus->original_sites)
+    end = locus->original_sites;
+
+  /* Sum per-pattern log-likelihoods for each original site in this block */
+  for (s = start; s < end; s++)
+  {
+    pattern_idx = locus->site_pattern_map[s];
+    logl += persite_lnl[pattern_idx];
+  }
+
+  return logl;
 }
 
 /**
  * Compute the log-likelihood for a single block (site range).
+ * (Legacy function - use compute_block_likelihood_with_map instead)
  *
  * @param locus  Locus data
  * @param gtree  Gene tree for this block
