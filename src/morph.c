@@ -1351,3 +1351,130 @@ double prop_branch_rates_trait(stree_t * stree)
   else
     return prop_branch_rates_relax(stree);
 }
+
+
+/* matrix related operations */
+
+/* C = A*B; A[n*m], B[m*k], C[n*k] */
+int mat_multi(double *A, double *B, double *C, int n, int m, int k)
+{
+  int i, j, r;
+  double sum;
+  
+  for (i = 0; i < n; ++i)
+    for (j = 0; j < k; ++j)
+    {
+      for (sum = 0, r = 0; r < m; ++r)
+        sum += A[i * m + r] * B[r * k + j];
+      C[i * k + j] = sum;
+    }
+
+  return 0;
+}
+
+/* t(A); A[n*m], At[m*n] */
+int mat_trans(double *A, double *At, int n, int m)
+{
+  int i, j;
+  
+  for (i = 0; i < n; ++i)
+    for (j = 0; j < m; ++j)
+      At[j * n + i] = A[i * m + j];
+  
+  return 0;
+}
+
+/* submatrix of A[n*m] by active coordinates */
+int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c)
+{
+  int i, j, a, b, ncol;
+  
+  /* get total active columns */
+  ncol = c[m];
+
+  /* extract submatrix using active rows and columns */
+  for (a = 0, i = 0; i < n; ++i)
+  {
+    if (r[i] != 1) continue;
+    for (b = 0, j = 0; j < m; ++j)
+    {
+      if (c[j] != 1) continue;
+      Asub[a * ncol + b] = A[i * m + j];
+      b++;
+    }
+    a++;
+  }
+  
+  return 0;
+}
+
+/* Cholesky decomposition: A = LL',
+   where A is symmetrical and positive definite, and L is lower triangular */
+int mat_decom_chol(double *A, double *L, int n)
+{
+  int i, j, k;
+  double sum;
+  
+  for (i = 0; i < n; ++i)
+    for (j = 0; j <= i; ++j)
+    {
+      sum = A[i * n + j];
+      for (k = 0; k < j; ++k)
+        sum -= L[i * n + k] * L[j * n + k];
+      if (i == j)
+      {
+        if (sum <= 0.0) return -1;  // not positive definite
+        L[i * n + j] = sqrt(sum);
+      }
+      else
+      {
+        L[i * n + j] = sum / L[j * n + j];
+      }
+    }
+  
+  /* set upper triangular part to zero */
+  for (i = 0; i < n; ++i)
+    for (j = i + 1; j < n; ++j)
+      L[i * n + j] = 0.0;
+  
+  return 0;
+}
+
+/* inverse A using Cholesky decomposition */
+int mat_inv(double *A, double *Ainv, int n)
+{
+  int i, j, k;
+  double *L, *L_t, sum;
+  
+  L = (double *)xmalloc(n*n*sizeof(double));
+  if (mat_decom_chol(A, L, n) != 0)
+  {
+    free(L);
+    return -1;
+  }
+  
+  /* inv(L) computed in place */
+  for (i = 0; i < n; ++i)
+    for (j = 0; j <= i; ++j)
+    {
+      if (i == j)
+        L[i * n + j] = 1.0 / L[i * n + j];
+      else
+      {
+        for (sum = 0, k = j; k < i; ++k)
+          sum -= L[i * n + k] * L[k * n + j];
+        L[i * n + j] = sum / L[i * n + i];
+      }
+    }
+  
+  /* inv(A) = t(inv(L)) * inv(L) */
+  L_t = (double *)xmalloc(n*n*sizeof(double));
+  mat_trans(L, L_t, n, n);
+  mat_multi(L_t, L, Ainv, n, n, n);
+
+  free(L);
+  free(L_t);
+  
+  return 0;
+}
+
