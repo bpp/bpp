@@ -428,7 +428,7 @@ void trait_destroy(stree_t * stree)
 static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
 {
   int j;
-  double v_pop, v_k, v_k1, v_k2, *m_k1, *m_k2;
+  double v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
@@ -454,12 +454,10 @@ static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
   else  /* tip node */
   {
     v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
-    /* the trait matrix has been standardized so that all characters have the
-       same variance and the population noise has variance of v_pop (1.0).
+    /* the trait matrix has been standardized so that all characters have
+       the same variance and the population noise has unit variance.
        Alvarez-Carretero et al. 2019. p.970. */
-    v_pop = 1.0;  //TODO: deal with stree->trait_v_pop[idx];
-    assert(v_k > 0 || v_pop > 0);
-    snode->trait[idx]->brlen = v_k + v_pop;
+    snode->trait[idx]->brlen = v_k + 1.0;
   }
 
 #ifdef DEBUG_Morph_BM
@@ -474,26 +472,101 @@ static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
 #endif
 }
 
+/* update the active coordinates */
+static void trait_update_k(int idx, snode_t * snode, stree_t * stree)
+{
+  int j, nchar, n_act;
+
+  if (snode->left && snode->right) // internal node
+  {
+    trait_update_k(idx, snode->left, stree);
+    trait_update_k(idx, snode->right, stree);
+
+    nchar = stree->trait_dim[idx];
+    for (n_act = 0, j = 0; j < nchar; ++j)
+    {
+      if (snode->left->trait[idx]->active[j] == -1 &&
+          snode->right->trait[idx]->active[j] == -1)
+      {
+        snode->trait[idx]->active[j] = -1;
+      }
+      else {
+        snode->trait[idx]->active[j] = 1;
+        n_act += 1;
+      }
+    }
+    snode->trait[idx]->active[nchar] = n_act;
+  }
+}
+
 static void trait_update_lmr(int idx, snode_t * snode, stree_t * stree)
 {
-  int j;
+  /* Mitov et al. 2020; BM model (Corollary 1, Eq. 21) */
 
-  /* calculate omega, Phi, V for this node */
+  int j, nchar;
+  double t;
 
-  /* calculate A, b, C, d, E, f */
-
-  /* calculate L, m, r */
-
-  if (snode->left && snode->right)  /* internal node */
+  if (snode->left && snode->right)  // internal node
   {
     trait_update_lmr(idx, snode->left, stree);
     trait_update_lmr(idx, snode->right, stree);  
-  
-    /* sum over all daughters L, m, r */
   }
   
+  if (snode != stree->root)  // not root
+  {
+    /* A = -0.5 * inv(V)
+       C = -0.5 * t(Phi) * inv(V) * Phi
+       E = t(Phi) * inv(V)
+       f = -0.5 * k * log(2pi) - 0.5 * logdet(V)
+     */
 
+    t = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
+    /* the trait matrix has been standardized so that all characters have
+       the same variance and the population noise has unit variance. */
+    if (snode->left == NULL) t += 1.0;
+
+    /* Rs is the linear shrinkage estimate of the correlation matrix R,
+       which is input along with the morphological data */
+    /* calculate the inverse of Rs */
+    // R_inv = inv(Rs)
+    // V_inv = R_inv / t;
+
+    
+  }
   
+  if (snode->left && snode->right)  // internal node
+  {
+    if (snode->left->left == NULL)  // left child is tip
+    {
+      /* L1 = C1
+         m1 = E1 * x1
+         r1 = t(x1) * A1 * x1 + f1
+       */
+      
+    }
+    else  // left child is internal node
+    {
+      /* L1 = C1 - 0.25 * E1 * inv(A1+L1) * t(E1)
+         m1 = -0.5 * E1 * inv(A1+L1) * m1
+         r1 = f1 + r1 + 0.5 * k * log(2pi)
+              - 0.5 * logdet(-2*(A1+L1)) 
+              - 0.25 * t(m1) * inv(A1+L1) * m1
+       */
+      
+    }
+
+    if (snode->right->left == NULL)  // right child is tip
+    {
+      
+    }
+    else  // right child is internal node
+    {
+      
+    }
+
+    /* L = L1 + L2; m = m1 + m2; r = r1 + r2 */
+    
+  }
 }
 
 static void trait_trprob_mk(double ** p, double v, int max_state)
@@ -676,7 +749,7 @@ void trait_update(stree_t * stree)
 
 static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
 {
-  int n, i, j, k, l, nchar, state, max_state;
+  int n, i, j, k, l, nchar, state, max_state, n_act;
   double value;
   snode_t * snode;
   morph_t * morph;
@@ -753,7 +826,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       /* update the vector for the active coordinates */
       for (i = 0; i < stree->tip_count; ++i)
       {
-        for (j = 0; j < nchar; ++j)
+        for (n_act = 0, j = 0; j < nchar; ++j)
         {
           value = stree->nodes[i]->trait[n]->state_m[j];
           if (isnan(value))  // inapplicable value
@@ -768,8 +841,10 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
           }
           else {
             stree->nodes[i]->trait[n]->active[j] = 1;
+            n_act += 1;
           }
         }
+        stree->nodes[i]->trait[n]->active[nchar] = n_act;
       }
     }
   }
@@ -852,7 +927,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
       {
         trait->state_m  = (double *)xcalloc(nchar, sizeof(double));
         trait->contrast = (double *)xcalloc(nchar, sizeof(double));
-        trait->active   = (int *)xcalloc(nchar, sizeof(int));
+        trait->active   = (int *)xcalloc(nchar +1, sizeof(int));
       }
       else
       {
@@ -1005,7 +1080,10 @@ static double loglikelihood_trait_Mitov(int idx, stree_t * stree)
 
   logl = 0.0;
 
-  
+  /* x0 = -0.5 * inv(L0) * m0 */
+
+  /* logl = t(x0) * L0 * x0 + t(x0) * m0 + r0 */
+
   stree->trait_logl[idx] = logl;
 
 #ifdef DEBUG_Morph_BM
