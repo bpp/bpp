@@ -491,9 +491,12 @@ typedef struct trait_s
   
   /* for continuous traits */
   double brlen;      // transformed branch length (v_k')
-  double * state_m;  // (ancestral) state values (m_k')
+  double * state_m;  // state values (m_k'), or m in GLInv model
   double * contrast; // independent contrasts (x_k)
   int    * active;   // indicator for active coordinates
+  double * glinv_L;  // L matrix in GLInv model
+  double   glinv_r;  // r in GLInv model
+
   /* for discrete traits */
   int    * state_d;  // discrete state values
   double **condprob; // conditional probabilities (L)

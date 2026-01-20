@@ -8,6 +8,16 @@
 
 #define DEBUG_Morph_BM     1
 
+/* matrix related operations */
+static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c);
+static int mat_scale(double *A, double b, double *C, int n, int m);
+static int mat_add(double *A, double *B, double *C, int n, int m);
+static int mat_multi(double *A, double *B, double *C, int n, int m, int k);
+static int mat_trans(double *A, double *At, int n, int m);
+static int mat_decom_chol(double *A, double *L, int n);
+static int mat_inv(double *L, double *Ainv, int n);
+static double mat_logdet(double *L, int n);
+
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
 {
@@ -425,15 +435,17 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_old_logpr);
 }
 
-static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
+static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
 {
+  /* Alvarez-Carretero et al. 2019. p.969. */
+
   int j;
   double v_k, v_k1, v_k2, *m_k1, *m_k2;
 
   if (snode->left && snode->right)  /* internal node */
   {
-    trait_update_ic(idx, snode->left, stree);
-    trait_update_ic(idx, snode->right, stree);
+    bm_update_vxm(idx, snode->left, stree);
+    bm_update_vxm(idx, snode->right, stree);
     
     if (snode->parent)
       v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
@@ -455,8 +467,7 @@ static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
   {
     v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
     /* the trait matrix has been standardized so that all characters have
-       the same variance and the population noise has unit variance.
-       Alvarez-Carretero et al. 2019. p.970. */
+       the same variance and the population noise has unit variance. */
     snode->trait[idx]->brlen = v_k + 1.0;
   }
 
@@ -472,17 +483,132 @@ static void trait_update_ic(int idx, snode_t * snode, stree_t * stree)
 #endif
 }
 
-/* update the active coordinates */
-static void trait_update_k(int idx, snode_t * snode, stree_t * stree)
+static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
+                        double * L_i, double * m_i, double * r_i)
 {
-  int j, nchar, n_act;
+  /* Mitov et al. 2020; BM model (Eq. 2, 10, 11) */
 
-  if (snode->left && snode->right) // internal node
+  int    nchar, k_i, k_j, *act, *act_p;
+  double t, *A, *C, *E, f, *L, *m, r,  *V, *T, *x, *y;
+
+  if (snode == stree->root)
+    return;
+  
+  /* total number of characters */
+  nchar = stree->trait_dim[idx];
+
+  /* allocate space (more than needed) */
+  A = (double *)xmalloc(nchar * nchar * sizeof(double));
+  C = (double *)xmalloc(nchar * nchar * sizeof(double));
+  E = (double *)xmalloc(nchar * nchar * sizeof(double));
+  V = (double *)xmalloc(nchar * nchar * sizeof(double));
+  T = (double *)xmalloc(nchar * nchar * sizeof(double));
+  x = (double *)xmalloc(nchar * sizeof(double));
+  y = (double *)xmalloc(nchar * sizeof(double));
+
+  /* active coordinates */
+  act = snode->trait[idx]->active;
+  act_p = snode->parent->trait[idx]->active;
+  k_i = act[nchar];   // number of active coordinates at node i
+  k_j = act_p[nchar]; // number of active coordinates at parent j
+
+  t = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
+  /* the trait matrix has been standardized so that all characters have
+     the same variance and the population noise has unit variance. */
+  if (snode->left == NULL)
+    t += 1.0;
+
+  /* Rs is the linear shrinkage estimate of the correlation matrix R,
+     which is input along with the morphological data */
+  mat_sub(stree->trait_Rs[idx], A, nchar, nchar, act, act);
+  mat_scale(A, t, V, k_i, k_i);         // V = t*R
+  mat_decom_chol(V, T, k_i);
+  mat_inv(T, V, k_i);                   // V: inv(V)
+
+  t = -0.5 * mat_logdet(T, k_i);        // reuse t
+
+  /* E = t(Phi) * inv(V) */
+  mat_sub(stree->trait_Phi[idx], A, nchar, nchar, act, act_p);
+  mat_trans(A, T, k_i, k_j);            // T: t(Phi)
+  mat_multi(T, V, E, k_j, k_i, k_i);
+
+  /* C = -0.5 * E * Phi */
+  mat_multi(E, A, C, k_j, k_i, k_j);
+  mat_scale(C, -0.5, C, k_j, k_j);
+
+  /* A = -0.5 * inv(V) */
+  mat_scale(V, -0.5, A, k_i, k_i);
+
+  if (snode->left == NULL) // tip
   {
-    trait_update_k(idx, snode->left, stree);
-    trait_update_k(idx, snode->right, stree);
+    m = snode->trait[idx]->state_m;
+    mat_sub(m, x, 1, nchar, NULL, act);
 
+    /* L_i = C */
+    mat_scale(C, 1.0, L_i, k_j, k_j);
+
+    /* m_i = E * x */
+    mat_multi(E, x, m_i, k_j, k_i, 1);
+    
+    /* r_i = t(x) * A * x + f */
+    mat_multi(x, A, y, 1, k_i, k_i);
+    mat_multi(y, x, r_i, 1, k_i, 1);
+    *(r_i) += t - 0.5 * k_i * log(2.0 * M_PI);
+  }
+  else  // internal node
+  {
+    L = snode->trait[idx]->glinv_L;
+    m = snode->trait[idx]->state_m;
+    r = snode->trait[idx]->glinv_r;
+
+    mat_add(A, L, V, k_i, k_i);         // V: A+L
+    mat_scale(V, -2.0, A, k_i, k_i);    // A: -2*(A+L)
+    mat_decom_chol(A, T, k_i);
+    t += -0.5 * mat_logdet(T, k_i);
+
+    mat_decom_chol(V, T, k_i);
+    mat_inv(T, V, k_i);                 // V: inv(A+L)
+
+    /* L_i = C - 0.25 * E * inv(A+L) * t(E) */
+    mat_multi(E, V, A, k_j, k_i, k_i);  // A: E * inv(A+L)
+    mat_trans(E, T, k_j, k_i);          // T: t(E)
+    mat_multi(A, T, E, k_j, k_i, k_j);  // E: E * inv(A+L) * t(E)
+    mat_scale(E, -0.25, L_i, k_j, k_j);
+    mat_add(C, L_i, L_i, k_j, k_j);
+
+    /* m_i = -0.5 * E * inv(A+L) * m */
+    mat_multi(A, m, m_i, k_j, k_i, 1);
+    mat_scale(m_i, -0.5, m_i, k_j, 1);
+
+    /* r_i = r + f + 0.5 * k * log(2pi)
+             - 0.5 * logdet(-2 * (A+L))
+             - 0.25 * t(m) * inv(A+L) * m */
+    mat_multi(m, V, y, 1, k_i, k_i);
+    mat_multi(y, m, r_i, 1, k_i, 1);
+    *(r_i) = *(r_i) * (-0.25) + r + t;
+  }
+
+  /* free space */
+  free(A); free(C); free(E);
+  free(V); free(T); free(x); free(y);
+}
+
+static void bm_update_Lmr(int idx, snode_t * snode, stree_t * stree)
+{
+  /* Mitov et al. 2020; BM model (Theorem 2) */
+
+  int    nchar, n_act, j;
+  double *L1, *L2, *m1, *m2, r1, r2;
+
+  if (snode->left && snode->right)  // internal node
+  {
+    bm_update_Lmr(idx, snode->left, stree);
+    bm_update_Lmr(idx, snode->right, stree);
+
+    /* total number of characters */
     nchar = stree->trait_dim[idx];
+
+    /* active coordinates */
     for (n_act = 0, j = 0; j < nchar; ++j)
     {
       if (snode->left->trait[idx]->active[j] == -1 &&
@@ -496,80 +622,28 @@ static void trait_update_k(int idx, snode_t * snode, stree_t * stree)
       }
     }
     snode->trait[idx]->active[nchar] = n_act;
+  
+    /* allocate space */
+    L1 = (double *)xmalloc(nchar * nchar * sizeof(double));
+    L2 = (double *)xmalloc(nchar * nchar * sizeof(double));
+    m1 = (double *)xmalloc(nchar * sizeof(double));
+    m2 = (double *)xmalloc(nchar * sizeof(double));
+
+    bm_ACEf_Lmr(idx, snode->left,  stree, L1, m1, &r1);
+    bm_ACEf_Lmr(idx, snode->right, stree, L2, m2, &r2);
+
+    /* store L, m, r at this node */
+    mat_add(L1, L2, snode->trait[idx]->glinv_L, n_act, n_act);
+    for (j = 0; j < n_act; ++j)
+      snode->trait[idx]->state_m[j] = m1[j] + m2[j];
+    snode->trait[idx]->glinv_r = r1 + r2;
+
+    /* free space */
+    free(L1); free(L2); free(m1); free(m2);
   }
 }
 
-static void trait_update_lmr(int idx, snode_t * snode, stree_t * stree)
-{
-  /* Mitov et al. 2020; BM model (Corollary 1, Eq. 21) */
-
-  int j, nchar;
-  double t;
-
-  if (snode->left && snode->right)  // internal node
-  {
-    trait_update_lmr(idx, snode->left, stree);
-    trait_update_lmr(idx, snode->right, stree);  
-  }
-  
-  if (snode != stree->root)  // not root
-  {
-    /* A = -0.5 * inv(V)
-       C = -0.5 * t(Phi) * inv(V) * Phi
-       E = t(Phi) * inv(V)
-       f = -0.5 * k * log(2pi) - 0.5 * logdet(V)
-     */
-
-    t = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
-    /* the trait matrix has been standardized so that all characters have
-       the same variance and the population noise has unit variance. */
-    if (snode->left == NULL) t += 1.0;
-
-    /* Rs is the linear shrinkage estimate of the correlation matrix R,
-       which is input along with the morphological data */
-    /* calculate the inverse of Rs */
-    // R_inv = inv(Rs)
-    // V_inv = R_inv / t;
-
-    
-  }
-  
-  if (snode->left && snode->right)  // internal node
-  {
-    if (snode->left->left == NULL)  // left child is tip
-    {
-      /* L1 = C1
-         m1 = E1 * x1
-         r1 = t(x1) * A1 * x1 + f1
-       */
-      
-    }
-    else  // left child is internal node
-    {
-      /* L1 = C1 - 0.25 * E1 * inv(A1+L1) * t(E1)
-         m1 = -0.5 * E1 * inv(A1+L1) * m1
-         r1 = f1 + r1 + 0.5 * k * log(2pi)
-              - 0.5 * logdet(-2*(A1+L1)) 
-              - 0.25 * t(m1) * inv(A1+L1) * m1
-       */
-      
-    }
-
-    if (snode->right->left == NULL)  // right child is tip
-    {
-      
-    }
-    else  // right child is internal node
-    {
-      
-    }
-
-    /* L = L1 + L2; m = m1 + m2; r = r1 + r2 */
-    
-  }
-}
-
-static void trait_trprob_mk(double ** p, double v, int max_state)
+static void mk_trprob(double ** p, double v, int max_state)
 {
   int k;
   
@@ -581,7 +655,7 @@ static void trait_trprob_mk(double ** p, double v, int max_state)
   }
 }
 
-static void trait_update_cp(int idx, snode_t * snode, stree_t * stree)
+static void mk_update_cp(int idx, snode_t * snode, stree_t * stree)
 {
   int h, j, k, a, x, y, z;
   int * nstate, nchar, max_state;
@@ -603,14 +677,14 @@ static void trait_update_cp(int idx, snode_t * snode, stree_t * stree)
   max_state = nstate[nchar];
 
   /* calculate the transition probabilities */
-  trait_trprob_mk(snode->trait[idx]->tranprob, v, max_state);
+  mk_trprob(snode->trait[idx]->tranprob, v, max_state);
 
   /* pruning algorithm */
   /* TODO: this can be optimized by grouping characters by patterns */
   if (snode->left && snode->right)  /* internal node */
   {
-    trait_update_cp(idx, snode->left, stree);
-    trait_update_cp(idx, snode->right, stree);
+    mk_update_cp(idx, snode->left, stree);
+    mk_update_cp(idx, snode->right, stree);
 
     for (h = 0; h < nchar; ++h)
     {
@@ -729,12 +803,12 @@ static void trait_update_part(int idx, stree_t * stree)
 #endif
 
   if (stree->trait_type[idx] == BPP_DATA_DISC)
-    trait_update_cp(idx, stree->root, stree);
+    mk_update_cp(idx, stree->root, stree);
   else if (stree->trait_type[idx] == BPP_DATA_CONT &&
            stree->trait_missing[idx])
-    trait_update_lmr(idx, stree->root, stree);
+    bm_update_Lmr(idx, stree->root, stree);
   else
-    trait_update_ic(idx, stree->root, stree);
+    bm_update_vmx(idx, stree->root, stree);
 }
 
 void trait_update(stree_t * stree)
@@ -1034,7 +1108,7 @@ void trait_restore(stree_t * stree)
     trait_restore_part(n, stree);
 }
 
-static double loglikelihood_trait_AC(int idx, stree_t * stree)
+static double loglikelihood_BM_AC(int idx, stree_t * stree)
 {
   int i, j, p;
   double v_k1, v_k2, zz, ldetRs, logl;
@@ -1072,17 +1146,28 @@ static double loglikelihood_trait_AC(int idx, stree_t * stree)
   return logl;
 }
 
-/* TODO: */
-static double loglikelihood_trait_Mitov(int idx, stree_t * stree)
+static double loglikelihood_BM_Mitov(int idx, stree_t * stree)
 {
-  double logl;
+  int nchar, n_act;
+  double logl, *L0, *m0, r0, *x0, *tmp, part;
 
-
-  logl = 0.0;
-
+  /* Mitov et al. 2020; Eq. S2 */
   /* x0 = -0.5 * inv(L0) * m0 */
+  
+  L0 = stree->root->trait[idx]->glinv_L;
+  m0 = stree->root->trait[idx]->state_m;
+  r0 = stree->root->trait[idx]->glinv_r;
+  
+  nchar = stree->trait_dim[idx];
+  n_act = stree->root->trait[idx]->active[nchar];
 
   /* logl = t(x0) * L0 * x0 + t(x0) * m0 + r0 */
+  mat_multi(x0, L0, tmp, 1, n_act, n_act);
+  mat_multi(tmp, x0, &part, 1, n_act, 1);
+  logl = part;
+
+  mat_multi(x0, m0, &part, 1, n_act, 1);
+  logl += part + r0;
 
   stree->trait_logl[idx] = logl;
 
@@ -1094,7 +1179,7 @@ static double loglikelihood_trait_Mitov(int idx, stree_t * stree)
   return logl;
 }
 
-static double loglikelihood_trait_Mkv(int idx, stree_t * stree)
+static double loglikelihood_Mkv(int idx, stree_t * stree)
 {
   int h, j, k, a, x;
   int * nstate, nchar, max_state;
@@ -1149,18 +1234,18 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
   if (stree->trait_type[idx] == BPP_DATA_DISC)
   {
     /* Mkv model */
-    return loglikelihood_trait_Mkv(idx, stree);
+    return loglikelihood_Mkv(idx, stree);
   }
   else if (stree->trait_type[idx] == BPP_DATA_CONT &&
            stree->trait_missing[idx])
   {
     /* BM model with missing data; Mitov et al. 2020 */
-    return loglikelihood_trait_Mitov(idx, stree);
+    return loglikelihood_BM_Mitov(idx, stree);
   }
   else
   {
     /* BM model without missing data; Alvarez-Carretero et al. 2019 */
-    return loglikelihood_trait_AC(idx, stree);
+    return loglikelihood_BM_AC(idx, stree);
   }
 }
 
@@ -1353,10 +1438,57 @@ double prop_branch_rates_trait(stree_t * stree)
 }
 
 
-/* matrix related operations */
+/* submatrix of A[n*m] by active coordinates */
+static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c)
+{
+  int i, j, a, b, ncol;
+  
+  /* get total active columns */
+  ncol = c[m];
+
+  /* extract submatrix using active rows and columns */
+  for (a = 0, i = 0; i < n; ++i)
+  {
+    if (n > 1 && r[i] != 1) // n=1 if A is a vector
+      continue;
+    for (b = 0, j = 0; j < m; ++j)
+    {
+      if (c[j] != 1) continue;
+      Asub[a * ncol + b] = A[i * m + j];
+      b++;
+    }
+    a++;
+  }
+  
+  return 0;
+}
+
+/* C = b*A; b is a scalar */
+static int mat_scale(double *A, double b, double *C, int n, int m)
+{
+  int i, j;
+  
+  for (i = 0; i < n; ++i)
+    for (j = 0; j < m; ++j)
+      C[i * m + j] = b * A[i * m + j];
+  
+  return 0;
+}
+
+/* C = A+B; A[n*m], B[n*m], C[n*m] */
+static int mat_add(double *A, double *B, double *C, int n, int m)
+{
+  int i, j;
+  
+  for (i = 0; i < n; ++i)
+    for (j = 0; j < m; ++j)
+      C[i * m + j] = A[i * m + j] + B[i * m + j];
+  
+  return 0;
+}
 
 /* C = A*B; A[n*m], B[m*k], C[n*k] */
-int mat_multi(double *A, double *B, double *C, int n, int m, int k)
+static int mat_multi(double *A, double *B, double *C, int n, int m, int k)
 {
   int i, j, r;
   double sum;
@@ -1373,7 +1505,7 @@ int mat_multi(double *A, double *B, double *C, int n, int m, int k)
 }
 
 /* t(A); A[n*m], At[m*n] */
-int mat_trans(double *A, double *At, int n, int m)
+static int mat_trans(double *A, double *At, int n, int m)
 {
   int i, j;
   
@@ -1384,33 +1516,9 @@ int mat_trans(double *A, double *At, int n, int m)
   return 0;
 }
 
-/* submatrix of A[n*m] by active coordinates */
-int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c)
-{
-  int i, j, a, b, ncol;
-  
-  /* get total active columns */
-  ncol = c[m];
-
-  /* extract submatrix using active rows and columns */
-  for (a = 0, i = 0; i < n; ++i)
-  {
-    if (r[i] != 1) continue;
-    for (b = 0, j = 0; j < m; ++j)
-    {
-      if (c[j] != 1) continue;
-      Asub[a * ncol + b] = A[i * m + j];
-      b++;
-    }
-    a++;
-  }
-  
-  return 0;
-}
-
 /* Cholesky decomposition: A = LL',
    where A is symmetrical and positive definite, and L is lower triangular */
-int mat_decom_chol(double *A, double *L, int n)
+static int mat_decom_chol(double *A, double *L, int n)
 {
   int i, j, k;
   double sum;
@@ -1440,41 +1548,48 @@ int mat_decom_chol(double *A, double *L, int n)
   return 0;
 }
 
-/* inverse A using Cholesky decomposition */
-int mat_inv(double *A, double *Ainv, int n)
+/* inverse A using Cholesky decomposition L */
+static int mat_inv(double *L, double *Ainv, int n)
 {
   int i, j, k;
-  double *L, *L_t, sum;
+  double *Linv, sum, *Linv_t;
   
-  L = (double *)xmalloc(n*n*sizeof(double));
-  if (mat_decom_chol(A, L, n) != 0)
-  {
-    free(L);
-    return -1;
-  }
-  
-  /* inv(L) computed in place */
-  for (i = 0; i < n; ++i)
-    for (j = 0; j <= i; ++j)
-    {
-      if (i == j)
-        L[i * n + j] = 1.0 / L[i * n + j];
-      else
-      {
-        for (sum = 0, k = j; k < i; ++k)
-          sum -= L[i * n + k] * L[k * n + j];
-        L[i * n + j] = sum / L[i * n + i];
-      }
-    }
-  
-  /* inv(A) = t(inv(L)) * inv(L) */
-  L_t = (double *)xmalloc(n*n*sizeof(double));
-  mat_trans(L, L_t, n, n);
-  mat_multi(L_t, L, Ainv, n, n, n);
+  /* store inv(L) separately to preserve L */
+  Linv   = (double *)xcalloc(n*n, sizeof(double));
+  Linv_t = (double *)xmalloc(n*n*sizeof(double));
 
-  free(L);
-  free(L_t);
+  for (i = 0; i < n; ++i)
+  {
+    Linv[i * n + i] = 1.0 / L[i * n + i];
+    for (j = 0; j < i; ++j)
+    {
+      for (sum = 0, k = j; k < i; ++k)
+        sum -= L[i * n + k] * Linv[k * n + j];
+      Linv[i * n + j] = sum / L[i * n + i];
+    }
+  }
+
+  /* inv(A) = t(inv(L)) * inv(L) */
+  mat_trans(Linv, Linv_t, n, n);
+  mat_multi(Linv_t, Linv, Ainv, n, n, n);
+
+  free(Linv);
+  free(Linv_t);
   
   return 0;
 }
 
+/* determinant A using Cholesky decomposition L */
+static double mat_logdet(double *L, int n)
+{
+  int i;
+  double logdet;
+
+  /* logdet(A) = 2 * sum(log(L[i,i])) for A = L*L^T */
+  logdet = 0.0;
+  for (i = 0; i < n; ++i)
+    logdet += log(L[i * n + i]);
+  logdet *= 2.0;
+
+  return logdet;
+}
