@@ -708,7 +708,6 @@ static void stree_clone(stree_t * stree, stree_t * clone)
   clone->trait_logpr = NULL;
   clone->trait_old_logpr = NULL;
   clone->trait_nstate = NULL;
-  clone->trait_v_pop = NULL;
   clone->trait_ldetRs = NULL;
 
   if (opt_migration)
@@ -3160,7 +3159,6 @@ void stree_init(stree_t * stree,
   stree->trait_old_logpr = NULL;
   stree->trait_nstate = NULL;
   stree->trait_missing = NULL;
-  stree->trait_v_pop = NULL;
   stree->trait_ldetRs = NULL;
 
   if (opt_migration)

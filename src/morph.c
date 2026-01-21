@@ -7,6 +7,8 @@
 #define LABEL_LEN 99
 
 #define DEBUG_Morph_BM     1
+#define BM_AC     1
+#define BM_Mitov  0
 
 /* matrix related operations */
 static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c);
@@ -206,9 +208,61 @@ static void parse_comment(FILE * fp)
   ungetc(c, fp);
 }
 
-static morph_t * parse_trait_part(FILE * fp)
+static int parse_matrix_c(FILE * fp, double * mat, int n, int m)
 {
   int i, j;
+  for (i = 0; i < n; ++i)
+    for (j = 0; j < m; ++j)
+      if (fscanf(fp, "%lf", &mat[i*m + j]) != 1)
+        return 1;
+
+#ifdef DEBUG_Morph_Matrix
+  printf("\nR*\n");
+  for (i = 0; i < n; ++i) {
+    for (j = 0; j < m; ++j)
+      printf("%+.3lf\t", mat[i*m + j]);
+    printf("\n");
+  }
+#endif
+
+  return 0;
+}
+
+void morph_destroy(morph_t * morph)
+{
+  int i;
+
+  if (morph->label)
+  {
+    for (i = 0; i < morph->ntaxa; ++i)
+      if (morph->label[i])
+        free(morph->label[i]);
+    free(morph->label);
+  }
+
+  if (morph->conti)
+  {
+    for (i = 0; i < morph->ntaxa; ++i)
+      if (morph->conti[i])
+        free(morph->conti[i]);
+    free(morph->conti);
+  }
+
+  if (morph->discr)
+  {
+    for (i = 0; i < morph->ntaxa; ++i)
+      if (morph->discr[i])
+        free(morph->discr[i]);
+    free(morph->discr);
+  }
+  
+  free(morph);
+}
+
+static morph_t * morph_parse(FILE * fp)
+{
+  int  i, j, nchar, c;
+  char tmpstr[10];
   
   morph_t * morph = (morph_t *)xmalloc(sizeof(morph_t));
   
@@ -221,6 +275,7 @@ static morph_t * parse_trait_part(FILE * fp)
     fprintf(stderr, "Error in header\n");
     return NULL;
   }
+  nchar = morph->length;
   
   /* allocate space */
   morph->label = (char **)xmalloc((morph->ntaxa)*sizeof(char *));
@@ -231,46 +286,76 @@ static morph_t * parse_trait_part(FILE * fp)
   {
     morph->conti = (double **)xmalloc((morph->ntaxa)*sizeof(double *));
     for (i = 0; i < morph->ntaxa; ++i)
-      morph->conti[i] = (double *)xmalloc((morph->length)*sizeof(double));
+      morph->conti[i] = (double *)xmalloc(nchar*sizeof(double));
   }
   else // morph->dtype == BPP_DATA_DISC
   {
     morph->discr = (int **)xmalloc((morph->ntaxa)*sizeof(int *));
     for (i = 0; i < morph->ntaxa; ++i)
-      morph->discr[i] = (int *)xmalloc((morph->length)*sizeof(int));
+      morph->discr[i] = (int *)xmalloc(nchar*sizeof(int));
   }
   
   /* read morphological traits of each species,
-     assuming each line has a label followed by m->length numbers.
-     trait matrix has dimension m->ntaxa * m->length */
+     assuming each line has a label followed by numbers.
+     trait matrix has dimension ntaxa * nchar */
   for (i = 0; i < morph->ntaxa; ++i)
   {
     /* read the label (species name) */
     if (parse_label(fp, morph->label[i], LABEL_LEN+1))
     {
       fprintf(stderr, "Failed to read label of species %d\n", i+1);
+      morph_destroy(morph);
       return NULL;
     }
     /* read the trait values of this species */
     if (morph->dtype == BPP_DATA_CONT &&
-        parse_value_c(fp, morph->conti[i], morph->length))
+        parse_value_c(fp, morph->conti[i], nchar))
     {
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
+      morph_destroy(morph);
       return NULL;
     }
     else if (morph->dtype == BPP_DATA_DISC &&
-             parse_value_d(fp, morph->discr[i], morph->length))
+             parse_value_d(fp, morph->discr[i], nchar))
     {
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
+      morph_destroy(morph);
       return NULL;
     }
   }
-  
-  /* TODO: also read in correlation matrix */
+
   if (morph->dtype == BPP_DATA_CONT)
   {
-
-  }  
+    c = get_nb_char(fp);
+    if (c == 'R')
+    {
+      /* read correlation matrix (R*) */
+      fgetc(fp);  // skip '*'
+      morph->matRs = (double *)xmalloc(nchar*nchar*sizeof(double));
+      if (parse_matrix_c(fp, morph->matRs, nchar, nchar))
+      {
+        fprintf(stderr, "Error reading correlation matrix (R*)\n");
+        morph_destroy(morph);
+        return NULL;
+      }
+    }
+    else if (c == 'l')
+    {
+      /* read log determinant of R* */
+      morph->matRs = (double *)xmalloc(sizeof(double));
+      if (fscanf(fp, "%s %lf", tmpstr, morph->matRs) != 2)
+      {
+        fprintf(stderr, "Error reading log determinant of R*\n");
+        morph_destroy(morph);
+        return NULL;
+      }
+    }
+    else
+    {
+      ungetc(c, fp);
+      morph->matRs = NULL;  // assume identity matrix
+    }
+  }
 
 #ifdef DEBUG_Morph_Matrix
   printf("\n%d %d  %d\n", morph->ntaxa, morph->length, morph->dtype);
@@ -313,7 +398,7 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
       pmorph = temp;
     }
 
-    pmorph[*count] = parse_trait_part(fp);
+    pmorph[*count] = morph_parse(fp);
     if (pmorph[*count] == NULL)
     {
       for (i = 0; i < *count; ++i)
@@ -329,127 +414,6 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
   fclose(fp);
 
   return pmorph;
-}
-
-void morph_destroy(morph_t * morph)
-{
-  int i;
-
-  if (morph->label)
-  {
-    for (i = 0; i < morph->ntaxa; ++i)
-      if (morph->label[i])
-        free(morph->label[i]);
-    free(morph->label);
-  }
-
-  if (morph->conti)
-  {
-    for (i = 0; i < morph->ntaxa; ++i)
-      if (morph->conti[i])
-        free(morph->conti[i]);
-    free(morph->conti);
-  }
-
-  if (morph->discr)
-  {
-    for (i = 0; i < morph->ntaxa; ++i)
-      if (morph->discr[i])
-        free(morph->discr[i]);
-    free(morph->discr);
-  }
-
-  if (morph->matRs)
-    free(morph->matRs);
-  
-  free(morph);
-}
-
-void trait_destroy(stree_t * stree)
-{
-  int n, i, j;
-  snode_t * snode;
-  trait_t * trait;
-
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    snode = stree->nodes[i];
-    if (snode->trait)
-    {
-      for (n = 0; n < stree->trait_count; ++n)
-      {
-        trait = snode->trait[n];
-        if (trait)
-        {
-          if (trait->state_d)
-            free(trait->state_d);
-          if (trait->condprob)
-          {
-            for (j = 0; j < stree->trait_dim[n] +54; ++j)
-              free(trait->condprob[j]);
-            free(trait->condprob);
-          }
-          if (trait->tranprob)
-          {
-            for (j = 0; j < 9; ++j)
-              free(trait->tranprob[j]);
-            free(trait->tranprob);
-          }
-          if (trait->state_m)
-            free(trait->state_m);
-          if (trait->contrast)
-            free(trait->contrast);
-          if (trait->active)
-            free(trait->active);
-          if (trait->glinv_L)
-            free(trait->glinv_L);  
-          free(trait);
-        }
-      }
-      free(snode->trait);
-    }
-  }
-  
-  if (stree->trait_dim)
-    free(stree->trait_dim);
-  if (stree->trait_type)
-    free(stree->trait_type);
-  if (stree->trait_missing)
-    free(stree->trait_missing);
-  if (stree->trait_ldetRs)
-    free(stree->trait_ldetRs);
-
-  if (stree->trait_nstate)
-  {
-    for (n = 0; n < stree->trait_count; ++n)
-    {
-      if (stree->trait_nstate[n])
-        free(stree->trait_nstate[n]);
-    }
-    free(stree->trait_nstate);
-  }
-  if (stree->trait_Rs)
-  {
-    for (n = 0; n < stree->trait_count; ++n)
-    {
-      if (stree->trait_Rs[n])
-      {
-        free(stree->trait_Rs[n]);
-        free(stree->trait_Phi[n]);
-      }
-    }
-    free(stree->trait_Rs);
-    free(stree->trait_Phi);
-  }
-
-  if (stree->trait_logl)
-    free(stree->trait_logl);
-  if (stree->trait_old_logl)
-    free(stree->trait_old_logl);
-  if (stree->trait_logpr)
-    free(stree->trait_logpr);
-  if (stree->trait_old_logpr)
-    free(stree->trait_old_logpr);
 }
 
 static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
@@ -500,13 +464,64 @@ static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
 #endif
 }
 
+static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
+{
+  int n, i, j, nchar;
+  morph_t * morph;
+
+  for (n = 0; n < stree->trait_count; ++n)
+  { 
+    morph = morph_list[n];
+    
+    if (morph->dtype != BPP_DATA_CONT)
+      continue;
+    
+    nchar = morph->length;
+
+    if (stree->trait_missing[n] || BM_Mitov)
+    {
+      if (morph->matRs == NULL)
+      {
+        stree->trait_Rs[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
+        /* set up identity matrix for R* */
+        for (i = 0; i < nchar; ++i)
+          for (j = 0; j < nchar; ++j)
+            if (i == j)
+              stree->trait_Rs[n][i*nchar + j] = 1.0;
+            else
+              stree->trait_Rs[n][i*nchar + j] = 0.0;
+      }
+      else
+        stree->trait_Rs[n] = morph->matRs;  //???
+
+      /* set up identity matrix for Phi */
+      stree->trait_Phi[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
+      for (i = 0; i < nchar; ++i)
+        for (j = 0; j < nchar; ++j)
+          if (i == j)
+            stree->trait_Phi[n][i*nchar + j] = 1.0;
+          else  
+            stree->trait_Phi[n][i*nchar + j] = 0.0;
+    }
+    else  // no missing data
+    {
+      if (morph->matRs == NULL)
+        stree->trait_ldetRs[n] = 0.0;  // identity matrix
+      else
+        stree->trait_ldetRs[n] = morph->matRs[0];
+    }
+  }
+
+  return 0;
+}
+
 static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
                         double * L_i, double * m_i, double * r_i)
 {
   /* Mitov et al. 2020; BM model (Eq. 2, 10, 11) */
 
   int    nchar, k_i, k_j, *act, *act_p;
-  double t, *A, *C, *E, f, *L, *m, r,  *V, *T, *x, *y;
+  double t, *A, *C, *E, *L, *m, r,  *V, *T, *x, *y;
 
   if (snode == stree->root)
     return;
@@ -515,6 +530,7 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   nchar = stree->trait_dim[idx];
 
   /* allocate space (more than needed) */
+  /* TODO: consider allocate space only once somewhere */
   A = (double *)xmalloc(nchar * nchar * sizeof(double));
   C = (double *)xmalloc(nchar * nchar * sizeof(double));
   E = (double *)xmalloc(nchar * nchar * sizeof(double));
@@ -534,6 +550,7 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
      the same variance and the population noise has unit variance. */
   if (snode->left == NULL)
     t += 1.0;
+  snode->trait[idx]->brlen = t;
 
   /* Rs is the linear shrinkage estimate of the correlation matrix R,
      which is input along with the morphological data */
@@ -825,7 +842,7 @@ static void trait_update_part(int idx, stree_t * stree)
            stree->trait_missing[idx])
     bm_update_Lmr(idx, stree->root, stree);
   else
-    bm_update_vmx(idx, stree->root, stree);
+    bm_update_vxm(idx, stree->root, stree);
 }
 
 void trait_update(stree_t * stree)
@@ -888,7 +905,6 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         {
           state = stree->nodes[i]->trait[n]->state_d[j];
           if (state >= 1023) { // ? or -
-            stree->trait_missing[n] = 1;
             l++;
             if (k == i) k++;
           }
@@ -914,7 +930,8 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
     }
     else // (morph_list[n]->dtype == BPP_DATA_CONT)
     {
-      /* update the vector for the active coordinates */
+      /* update the vector for the active coordinates 
+         while checking missing states */
       for (i = 0; i < stree->tip_count; ++i)
       {
         for (n_act = 0, j = 0; j < nchar; ++j)
@@ -1003,7 +1020,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
     if (morph_list[n]->dtype == BPP_DATA_DISC)
       stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
     
-    /* allocate trait_Rs[n] and trait_Phi[n] in trait_fill_tip() if needed */
+    /* allocate trait_Rs[n] and trait_Phi[n] later if needed */
   }
   
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
@@ -1049,6 +1066,93 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
   stree->trait_old_logpr = (double *)xcalloc(n_part, sizeof(double));
 }
 
+void trait_destroy(stree_t * stree)
+{
+  int n, i, j;
+  snode_t * snode;
+  trait_t * trait;
+
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    if (snode->trait)
+    {
+      for (n = 0; n < stree->trait_count; ++n)
+      {
+        trait = snode->trait[n];
+        if (trait)
+        {
+          if (trait->state_d)
+            free(trait->state_d);
+          if (trait->condprob)
+          {
+            for (j = 0; j < stree->trait_dim[n] +54; ++j)
+              free(trait->condprob[j]);
+            free(trait->condprob);
+          }
+          if (trait->tranprob)
+          {
+            for (j = 0; j < 9; ++j)
+              free(trait->tranprob[j]);
+            free(trait->tranprob);
+          }
+          if (trait->state_m)
+            free(trait->state_m);
+          if (trait->contrast)
+            free(trait->contrast);
+          if (trait->active)
+            free(trait->active);
+          if (trait->glinv_L)
+            free(trait->glinv_L);  
+          free(trait);
+        }
+      }
+      free(snode->trait);
+    }
+  }
+  
+  if (stree->trait_dim)
+    free(stree->trait_dim);
+  if (stree->trait_type)
+    free(stree->trait_type);
+  if (stree->trait_missing)
+    free(stree->trait_missing);
+  if (stree->trait_ldetRs)
+    free(stree->trait_ldetRs);
+
+  if (stree->trait_nstate)
+  {
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      if (stree->trait_nstate[n])
+        free(stree->trait_nstate[n]);
+    }
+    free(stree->trait_nstate);
+  }
+  if (stree->trait_Rs)
+  {
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      if (stree->trait_Rs[n])
+      {
+        free(stree->trait_Rs[n]);
+        free(stree->trait_Phi[n]);
+      }
+    }
+    free(stree->trait_Rs);
+    free(stree->trait_Phi);
+  }
+
+  if (stree->trait_logl)
+    free(stree->trait_logl);
+  if (stree->trait_old_logl)
+    free(stree->trait_old_logl);
+  if (stree->trait_logpr)
+    free(stree->trait_logpr);
+  if (stree->trait_old_logpr)
+    free(stree->trait_old_logpr);
+}
+
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 {
   int n, i;
@@ -1066,8 +1170,10 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     stree->trait_type[n] = morph_list[n]->dtype;
   }
   
-  /* fill the trait values for the tip nodes */
-  if (trait_fill_tip(stree, morph_list))
+  /* fill the trait values for the tip nodes;
+     and for continuous traits, set up R and Phi */
+  if (trait_fill_tip(stree, morph_list) ||
+      bm_init_Rs_Phi(stree, morph_list))
   {
     trait_destroy(stree);
     fatal("Error filling traits");
@@ -1258,8 +1364,7 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
     /* Mkv model */
     return loglikelihood_Mkv(idx, stree);
   }
-  else if (stree->trait_type[idx] == BPP_DATA_CONT &&
-           stree->trait_missing[idx])
+  else if (stree->trait_missing[idx] || BM_Mitov)
   {
     /* BM model with missing data; Mitov et al. 2020 */
     return loglikelihood_BM_Mitov(idx, stree);
@@ -1526,7 +1631,7 @@ static int mat_multi(double *A, double *B, double *C, int n, int m, int k)
   return 0;
 }
 
-/* t(A); A[n*m], At[m*n] */
+/* A'; A[n*m], At[m*n] */
 static int mat_trans(double *A, double *At, int n, int m)
 {
   int i, j;
@@ -1577,7 +1682,7 @@ static int mat_inv(double *L, double *Ainv, int n)
   double *Linv, sum, *Linv_t;
   
   /* store inv(L) separately to preserve L */
-  Linv   = (double *)xcalloc(n*n, sizeof(double));
+  Linv   = (double *)xmalloc(n*n*sizeof(double));
   Linv_t = (double *)xmalloc(n*n*sizeof(double));
 
   for (i = 0; i < n; ++i)
@@ -1607,7 +1712,7 @@ static double mat_logdet(double *L, int n)
   int i;
   double logdet;
 
-  /* logdet(A) = 2 * sum(log(L[i,i])) for A = L*L^T */
+  /* logdet(A) = 2 * sum(log(L[i,i])) for A = LL' */
   logdet = 0.0;
   for (i = 0; i < n; ++i)
     logdet += log(L[i * n + i]);
