@@ -3921,7 +3921,7 @@ static FILE * init(stree_t ** ptr_stree,
     assert(morph_list);
     printf(" Done\n");
 
-    /* initialize trait values and contrasts */
+    /* initialize trait values, etc */
     trait_init(stree, morph_list, opt_trait_count);
     
     /* calculate log likelihood for morphological traits */

@@ -490,9 +490,9 @@ typedef struct trait_s
   double old_brate;
   
   /* for continuous traits */
-  double brlen;      // transformed branch length (v_k')
-  double * state_m;  // state values (m_k'), or m in GLInv model
-  double * contrast; // independent contrasts (x_k)
+  double   brlen;    // (transformed) branch length
+  double * state_m;  // state values, or m in GLInv model
+  double * contrast; // independent contrasts
   int    * active;   // indicator for active coordinates
   double * glinv_L;  // L matrix in GLInv model
   double   glinv_r;  // r in GLInv model
@@ -600,9 +600,7 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
-  /* trait related things (per partition): branch length, rate, trait values;
-     for discrete traits, it contains transition & conditional probabilities;
-     for continuous traits, it contains phylogenetic indepandent contrasts */
+  /* trait related things (per partition): branch length, rate, trait values, etc */
   trait_t ** trait;
 
   long flag;
@@ -679,9 +677,9 @@ typedef struct stree_s
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
   int    * trait_missing;    /* partition has missing states? */
-  double * trait_v_pop;         /* within population variance */
-  double * trait_ldetRs;  /* log determinant of shrinkage estimate of
-                             correlation matrix, i.e. log(det(R*)) */
+  double **trait_Phi;         /* identity matrix for BM model */
+  double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
+  double * trait_ldetRs;             /* log determinant of R* */
 } stree_t;
 
 typedef struct mutation_s
@@ -812,14 +810,11 @@ typedef struct morph_s
   int length;       // number of characters
   int dtype;        // data type: continuous or discrete
 
-  double ** conti;  // continuous trait matrix
-  int    ** discr;  // discrete trait matrix
   char   ** label;  // species labels
+  int    ** discr;  // discrete trait matrix
+  double ** conti;  // continuous trait matrix
 
-  /* TODO: correlation matrix, etc */
-  double v_pop;     // population variance
-  double ldetRs;    // log determinant of R*
-
+  double  * matRs;  // shrinkage estimate of correlation matrix
   int model;
 } morph_t;
 

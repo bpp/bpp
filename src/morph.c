@@ -32,15 +32,15 @@ static int parse_header(FILE * fp, int * nrow, int * ncol, int * type)
   
   if (fscanf(fp, "%d %d", nrow, ncol) != 2) {
     fprintf(stderr, "Expecting two numbers\n");
-    return 0;
+    return -1;
   }
   else if (*nrow <= 0) {
     fprintf(stderr, "Number of species must be >0(%d)\n", *nrow);
-    return 0;
+    return 1;
   }
   else if (*ncol <= 0) {
     fprintf(stderr, "Number of traits must be >0 (%d)\n", *ncol);
-    return 0;
+    return 1;
   }
 
   t = get_nb_char(fp);
@@ -55,10 +55,10 @@ static int parse_header(FILE * fp, int * nrow, int * ncol, int * type)
   else
   {
     fprintf(stderr, "Unrecognized data type (%c)\n", t);
-    return 0;
+    return 1;
   }
 
-  return 1;
+  return 0;
 }
 
 static int parse_label(FILE * fp, char * name, int len)
@@ -67,7 +67,7 @@ static int parse_label(FILE * fp, char * name, int len)
   
   c = get_nb_char(fp);
   if (c == EOF)
-    return 0;
+    return -1;
   
   for (j = 0; j < len; ++j)
   {
@@ -81,7 +81,7 @@ static int parse_label(FILE * fp, char * name, int len)
   else
     name[len] = '\0';
 
-  return 1;
+  return 0;
 }
 
 static int parse_value_c(FILE * fp, double * trait, int len)
@@ -94,7 +94,7 @@ static int parse_value_c(FILE * fp, double * trait, int len)
     
     if (c == EOF)
     {
-      return 0;
+      return -1;
     }
     else if (c == '-')
     {
@@ -104,8 +104,8 @@ static int parse_value_c(FILE * fp, double * trait, int len)
       else
       {
         ungetc(c, fp);
-        if(fscanf(fp, "%lf", &trait[j]) != 1)
-          return 0;
+        if (fscanf(fp, "%lf", &trait[j]) != 1)
+          return 1;
         trait[j] = -trait[j];  // negative value
       }
     }
@@ -116,8 +116,8 @@ static int parse_value_c(FILE * fp, double * trait, int len)
     else if (c == 'N' || c == 'n')
     {
       c = fgetc(fp);
-      if(c != 'A' && c != 'a')
-        return 0;
+      if (c != 'A' && c != 'a')
+        return 1;
       else
       {
         c = fgetc(fp);
@@ -126,19 +126,19 @@ static int parse_value_c(FILE * fp, double * trait, int len)
         else if (c == 'N' || c == 'n')
           trait[j] = NAN;  // inapplicable value
         else
-          return 0;
+          return 1;
       }
     }
     else
     {
       ungetc(c, fp);           // positive value
-      if(fscanf(fp, "%lf", &trait[j]) != 1)
-        return 0;
+      if (fscanf(fp, "%lf", &trait[j]) != 1)
+        return 1;
     }
   }
   assert(j == len);
 
-  return 1;
+  return 0;
 }
 
 static int state_bin(int x)
@@ -150,7 +150,7 @@ static int state_bin(int x)
   else
   {
     fprintf(stderr, "Unsupported trait value (%d)\n", x);
-    return 0;
+    return -1;
   }
 }
 
@@ -164,7 +164,7 @@ static int parse_value_d(FILE * fp, int * std, int len)
     c = get_nb_char(fp);
     
     if (c == EOF)
-      return 0;
+      return -1;
     
     if (isdigit(c))  // 0-9
     {
@@ -183,17 +183,17 @@ static int parse_value_d(FILE * fp, int * std, int len)
         
       if (std[j] == 0) {
         fprintf(stderr, "Misspecified ambiguity state at %d\n", j+1);
-        return 0;
+        return 1;
       }
     }
     else
     {
       fprintf(stderr, "Unrecognized trait value (%c) at %d\n", c, j+1);
-      return 0;
+      return 1;
     }
   }
   
-  return 1;
+  return 0;
 }
 
 static void parse_comment(FILE * fp)
@@ -216,7 +216,7 @@ static morph_t * parse_trait_part(FILE * fp)
   parse_comment(fp);
   
   /* read header */
-  if (!parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype)))
+  if (parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype)))
   {
     fprintf(stderr, "Error in header\n");
     return NULL;
@@ -224,23 +224,20 @@ static morph_t * parse_trait_part(FILE * fp)
   
   /* allocate space */
   morph->label = (char **)xmalloc((morph->ntaxa)*sizeof(char *));
+  for (i = 0; i < morph->ntaxa; ++i)
+    morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
+
   if (morph->dtype == BPP_DATA_CONT)
   {
     morph->conti = (double **)xmalloc((morph->ntaxa)*sizeof(double *));
     for (i = 0; i < morph->ntaxa; ++i)
-    {
       morph->conti[i] = (double *)xmalloc((morph->length)*sizeof(double));
-      morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
-    }
   }
   else // morph->dtype == BPP_DATA_DISC
   {
     morph->discr = (int **)xmalloc((morph->ntaxa)*sizeof(int *));
     for (i = 0; i < morph->ntaxa; ++i)
-    {
       morph->discr[i] = (int *)xmalloc((morph->length)*sizeof(int));
-      morph->label[i] = (char *)xmalloc((LABEL_LEN+1)*sizeof(char));
-    }
   }
   
   /* read morphological traits of each species,
@@ -249,20 +246,20 @@ static morph_t * parse_trait_part(FILE * fp)
   for (i = 0; i < morph->ntaxa; ++i)
   {
     /* read the label (species name) */
-    if (!parse_label(fp, morph->label[i], LABEL_LEN+1))
+    if (parse_label(fp, morph->label[i], LABEL_LEN+1))
     {
       fprintf(stderr, "Failed to read label of species %d\n", i+1);
       return NULL;
     }
     /* read the trait values of this species */
     if (morph->dtype == BPP_DATA_CONT &&
-        !parse_value_c(fp, morph->conti[i], morph->length))
+        parse_value_c(fp, morph->conti[i], morph->length))
     {
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
       return NULL;
     }
     else if (morph->dtype == BPP_DATA_DISC &&
-             !parse_value_d(fp, morph->discr[i], morph->length))
+             parse_value_d(fp, morph->discr[i], morph->length))
     {
       fprintf(stderr, "Failed to read traits of species %s\n", morph->label[i]);
       return NULL;
@@ -270,6 +267,10 @@ static morph_t * parse_trait_part(FILE * fp)
   }
   
   /* TODO: also read in correlation matrix */
+  if (morph->dtype == BPP_DATA_CONT)
+  {
+
+  }  
 
 #ifdef DEBUG_Morph_Matrix
   printf("\n%d %d  %d\n", morph->ntaxa, morph->length, morph->dtype);
@@ -358,6 +359,9 @@ void morph_destroy(morph_t * morph)
     free(morph->discr);
   }
 
+  if (morph->matRs)
+    free(morph->matRs);
+  
   free(morph);
 }
 
@@ -397,6 +401,8 @@ void trait_destroy(stree_t * stree)
             free(trait->contrast);
           if (trait->active)
             free(trait->active);
+          if (trait->glinv_L)
+            free(trait->glinv_L);  
           free(trait);
         }
       }
@@ -410,6 +416,8 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_type);
   if (stree->trait_missing)
     free(stree->trait_missing);
+  if (stree->trait_ldetRs)
+    free(stree->trait_ldetRs);
 
   if (stree->trait_nstate)
   {
@@ -420,10 +428,19 @@ void trait_destroy(stree_t * stree)
     }
     free(stree->trait_nstate);
   }
-  if (stree->trait_v_pop)
-    free(stree->trait_v_pop);
-  if (stree->trait_ldetRs)
-    free(stree->trait_ldetRs);
+  if (stree->trait_Rs)
+  {
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      if (stree->trait_Rs[n])
+      {
+        free(stree->trait_Rs[n]);
+        free(stree->trait_Phi[n]);
+      }
+    }
+    free(stree->trait_Rs);
+    free(stree->trait_Phi);
+  }
 
   if (stree->trait_logl)
     free(stree->trait_logl);
@@ -852,7 +869,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       {
         fprintf(stderr, "Species name %s not found in partition %d\n",
                 snode->label, n+1);
-        return 0;
+        return 1;
       }
     }
   }
@@ -883,7 +900,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         if (l == stree->tip_count)
         {
           fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
-          return 0;
+          return 1;
         }
         
         /* record the number of states for each character */
@@ -905,12 +922,13 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
           value = stree->nodes[i]->trait[n]->state_m[j];
           if (isnan(value))  // inapplicable value
           {
-            stree->trait_missing[n] = 1;
+            stree->trait_missing[n] = 2;
             stree->nodes[i]->trait[n]->active[j] = -1;
           }
           else if (isinf(value))  // missing value
           {
-            stree->trait_missing[n] = 1;
+            if (stree->trait_missing[n] != 2)
+              stree->trait_missing[n] = 1;
             stree->nodes[i]->trait[n]->active[j] = 0;
           }
           else {
@@ -961,51 +979,55 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
   }
 #endif
 
-  return 1;
+  return 0;
 }
 
 static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
 {
   int n, i, j, nchar;
-  snode_t * snode;
   trait_t * trait;
   
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_v_pop = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
   
   stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
+  stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Phi = (double **)xcalloc(n_part, sizeof(double *));
   for (n = 0; n < n_part; ++n)
   {
     nchar = morph_list[n]->length;
+    /* the number of states of each character
+       use the last element to store the max number of states */
     if (morph_list[n]->dtype == BPP_DATA_DISC)
-    { /* for the number of states of each character
-         use the last element to store the max number of states */
       stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
-    }
+    
+    /* allocate trait_Rs[n] and trait_Phi[n] in trait_fill_tip() if needed */
   }
   
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
-    snode = stree->nodes[i];
-    snode->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
+    stree->nodes[i]->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
     for (n = 0; n < n_part; ++n)
     {
-      snode->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
-      trait = snode->trait[n];
+      stree->nodes[i]->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
+      trait = stree->nodes[i]->trait[n];
       
       nchar = morph_list[n]->length;
       if (morph_list[n]->dtype == BPP_DATA_CONT)
       {
-        trait->state_m  = (double *)xcalloc(nchar, sizeof(double));
-        trait->contrast = (double *)xcalloc(nchar, sizeof(double));
-        trait->active   = (int *)xcalloc(nchar +1, sizeof(int));
+        trait->state_m = (double *)xcalloc(nchar, sizeof(double));
+        trait->active = (int *)xcalloc(nchar +1, sizeof(int));
+        if (i >= stree->tip_count)
+        {
+          trait->contrast = (double *)xcalloc(nchar, sizeof(double));
+          trait->glinv_L = (double *)xmalloc(nchar * nchar * sizeof(double));
+        }
       }
       else
       {
-        trait->state_d  = (int *)xcalloc(nchar, sizeof(int));
+        trait->state_d = (int *)xcalloc(nchar, sizeof(int));
         /* each character has maximally ten states; the last 2+3+...+10=54
            cells are for storing conditional probs of dummy constant chars
            of 2, 3, ..., 10 states */
@@ -1045,7 +1067,7 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   }
   
   /* fill the trait values for the tip nodes */
-  if (!trait_fill_tip(stree, morph_list))
+  if (trait_fill_tip(stree, morph_list))
   {
     trait_destroy(stree);
     fatal("Error filling traits");
@@ -1116,7 +1138,7 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
 
   /* log determinant of shrinkage estimate of the correlation matrix,
       i.e. log(det(R*)) */
-  ldetRs = 0.0;  //TODO: stree->trait_ldetRs[idx];
+  ldetRs = stree->trait_ldetRs[idx];
   p = stree->trait_dim[idx];
 
   logl = 0.0;
