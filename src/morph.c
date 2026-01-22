@@ -6,6 +6,7 @@
 
 #define LABEL_LEN 99
 
+#define DEBUG_Chi 1
 #define DEBUG_Morph_Matrix 1
 #define DEBUG_Morph_BM     1
 #define BM_AC     1
@@ -845,14 +846,13 @@ static void mk_update_cp(int idx, snode_t * snode, stree_t * stree)
 static void trait_update_part(int idx, stree_t * stree)
 {
 #ifdef DEBUG_Chi
-  // stree->nodes[3]->tau = 0.13;
-  // stree->nodes[4]->tau = 0.08;
+  stree->nodes[3]->tau = 0.13;
+  stree->nodes[4]->tau = 0.08;
 #endif
 
   if (stree->trait_type[idx] == BPP_DATA_DISC)
     mk_update_cp(idx, stree->root, stree);
-  else if (stree->trait_type[idx] == BPP_DATA_CONT &&
-           stree->trait_missing[idx])
+  else if (stree->trait_missing[idx] || BM_Mitov)
     bm_update_Lmr(idx, stree->root, stree);
   else
     bm_update_vxm(idx, stree->root, stree);
@@ -886,12 +886,12 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
       {
         if (strncmp(snode->label, morph->label[l], LABEL_LEN) == 0)
         {
-          for (j = 0; j < morph->length; ++j) {
-            if (morph->dtype == BPP_DATA_CONT)
-              snode->trait[n]->state_m[j] = morph->conti[l][j];
-            else
-              snode->trait[n]->state_d[j] = morph->discr[l][j];
-          }
+          if (morph->dtype == BPP_DATA_CONT)
+            memcpy(snode->trait[n]->state_m, morph->conti[l], 
+                             (morph->length) * sizeof(double));
+          else
+            memcpy(snode->trait[n]->state_d, morph->discr[l],
+                                (morph->length) * sizeof(int));
           break;
         }
       }
@@ -947,26 +947,27 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
          while checking missing states */
       for (i = 0; i < stree->tip_count; ++i)
       {
+        snode = stree->nodes[i];
         for (n_act = 0, j = 0; j < nchar; ++j)
         {
-          value = stree->nodes[i]->trait[n]->state_m[j];
+          value = snode->trait[n]->state_m[j];
           if (isnan(value))  // inapplicable value
           {
             stree->trait_missing[n] = 2;
-            stree->nodes[i]->trait[n]->active[j] = -1;
+            snode->trait[n]->active[j] = -1;
           }
           else if (isinf(value))  // missing value
           {
             if (stree->trait_missing[n] != 2)
               stree->trait_missing[n] = 1;
-            stree->nodes[i]->trait[n]->active[j] = 0;
+            snode->trait[n]->active[j] = 0;
           }
           else {
-            stree->nodes[i]->trait[n]->active[j] = 1;
+            snode->trait[n]->active[j] = 1;
             n_act += 1;
           }
         }
-        stree->nodes[i]->trait[n]->active[nchar] = n_act;
+        snode->trait[n]->active[nchar] = n_act;
       }
     }
   }
