@@ -6,6 +6,7 @@
 
 #define LABEL_LEN 99
 
+#define DEBUG_Morph_Matrix 1
 #define DEBUG_Morph_BM     1
 #define BM_AC     1
 #define BM_Mitov  0
@@ -19,6 +20,7 @@ static int mat_trans(double *A, double *At, int n, int m);
 static int mat_decom_chol(double *A, double *L, int n);
 static int mat_inv(double *L, double *Ainv, int n);
 static double mat_logdet(double *L, int n);
+static int mat_issym(double *A, int n);
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
@@ -215,16 +217,6 @@ static int parse_matrix_c(FILE * fp, double * mat, int n, int m)
     for (j = 0; j < m; ++j)
       if (fscanf(fp, "%lf", &mat[i*m + j]) != 1)
         return 1;
-
-#ifdef DEBUG_Morph_Matrix
-  printf("\nR*\n");
-  for (i = 0; i < n; ++i) {
-    for (j = 0; j < m; ++j)
-      printf("%+.3lf\t", mat[i*m + j]);
-    printf("\n");
-  }
-#endif
-
   return 0;
 }
 
@@ -255,6 +247,9 @@ void morph_destroy(morph_t * morph)
         free(morph->discr[i]);
     free(morph->discr);
   }
+  
+  if (morph->matRs)
+    free(morph->matRs);
   
   free(morph);
 }
@@ -369,6 +364,17 @@ static morph_t * morph_parse(FILE * fp)
         printf("%4d ", morph->discr[i][j]);
     printf("\n");
   }
+  if (c == 'R') {
+    printf("\nR* = \n");
+    for (i = 0; i < morph->length; ++i) {
+      for (j = 0; j < morph->length; ++j)
+        printf("%+.3lf\t", morph->matRs[i * morph->length + j]);
+      printf("\n");
+    }
+  }
+  else if (c == 'l') {
+    printf("logdet(R*) = %.3lf\n", morph->matRs[0]);
+  }
 #endif
   
   return morph;
@@ -480,9 +486,9 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
 
     if (stree->trait_missing[n] || BM_Mitov)
     {
+      stree->trait_Rs[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
       if (morph->matRs == NULL)
       {
-        stree->trait_Rs[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
         /* set up identity matrix for R* */
         for (i = 0; i < nchar; ++i)
           for (j = 0; j < nchar; ++j)
@@ -492,7 +498,14 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
               stree->trait_Rs[n][i*nchar + j] = 0.0;
       }
       else
-        stree->trait_Rs[n] = morph->matRs;  //???
+      {
+        /* copy the R* matrix over */
+        memcpy(stree->trait_Rs[n], morph->matRs, nchar*nchar*sizeof(double));
+
+        /* check whether R* is symmetric */
+        if (mat_issym(stree->trait_Rs[n], nchar))
+          fatal("Error: correlation matrix R* is not symmetric");
+      }
 
       /* set up identity matrix for Phi */
       stree->trait_Phi[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
@@ -1170,15 +1183,16 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     stree->trait_type[n] = morph_list[n]->dtype;
   }
   
-  /* fill the trait values for the tip nodes;
-     and for continuous traits, set up R and Phi */
-  if (trait_fill_tip(stree, morph_list) ||
-      bm_init_Rs_Phi(stree, morph_list))
+  /* fill the trait values for the tip nodes; */
+  if (trait_fill_tip(stree, morph_list))
   {
     trait_destroy(stree);
     fatal("Error filling traits");
   }
   
+  /* for continuous traits, set up R and Phi */
+  bm_init_Rs_Phi(stree, morph_list);
+
   /* initialize branch rates */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     for (n = 0; n < n_part; ++n)
@@ -1719,4 +1733,18 @@ static double mat_logdet(double *L, int n)
   logdet *= 2.0;
 
   return logdet;
+}
+
+/* check whether A is symmetric */
+static int mat_issym(double *A, int n)
+{
+  int i, j;
+  double tol = 1e-5;
+
+  for (i = 0; i < n; ++i)
+    for (j = i + 1; j < n; ++j)
+      if (fabs(A[i * n + j] - A[j * n + i]) > tol)
+        return 1;
+
+  return 0;
 }
