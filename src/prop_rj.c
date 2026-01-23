@@ -44,6 +44,19 @@ static unsigned int * nodevec_count;
 static int * feasible;
 static unsigned int * partials_count;
 
+/* Storage for migration rollback */
+typedef struct mig_rollback_s
+{
+  migevent_t * me;
+  snode_t * old_source;
+  snode_t * old_target;
+  long msa_index;
+} mig_rollback_t;
+
+static mig_rollback_t * mig_rb;
+static long mig_rb_count;
+static long mig_rb_alloc;
+
 #if 0
 static void all_partials_recursive(gnode_t * node,
                                    unsigned int * trav_size,
@@ -91,6 +104,11 @@ void rj_init(gtree_t ** gtreelist, stree_t * stree, unsigned int count)
   feasible = (int *)xmalloc((stree->tip_count + stree->inner_count) *
                             sizeof(int));
   partials_count = (unsigned int *)xcalloc(stree->locus_count,sizeof(unsigned int));
+
+  /* initialize migration rollback storage */
+  mig_rb = NULL;
+  mig_rb_count = 0;
+  mig_rb_alloc = 0;
 }
 void rj_fini()
 {
@@ -99,6 +117,10 @@ void rj_fini()
   free(nodevec_count);
   free(feasible);
   free(partials_count);
+
+  /* free migration rollback storage */
+  if (mig_rb)
+    free(mig_rb);
 }
 
 static double pdf_gamma(double x, double alpha, double beta)
@@ -112,6 +134,272 @@ static double pdf_gamma(double x, double alpha, double beta)
    if (alpha>100)
       fatal("large alpha in PDFGamma()");
    return pow(beta*x,alpha)/x * exp(-beta*x - lgamma(alpha));
+}
+
+/* Reset migration rollback storage for a new proposal */
+static void mig_rb_reset(void)
+{
+  mig_rb_count = 0;
+}
+
+/* Store migration event for potential rollback */
+static void mig_rb_store(migevent_t * me,
+                         snode_t * old_source,
+                         snode_t * old_target,
+                         long msa_index)
+{
+  if (mig_rb_count == mig_rb_alloc)
+  {
+    /* grow storage */
+    mig_rb_alloc = mig_rb_alloc ? mig_rb_alloc * 2 : 64;
+    mig_rb = (mig_rollback_t *)xrealloc(mig_rb, mig_rb_alloc * sizeof(mig_rollback_t));
+  }
+  mig_rb[mig_rb_count].me = me;
+  mig_rb[mig_rb_count].old_source = old_source;
+  mig_rb[mig_rb_count].old_target = old_target;
+  mig_rb[mig_rb_count].msa_index = msa_index;
+  mig_rb_count++;
+}
+
+/* Check if any L<->R migrations exist (invalid after join).
+   Return 1 if any found, 0 otherwise. */
+static int check_mig_join_validity(stree_t * stree,
+                                   gtree_t ** gtree,
+                                   snode_t * snode)
+{
+  unsigned int i, j;
+  snode_t * left = snode->left;
+  snode_t * right = snode->right;
+
+  for (i = 0; i < stree->locus_count; ++i)
+  {
+    gtree_t * gt = gtree[i];
+
+    for (j = 0; j < gt->tip_count + gt->inner_count; ++j)
+    {
+      gnode_t * gnode = gt->nodes[j];
+
+      if (!gnode->mi || gnode->mi->count == 0)
+        continue;
+
+      long k;
+      for (k = 0; k < gnode->mi->count; ++k)
+      {
+        migevent_t * me = gnode->mi->me + k;
+
+        /* check for L->R or R->L migration */
+        if ((me->source == left && me->target == right) ||
+            (me->source == right && me->target == left))
+        {
+          return 1;  /* invalid migration exists */
+        }
+      }
+    }
+  }
+  return 0;  /* no invalid migrations */
+}
+
+/* Reassign migration source/target from snode to left/right child during split.
+   For migrations with time < tau_new and involving snode as source or target,
+   determine the appropriate child based on ancestry marks and reassign. */
+static void update_migs_split(stree_t * stree,
+                              gtree_t * gtree,
+                              snode_t * snode,
+                              double tau_new,
+                              long msa_index)
+{
+  unsigned int i;
+  snode_t * left = snode->left;
+  snode_t * right = snode->right;
+
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (!gnode->mi || gnode->mi->count == 0)
+      continue;
+
+    long k;
+    for (k = 0; k < gnode->mi->count; ++k)
+    {
+      migevent_t * me = gnode->mi->me + k;
+
+      /* only process migrations below tau_new */
+      if (me->time >= tau_new)
+        continue;
+
+      int changed = 0;
+      snode_t * old_source = me->source;
+      snode_t * old_target = me->target;
+
+      if (me->source == snode || me->target == snode)
+      {
+        /* unlink from current populations */
+        migevent_unlink(me, msa_index);
+
+        /* determine child based on gene tree node marks */
+        snode_t * child;
+        if (gnode->mark & MARK_ANCESTOR_LNODE)
+          child = left;
+        else
+          child = right;
+
+        if (me->source == snode)
+        {
+          /* update migevent_count for old and new source */
+          snode->migevent_count[msa_index]--;
+          child->migevent_count[msa_index]++;
+
+          /* update migcount: decrease for old, increase for new (migcount[target][source]) */
+          gtree->migcount[me->target->node_index][snode->node_index]--;
+          gtree->migcount[me->target->node_index][child->node_index]++;
+
+          me->source = child;
+          changed = 1;
+        }
+
+        if (me->target == snode)
+        {
+          /* update migevent_count for old and new target */
+          snode->migevent_count[msa_index]--;
+          child->migevent_count[msa_index]++;
+
+          /* update migcount: decrease for old, increase for new */
+          gtree->migcount[snode->node_index][me->source->node_index]--;
+          gtree->migcount[child->node_index][me->source->node_index]++;
+
+          me->target = child;
+          changed = 1;
+        }
+
+        /* relink to new populations */
+        migevent_link(me, msa_index);
+
+        if (changed)
+          mig_rb_store(me, old_source, old_target, msa_index);
+      }
+    }
+  }
+}
+
+/* Reassign migration source/target from L/R to parent snode during join */
+static void update_migs_join(stree_t * stree,
+                             gtree_t * gtree,
+                             snode_t * snode,
+                             long msa_index)
+{
+  unsigned int i;
+  snode_t * left = snode->left;
+  snode_t * right = snode->right;
+
+  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+  {
+    gnode_t * gnode = gtree->nodes[i];
+
+    if (!gnode->mi || gnode->mi->count == 0)
+      continue;
+
+    long k;
+    for (k = 0; k < gnode->mi->count; ++k)
+    {
+      migevent_t * me = gnode->mi->me + k;
+
+      int changed = 0;
+      snode_t * old_source = me->source;
+      snode_t * old_target = me->target;
+
+      if (me->source == left || me->source == right ||
+          me->target == left || me->target == right)
+      {
+        /* unlink from current populations */
+        migevent_unlink(me, msa_index);
+
+        if (me->source == left || me->source == right)
+        {
+          snode_t * old_src = me->source;
+
+          /* update migevent_count */
+          old_src->migevent_count[msa_index]--;
+          snode->migevent_count[msa_index]++;
+
+          /* update migcount */
+          gtree->migcount[me->target->node_index][old_src->node_index]--;
+          gtree->migcount[me->target->node_index][snode->node_index]++;
+
+          me->source = snode;
+          changed = 1;
+        }
+
+        if (me->target == left || me->target == right)
+        {
+          snode_t * old_tgt = me->target;
+
+          /* update migevent_count */
+          old_tgt->migevent_count[msa_index]--;
+          snode->migevent_count[msa_index]++;
+
+          /* update migcount */
+          gtree->migcount[old_tgt->node_index][me->source->node_index]--;
+          gtree->migcount[snode->node_index][me->source->node_index]++;
+
+          me->target = snode;
+          changed = 1;
+        }
+
+        /* relink to new populations */
+        migevent_link(me, msa_index);
+
+        if (changed)
+          mig_rb_store(me, old_source, old_target, msa_index);
+      }
+    }
+  }
+}
+
+/* Rollback migration changes on rejection */
+static void revert_migs(gtree_t ** gtree)
+{
+  long i;
+
+  for (i = 0; i < mig_rb_count; ++i)
+  {
+    migevent_t * me = mig_rb[i].me;
+    snode_t * old_source = mig_rb[i].old_source;
+    snode_t * old_target = mig_rb[i].old_target;
+    long msa_index = mig_rb[i].msa_index;
+    snode_t * cur_source = me->source;
+    snode_t * cur_target = me->target;
+
+    /* unlink from current populations */
+    migevent_unlink(me, msa_index);
+
+    /* restore source if changed */
+    if (cur_source != old_source)
+    {
+      cur_source->migevent_count[msa_index]--;
+      old_source->migevent_count[msa_index]++;
+
+      gtree[msa_index]->migcount[me->target->node_index][cur_source->node_index]--;
+      gtree[msa_index]->migcount[me->target->node_index][old_source->node_index]++;
+
+      me->source = old_source;
+    }
+
+    /* restore target if changed */
+    if (cur_target != old_target)
+    {
+      cur_target->migevent_count[msa_index]--;
+      old_target->migevent_count[msa_index]++;
+
+      gtree[msa_index]->migcount[cur_target->node_index][me->source->node_index]--;
+      gtree[msa_index]->migcount[old_target->node_index][me->source->node_index]++;
+
+      me->target = old_target;
+    }
+
+    /* relink to restored populations */
+    migevent_link(me, msa_index);
+  }
 }
 
 static void locate_nodes(stree_t * stree,
@@ -397,6 +685,10 @@ long prop_split(gtree_t ** gtree,
 
   const long thread_index = 0;
 
+  /* reset migration rollback storage */
+  if (opt_migration)
+    mig_rb_reset();
+
   /* 1. Initialize lnacceptance */
   double lnacceptance = log((1-pr_split)/pr_split);
 
@@ -437,6 +729,10 @@ long prop_split(gtree_t ** gtree,
   node->old_tau = node->tau;
   node->tau = tau_new = tau_upper * legacy_rndbeta(thread_index,pbetatau,qbetatau);
   lnacceptance -= log_pdfbeta(tau_new,pbetatau,qbetatau,tau_upper);
+
+  /* update migration bands after changing tau */
+  if (opt_migration)
+    stree_update_mig_subpops(stree, thread_index);
 
   /* save old logpr contributions for rollback if proposal is rejected */
   double tmpth = node->notheta_logpr_contrib;
@@ -548,6 +844,10 @@ long prop_split(gtree_t ** gtree,
                                 tau_new,
                                 i,
                                 &lnacceptance);
+
+    /* reassign migrations from parent to child populations */
+    if (opt_migration)
+      update_migs_split(stree, gtree[i], node, tau_new, i);
 
     gtree[i]->old_logl = gtree[i]->logl;
     if (j)
@@ -773,9 +1073,17 @@ long prop_split(gtree_t ** gtree,
     if (opt_traitfile)  //Chi
       trait_restore(stree);
 
+    /* revert migration changes before restoring tau */
+    if (opt_migration)
+      revert_migs(gtree);
+
     node->tau = node->old_tau;
     node->left->theta  = node->left->old_theta;
     node->right->theta = node->right->old_theta;
+
+    /* restore migration bands after tau is reverted */
+    if (opt_migration)
+      stree_update_mig_subpops(stree, thread_index);
 
     for (i = 0; i < stree->locus_count; ++i)
     {
@@ -936,6 +1244,10 @@ long prop_join(gtree_t ** gtree,
 
   long thread_index = 0;
 
+  /* reset migration rollback storage */
+  if (opt_migration)
+    mig_rb_reset();
+
   /* 1. Initialize lnacceptance */
   double lnacceptance = log((1-pr_split)/pr_split);
 
@@ -969,6 +1281,10 @@ long prop_join(gtree_t ** gtree,
     tau_upper = node->parent->tau;
 
   if (node->tau >= tau_upper) return 2;
+
+  /* Check for invalid L<->R migrations before proceeding */
+  if (opt_migration && check_mig_join_validity(stree, gtree, node))
+    return 2;  /* reject - L<->R migrations exist */
 
   /* 4. Change the age of the node, and update lnacceptance */
   lnacceptance += log_pdfbeta(node->tau,pbetatau,qbetatau,tau_upper);
@@ -1047,6 +1363,10 @@ long prop_join(gtree_t ** gtree,
   node->tau = 0;
   node->left->theta = node->right->theta = -1;
 
+  /* update migration bands after changing tau */
+  if (opt_migration)
+    stree_update_mig_subpops(stree, thread_index);
+
   /* Update lnacceptance with new species tree prior */
   lnacceptance += lnprior_species_model(stree) - oldprior;
 
@@ -1088,6 +1408,10 @@ long prop_join(gtree_t ** gtree,
                                 0,
                                 i,
                                 &lnacceptance);
+
+    /* reassign migrations from child populations to parent */
+    if (opt_migration)
+      update_migs_join(stree, gtree[i], node, i);
 
     gtree[i]->old_logl = gtree[i]->logl;
     if (j)
@@ -1312,12 +1636,20 @@ long prop_join(gtree_t ** gtree,
     if (opt_traitfile)  //Chi
       trait_restore(stree);
 
+    /* revert migration changes before restoring tau */
+    if (opt_migration)
+      revert_migs(gtree);
+
     /* restore old tau */
     node->tau = node->old_tau;
     node->left->tau = node->left->old_tau;
     node->right->tau = node->right->old_tau;
     node->left->theta = node->left->old_theta;
     node->right->theta = node->right->old_theta;
+
+    /* restore migration bands after tau is reverted */
+    if (opt_migration)
+      stree_update_mig_subpops(stree, thread_index);
 
     for (i = 0; i < stree->locus_count; ++i)
     {
@@ -1326,7 +1658,7 @@ long prop_join(gtree_t ** gtree,
         gnode_t * tmp = gtree[i]->nodes[k];
 
         if (tmp->mark & MARK_AGE_UPDATE)
-          tmp->time = tmp->old_time; 
+          tmp->time = tmp->old_time;
 
         if (tmp->mark & MARK_POP_CHANGE)
         {
