@@ -18,9 +18,9 @@ static int mat_scale(double *A, double b, double *C, int n, int m);
 static int mat_add(double *A, double *B, double *C, int n, int m);
 static int mat_multi(double *A, double *B, double *C, int n, int m, int k);
 static int mat_trans(double *A, double *At, int n, int m);
-static int mat_decom_chol(double *A, double *L, int n);
-static int mat_inv(double *L, double *Ainv, int n);
-static double mat_logdet(double *L, int n);
+static int mat_inv_chol(double *A, double *Ainv, int n);
+static int mat_inv_plu (double *A, double *Ainv, int n);
+static double mat_logdet(double *U, int n);
 static int mat_issym(double *A, int n);
 
 /* get a non-blank character from file */
@@ -1702,48 +1702,159 @@ static int mat_decom_chol(double *A, double *L, int n)
   return 0;
 }
 
-/* inverse A using Cholesky decomposition L */
-static int mat_inv(double *L, double *Ainv, int n)
+/* A = LL' and Ainv = inv(L')*inv(L). A is destroyed */
+static int mat_inv_chol(double *A, double *Ainv, int n)
 {
-  int i, j, k;
-  double *Linv, sum, *Linv_t;
+  int i, j, k, start;
+  double sum, Lii;
   
-  /* store inv(L) separately to preserve L */
-  Linv   = (double *)xmalloc(n*n*sizeof(double));
-  Linv_t = (double *)xmalloc(n*n*sizeof(double));
-
+  /* store L in lower triangle of A (Cholesky factor) */
+  for (i = 0; i < n; ++i)
+    for (j = 0; j <= i; ++j)
+    {
+      sum = A[i * n + j];
+      for (k = 0; k < j; ++k)
+        sum -= A[i * n + k] * A[j * n + k];
+      if (i == j)
+      {
+        if (sum <= 0.0) return -1;  // not positive definite
+        A[i * n + j] = sqrt(sum);
+      }
+      else
+      {
+        A[i * n + j] = sum / A[j * n + j];
+      }
+    }
+  
+  /* compute L^(-1) in-place, storing in upper triangle (including diagonal) 
+     store L_inv^T, so L_inv[i,j] goes to A[j,i] */
   for (i = 0; i < n; ++i)
   {
-    Linv[i * n + i] = 1.0 / L[i * n + i];
+    Lii = A[i * n + i];
+    A[i * n + i] = 1.0 / Lii;  // diagonal: (L_inv^T)[i,i] = 1/L[i,i]
     for (j = 0; j < i; ++j)
     {
+      /* compute L_inv[i,j] = -(1/L[i,i]) * sum_{k=j}^{i-1} L[i,k]*L_inv[k,j] 
+         L[i,k] is in lower triangle: A[i,k]
+         L_inv[k,j] in upper triangle: A[j,k] */
       for (sum = 0, k = j; k < i; ++k)
-        sum -= L[i * n + k] * Linv[k * n + j];
-      Linv[i * n + j] = sum / L[i * n + i];
+        sum += A[i * n + k] * A[j * n + k];
+      A[j * n + i] = -sum / Lii;  // store (L_inv^T)[j,i] = L_inv[i,j]
     }
   }
 
-  /* inv(A) = t(inv(L)) * inv(L) */
-  mat_trans(Linv, Linv_t, n, n);
-  mat_multi(Linv_t, Linv, Ainv, n, n, n);
-
-  free(Linv);
-  free(Linv_t);
+  /* A_inv = L_inv^T * L_inv where L_inv^T is in A's upper triangle */
+  for (i = 0; i < n; ++i)
+    for (j = 0; j <= i; ++j)
+    {
+      start = i > j ? i : j;
+      for (sum = 0.0, k = start; k < n; ++k)
+        sum += A[j * n + k] * A[i * n + k];
+      Ainv[i * n + j] = Ainv[j * n + i] = sum;
+    }
   
   return 0;
 }
 
-/* determinant A using Cholesky decomposition L */
-static double mat_logdet(double *L, int n)
+/* A^(-1) by solving PA = LU, then LU * A^(-1) = P. A is destroyed */
+static int mat_inv_plu(double *A, double *Ainv, int n)
+{
+  int i, j, k, pivot_row;
+  double pivot_abs, col_abs, tmp, sum, *y;
+  int *perm;  /* permutation vector tracking row swaps */
+  const double eps = 1e-12;
+  
+  y = (double *)xmalloc(n * sizeof(double));
+  perm = (int *)xmalloc(n * sizeof(int));
+  
+  /* initialize permutation as identity */
+  for (i = 0; i < n; ++i)
+    perm[i] = i;
+  
+  /* LU decomposition with partial pivoting: compute PA = LU in place */
+  for (k = 0; k < n; ++k)
+  {
+    pivot_row = k;
+    pivot_abs = fabs(A[k * n + k]);
+    for (i = k + 1; i < n; ++i)
+    {
+      col_abs = fabs(A[i * n + k]);
+      if (col_abs > pivot_abs)
+      {
+        pivot_abs = col_abs;
+        pivot_row = i;
+      }
+    } /* pivot search: max abs in column k at/below row k */
+
+    if (pivot_abs < eps)
+    {
+      free(y);
+      free(perm);
+      return -1;  /* singular or nearly singular */
+    }
+
+    /* row swap to move pivot into place */
+    if (pivot_row != k)
+    {
+      for (j = 0; j < n; ++j)
+      {
+        tmp = A[k * n + j];
+        A[k * n + j] = A[pivot_row * n + j];
+        A[pivot_row * n + j] = tmp;
+      }
+      /* track permutation */
+      i = perm[k];
+      perm[k] = perm[pivot_row];
+      perm[pivot_row] = i;
+    }
+
+    /* elimination below pivot */
+    for (i = k + 1; i < n; ++i)
+    {
+      A[i * n + k] /= A[k * n + k];
+      for (j = k + 1; j < n; ++j)
+        A[i * n + j] -= A[i * n + k] * A[k * n + j];
+    }
+  }
+  
+  /* now A contains L (below diagonal) and U (on and above diagonal)
+     solve LU * Ainv = P by computing each column of Ainv
+     for column j: solve LU * x = P * e_j = e_perm[j] */
+  for (j = 0; j < n; ++j)
+  {
+    /* forward substitution: solve L * y = e_perm[j] (L has unit diagonal) */
+    for (i = 0; i < n; ++i)
+    {
+      sum = (perm[i] == j) ? 1.0 : 0.0;  /* right-hand side from permutation */
+      for (k = 0; k < i; ++k)
+        sum -= A[i * n + k] * y[k];
+      y[i] = sum;  /* L has unit diagonal */
+    }
+    
+    /* backward substitution: solve U * x = y (x becomes j-th column of Ainv) */
+    for (i = n - 1; i >= 0; --i)
+    {
+      sum = y[i];
+      for (k = i + 1; k < n; ++k)
+        sum -= A[i * n + k] * Ainv[k * n + j];
+      Ainv[i * n + j] = sum / A[i * n + i];
+    }
+  }
+  
+  free(y);
+  free(perm);
+  return 0;
+}
+
+/* A contains U on/above diagonal from LU decomposition.
+   logdet(A) = sum(log(|U[i,i]|)) for PA = LU */
+static double mat_logdet(double *U, int n)
 {
   int i;
-  double logdet;
+  double logdet = 0.0;
 
-  /* logdet(A) = 2 * sum(log(L[i,i])) for A = LL' */
-  logdet = 0.0;
   for (i = 0; i < n; ++i)
-    logdet += log(L[i * n + i]);
-  logdet *= 2.0;
+    logdet += log(fabs(U[i * n + i]));
 
   return logdet;
 }
