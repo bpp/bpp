@@ -8,7 +8,7 @@
 
 #define DEBUG_Chi 1
 #define DEBUG_Morph_Matrix 1
-#define DEBUG_Morph_BM     1
+#define DEBUG_Morph_BM_M   1
 #define BM_AC     1
 #define BM_Mitov  0
 
@@ -459,7 +459,7 @@ static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
     snode->trait[idx]->brlen = v_k + 1.0;
   }
 
-#ifdef DEBUG_Morph_BM
+#ifdef DEBUG_Morph_BM_A
   printf("%s\t v'=%lf\n", snode->label, snode->trait[idx]->brlen);
   for (j = 0; j < stree->trait_dim[idx]; ++j) {
     printf("m'=%lf ", snode->trait[idx]->state_m[j]);
@@ -535,23 +535,24 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   /* Mitov et al. 2020; BM model (Eq. 2, 10, 11) */
 
   int    nchar, k_i, k_j, *act, *act_p;
-  double t, *A, *C, *E, *L, *m, r,  *V, *T, *x, *y;
+  double t, *R, *I, *A, *C, *E, *L, *m, r,  *V, *T, *x, *y;
 
   if (snode == stree->root)
     return;
   
+  /* find stratch space */
+  R = snode->trait[idx]->tranprob[0];
+  I = snode->trait[idx]->tranprob[1];
+  A = snode->trait[idx]->tranprob[2];
+  C = snode->trait[idx]->tranprob[3];
+  E = snode->trait[idx]->tranprob[4];
+  V = snode->trait[idx]->tranprob[5];
+  T = snode->trait[idx]->tranprob[6];
+  x = snode->trait[idx]->tranprob[8];
+  y = snode->trait[idx]->tranprob[9];
+
   /* total number of characters */
   nchar = stree->trait_dim[idx];
-
-  /* allocate space (more than needed) */
-  /* TODO: consider allocate space only once somewhere */
-  A = (double *)xmalloc(nchar * nchar * sizeof(double));
-  C = (double *)xmalloc(nchar * nchar * sizeof(double));
-  E = (double *)xmalloc(nchar * nchar * sizeof(double));
-  V = (double *)xmalloc(nchar * nchar * sizeof(double));
-  T = (double *)xmalloc(nchar * nchar * sizeof(double));
-  x = (double *)xmalloc(nchar * sizeof(double));
-  y = (double *)xmalloc(nchar * sizeof(double));
 
   /* active coordinates */
   act = snode->trait[idx]->active;
@@ -568,20 +569,20 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
 
   /* Rs is the linear shrinkage estimate of the correlation matrix R,
      which is input along with the morphological data */
-  mat_sub(stree->trait_Rs[idx], A, nchar, nchar, act, act);
-  mat_scale(A, t, V, k_i, k_i);         // V = t*R
+  mat_sub(stree->trait_Rs[idx], R, nchar, nchar, act, act);
+  mat_scale(R, t, V, k_i, k_i);         // V = t*R
   mat_decom_chol(V, T, k_i);
   mat_inv(T, V, k_i);                   // V: inv(V)
 
   t = -0.5 * mat_logdet(T, k_i);        // reuse t
 
   /* E = t(Phi) * inv(V) */
-  mat_sub(stree->trait_Phi[idx], A, nchar, nchar, act, act_p);
-  mat_trans(A, T, k_i, k_j);            // T: t(Phi)
+  mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
+  mat_trans(I, T, k_i, k_j);            // T: t(Phi)
   mat_multi(T, V, E, k_j, k_i, k_i);
 
   /* C = -0.5 * E * Phi */
-  mat_multi(E, A, C, k_j, k_i, k_j);
+  mat_multi(E, I, C, k_j, k_i, k_j);
   mat_scale(C, -0.5, C, k_j, k_j);
 
   /* A = -0.5 * inv(V) */
@@ -635,10 +636,6 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
     mat_multi(y, m, r_i, 1, k_i, 1);
     *(r_i) = *(r_i) * (-0.25) + r + t;
   }
-
-  /* free space */
-  free(A); free(C); free(E);
-  free(V); free(T); free(x); free(y);
 }
 
 static void bm_update_Lmr(int idx, snode_t * snode, stree_t * stree)
@@ -671,11 +668,11 @@ static void bm_update_Lmr(int idx, snode_t * snode, stree_t * stree)
     }
     snode->trait[idx]->active[nchar] = n_act;
   
-    /* allocate space */
-    L1 = (double *)xmalloc(nchar * nchar * sizeof(double));
-    L2 = (double *)xmalloc(nchar * nchar * sizeof(double));
-    m1 = (double *)xmalloc(nchar * sizeof(double));
-    m2 = (double *)xmalloc(nchar * sizeof(double));
+    /* find stratch space */
+    L1 = snode->trait[idx]->tranprob[0];
+    L2 = snode->trait[idx]->tranprob[1];
+    m1 = snode->trait[idx]->tranprob[8];
+    m2 = snode->trait[idx]->tranprob[9];
 
     bm_ACEf_Lmr(idx, snode->left,  stree, L1, m1, &r1);
     bm_ACEf_Lmr(idx, snode->right, stree, L2, m2, &r2);
@@ -685,9 +682,6 @@ static void bm_update_Lmr(int idx, snode_t * snode, stree_t * stree)
     for (j = 0; j < n_act; ++j)
       snode->trait[idx]->state_m[j] = m1[j] + m2[j];
     snode->trait[idx]->glinv_r = r1 + r2;
-
-    /* free space */
-    free(L1); free(L2); free(m1); free(m2);
   }
 }
 
@@ -1054,6 +1048,14 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
         {
           trait->contrast = (double *)xcalloc(nchar, sizeof(double));
           trait->glinv_L = (double *)xmalloc(nchar * nchar * sizeof(double));
+
+          /* scratch space to store L_i, m_i, etc */
+          trait->tranprob = (double **)xmalloc(9 * sizeof(double *));
+          for (j = 0; j < 7; ++j)
+            trait->tranprob[j] =
+                           (double *)xmalloc(nchar * nchar * sizeof(double));
+          for (j = 7; j < 9; ++j)
+            trait->tranprob[j] = (double *)xmalloc(nchar * sizeof(double));
         }
       }
       else
@@ -1281,7 +1283,7 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
   
   stree->trait_logl[idx] = logl;
 
-#ifdef DEBUG_Morph_BM
+#ifdef DEBUG_Morph_BM_A
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
@@ -1314,7 +1316,7 @@ static double loglikelihood_BM_Mitov(int idx, stree_t * stree)
 
   stree->trait_logl[idx] = logl;
 
-#ifdef DEBUG_Morph_BM
+#ifdef DEBUG_Morph_BM_M
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 #endif
