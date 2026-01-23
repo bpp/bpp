@@ -548,8 +548,8 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   E = snode->trait[idx]->tranprob[4];
   V = snode->trait[idx]->tranprob[5];
   T = snode->trait[idx]->tranprob[6];
-  x = snode->trait[idx]->tranprob[8];
-  y = snode->trait[idx]->tranprob[9];
+  x = snode->trait[idx]->tranprob[7];
+  y = snode->trait[idx]->tranprob[8];
 
   /* total number of characters */
   nchar = stree->trait_dim[idx];
@@ -671,8 +671,8 @@ static void bm_update_Lmr(int idx, snode_t * snode, stree_t * stree)
     /* find stratch space */
     L1 = snode->trait[idx]->tranprob[0];
     L2 = snode->trait[idx]->tranprob[1];
-    m1 = snode->trait[idx]->tranprob[8];
-    m2 = snode->trait[idx]->tranprob[9];
+    m1 = snode->trait[idx]->tranprob[7];
+    m2 = snode->trait[idx]->tranprob[8];
 
     bm_ACEf_Lmr(idx, snode->left,  stree, L1, m1, &r1);
     bm_ACEf_Lmr(idx, snode->right, stree, L2, m2, &r2);
@@ -1047,16 +1047,15 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
         if (i >= stree->tip_count)
         {
           trait->contrast = (double *)xcalloc(nchar, sizeof(double));
-          trait->glinv_L = (double *)xmalloc(nchar * nchar * sizeof(double));
-
-          /* scratch space to store L_i, m_i, etc */
-          trait->tranprob = (double **)xmalloc(9 * sizeof(double *));
-          for (j = 0; j < 7; ++j)
-            trait->tranprob[j] =
-                           (double *)xmalloc(nchar * nchar * sizeof(double));
-          for (j = 7; j < 9; ++j)
-            trait->tranprob[j] = (double *)xmalloc(nchar * sizeof(double));
+          trait->glinv_L = (double *)xmalloc(nchar*nchar * sizeof(double));
         }
+
+        /* scratch space to store L_i, m_i, etc */
+        trait->tranprob = (double **)xmalloc(9 * sizeof(double *));
+        for (j = 0; j < 7; ++j)
+          trait->tranprob[j] = (double *)xmalloc(nchar*nchar * sizeof(double));
+        for (j = 7; j < 9; ++j)
+          trait->tranprob[j] = (double *)xmalloc(nchar * sizeof(double));
       }
       else
       {
@@ -1293,26 +1292,37 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
 
 static double loglikelihood_BM_Mitov(int idx, stree_t * stree)
 {
-  int nchar, n_act;
-  double logl, *L0, *m0, r0, *x0, *tmp, part;
+  int nchar, k_0;
+  double logl, *L0, *m0, r0, *x0, *T, *L0_1, *y, z;
+  snode_t * root = stree->root;
 
-  /* Mitov et al. 2020; Eq. S2 */
-  /* x0 = -0.5 * inv(L0) * m0 */
-  
-  L0 = stree->root->trait[idx]->glinv_L;
-  m0 = stree->root->trait[idx]->state_m;
-  r0 = stree->root->trait[idx]->glinv_r;
-  
+  /* find stratch space */
+  T    = root->trait[idx]->tranprob[0];
+  L0_1 = root->trait[idx]->tranprob[1];
+  x0   = root->trait[idx]->tranprob[7];
+  y    = root->trait[idx]->tranprob[8];
+
+  /* number of active coordinates */
   nchar = stree->trait_dim[idx];
-  n_act = stree->root->trait[idx]->active[nchar];
+  k_0 = root->trait[idx]->active[nchar];
+
+  /* Mitov et al. 2020; Eq. S2
+     x0 = -0.5 * inv(L0) * m0 */
+  L0 = root->trait[idx]->glinv_L;
+  m0 = root->trait[idx]->state_m;
+  mat_decom_chol(L0, T, k_0);
+  mat_inv(T, L0_1, k_0);  // L0_1: inv(L0)
+  mat_multi(L0_1, m0, y, k_0, k_0, 1);
+  mat_scale(y, -0.5, x0, k_0, 1);  
 
   /* logl = t(x0) * L0 * x0 + t(x0) * m0 + r0 */
-  mat_multi(x0, L0, tmp, 1, n_act, n_act);
-  mat_multi(tmp, x0, &part, 1, n_act, 1);
-  logl = part;
+  mat_multi(x0, L0, y, 1, k_0, k_0);
+  mat_multi(y, x0, &z, 1, k_0, 1);
+  logl = z;
 
-  mat_multi(x0, m0, &part, 1, n_act, 1);
-  logl += part + r0;
+  mat_multi(x0, m0, &z, 1, k_0, 1);
+  r0 = root->trait[idx]->glinv_r;
+  logl += z + r0;
 
   stree->trait_logl[idx] = logl;
 
