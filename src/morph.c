@@ -571,22 +571,22 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
      which is input along with the morphological data */
   mat_sub(stree->trait_Rs[idx], R, nchar, nchar, act, act);
   mat_scale(R, t, V, k_i, k_i);         // V = t*R
-  mat_decom_chol(V, T, k_i);
-  mat_inv(T, V, k_i);                   // V: inv(V)
-
-  t = -0.5 * mat_logdet(T, k_i);        // reuse t
+  if(mat_inv_plu(V, A, k_i))            // A: inv(V)
+    fatal("Failed to invert V at node %s", snode->label);
+  
+  t = -0.5 * mat_logdet(V, k_i);        // t = f + 0.5 * k * log(2pi)
 
   /* E = t(Phi) * inv(V) */
   mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
   mat_trans(I, T, k_i, k_j);            // T: t(Phi)
-  mat_multi(T, V, E, k_j, k_i, k_i);
+  mat_multi(T, A, E, k_j, k_i, k_i);
 
   /* C = -0.5 * E * Phi */
   mat_multi(E, I, C, k_j, k_i, k_j);
   mat_scale(C, -0.5, C, k_j, k_j);
 
   /* A = -0.5 * inv(V) */
-  mat_scale(V, -0.5, A, k_i, k_i);
+  mat_scale(A, -0.5, A, k_i, k_i);
 
   if (snode->left == NULL) // tip
   {
@@ -610,20 +610,19 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
     m = snode->trait[idx]->state_m;
     r = snode->trait[idx]->glinv_r;
 
-    mat_add(A, L, V, k_i, k_i);         // V: A+L
-    mat_scale(V, -2.0, A, k_i, k_i);    // A: -2*(A+L)
-    mat_decom_chol(A, T, k_i);
-    t += -0.5 * mat_logdet(T, k_i);
-
-    mat_decom_chol(V, T, k_i);
-    mat_inv(T, V, k_i);                 // V: inv(A+L)
+    mat_add(A, L, T, k_i, k_i);         // T: A+L
+    if(mat_inv_plu(T, V, k_i))          // V: inv(A+L)
+      fatal("Failed to invert A+L at node %s", snode->label);
+    
+    /* logdet(-2 * (A+L)) = k_i*log(2) + log(det(A+L)) */
+    t += -0.5 * (k_i * log(2.0) + mat_logdet(T, k_i));
 
     /* L_i = C - 0.25 * E * inv(A+L) * t(E) */
     mat_multi(E, V, A, k_j, k_i, k_i);  // A: E * inv(A+L)
     mat_trans(E, T, k_j, k_i);          // T: t(E)
     mat_multi(A, T, E, k_j, k_i, k_j);  // E: E * inv(A+L) * t(E)
-    mat_scale(E, -0.25, L_i, k_j, k_j);
-    mat_add(C, L_i, L_i, k_j, k_j);
+    mat_scale(E, -0.25, T, k_j, k_j);
+    mat_add(C, T, L_i, k_j, k_j);
 
     /* m_i = -0.5 * E * inv(A+L) * m */
     mat_multi(A, m, m_i, k_j, k_i, 1);
@@ -1310,11 +1309,15 @@ static double loglikelihood_BM_Mitov(int idx, stree_t * stree)
      x0 = -0.5 * inv(L0) * m0 */
   L0 = root->trait[idx]->glinv_L;
   m0 = root->trait[idx]->state_m;
-  mat_decom_chol(L0, T, k_0);
-  mat_inv(T, L0_1, k_0);  // L0_1: inv(L0)
+  /* keep L0 when inverting to L0_1 */
+  memcpy(T, L0, k_0 * k_0 * sizeof(double));
+  if(mat_inv_plu(T, L0_1, k_0))
+    fatal("Failed to invert L0 in likelihood calculation");
   mat_multi(L0_1, m0, y, k_0, k_0, 1);
-  mat_scale(y, -0.5, x0, k_0, 1);  
+  mat_scale(y, -0.5, x0, k_0, 1);
 
+  // for (int i = 0; i < k_0; ++i) x0[i] = 0.0;
+  
   /* logl = t(x0) * L0 * x0 + t(x0) * m0 + r0 */
   mat_multi(x0, L0, y, 1, k_0, k_0);
   mat_multi(y, x0, &z, 1, k_0, 1);
@@ -1666,38 +1669,6 @@ static int mat_trans(double *A, double *At, int n, int m)
   for (i = 0; i < n; ++i)
     for (j = 0; j < m; ++j)
       At[j * n + i] = A[i * m + j];
-  
-  return 0;
-}
-
-/* Cholesky decomposition: A = LL',
-   where A is symmetrical and positive definite, and L is lower triangular */
-static int mat_decom_chol(double *A, double *L, int n)
-{
-  int i, j, k;
-  double sum;
-  
-  for (i = 0; i < n; ++i)
-    for (j = 0; j <= i; ++j)
-    {
-      sum = A[i * n + j];
-      for (k = 0; k < j; ++k)
-        sum -= L[i * n + k] * L[j * n + k];
-      if (i == j)
-      {
-        if (sum <= 0.0) return -1;  // not positive definite
-        L[i * n + j] = sqrt(sum);
-      }
-      else
-      {
-        L[i * n + j] = sum / L[j * n + j];
-      }
-    }
-  
-  /* set upper triangular part to zero */
-  for (i = 0; i < n; ++i)
-    for (j = i + 1; j < n; ++j)
-      L[i * n + j] = 0.0;
   
   return 0;
 }
