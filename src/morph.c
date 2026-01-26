@@ -5,12 +5,13 @@
 #include "bpp.h"
 
 #define LABEL_LEN 99
-
-#define DEBUG_Chi 1
-#define DEBUG_Morph_Matrix 1
-#define DEBUG_Morph_BM_M   1
 #define BM_AC     1
 #define BM_Mitov  0
+
+// #define DEBUG_Chi          1
+// #define DEBUG_Morph_Matrix 1
+// #define DEBUG_Morph_BM_M   1
+// #define DEBUG_Morph_BM_A   1
 
 /* matrix related operations */
 static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c);
@@ -429,6 +430,11 @@ static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
 
   int j;
   double v_k, v_k1, v_k2, *m_k1, *m_k2;
+  double v_pop = 1.0;  // population noise
+
+#ifdef DEBUG_Chi
+  v_pop = 0.0;
+#endif
 
   if (snode->left && snode->right)  /* internal node */
   {
@@ -456,7 +462,7 @@ static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
     v_k = (snode->parent->tau - snode->tau) * snode->trait[idx]->brate;
     /* the trait matrix has been standardized so that all characters have
        the same variance and the population noise has unit variance. */
-    snode->trait[idx]->brlen = v_k + 1.0;
+    snode->trait[idx]->brlen = v_k + v_pop;
   }
 
 #ifdef DEBUG_Morph_BM_A
@@ -536,6 +542,11 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
 
   int    nchar, k_i, k_j, *act, *act_p;
   double t, *R, *I, *A, *C, *E, *L, *m, r,  *V, *T, *x, *y;
+  double v_pop = 1.0;  // population noise
+
+#ifdef DEBUG_Chi
+  v_pop = 0.0;
+#endif
 
   if (snode == stree->root)
     return;
@@ -564,7 +575,7 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   /* the trait matrix has been standardized so that all characters have
      the same variance and the population noise has unit variance. */
   if (snode->left == NULL)
-    t += 1.0;
+    t += v_pop;
   snode->trait[idx]->brlen = t;
 
   /* Rs is the linear shrinkage estimate of the correlation matrix R,
