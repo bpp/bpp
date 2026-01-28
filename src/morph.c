@@ -512,6 +512,10 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
         /* check whether R* is symmetric */
         if (mat_issym(stree->trait_Rs[n], nchar))
           fatal("Error: correlation matrix R* is not symmetric");
+        /* also check the diagonal elements = 1.0 */
+        for (i = 0; i < nchar; ++i)
+          if (fabs(stree->trait_Rs[n][i*nchar + i] - 1.0) > 1e-5)
+            fatal("Error: correlation matrix R* has diagonal element != 1.0");
       }
 
       /* set up identity matrix for Phi */
@@ -1295,6 +1299,15 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
 #ifdef DEBUG_Morph_BM_A
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
+
+  /* adding the root states of (0, .., 0) */
+  v_k1 = stree->root->left->trait[idx]->brlen;
+  v_k2 = stree->root->right->trait[idx]->brlen;
+  double v0 = v_k1 * v_k2 / (v_k1 + v_k2);
+  double *x0 = stree->root->trait[idx]->state_m;
+  for (zz = 0, j = 0; j < p; ++j)
+      zz += x0[j] * x0[j];  // zz = 0.0;
+  double ll0 = -0.5* (p*log(2.0*BPP_PI*v0) + ldetRs + zz/v0);
 #endif
 
   return logl;
