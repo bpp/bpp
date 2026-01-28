@@ -582,6 +582,28 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
     t += v_pop;
   snode->trait[idx]->brlen = t;
 
+  /* if t is zero (or very close to zero), propagate L, m and r */
+  if (t < 1e-8 && snode->left != NULL)
+  {
+    L = snode->trait[idx]->glinv_L;
+    m = snode->trait[idx]->state_m;
+    if (k_i != k_j)  // expand L and m
+    {
+      mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
+      mat_trans(I, T, k_i, k_j);
+      mat_multi(T, L, E, k_j, k_i, k_i);
+      mat_multi(E, I, L_i, k_j, k_i, k_j);
+      mat_multi(T, m, m_i, k_j, k_i, 1);
+    }
+    else  // directly copy L and m
+    {
+      mat_scale(L, 1.0, L_i, k_i, k_i);
+      mat_scale(m, 1.0, m_i, k_i, 1);
+    }
+    *(r_i) = snode->trait[idx]->glinv_r;
+    return;
+  }
+
   /* Rs is the linear shrinkage estimate of the correlation matrix R,
      which is input along with the morphological data */
   mat_sub(stree->trait_Rs[idx], R, nchar, nchar, act, act);
@@ -589,7 +611,8 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   if(mat_inv_plu(V, A, k_i))            // A: inv(V)
     fatal("Failed to invert V at node %s", snode->label);
   
-  t = -0.5 * mat_logdet(V, k_i);        // t = f + 0.5 * k * log(2pi)
+  /* reuse t as f + 0.5 * k * log(2pi) */
+  t = -0.5 * mat_logdet(V, k_i);
 
   /* E = t(Phi) * inv(V) */
   mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
@@ -1300,13 +1323,14 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
   printf("part%d: cur log(like)=%lf, old log(like)=%lf\n\n", idx+1,
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 
-  /* adding the root states of (0, .., 0) */
+  /* adding the variance at the root */
   v_k1 = stree->root->left->trait[idx]->brlen;
   v_k2 = stree->root->right->trait[idx]->brlen;
   double v0 = v_k1 * v_k2 / (v_k1 + v_k2);
   double *x0 = stree->root->trait[idx]->state_m;
-  for (zz = 0, j = 0; j < p; ++j)
-      zz += x0[j] * x0[j];  // zz = 0.0;
+  zz = 0.0;  // if root states are from MLE
+  for (j = 0; j < p; ++j)
+      zz += x0[j] * x0[j]; // if root states are zero
   double ll0 = -0.5* (p*log(2.0*BPP_PI*v0) + ldetRs + zz/v0);
 #endif
 
