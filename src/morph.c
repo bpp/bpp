@@ -583,8 +583,11 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
   snode->trait[idx]->brlen = t;
 
   /* if t is zero (or very close to zero), propagate L, m and r */
-  if (t < 1e-8 && snode->left != NULL)
+  if (t < 1e-8)
   {
+    if (snode->left == NULL)
+      fatal("Zero branch length at tip %s", snode->label);
+    
     L = snode->trait[idx]->glinv_L;
     m = snode->trait[idx]->state_m;
     if (k_i != k_j)  // expand L and m
@@ -877,7 +880,7 @@ static void mk_update_cp(int idx, snode_t * snode, stree_t * stree)
 static void trait_update_part(int idx, stree_t * stree)
 {
 #ifdef DEBUG_Chi
-  stree->nodes[3]->tau = 0.13;
+  stree->nodes[3]->tau = 0.08; //0.13;
   stree->nodes[4]->tau = 0.08;
 #endif
 
@@ -1324,9 +1327,7 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
          stree->trait_logl[idx], stree->trait_old_logl[idx]);
 
   /* adding the variance at the root */
-  v_k1 = stree->root->left->trait[idx]->brlen;
-  v_k2 = stree->root->right->trait[idx]->brlen;
-  double v0 = v_k1 * v_k2 / (v_k1 + v_k2);
+  double  v0 = stree->root->trait[idx]->brlen;
   double *x0 = stree->root->trait[idx]->state_m;
   zz = 0.0;  // if root states are from MLE
   for (j = 0; j < p; ++j)

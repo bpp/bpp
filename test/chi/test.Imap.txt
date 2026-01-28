@@ -1,0 +1,9 @@
+6            H
+c66          H
+rd1          C
+hn24         C
+gs250        C
+kiz1375      C
+gs49         K
+gs132        K
+nx4          K
