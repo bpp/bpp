@@ -89,6 +89,7 @@ OBJ_BPP = \
 	util.obj \
 	visual.obj \
 	a1b1.obj \
+	morph.obj \
 
 all: $(PROG)
 
