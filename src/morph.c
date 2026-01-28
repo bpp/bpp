@@ -1,6 +1,7 @@
-//
-//  Created by Chi Zhang on 2023/12/5.
-//
+// 2023/12/05: started working on morphological models
+// 2024/02/07: implemented BM model of Alvarez-Carretero et al. 2019
+// 2024/12/19: implemented Mkv model of Lewis 2001
+// 2026/01/28: implemented BM model of Mitov et al. 2020
 
 #include "bpp.h"
 
