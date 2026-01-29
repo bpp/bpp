@@ -5478,6 +5478,9 @@ void cmd_run()
           SWAP(stree,sclone);
           SWAP(gtree,gclones);
           stree_label(stree);
+          
+          if (opt_traitfile)
+            trait_store(stree);
         }
         if (opt_debug_bruce)
           debug_bruce(stree,gtree,stree_snl == 0 ? "SSPR" : "SNL", i, fp_debug);
@@ -6593,6 +6596,12 @@ void cmd_run()
     free(ft_round_theta_slide);
   if (ft_round_theta_gibbs)
     free(ft_round_theta_gibbs);
+
+  /* free trait related memory once! as the pointers in cloned nodes point to
+     the same locations --- this is how they are initialized in stree_clone().
+     this is a bad practice, and need to be refined */
+  if (opt_traitfile)  //Chi
+    trait_destroy(stree);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

@@ -298,10 +298,6 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
-  /* free trait related memory first, as snodes
-     will be freed in the following for loop. */
-  trait_destroy(tree);  //Chi
-
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
