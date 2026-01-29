@@ -2839,7 +2839,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out,
                      FILE ** ptr_fp_a1b1,
-		     int ** ptr_printLocusIndex)
+                     int ** ptr_printLocusIndex)
 {
   long i,j;
   FILE * fp_mcmc;
@@ -4051,7 +4051,6 @@ static FILE * init(stree_t ** ptr_stree,
   }
 
 
-
   /* Generate space for cloning the species and gene trees (used for species
      tree inference or inference with migration) */
   if (opt_est_stree || opt_migration)
@@ -5075,7 +5074,7 @@ void cmd_run()
                      &fp_migcount,
                      &fp_out,
                      &fp_a1b1,
-		     &printLocusIndex);
+                     &printLocusIndex);
   else
   {
     fp_mcmc = init(&stree,
@@ -5101,7 +5100,7 @@ void cmd_run()
                    &fp_migcount,
                    &fp_out, 
                    &fp_a1b1,
-		   &printLocusIndex);
+                   &printLocusIndex);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
     if (opt_migration && !opt_est_geneflow)

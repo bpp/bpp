@@ -298,6 +298,10 @@ void stree_destroy(stree_t * tree,
   unsigned int i,j;
   snode_t * node;
 
+  /* free trait related memory first, as snodes
+     will be freed in the following for loop. */
+  trait_destroy(tree);  //Chi
+
   /* deallocate all nodes */
   for (i = 0; i < tree->tip_count + tree->inner_count + tree->hybrid_count; ++i)
   {
@@ -494,13 +498,6 @@ void stree_destroy(stree_t * tree,
     free(tree->u_constraint);
   if (tree->l_constraint)
     free(tree->l_constraint);
-
-  /* TODO: For Chi to fix
-
-     This is the wrong place to call trait_destroy, as snodes
-     have already been freed. Move this call before the node
-     deallocation  */
-  //trait_destroy(tree);  //Chi
 
   /* deallocate tree structure */
   free(tree->nodes);
