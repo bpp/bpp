@@ -494,29 +494,41 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
 
     if (stree->trait_missing[n] || BM_Mitov)
     {
-      stree->trait_Rs[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
+      stree->trait_Rs[n]   = (double *)xmalloc(nchar*nchar*sizeof(double));
+      stree->trait_Rs_1[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
       if (morph->matRs == NULL)
       {
-        /* set up identity matrix for R* */
+        /* set up identity matrix for R* and inv(R*) */
         for (i = 0; i < nchar; ++i)
           for (j = 0; j < nchar; ++j)
-            if (i == j)
-              stree->trait_Rs[n][i*nchar + j] = 1.0;
-            else
-              stree->trait_Rs[n][i*nchar + j] = 0.0;
+            if (i == j) {
+              stree->trait_Rs[n][i*nchar + j]  = 1.0;
+              stree->trait_Rs_1[n][i*nchar +j] = 1.0;
+            }
+            else {
+              stree->trait_Rs[n][i*nchar + j]  = 0.0;
+              stree->trait_Rs_1[n][i*nchar +j] = 0.0;
+            }
       }
       else
       {
-        /* copy the R* matrix over */
-        memcpy(stree->trait_Rs[n], morph->matRs, nchar*nchar*sizeof(double));
-
         /* check whether R* is symmetric */
-        if (mat_issym(stree->trait_Rs[n], nchar))
+        if (mat_issym(morph->matRs, nchar))
           fatal("Error: correlation matrix R* is not symmetric");
         /* also check the diagonal elements = 1.0 */
         for (i = 0; i < nchar; ++i)
-          if (fabs(stree->trait_Rs[n][i*nchar + i] - 1.0) > 1e-5)
+          if (fabs(morph->matRs[i*nchar + i] - 1.0) > 1e-5)
             fatal("Error: correlation matrix R* has diagonal element != 1.0");
+
+        /* copy the R* matrix over */
+        memcpy(stree->trait_Rs[n], morph->matRs, nchar*nchar*sizeof(double));
+
+        /* compute inv(R*) and store it in trait_Rs_1 */
+        if (mat_inv_plu(morph->matRs, stree->trait_Rs_1[n], nchar))
+          fatal("Failed to invert correlation matrix R*");
+
+        /* and logdet(R*) from the LU decomposed morph->matRs */
+        stree->trait_ldetRs[n] = mat_logdet(morph->matRs, nchar);
       }
 
       /* set up identity matrix for Phi */
@@ -528,12 +540,12 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
           else  
             stree->trait_Phi[n][i*nchar + j] = 0.0;
     }
-    else  // no missing data
+    else  // no missing data, use logdet(R*) directly
     {
       if (morph->matRs == NULL)
         stree->trait_ldetRs[n] = 0.0;  // identity matrix
       else
-        stree->trait_ldetRs[n] = morph->matRs[0];
+        stree->trait_ldetRs[n] = *(morph->matRs);
     }
   }
 
@@ -610,25 +622,41 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
 
   /* Rs is the linear shrinkage estimate of the correlation matrix R,
      which is input along with the morphological data */
-  mat_sub(stree->trait_Rs[idx], R, nchar, nchar, act, act);
-  mat_scale(R, t, V, k_i, k_i);         // V = t*R
-  if(mat_inv_plu(V, A, k_i))            // A: inv(V)
-    fatal("Failed to invert V at node %s", snode->label);
-  
-  /* reuse t as f + 0.5 * k * log(2pi) */
-  t = -0.5 * mat_logdet(V, k_i);
+  if (k_i == nchar && k_j == nchar)
+  {
+    /* directly use precomputed Rs_1 and ldetRs */
+    /* E = inv(V) = inv(t * R) */
+    mat_scale(stree->trait_Rs_1[idx], 1.0/t, E, nchar, nchar);
 
-  /* E = t(Phi) * inv(V) */
-  mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
-  mat_trans(I, T, k_i, k_j);            // T: t(Phi)
-  mat_multi(T, A, E, k_j, k_i, k_i);
+    /* C = A = -0.5 * E */
+    mat_scale(E, -0.5, C, nchar, nchar);
+    memcpy(A, C, nchar*nchar*sizeof(double));
 
-  /* C = -0.5 * E * Phi */
-  mat_multi(E, I, C, k_j, k_i, k_j);
-  mat_scale(C, -0.5, C, k_j, k_j);
+    /* reuse t as f + 0.5 * k * log(2pi) */
+    t = -0.5 * (stree->trait_ldetRs[idx] + nchar * log(t));
+  }
+  else  /* extract submatrices for the computation */
+  {
+    mat_sub(stree->trait_Rs[idx], R, nchar, nchar, act, act);
+    mat_scale(R, t, V, k_i, k_i);       // V = t*R
+    if (mat_inv_plu(V, A, k_i))         // A: inv(V)
+      fatal("Failed to invert V at node %s", snode->label);
 
-  /* A = -0.5 * inv(V) */
-  mat_scale(A, -0.5, A, k_i, k_i);
+    /* reuse t as f + 0.5 * k * log(2pi) */
+    t = -0.5 * mat_logdet(V, k_i);
+
+    /* E = t(Phi) * inv(V) */
+    mat_sub(stree->trait_Phi[idx], I, nchar, nchar, act, act_p);
+    mat_trans(I, T, k_i, k_j);          // T: t(Phi)
+    mat_multi(T, A, E, k_j, k_i, k_i);
+
+    /* C = -0.5 * E * Phi */
+    mat_multi(E, I, C, k_j, k_i, k_j);
+    mat_scale(C, -0.5, C, k_j, k_j);
+
+    /* A = -0.5 * inv(V) */
+    mat_scale(A, -0.5, A, k_i, k_i);
+  }
 
   if (snode->left == NULL) // tip
   {
@@ -881,7 +909,7 @@ static void mk_update_cp(int idx, snode_t * snode, stree_t * stree)
 static void trait_update_part(int idx, stree_t * stree)
 {
 #ifdef DEBUG_Chi
-  stree->nodes[3]->tau = 0.08; //0.13;
+  stree->nodes[3]->tau = 0.13;
   stree->nodes[4]->tau = 0.08;
 #endif
 
@@ -1060,6 +1088,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
   
   stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
   stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Rs_1 =  (double **)xcalloc(n_part, sizeof(double *));
   stree->trait_Phi = (double **)xcalloc(n_part, sizeof(double *));
   for (n = 0; n < n_part; ++n)
   {
@@ -1192,10 +1221,12 @@ void trait_destroy(stree_t * stree)
       if (stree->trait_Rs[n])
       {
         free(stree->trait_Rs[n]);
+        free(stree->trait_Rs_1[n]);
         free(stree->trait_Phi[n]);
       }
     }
     free(stree->trait_Rs);
+    free(stree->trait_Rs_1);
     free(stree->trait_Phi);
   }
 

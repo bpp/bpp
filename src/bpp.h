@@ -679,6 +679,7 @@ typedef struct stree_s
   int    * trait_missing;    /* partition has missing states? */
   double **trait_Phi;         /* identity matrix for BM model */
   double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
+  double **trait_Rs_1;                       /* inverse of R* */
   double * trait_ldetRs;             /* log determinant of R* */
 } stree_t;
 
