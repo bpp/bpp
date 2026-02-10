@@ -1,0 +1,24 @@
+#NEXUS
+Begin Data;
+	Dimensions ntax=3 nchar=5;
+	Format datatype=standard symbols="012" gap=- missing=?;
+	Matrix
+	K    1?121
+	C {01}0102
+	H    010-0
+	;
+End;
+
+Begin Trees;
+	tree mytree=[&R]((K:0.08,C:0.08):0.05,H:0.13);
+End;
+
+Begin MrBayes;
+	lset coding=variable; [Mkv]
+	prset brlenspr=clock:uniform;
+	prset topologypr=fixed(mytree);
+	mcmcp nrun=1 nchain=1 ngen=1 samplefr=1;
+	startvals [tau=mytree] v=mytree;
+	mcmc;
+	[sump;]
+End;
