@@ -2782,7 +2782,7 @@ static void create_mig_bitmatrix(stree_t * stree)
     }
 
     /* 2024-07-31 -- Decided that setting W to 1 is best */
-    spec->M = 50;
+    spec->M = 200;
     if(opt_usedata_fix_gtree)
       spec->M = spec->alpha / spec->beta;
 
