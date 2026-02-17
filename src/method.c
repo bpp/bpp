@@ -5584,7 +5584,7 @@ void cmd_run()
  
     /* propose species tree taus */     
     #if 1
-    if (stree->tip_count > 1 && stree->root->tau > 0)
+    if (stree->inner_count >= 1 && stree->root->tau > 0)
     {
       ratio = 0;
       if(!opt_usedata_fix_gtree && opt_migration)

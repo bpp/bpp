@@ -2246,13 +2246,15 @@ static void simulate(stree_t * stree)
          fill it with ones, and use rates4sites to alter it */
       if (siterates)
         free(siterates);
+
+      if (fp_seqfull && stree->tip_count == 1)
+      {
+        mH += H;  meand_full += md_full;  meand_rand += md_rand;
+        printf("locus %3ld, H md_full md_rand: %9.6f %9.6f %9.6f\n",
+               i + 1, H, md_full, md_rand);
+      }
     }
-    if (stree->tip_count == 1)
-    {
-      mH += H;  meand_full += md_full;  meand_rand += md_rand;
-      printf("locus %3ld, H md_full md_rand: %9.6f %9.6f %9.6f\n",
-             i + 1, H, md_full, md_rand);
-    }
+
     if ((i+1) % 1000 == 0 || (opt_locus_count > 1000 && i == opt_locus_count-1))
       printf("%10ld replicates done... mean tMRCA = %9.6f\n", i+1, tmrca/(i+1));
   }  /* end of locus loop */
@@ -2265,7 +2267,7 @@ static void simulate(stree_t * stree)
     free(rate);
   }
 
-  if (stree->tip_count == 1)
+  if (fp_seqfull && stree->tip_count == 1)
   {
     mH /= opt_locus_count;  meand_full /= opt_locus_count;  meand_rand /= opt_locus_count;
     printf("average,   H md_full md_rand: %9.6f %9.6f %9.6f\n", mH, meand_full, meand_rand);
