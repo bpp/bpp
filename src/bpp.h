@@ -490,10 +490,13 @@ typedef struct trait_s
   double old_brate;
   
   /* for continuous traits */
-  double brlen;      // transformed branch length (v_k')
-  double * state_m;  // (ancestral) state values (m_k')
-  double * contrast; // independent contrasts (x_k)
-  
+  double   brlen;    // (transformed) branch length
+  double * state_m;  // state values, or m in GLInv model
+  double * contrast; // independent contrasts
+  int    * active;   // indicator for active coordinates
+  double * glinv_L;  // L matrix in GLInv model
+  double   glinv_r;  // r in GLInv model
+
   /* for discrete traits */
   int    * state_d;  // discrete state values
   double **condprob; // conditional probabilities (L)
@@ -597,9 +600,7 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
-  /* trait related things (per partition): branch length, rate, trait values;
-     for discrete traits, it contains transition & conditional probabilities;
-     for continuous traits, it contains phylogenetic indepandent contrasts */
+  /* trait related things (per partition): branch length, rate, trait values, etc */
   trait_t ** trait;
 
   long flag;
@@ -675,9 +676,11 @@ typedef struct stree_s
   double * trait_logpr;        /* log prior of each partition */
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
-  double * trait_v_pop;         /* within population variance */
-  double * trait_ldetRs;  /* log determinant of shrinkage estimate of
-                             correlation matrix, i.e. log(det(R*)) */
+  int    * trait_missing;    /* partition has missing states? */
+  double **trait_Phi;         /* identity matrix for BM model */
+  double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
+  double **trait_Rs_1;                       /* inverse of R* */
+  double * trait_ldetRs;             /* log determinant of R* */
 } stree_t;
 
 typedef struct mutation_s
@@ -806,15 +809,13 @@ typedef struct morph_s
 {
   int ntaxa;        // number of species (populations)
   int length;       // number of characters
-
-  double ** conti;  // continuous trait matrix
-  int    ** discr;  // discrete trait matrix
-  char   ** label;  // species labels
-
-  double v_pop;     // population variance
-  double ldetRs;    // log determinant of R*
-
   int dtype;        // data type: continuous or discrete
+
+  char   ** label;  // species labels
+  int    ** discr;  // discrete trait matrix
+  double ** conti;  // continuous trait matrix
+
+  double  * matRs;  // shrinkage estimate of correlation matrix
   int model;
 } morph_t;
 
@@ -1255,8 +1256,8 @@ extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
-extern double opt_brate_alpha;
-extern double opt_brate_beta;
+extern double opt_brate_m_alpha;
+extern double opt_brate_m_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;

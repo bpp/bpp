@@ -637,8 +637,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
 
   if (opt_traitfile)  //Chi
   {
-    /* update the contrasts (continuous) or conditional probs (discrete)
-       as node age (tau) has been changed */
+    /* update as node age (tau) has been changed */
     trait_update(stree);
     
     /* then calculate the log likelihood difference */
@@ -658,13 +657,14 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     if (!opt_est_theta)
       stree->notheta_logpr = logpr;
 
-    if (opt_traitfile)  //Chi
+    if (opt_traitfile)
       trait_store(stree);
   }
   else
   {
-    if (opt_traitfile)  //Chi
-      trait_restore(stree);
+    /* no need at the moment as things will be recomputed */
+    //if (opt_traitfile)
+    //  trait_restore(stree);
 
     /* revert thetas and logpr contributions */
     if (opt_est_theta)
