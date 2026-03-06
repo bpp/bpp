@@ -90,6 +90,7 @@ OBJ_BPP = \
 	visual.obj \
 	a1b1.obj \
 	morph.obj \
+	ancestry.obj \
 
 all: $(PROG)
 
