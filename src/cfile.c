@@ -3164,7 +3164,15 @@ void load_cfile()
     }
     else if (token_len == 8)
     {
-      if (!strncasecmp(token,"imapfile",8))
+      if (!strncasecmp(token,"ancestry",8))
+      {
+        if (!parse_long(value, &opt_ancestry) ||
+            (opt_ancestry != 0 && opt_ancestry != 1))
+          fatal("Option 'ancestry' expects value 0 or 1 (line %ld)",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"imapfile",8))
       {
         if (!get_string(value, &opt_mapfile))
           fatal("Option %s expects a string (line %ld)", token, line_count);

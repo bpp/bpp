@@ -666,6 +666,11 @@ typedef struct stree_s
   double * u_constraint;
   double * l_constraint;
 
+  /* ancestry tracking for hybridization paths */
+  long *** ancestry_count;
+  snode_t ** ancestry_tips;
+
+
   /* morphological traits //Chi */
   int      trait_count;         /* number of trait partitions */
   int    * trait_dim;  /* dimension of trait vector of each partition */
@@ -1140,6 +1145,7 @@ typedef struct thread_info_s
 /* options */
 
 extern long opt_alpha_cats;
+extern long opt_ancestry;
 extern long opt_arch;
 extern long opt_basefreqs_fixed;
 extern long opt_bfd_points;
@@ -3142,3 +3148,13 @@ void conditional_to_marginal_M(double * ai1_full,
                                double * out_c,
                                double * out_effu,
                                double * out_effy);
+
+/* functions in ancestry.c */
+void ancestry_init(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_reset(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_reset_mean(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_update(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_print(stree_t * stree);
+void ancestry_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
+void ancestry_write(stree_t * stree, gtree_t ** gtree_list);
+
