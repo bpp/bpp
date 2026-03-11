@@ -243,7 +243,7 @@ void ancestry_print(stree_t * stree)
 
 void ancestry_write(stree_t * stree, gtree_t ** gtree_list)
 {
-  long i,j,k,m;
+  long i,j,k,m,r;
   snode_t * stip;
   snode_t * mnode;
   snode_t * hnode;
@@ -253,6 +253,11 @@ void ancestry_write(stree_t * stree, gtree_t ** gtree_list)
   FILE * fp_seq = NULL;
 
   if (!opt_msci || !ancestry_mean || !stree || !stree->ancestry_tips) return;
+
+  /* build reverse mapping: perm[original_index] = sorted_index */
+  long * perm = (long *)xmalloc((size_t)opt_locus_count * sizeof(long));
+  for (k = 0; k < opt_locus_count; ++k)
+    perm[gtree_list[k]->original_index] = k;
 
   fp_tip = ancestry_openfile("ancestry.per-tip.txt", "w");
   fp_locus = ancestry_openfile("ancestry.per-tip-per-locus.txt", "w");
@@ -317,10 +322,11 @@ void ancestry_write(stree_t * stree, gtree_t ** gtree_list)
   }
   fprintf(fp_locus, "\n");
 
-  /* per-locus rows */
-  for (k = 0; k < opt_locus_count; ++k)
+  /* per-locus rows (iterate in original locus order) */
+  for (r = 0; r < opt_locus_count; ++r)
   {
-    fprintf(fp_locus, "%ld", k + 1);
+    k = perm[r];
+    fprintf(fp_locus, "%ld", r + 1);
     m = 0;
     while ((stip = stree->ancestry_tips[m++]))
     {
@@ -355,15 +361,16 @@ void ancestry_write(stree_t * stree, gtree_t ** gtree_list)
   }
   fprintf(fp_seq, "\n");
 
-  /* rows: one per (locus, sequence) pair */
-  for (k = 0; k < opt_locus_count; ++k)
+  /* rows: one per (locus, sequence) pair (iterate in original locus order) */
+  for (r = 0; r < opt_locus_count; ++r)
   {
+    k = perm[r];
     gtree_t * gt = gtree_list[k];
     for (j = 0; j < gt->tip_count; ++j)
     {
       if (ancestry_seq_mean[k][j] == NULL) continue;
 
-      fprintf(fp_seq, "%ld,%s", k + 1,
+      fprintf(fp_seq, "%ld,%s", r + 1,
               gt->nodes[j]->label ? gt->nodes[j]->label : "");
       for (i = 0; i < stree->hybrid_count; ++i)
         fprintf(fp_seq, ",%f", ancestry_seq_mean[k][j][i]);
@@ -374,6 +381,7 @@ void ancestry_write(stree_t * stree, gtree_t ** gtree_list)
 
   fclose(fp_tip);
   fclose(fp_locus);
+  free(perm);
 }
 
 void ancestry_update(stree_t * stree, gtree_t ** gtree_list)
