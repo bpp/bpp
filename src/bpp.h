@@ -158,7 +158,7 @@
 #define VERSION_MINOR 8
 #define VERSION_PATCH 7
 
-#define PVER_SHA1 "a84db12a15c6d7350cc3f9510a6d790972400af1"
+#define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
 /* checkpoint version */
 #define VERSION_CHKP 1
@@ -667,6 +667,11 @@ typedef struct stree_s
   double * u_constraint;
   double * l_constraint;
 
+  /* ancestry tracking for hybridization paths */
+  long *** ancestry_count;
+  snode_t ** ancestry_tips;
+
+
   /* morphological traits //Chi */
   int      trait_count;         /* number of trait partitions */
   int    * trait_dim;  /* dimension of trait vector of each partition */
@@ -1141,6 +1146,7 @@ typedef struct thread_info_s
 /* options */
 
 extern long opt_alpha_cats;
+extern long opt_ancestry;
 extern long opt_arch;
 extern long opt_basefreqs_fixed;
 extern long opt_bfd_points;
@@ -3143,3 +3149,13 @@ void conditional_to_marginal_M(double * ai1_full,
                                double * out_c,
                                double * out_effu,
                                double * out_effy);
+
+/* functions in ancestry.c */
+void ancestry_init(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_reset(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_reset_mean(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_update(stree_t * stree, gtree_t ** gtree_list);
+void ancestry_print(stree_t * stree);
+void ancestry_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
+void ancestry_write(stree_t * stree, gtree_t ** gtree_list);
+

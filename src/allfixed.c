@@ -1605,6 +1605,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   long sample_num;
   long rc = 0;
   FILE * fp;
+  FILE * fp_csv = NULL;
+  char * summary_csv = NULL;
   unsigned int snodes_total = stree->tip_count + stree->inner_count;
   
   if (opt_msci)
@@ -1879,6 +1881,13 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   for (i = 0; i < label_count; ++i)
     label_size[i] = MAX(prec, (int)strlen(label[i]));
 
+  xasprintf(&summary_csv, "%s.summary.csv", opt_jobname);
+  fp_csv = xopen(summary_csv, "w");
+  fprintf(fp_csv, "param");
+  for (i = 0; i < label_count; ++i)
+    fprintf(fp_csv, ",%s", label[i]);
+  fprintf(fp_csv, "\n");
+
 
   /* now created additional columns for M */
   if (opt_migration)
@@ -2087,6 +2096,14 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
   /* print each row */
   for (i = 0; i < col_count; ++i)
   {
+    long median_line = opt_samples / 2;
+    double median = matrix[i][median_line];
+    if ((opt_samples & 1) == 0)
+    {
+      median += matrix[i][median_line-1];
+      median /= 2;
+    }
+
     if (!strcmp(tokens[i],"lnL") && i == col_count-1)
     {
       fprintf(stdout, "\n");
@@ -2109,13 +2126,6 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     fprintf(fp_out, "  ");
 
     /* median */
-    long median_line = opt_samples / 2;
-    double median = matrix[i][median_line];
-    if ((opt_samples & 1) == 0)
-    {
-      median += matrix[i][median_line-1];
-      median /= 2;
-    }
     xasprintf(&s, "%.*f", prec, median);
     fprintf(stdout, "%*s", label_size[1], s);
     fprintf(fp_out, "%*s", label_size[1], s);
@@ -2214,6 +2224,21 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     fprintf(stdout, "\n");
     fprintf(fp_out, "\n");
 
+    fprintf(fp_csv, "%s", tokens[i]);
+    fprintf(fp_csv,
+            ",%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f,%.*f\n",
+            prec, mean[i],
+            prec, median,
+            prec, stdev[i],
+            prec, matrix[i][0],
+            prec, matrix[i][opt_samples-1],
+            prec, matrix[i][(long)(opt_samples*.025)],
+            prec, matrix[i][(long)(opt_samples*.975)],
+            prec, hpd025[i],
+            prec, hpd975[i],
+            prec, opt_samples/tint[i],
+            prec, 1/tint[i],
+            prec, rho1[i]);
   }
   fprintf(stdout, "\n");
   fprintf(fp_out, "\n");
@@ -2253,6 +2278,9 @@ l_unwind:
   free(rho1);
   free(stdev);
   fclose(fp);
+  if (fp_csv)
+    fclose(fp_csv);
+  free(summary_csv);
 
   if (!rc)
     fatal("Error while reading/summarizing %s", opt_mcmcfile);

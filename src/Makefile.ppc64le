@@ -40,10 +40,11 @@ ifdef DISABLE_AVX
   AVXOBJ=
 endif
 
+CC=powerpc64le-linux-gnu-gcc-14
 ifndef CC
 CC = gcc-7
 endif
-CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+CFLAGS = -static -D_GNU_SOURCE -g -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)
 LIBS=-lm -lpthread
 
@@ -61,7 +62,7 @@ OBJS=bpp.o rtree.o util.o \
      revolutionary.o diploid.o dump.o load.o summary11.o simulate.o cfile_sim.o \
      gamma.o prop_gamma.o threads.o treeparse.o parsemap.o msci_gen.o visual.o \
      pdfgen.o constraint.o debug.o lswitch.o miginfo.o ming2.o a1b1.o \
-     bfdriver.o morph.o ancestry.o $(AVXOBJ) $(AVX2OBJ)
+     bfdriver.o morph.o ancestry.o
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS) $(LDFLAGS)

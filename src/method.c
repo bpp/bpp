@@ -2782,7 +2782,7 @@ static void create_mig_bitmatrix(stree_t * stree)
     }
 
     /* 2024-07-31 -- Decided that setting W to 1 is best */
-    spec->M = 50;
+    spec->M = 200;
     if(opt_usedata_fix_gtree)
       spec->M = spec->alpha / spec->beta;
 
@@ -5355,6 +5355,10 @@ void cmd_run()
     phi_av_count = (long *)xmalloc(2*sizeof(long));
   }
 
+  /* TF: 20.10.2025 */
+  if (opt_msci && opt_ancestry)
+    ancestry_init(stree, gtree);
+
   /* *** start of MCMC loop *** */
   active_pjumps_alloc();
   for ( ; i < opt_samples*opt_samplefreq; ++i)
@@ -5428,6 +5432,11 @@ void cmd_run()
         if (ft_round_mrate_gibbs)
           for (j = 0; j < slots; ++j)
             ft_round_mrate_gibbs[j] = 0;
+      }
+      if (opt_msci && opt_ancestry)
+      {
+        ancestry_reset(stree,gtree); /* not needed as it's done at the end before update */
+        ancestry_reset_mean(stree,gtree);
       }
     }
 
@@ -5586,7 +5595,7 @@ void cmd_run()
  
     /* propose species tree taus */     
     #if 1
-    if (stree->tip_count > 1 && stree->root->tau > 0)
+    if (stree->inner_count >= 1 && stree->root->tau > 0)
     {
       ratio = 0;
       if(!opt_usedata_fix_gtree && opt_migration)
@@ -6028,6 +6037,13 @@ void cmd_run()
         mig_rate_counts[opt_migration_count]++;
     }
 
+    if (opt_ancestry)
+    {
+      ancestry_reset(stree, gtree);
+      ancestry_update(stree, gtree);
+      ancestry_update_mean(stree, gtree, ft_round);
+    }
+
     /* print MCMC status on screen */
     if (printk <= 500 || (i+1) % (printk / 200) == 0)
     {
@@ -6194,6 +6210,10 @@ void cmd_run()
           fatal("\n[ERROR] The mean log-L over loci is -inf.\n"
                 "Please run BPP with numerical scaling. This is enabled by adding the line:\n"
                 "\n  scaling = 1\n\nto the control file");
+        #if 0
+        if (opt_msci && opt_ancestry)
+          ancestry_print(stree);
+        #endif
       }
     }
 
@@ -6296,6 +6316,13 @@ void cmd_run()
   active_pjumps_dealloc();
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
+
+  #if 0
+  if (opt_ancestry)
+    ancestry_print(stree);
+  #endif
+  if (opt_ancestry)
+    ancestry_write(stree, gtree);
 
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);

@@ -35,6 +35,7 @@ __THREAD char bpp_errmsg[200] = {0};
 
 /* options */
 long opt_alpha_cats;
+long opt_ancestry;
 long opt_arch;
 long opt_basefreqs_fixed;
 long opt_bfd_points;
@@ -445,6 +446,7 @@ void args_init(int argc, char ** argv)
   opt_alpha_alpha = 1;
   opt_alpha_beta = 2;
   opt_alpha_cats = 1;
+  opt_ancestry = 0;
   opt_arch = -1;
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
