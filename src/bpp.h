@@ -1358,6 +1358,11 @@ extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
 extern partition_t ** opt_partition_list;
 extern int  opt_seqAncestral;
+extern long   opt_sim_disc_nchar;
+extern double opt_sim_disc_rate;
+extern long   opt_sim_cont_nchar;
+extern double opt_sim_cont_rate;
+extern double * opt_sim_cont_R;
 
 /* common data */
 
@@ -1522,6 +1527,10 @@ void trait_update(stree_t * stree);
 
 double loglikelihood_trait(stree_t * stree);
 double logprior_trait(stree_t * stree);
+
+int sim_parse_disc(const char * line);
+int sim_parse_cont(const char * line);
+int parse_matrix(FILE * fp, double * mat, int n, int m);
 
 /* functions in rtree.c */
 

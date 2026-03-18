@@ -1434,6 +1434,12 @@ void load_cfile_sim()
         parse_migration(fp, value, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"traitfile",9))
+      {
+        if (!get_string(value, &opt_traitfile))
+          fatal("Option '%s' expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 10)
     {
@@ -1447,6 +1453,37 @@ void load_cfile_sim()
       {
         if (!parse_printlocus(value,&opt_print_locus))
           fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"trait_disc",10)) 
+      {
+        if (sim_parse_disc(value))
+          fatal("Option expects one integer and one rate value (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"trait_cont",10)) 
+      {
+        if (sim_parse_cont(value))
+          fatal("Option expects one integer and one rate value (line %ld)", line_count);
+        
+        int c, n = opt_sim_cont_nchar;
+        opt_sim_cont_R = (double *)xmalloc(n * n * sizeof(double));
+        while (isspace(c = fgetc(fp)));
+        if (c == 'R')
+        {
+          if (parse_matrix(fp, opt_sim_cont_R, n, n))
+            fatal("Error reading correlation matrix (R)\n");
+        }
+        else {
+          ungetc(c, fp); 
+          /* fill in identity matrix */
+          for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+              if (i == j)
+                opt_sim_cont_R[i * n + j] = 1.0;
+              else  
+                opt_sim_cont_R[i * n + j] = 0.0;
+        }
         valid = 1;
       }
     }

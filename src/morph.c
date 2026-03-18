@@ -23,13 +23,13 @@ static int mat_trans(double *A, double *At, int n, int m);
 static int mat_inv_chol(double *A, double *Ainv, int n);
 static int mat_inv_plu (double *A, double *Ainv, int n);
 static double mat_logdet(double *U, int n);
-static int mat_issym(double *A, int n);
+static int mat_asym(double *A, int n);
 
 /* get a non-blank character from file */
 static int get_nb_char(FILE *fp)
 {
   int c;
-  while (isspace(c=fgetc(fp)));
+  while (isspace(c = fgetc(fp)));
   return c;
 }
 
@@ -207,13 +207,13 @@ static void parse_comment(FILE * fp)
 {
   int c;
   
-  while ((c=get_nb_char(fp)) == '#')
-    while ((c=fgetc(fp)) != '\n'); //eat the line
+  while ((c = get_nb_char(fp)) == '#')
+    while ((c = fgetc(fp)) != '\n'); //eat the line
 
   ungetc(c, fp);
 }
 
-static int parse_matrix_c(FILE * fp, double * mat, int n, int m)
+int parse_matrix(FILE * fp, double * mat, int n, int m)
 {
   int i, j;
   for (i = 0; i < n; ++i)
@@ -330,7 +330,7 @@ static morph_t * morph_parse(FILE * fp)
       /* read correlation matrix (R*) */
       fgetc(fp);  // skip '*'
       morph->matRs = (double *)xmalloc(nchar*nchar*sizeof(double));
-      if (parse_matrix_c(fp, morph->matRs, nchar, nchar))
+      if (parse_matrix(fp, morph->matRs, nchar, nchar))
       {
         fprintf(stderr, "Error reading correlation matrix (R*)\n");
         morph_destroy(morph);
@@ -513,11 +513,11 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
       else
       {
         /* check whether R* is symmetric */
-        if (mat_issym(morph->matRs, nchar))
+        if (mat_asym(morph->matRs, nchar))
           fatal("Error: correlation matrix R* is not symmetric");
         /* also check the diagonal elements = 1.0 */
         for (i = 0; i < nchar; ++i)
-          if (fabs(morph->matRs[i*nchar + i] - 1.0) > 1e-5)
+          if (fabs(morph->matRs[i*nchar + i] - 1.0) > 1e-8)
             fatal("Error: correlation matrix R* has diagonal element != 1.0");
 
         /* copy the R* matrix over */
@@ -1912,15 +1912,41 @@ static double mat_logdet(double *U, int n)
 }
 
 /* check whether A is symmetric */
-static int mat_issym(double *A, int n)
+static int mat_asym(double *A, int n)
 {
   int i, j;
-  double tol = 1e-5;
+  double tol = 1e-8;
 
   for (i = 0; i < n; ++i)
     for (j = i + 1; j < n; ++j)
       if (fabs(A[i * n + j] - A[j * n + i]) > tol)
         return 1;
 
+  return 0;
+}
+
+
+/* functions for simulation */
+long     opt_sim_disc_nchar = 0;
+double   opt_sim_disc_rate = 0.;
+long     opt_sim_cont_nchar = 0;
+double   opt_sim_cont_rate = 0.;
+double * opt_sim_cont_R;  // correlation matrix
+
+int sim_parse_disc(const char * line)
+{
+  if (sscanf(line, "%ld %lf", &opt_sim_disc_nchar, &opt_sim_disc_rate) != 2
+      || opt_sim_disc_nchar < 0 || opt_sim_disc_rate <= 0.0)
+    return 1;
+
+  return 0;
+}
+
+int sim_parse_cont(const char * line)
+{
+  if (sscanf(line, "%ld %lf", &opt_sim_cont_nchar, &opt_sim_cont_rate) != 2
+      || opt_sim_cont_nchar < 0 || opt_sim_cont_rate <= 0.0)
+    return 1;
+  
   return 0;
 }

@@ -1639,6 +1639,7 @@ static void simulate(stree_t * stree)
   double * eigenvecs = NULL;
   double * inv_eigenvecs = NULL;
   double * eigenvals = NULL;
+  FILE * fp_trait = NULL;
   FILE * fp_seq = NULL;
   FILE * fp_concat = NULL;
   FILE * fp_tree = NULL;
@@ -1655,6 +1656,8 @@ static void simulate(stree_t * stree)
   double mH = 0, meand_full = 0, meand_rand = 0;
 
   /* open output files */
+  if (opt_traitfile)
+    fp_trait = xopen(opt_traitfile, "w");
   if (opt_msafile)
     fp_seq = xopen(opt_msafile, "w");
   if (opt_concatfile)
@@ -1673,6 +1676,8 @@ static void simulate(stree_t * stree)
     fp_seqDates = xopen(opt_seqDates, "w");
 
   /* print list of output files */
+  if (opt_traitfile)
+    fprintf(stdout, "Trait data file -> %s\n", opt_traitfile);
   if (opt_msafile)
     fprintf(stdout, "Sequence data file -> %s\n", opt_msafile);
   if (opt_treefile)
@@ -2373,6 +2378,8 @@ static void simulate(stree_t * stree)
   }
 
   /* close all open output files */
+  if (opt_traitfile)
+    fclose(fp_trait);
   if (opt_msafile)
     fclose(fp_seq);
   if (opt_concatfile)
@@ -2720,6 +2727,12 @@ void cmd_simulate()
     }
     free(opt_mig_specs);
 
+  }
+
+  if (opt_traitfile)  //Chi
+  {
+    free(opt_sim_cont_R);
+    trait_destroy(stree);
   }
 
   stree_destroy(stree,free);
