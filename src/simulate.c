@@ -2367,14 +2367,28 @@ static void simulate(stree_t * stree)
   free(msa);
   free(gtree);
 
-
-
   /* deallocate eigendecomposition structures */
   if (opt_model == BPP_DNA_MODEL_GTR)
   {
     free(eigenvecs);
     free(inv_eigenvecs);
     free(eigenvals);
+  }
+
+  if (opt_traitfile)  //Chi
+  {
+    /* allocate memory and set things up */
+    trait_init_sim(stree);
+
+    /* simulate discrete and continuous traits */
+    trait_simulate(stree);
+
+    /* write traits to file */
+    // trait_write(fp_trait, stree);
+
+    /* free memory */
+    free(opt_sim_cont_R);
+    trait_destroy(stree);
   }
 
   /* close all open output files */
@@ -2727,12 +2741,6 @@ void cmd_simulate()
     }
     free(opt_mig_specs);
 
-  }
-
-  if (opt_traitfile)  //Chi
-  {
-    free(opt_sim_cont_R);
-    trait_destroy(stree);
   }
 
   stree_destroy(stree,free);

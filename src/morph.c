@@ -1927,18 +1927,27 @@ static int mat_asym(double *A, int n)
 
 
 /* functions for simulation */
-long     opt_sim_disc_nchar = 0;
-double   opt_sim_disc_rate = 0.;
+long     opt_sim_disc_nchar[3] = {0, 0, 0};
+double   opt_sim_disc_rate = 0.0;
 long     opt_sim_cont_nchar = 0;
-double   opt_sim_cont_rate = 0.;
-double * opt_sim_cont_R;  // correlation matrix
+double   opt_sim_cont_rate = 0.0;
+double * opt_sim_cont_R = NULL;  // correlation matrix
 
 int sim_parse_disc(const char * line)
 {
-  if (sscanf(line, "%ld %lf", &opt_sim_disc_nchar, &opt_sim_disc_rate) != 2
-      || opt_sim_disc_nchar < 0 || opt_sim_disc_rate <= 0.0)
+  if (sscanf(line, "%ld %ld %ld %lf", 
+              &opt_sim_disc_nchar[0],
+              &opt_sim_disc_nchar[1],
+              &opt_sim_disc_nchar[2],
+              &opt_sim_disc_rate) != 4)
     return 1;
 
+  if (opt_sim_disc_nchar[0] < 0 ||
+      opt_sim_disc_nchar[1] < 0 ||
+      opt_sim_disc_nchar[2] < 0 ||
+      opt_sim_disc_rate <= 0.0)
+    return 1;
+  
   return 0;
 }
 
@@ -1949,4 +1958,134 @@ int sim_parse_cont(const char * line)
     return 1;
   
   return 0;
+}
+
+void trait_init_sim(stree_t * stree)
+{
+  int i, j, nchar;
+  snode_t * snode;
+  trait_t * trait;
+
+  stree->trait_count = 2; // two partitions: discrete and continuous
+  stree->trait_type = (int *)xmalloc(2 * sizeof(int));
+  stree->trait_type[0] = BPP_DATA_DISC;
+  stree->trait_type[1] = BPP_DATA_CONT;
+  stree->trait_dim  = (int *)xcalloc(2, sizeof(int));
+  stree->trait_dim[0] = opt_sim_disc_nchar[0] 
+                      + opt_sim_disc_nchar[1]
+                      + opt_sim_disc_nchar[2];
+  stree->trait_dim[1] = opt_sim_cont_nchar;
+
+  stree->trait_nstate = (int **)xmalloc(2 * sizeof(int *));
+  stree->trait_nstate[0] = (int *)xcalloc(stree->trait_dim[0], sizeof(int));
+  for (j = 0; j < stree->trait_dim[0]; ++j)
+  {
+    if (j < opt_sim_disc_nchar[0])
+      stree->trait_nstate[0][j] = 2;
+    else if (j < opt_sim_disc_nchar[0] + opt_sim_disc_nchar[1])
+      stree->trait_nstate[0][j] = 3;
+    else
+      stree->trait_nstate[0][j] = 4;
+  }
+   
+  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    snode->trait = (trait_t **)xmalloc(2 * sizeof(trait_t *));
+    
+    /* 0: discrete characters */
+    trait = snode->trait[0] = (trait_t *)xmalloc(sizeof(trait_t));
+    nchar = stree->trait_dim[0];
+    trait->state_d = (int *)xcalloc(nchar, sizeof(int));
+
+    if (snode->parent)
+    {
+      /* update the branch length */
+      trait->brate = opt_sim_disc_rate;
+      trait->brlen = (snode->parent->tau - snode->tau) * trait->brate;
+
+      /* transition probabilities for characters of 2, 3, 4 states */
+      trait->tranprob = (double **)xcalloc(9, sizeof(double *));
+      for (j = 0; j < 3; ++j)
+        trait->tranprob[j] = (double *)xcalloc(2, sizeof(double));
+      /* calculate the transition probabilities */
+      mk_trprob(trait->tranprob, trait->brlen, 4);
+    }
+    
+    /* 1: continuous characters */
+    trait = snode->trait[1] = (trait_t *)xmalloc(sizeof(trait_t));
+    nchar = stree->trait_dim[1];
+    trait->state_m = (double *)xcalloc(nchar, sizeof(double));
+
+    if (snode->parent)
+    {
+      /* update the branch length */
+      trait->brate = opt_sim_cont_rate;
+      trait->brlen = (snode->parent->tau - snode->tau) * trait->brate;
+    
+      /* TODO */
+    }
+  }
+}
+
+static void sim_disc_Mkv(int idx, snode_t * snode, stree_t * stree)
+{
+  int i, j, k, a;
+  double u, cumprob, prob[10];
+  
+  if (snode->parent)
+  {
+    /* evolve from ancestral node to current node */
+    for (j = 0; j < stree->trait_dim[idx]; ++j)
+    {
+      k = stree->trait_nstate[idx][j];
+      a = snode->parent->trait[idx]->state_d[j];
+
+      for (i = 0; i < k; ++i) {
+        if (i == a)
+          prob[i] = snode->trait[idx]->tranprob[k-2][0];
+        else
+          prob[i] = snode->trait[idx]->tranprob[k-2][1];
+      }  // prob should sum to 1.0
+      
+      /* sample the state via cumulative probability */
+      snode->trait[idx]->state_d[j] = k - 1;
+      u = legacy_rndu(0);
+      cumprob = 0.0;
+      for (i = 0; i < k; ++i) {
+        cumprob += prob[i];
+        if (u < cumprob) {
+          snode->trait[idx]->state_d[j] = i;
+          break;
+        }
+      }
+    }
+  }
+  else
+  {
+    /* initialize states at the root */
+    for (j = 0; j < stree->trait_dim[idx]; ++j)
+    {
+      k = stree->trait_nstate[idx][j];
+      u = legacy_rndu(0);
+      snode->trait[idx]->state_d[j] = (int)(k * u);
+    }
+  }
+  
+  /* then recursively simulate for children */
+  if (snode->left)
+    sim_disc_Mkv(idx, snode->left, stree);
+  if (snode->right)
+    sim_disc_Mkv(idx, snode->right, stree); 
+}
+
+void trait_simulate(stree_t * stree)
+{
+  /* simulate discrete traits from root to tips
+     given the species tree and evolutionary rate */
+  sim_disc_Mkv(0, stree->root, stree);
+  
+  
+  /* and continuous traits (TODO) */
+  // sim_cont_BM(1, stree->root, stree);
 }

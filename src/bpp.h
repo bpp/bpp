@@ -1358,7 +1358,7 @@ extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
 extern partition_t ** opt_partition_list;
 extern int  opt_seqAncestral;
-extern long   opt_sim_disc_nchar;
+extern long   opt_sim_disc_nchar[3];
 extern double opt_sim_disc_rate;
 extern long   opt_sim_cont_nchar;
 extern double opt_sim_cont_rate;
@@ -1531,6 +1531,8 @@ double logprior_trait(stree_t * stree);
 int sim_parse_disc(const char * line);
 int sim_parse_cont(const char * line);
 int parse_matrix(FILE * fp, double * mat, int n, int m);
+void trait_init_sim(stree_t * stree);
+void trait_simulate(stree_t * stree);
 
 /* functions in rtree.c */
 
@@ -1538,7 +1540,7 @@ void stree_show_ascii(const snode_t * root, int options);
 
 char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *));
 
-char* msci_export_newick(const snode_t* root, char* (*cb_serialize)(const snode_t*));
+char * msci_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *));
 
 int stree_traverse(snode_t * root,
                    int traversal,
