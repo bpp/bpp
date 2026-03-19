@@ -2028,63 +2028,73 @@ void trait_init_sim(stree_t * stree)
   }
 }
 
-static void sim_disc_Mkv(int idx, snode_t * snode, stree_t * stree)
+static void sim_disc_Mk(int pt, int col, snode_t * snode, stree_t * stree)
 {
-  int i, j, k, a;
+  int i, k, a;
   double u, cumprob, prob[10];
   
   if (snode->parent)
   {
     /* evolve from ancestral node to current node */
-    for (j = 0; j < stree->trait_dim[idx]; ++j)
-    {
-      k = stree->trait_nstate[idx][j];
-      a = snode->parent->trait[idx]->state_d[j];
+    k = stree->trait_nstate[pt][col];
+    a = snode->parent->trait[pt]->state_d[col];
 
-      for (i = 0; i < k; ++i) {
-        if (i == a)
-          prob[i] = snode->trait[idx]->tranprob[k-2][0];
-        else
-          prob[i] = snode->trait[idx]->tranprob[k-2][1];
-      }  // prob should sum to 1.0
+    for (i = 0; i < k; ++i) {
+      if (i == a)
+        prob[i] = snode->trait[pt]->tranprob[k-2][0];
+      else
+        prob[i] = snode->trait[pt]->tranprob[k-2][1];
+    }  // prob should sum to 1.0
       
-      /* sample the state via cumulative probability */
-      snode->trait[idx]->state_d[j] = k - 1;
-      u = legacy_rndu(0);
-      cumprob = 0.0;
-      for (i = 0; i < k; ++i) {
-        cumprob += prob[i];
-        if (u < cumprob) {
-          snode->trait[idx]->state_d[j] = i;
-          break;
-        }
+    /* sample the state via cumulative probability */
+    snode->trait[pt]->state_d[col] = k - 1;
+    u = legacy_rndu(0);
+    cumprob = 0.0;
+    for (i = 0; i < k; ++i) {
+      cumprob += prob[i];
+      if (u < cumprob) {
+        snode->trait[pt]->state_d[col] = i;
+        break;
       }
     }
   }
   else
   {
     /* initialize states at the root */
-    for (j = 0; j < stree->trait_dim[idx]; ++j)
-    {
-      k = stree->trait_nstate[idx][j];
-      u = legacy_rndu(0);
-      snode->trait[idx]->state_d[j] = (int)(k * u);
-    }
+    k = stree->trait_nstate[pt][col];
+    u = legacy_rndu(0);
+    snode->trait[pt]->state_d[col] = (int)(k * u);
   }
   
   /* then recursively simulate for children */
   if (snode->left)
-    sim_disc_Mkv(idx, snode->left, stree);
+    sim_disc_Mk(pt, col, snode->left, stree);
   if (snode->right)
-    sim_disc_Mkv(idx, snode->right, stree); 
+    sim_disc_Mk(pt, col, snode->right, stree); 
+}
+
+static int constant_char(int pt, int col, stree_t * stree)
+{
+  int i;
+
+  for (i = 1; i < stree->tip_count; ++i)
+    if (stree->nodes[i]->trait[pt]->state_d[col] !=
+        stree->nodes[0]->trait[pt]->state_d[col])
+      return 0;  // not constant
+
+  return 1; // constant
 }
 
 void trait_simulate(stree_t * stree)
 {
   /* simulate discrete traits from root to tips
      given the species tree and evolutionary rate */
-  sim_disc_Mkv(0, stree->root, stree);
-  
+  for (int j = 0; j < stree->trait_dim[0]; ++j)
+  {
+    // Mkv: only variable characters
+    do sim_disc_Mk(0, j, stree->root, stree);
+    while (constant_char(0, j, stree));
+  }
   
   /* and continuous traits (TODO) */
   // sim_cont_BM(1, stree->root, stree);
