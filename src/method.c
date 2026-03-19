@@ -292,7 +292,7 @@ static void print_mcmc_headerline(FILE * fp,
     k = 0;
     if (opt_est_theta)
     {
-      for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+      for (j=0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
       {
         if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta)
           continue;
@@ -5949,7 +5949,7 @@ void cmd_run()
       if (opt_est_theta)
       {
         max_param_count = MIN(total_nodes, MAX_THETA_OUTPUT);
-        for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+        for (j=0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
         {
           if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta) 
             continue;
