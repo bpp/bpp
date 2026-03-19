@@ -1,0 +1,43 @@
+# Header: number of species, number of traits, and
+# data type (C for continuous and D for discrete)
+# NA or ? for missing; NAN or - for inapplicable
+
+# ((K:0.08,C:0.08):0.05,H:0.13)
+
+# Mkv model
+# log(like) = -10.6634
+ 3 5  D
+K    1?121
+C {01}0102
+H    010-0
+
+# BM model
+# log likelihood = -0.0323 (Mitov et al. 2020)
+ 3 3  C
+K   0.1  NAN   NA
+C  -0.2   -   1.2
+H    ?   0.4  0.7
+
+R*  1.0  0.3  0.0
+    0.3  1.0 -0.5
+    0.0 -0.5  1.0
+
+
+# original data (v_pop = 0)
+# log likelihood = -2.8394 when root states are (-0.7219, -0.9475)
+# log likelihood = -13.6399 when root states are (0, 0)
+# 3 2  C
+#K -1.3595 -0.8086
+#C -0.9219 -0.8869
+#H -0.1170 -1.0917
+#R*  1.0  .25
+#    .25  1.0
+
+# transformed data (Z = MA')
+# log likelihood = -3.9679 (REML; Alvarez-Carretero et al. 2019)
+# when the root states are added, the full likelihood matches above
+ 3 2  C
+K -1.3595 -0.4841
+C -0.9219 -0.6780
+H -0.1170 -1.0973
+ldetR*  -0.0645
