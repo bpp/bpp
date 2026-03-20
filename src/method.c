@@ -3662,8 +3662,10 @@ static FILE * init(stree_t ** ptr_stree,
                                                   compress_method);
     }
     fprintf(fp_out, "COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES\n\n");
-    msa_print_phylip(fp_out,msa_list,msa_count,tmpwgt);
-
+    msa_print_phylip(fp_out, msa_list, msa_count, NULL);
+    /* Ziheng-2026.2.25 */
+    /* msa_print_phylip(fp_out, msa_list, msa_count, tmpwgt); */
+    
     /* deallocate temporary pattern weights */
     for (i = 0; i < msa_count; ++i)
       free(tmpwgt[i]);

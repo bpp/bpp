@@ -64,11 +64,13 @@ static void print_pretty_phylip_dna(FILE * fp,
     }
     fprintf(fp, "\n");
   }
-  assert(weights);
-  fprintf(fp, "%d", weights[0]);
-  for (i = 1; i < msa->length; ++i)
-    fprintf(fp, " %d", weights[i]);
-  fprintf(fp, "\n");
+  /* Ziheng-2026.2.25 */
+  if (weights) {
+    fprintf(fp, "%d", weights[0]);
+    for (i = 1; i < msa->length; ++i)
+      fprintf(fp, " %d", weights[i]);
+    fprintf(fp, "\n");
+  }
 }
 
 static void print_pretty_phylip(FILE * fp,
@@ -99,11 +101,13 @@ static void print_pretty_phylip(FILE * fp,
     }
     fprintf(fp, "\n");
   }
-  assert(weights);
-  fprintf(fp, "%d", weights[0]);
-  for (i = 1; i < msa->length; ++i)
-    fprintf(fp, " %d", weights[i]);
-  fprintf(fp, "\n");
+  /* Ziheng-2026.2.25 */
+  if (weights) {
+    fprintf(fp, "%d", weights[0]);
+    for (i = 1; i < msa->length; ++i)
+      fprintf(fp, " %d", weights[i]);
+    fprintf(fp, "\n");
+  }
 }
 
 void msa_print_phylip(FILE * fp,
@@ -129,7 +133,8 @@ void msa_print_phylip(FILE * fp,
 
   for (i = 0; i < count; ++i)
   {
-    print_pretty_phylip(fp, msa[i], maxlen+pad, every, weights[i]);
+    /* Ziheng-2026.2.25 */
+    print_pretty_phylip(fp, msa[i], maxlen + pad, every, (weights ? weights[i] : NULL));
     fprintf(fp,"\n");
   }
 }
