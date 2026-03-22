@@ -54,7 +54,7 @@ all: $(PROG)
 OBJS=bpp.o rtree.o util.o \
      arch.o phylip.o msa.o \
      maps.o locus.o \
-     mapping.o compress.o hash.o list.o \
+     mapping.o compress.o hash.o sha1.o list.o \
      stree.o random.o gtree.o core_partials.o core_pmatrix.o core_likelihood.o \
      output.o core_partials_sse.o dlist.o allfixed.o core_likelihood_sse.o \
      prop_mixing.o method.o delimit.o prop_rj.o summary.o cfile.o hardware.o \

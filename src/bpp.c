@@ -41,9 +41,7 @@ long opt_basefreqs_fixed;
 long opt_bfd_points;
 long opt_burnin;
 long opt_checkpoint;
-long opt_checkpoint_current;
-long opt_checkpoint_initial;
-long opt_checkpoint_step;
+long opt_checkpoint_percent;
 long opt_cleandata;
 long opt_clock;
 long opt_comply;
@@ -344,6 +342,8 @@ static struct option long_options[] =
   {"keep-labels",          no_argument,       0, 0 },  /* 52 */
   {"wrate_mode",           required_argument, 0, 0 },  /* 53 */
   {"wrate-showeps",        no_argument,       0, 0 },  /* 54 */
+  {"checkpoint-percent",   required_argument, 0, 0 },  /* 55 */
+  {"no-checkpoint",        no_argument,       0, 0 },  /* 56 */
   { 0, 0, 0, 0 }
 };
 
@@ -468,10 +468,8 @@ void args_init(int argc, char ** argv)
   opt_clock_vbar = 0;
   opt_clock_alpha = -1;
 
-  opt_checkpoint = 0;
-  opt_checkpoint_initial = 0;
-  opt_checkpoint_current = 0;
-  opt_checkpoint_step = 0;
+  opt_checkpoint = 1;
+  opt_checkpoint_percent = 10;
   opt_cleandata = 0;
   opt_comply = 0;
   opt_concatfile = NULL;
@@ -956,6 +954,16 @@ void args_init(int argc, char ** argv)
         opt_mrate_gibbs_showall_eps = 1;
         break;
 
+      case 55:
+        opt_checkpoint_percent = atol(optarg);
+        if (opt_checkpoint_percent < 1 || opt_checkpoint_percent > 100)
+          fatal("--checkpoint-percent must be between 1 and 100");
+        break;
+
+      case 56:
+        opt_checkpoint = 0;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1104,6 +1112,8 @@ void cmd_help()
           "  --wrate-showeps          show individual step lengths/pjumps for each W\n"
           "  --extend INTEGER         extend resumed analysis by number of MCMC samples\n"
           "  --keep-labels            keep original node labels when summarizing results\n"
+          "  --checkpoint-percent N   checkpoint every N%% of MCMC run (default: 10)\n"
+          "  --no-checkpoint          disable automatic checkpointing\n"
           "\n"
          );
 

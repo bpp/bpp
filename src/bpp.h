@@ -86,6 +86,7 @@
 #define PROG_OS "win"
 #include <windows.h>
 #include <psapi.h>
+#include <io.h>    /* _commit, _fileno for atomic checkpoint writes */
 
 #elif __FreeBSD__
 #define PROG_OS "freebsd"
@@ -161,13 +162,15 @@
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
 /* checkpoint version */
-#define VERSION_CHKP 1
+#define VERSION_CHKP 3
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
 
 #define BPP_MAGIC_BYTES 4
 #define BPP_MAGIC "BPPX"
+
+#define BPP_SHA1_DIGEST_SIZE 20
 
 #define BPP_FALSE 0
 #define BPP_TRUE  1
@@ -1151,9 +1154,7 @@ extern long opt_basefreqs_fixed;
 extern long opt_bfd_points;
 extern long opt_burnin;
 extern long opt_checkpoint;
-extern long opt_checkpoint_current;
-extern long opt_checkpoint_initial;
-extern long opt_checkpoint_step;
+extern long opt_checkpoint_percent;
 extern long opt_cleandata;
 extern long opt_clock;
 extern long opt_comply;
@@ -1792,6 +1793,10 @@ int hashtable_ptrcmp(void * x, void * y);
 unsigned long hash_djb2a(char * s);
 
 unsigned long hash_fnv(char * s);
+
+void sha1_compute(const unsigned char * data,
+                  size_t len,
+                  unsigned char digest[20]);
 
 int hashtable_insert(hashtable_t * ht,
                      void * x,

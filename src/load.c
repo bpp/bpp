@@ -156,9 +156,6 @@ void load_chk_header(FILE * fp)
   if (sizeof(double) != chk_size_double)
     fatal("Mismatching double size");
 
-  unsigned int sections;
-  unsigned long size_section;
-
   if (!LOAD(&opt_threads,1,fp))
     fatal("Cannot read number of threads");
   if (!LOAD(&opt_threads_start,1,fp))
@@ -176,18 +173,6 @@ void load_chk_header(FILE * fp)
   if (!LOAD(rng,opt_threads,fp))
     fatal("Cannot read RNG states");
   set_legacy_rndu_array(rng);
-
-  if (!LOAD(&sections,1,fp))
-    fatal("Cannot read number of sections");
-  #if 0
-  printf(" Sections: %u\n", sections);
-  #endif
-
-  if (!LOAD(&size_section,1,fp))
-    fatal("Cannot read number of sections");
-  #if 0
-  printf("   Section 1: %ld bytes\n\n", size_section);
-  #endif
 }
 
 int load_string(FILE * fp, char ** buffer)
@@ -353,13 +338,9 @@ static void load_chk_section_1(FILE * fp,
 
   /* read checkpoint info */
   if (!LOAD(&opt_checkpoint,1,fp))
-    fatal("Cannot read 'checkpoint' flag");
-  if (!LOAD(&opt_checkpoint_current,1,fp))
-    fatal("Cannot read 'checkpoint' status");
-  if (!LOAD(&opt_checkpoint_initial,1,fp))
-    fatal("Cannot read 'checkpoint' tag initial value");
-  if (!LOAD(&opt_checkpoint_step,1,fp))
-    fatal("Cannot read 'checkpoint' tag step value");
+    fatal("Cannot read checkpoint flag");
+  if (!LOAD(&opt_checkpoint_percent,1,fp))
+    fatal("Cannot read checkpoint percent");
 
   /* read network info */
   if (!LOAD(&opt_msci,1,fp))
@@ -787,12 +768,6 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_theta_gibbs");
   if (!(LOAD(g_pj_theta_slide, opt_finetune_theta_count, fp)))
     fatal("Cannot read g_pj_theta_slide");
-  /* DEBUG */
-  printf("g_pj_theta_gibbs[0] = %f\n", g_pj_theta_gibbs[0]);
-  printf("g_pj_theta_slide[0] = %f\n", g_pj_theta_slide[0]);
-  printf("opt_finetune_theta_count: %ld\n", opt_finetune_theta_count);
-  printf("g_pj_gage = %f\n", g_pj_gage);
-  printf("g_pj_gspr = %f\n", g_pj_gspr);
   if (!(LOAD(&g_pj_tau, 1, fp)))
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))
@@ -822,7 +797,6 @@ static void load_chk_section_1(FILE * fp,
 
   if (opt_migration && !opt_est_geneflow)
   {
-    printf("opt_mrate_slide_prob: %f\n", opt_mrate_slide_prob);
     assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
 
     long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
@@ -834,7 +808,6 @@ static void load_chk_section_1(FILE * fp,
       g_pj_mrate_slide = (double *)xmalloc((size_t)slots * sizeof(double));
       if (!LOAD(g_pj_mrate_slide,slots,fp))
         fatal("Cannot read g_pj_mrate_slide...");
-      printf("g_pj_mrate_slide: %f\n", g_pj_mrate_slide[0]);
     }
     if (opt_mrate_slide_prob < 1)
     {
@@ -886,7 +859,6 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read rates files offsets");
   }
 
-  printf("Opt_debug_migration: %ld\n", opt_debug_migration);
   if (opt_debug_migration)
   {
     *migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
@@ -2195,6 +2167,43 @@ int checkpoint_load(gtree_t *** gtreep,
   fp = fopen(opt_resume,"rb");
   if (!fp)
     fatal("Cannot open checkpoint file %s", opt_resume);
+
+  /* verify SHA-1 integrity */
+  {
+    long file_size, data_size;
+    unsigned char * buffer;
+    unsigned char stored[BPP_SHA1_DIGEST_SIZE];
+    unsigned char computed[BPP_SHA1_DIGEST_SIZE];
+
+    fseek(fp, 0, SEEK_END);
+    file_size = ftell(fp);
+    if (file_size <= BPP_SHA1_DIGEST_SIZE)
+      fatal("Checkpoint file %s is too small", opt_resume);
+
+    data_size = file_size - BPP_SHA1_DIGEST_SIZE;
+    buffer = (unsigned char *)xmalloc((size_t)data_size);
+    fseek(fp, 0, SEEK_SET);
+    if (fread(buffer, 1, (size_t)data_size, fp) != (size_t)data_size)
+    {
+      free(buffer);
+      fatal("Cannot read checkpoint file %s", opt_resume);
+    }
+    if (fread(stored, 1, BPP_SHA1_DIGEST_SIZE, fp) != BPP_SHA1_DIGEST_SIZE)
+    {
+      free(buffer);
+      fatal("Cannot read SHA-1 from checkpoint file %s", opt_resume);
+    }
+
+    sha1_compute(buffer, (size_t)data_size, computed);
+    free(buffer);
+
+    if (memcmp(stored, computed, BPP_SHA1_DIGEST_SIZE) != 0)
+      fatal("Checkpoint file %s failed integrity check.\n"
+            "       The file may be corrupted or from an older BPP version.",
+            opt_resume);
+
+    fseek(fp, 0, SEEK_SET);  /* rewind for normal loading */
+  }
 
   /* read header */
   #if 0

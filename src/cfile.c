@@ -636,35 +636,6 @@ l_unwind:
   return ret;
 }
 
-static long parse_checkpoint(const char * line)
-{
-  long ret = 0;
-  char * s = xstrdup(line);
-  char * p = s;
-
-  long count;
-
-  count = get_long(p, &opt_checkpoint_initial);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  ret = 1;
-
-  count = get_long(p, &opt_checkpoint_step);
-  if (!count) goto l_unwind;
-
-  p += count;
-
-  ret = 0;
-
-  if (is_emptyline(p)) ret = 1;
-
-l_unwind:
-  free(s);
-  return ret;
-}
-
 static long parse_speciesdelimitation(const char * line)
 {
   long ret = 0;
@@ -3279,11 +3250,12 @@ void load_cfile()
       }
       else if (!strncasecmp(token,"checkpoint",10))
       {
-        if (!parse_checkpoint(value))
-          fatal("Erroneous format of 'checkpoint' (line %ld)", line_count);
-        opt_checkpoint = 1;
-        if (sizeof(BYTE) != 1)
-          fatal("Checkpoint does not work on systems with sizeof(char) != 1");
+        fprintf(stderr, "WARNING: 'checkpoint' keyword is deprecated and "
+                        "ignored.\n"
+                        "Checkpointing is now automatic (every %ld%%).\n"
+                        "Use --no-checkpoint to disable "
+                        "or --checkpoint-percentage to modify frequency.\n",
+                opt_checkpoint_percent);
         valid = 1;
       }
       else if (!strncasecmp(token,"alphaprior",10))
@@ -3491,7 +3463,7 @@ void load_cfile()
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
 
-  if ( opt_checkpoint == 1 && opt_datefile)
+  if ( opt_checkpoint && opt_datefile)
 	  fatal("Checkpointing is not implemented with tip dating");
   if ( opt_method != METHOD_00 && opt_datefile)
 	  fatal("You can only use method A00 with tip dating");

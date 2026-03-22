@@ -5031,6 +5031,11 @@ void cmd_run()
 
   unsigned long curstep = 0;
 
+  /* checkpoint trigger variables */
+  long chk_trigger_count = 0;
+  unsigned long * chk_triggers = NULL;
+  long chk_next_idx = 0;
+
   int * printLocusIndex = NULL;
 
   printf("\nStarting timer..\n");
@@ -5306,6 +5311,15 @@ void cmd_run()
   else
     i = curstep - opt_burnin;
 
+  if (opt_resume && !opt_onlysummary &&
+      i >= opt_samples * opt_samplefreq)
+  {
+    fprintf(stdout, "\nRun already completed (%ld samples). "
+                    "Generating summary...\n"
+                    "Use --extend N to add more samples.\n\n",
+            opt_samples);
+  }
+
   /* TODO: Delete after debugging */
   if (opt_debug_rates)
   {
@@ -5361,6 +5375,33 @@ void cmd_run()
   /* TF: 20.10.2025 */
   if (opt_msci && opt_ancestry)
     ancestry_init(stree, gtree);
+
+  /* compute checkpoint trigger points */
+  if (opt_checkpoint && opt_checkpoint_percent > 0)
+  {
+    unsigned long total_steps_chk = (unsigned long)opt_burnin +
+                                    (unsigned long)opt_samples *
+                                    (unsigned long)opt_samplefreq;
+    chk_trigger_count = 100 / opt_checkpoint_percent;
+    chk_triggers = (unsigned long *)xmalloc((size_t)chk_trigger_count *
+                                             sizeof(unsigned long));
+    for (j = 0; j < chk_trigger_count; ++j)
+      chk_triggers[j] = (unsigned long)((double)total_steps_chk *
+                         (j + 1) * opt_checkpoint_percent / 100.0);
+
+    /* don't checkpoint at the very last step (run is done) */
+    if (chk_trigger_count > 0 &&
+        chk_triggers[chk_trigger_count-1] >= total_steps_chk)
+      chk_trigger_count--;
+
+    chk_next_idx = 0;
+
+    /* if resuming, skip past already-completed triggers */
+    if (opt_resume)
+      while (chk_next_idx < chk_trigger_count &&
+             chk_triggers[chk_next_idx] <= curstep)
+        chk_next_idx++;
+  }
 
   /* *** start of MCMC loop *** */
   active_pjumps_alloc();
@@ -6220,11 +6261,9 @@ void cmd_run()
     curstep++;
 
     /* Create a checkpoint file... */
-    if (opt_checkpoint)
+    if (opt_checkpoint && chk_next_idx < chk_trigger_count &&
+        curstep >= chk_triggers[chk_next_idx])
     {
-      if (((long)curstep == opt_checkpoint_initial) ||
-          (opt_checkpoint_step && ((long)curstep > opt_checkpoint_initial) &&
-           (((long)curstep-opt_checkpoint_initial) % opt_checkpoint_step == 0)))
       {
         /* if migcount printing is enabled get current file offsets */
         if (opt_migration && opt_debug_migration)
@@ -6300,9 +6339,11 @@ void cmd_run()
                         mean_theta_count,
                         mean_phi_count,
                         prec_logpr,
-                        prec_logl, 
+                        prec_logl,
                         printLocusIndex);
+        fprintf(stdout, " [CHK]");
 
+        chk_next_idx++;
       }
     }
     if (opt_debug_abort == opt_debug_counter)
@@ -6314,6 +6355,84 @@ void cmd_run()
     }
   }
   active_pjumps_dealloc();
+  free(chk_triggers);
+
+  /* write final checkpoint so a completed run can be resumed/extended */
+  if (opt_checkpoint && !opt_onlysummary)
+  {
+    if (opt_migration && opt_debug_migration)
+      for (j = 0; j < opt_locus_count; ++j)
+        migcount_offset[j] = ftell(fp_migcount[j]);
+
+    if (opt_print_genetrees) {
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (!printLocusIndex || printLocusIndex[j])
+          gtree_offset[j] = ftell(fp_gtree[j]);
+        else
+          gtree_offset[j] = 0;
+      }
+    }
+
+    if (printLocusIndex) {
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (printLocusIndex[j])
+          mig_offset[j] = ftell(fp_mig[j]);
+        else
+          mig_offset[j] = 0;
+      }
+    }
+
+    if (opt_print_locusfile)
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (!printLocusIndex || printLocusIndex[j])
+          rates_offset[j] = ftell(fp_locus[j]);
+        else
+          rates_offset[j] = 0;
+      }
+
+    checkpoint_dump(stree,
+                    gtree,
+                    locus,
+                    curstep,
+                    ft_round,
+                    ndspecies,
+                    ftell(fp_mcmc),
+                    ftell(fp_out),
+                    fp_a1b1 ? ftell(fp_a1b1) : 0,
+                    gtree_offset,
+                    mig_offset,
+                    rates_offset,
+                    migcount_offset,
+                    dparam_count,
+                    posterior,
+                    pspecies,
+                    opt_est_delimit ?
+                      delimitation_getparam_count() : 0,
+                    ft_round_rj,
+                    ft_round_spr,
+                    ft_round_snl,
+                    ft_round_theta_gibbs,
+                    ft_round_theta_slide,
+                    ft_round_mrate_gibbs,
+                    ft_round_mrate_slide,
+                    mean_logl,
+                    mean_mrate_row,
+                    mean_mrate_col,
+                    mean_mrate_round,
+                    mean_mrate,
+                    mean_tau,
+                    mean_theta,
+                    mean_phi,
+                    mean_mrate_count,
+                    mean_tau_count,
+                    mean_theta_count,
+                    mean_phi_count,
+                    prec_logpr,
+                    prec_logl,
+                    printLocusIndex);
+    fprintf(stdout, " [CHK]");
+  }
+
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
