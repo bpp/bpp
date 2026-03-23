@@ -188,6 +188,8 @@ static void dump_chk_section_1(FILE * fp,
   /* write migration info */
   DUMP(&opt_migration,1,fp);
   DUMP(&opt_migration_count,1,fp);
+  DUMP(&opt_finetune_mrate_mode,1,fp);
+  DUMP(&opt_est_geneflow,1,fp);
 
   /* write method info */
   DUMP(&opt_method,1,fp);

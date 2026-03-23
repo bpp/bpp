@@ -1343,6 +1343,7 @@ extern char * opt_locusrate_filename;
 extern char * opt_partition_file;
 extern char * opt_reorder;
 extern char * opt_resume;
+extern char * opt_checkpoint_info;
 extern char * opt_seqDates;
 extern char * opt_simulate;
 extern char * opt_streenewick;
@@ -2272,6 +2273,7 @@ int checkpoint_load(gtree_t *** gtreep,
 		    int ** ptr_printLocusIndex);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
+void cmd_checkpoint_info(const char * filename);
 
 /* functions in core_partials.c */
 

@@ -223,6 +223,7 @@ char * opt_mscifile;
 char * opt_partition_file;
 char * opt_reorder;
 char * opt_resume;
+char * opt_checkpoint_info;
 char * opt_seqDates;
 char * opt_simulate;
 char * opt_streenewick;
@@ -344,6 +345,7 @@ static struct option long_options[] =
   {"wrate-showeps",        no_argument,       0, 0 },  /* 54 */
   {"checkpoint-percent",   required_argument, 0, 0 },  /* 55 */
   {"no-checkpoint",        no_argument,       0, 0 },  /* 56 */
+  {"checkpoint-info",      required_argument, 0, 0 },  /* 57 */
   { 0, 0, 0, 0 }
 };
 
@@ -964,6 +966,10 @@ void args_init(int argc, char ** argv)
         opt_checkpoint = 0;
         break;
 
+      case 57:
+        opt_checkpoint_info = optarg;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1005,6 +1011,8 @@ void args_init(int argc, char ** argv)
   if (opt_comply)
     commands++;
   if (opt_bfdriver)
+    commands++;
+  if (opt_checkpoint_info)
     commands++;
 
   /* if more than one independent command, fail */
@@ -1096,6 +1104,7 @@ void cmd_help()
           "  --resume FILENAME        resume analysis from a specified checkpoint file\n"
           "  --msci-create FILENAME   construct an MSci graph using a definitions file\n"
           "  --summary FILENAME       summarize results using specified control file\n"
+          "  --checkpoint-info FILE   display checkpoint file summary and exit\n"
           "\n"
           "Advanced options:\n"
           "  --arch SIMD              force specific vector instruction set (default: auto)\n"
@@ -1162,6 +1171,14 @@ int main (int argc, char * argv[])
   getentirecommandline(argc, argv);
 
   args_init(argc, argv);
+
+  if (opt_checkpoint_info)
+  {
+    cmd_checkpoint_info(opt_checkpoint_info);
+    dealloc_switches();
+    free(cmdline);
+    return 0;
+  }
 
   cpu_features_detect();
   cpu_features_show();
