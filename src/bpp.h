@@ -1533,6 +1533,7 @@ int sim_parse_cont(const char * line);
 int parse_matrix(FILE * fp, double * mat, int n, int m);
 void trait_init_sim(stree_t * stree);
 void trait_simulate(stree_t * stree);
+void trait_write(FILE * fp, stree_t * stree);
 
 /* functions in rtree.c */
 

@@ -1704,11 +1704,10 @@ static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c)
 /* C = b*A; b is a scalar */
 static int mat_scale(double *A, double b, double *C, int n, int m)
 {
-  int i, j;
+  int i;
   
-  for (i = 0; i < n; ++i)
-    for (j = 0; j < m; ++j)
-      C[i * m + j] = b * A[i * m + j];
+  for (i = 0; i < n * m; ++i)
+    C[i] = b * A[i];
   
   return 0;
 }
@@ -1754,57 +1753,30 @@ static int mat_trans(double *A, double *At, int n, int m)
   return 0;
 }
 
-/* A = LL' and Ainv = inv(L')*inv(L). A is destroyed */
-static int mat_inv_chol(double *A, double *Ainv, int n)
+/* Cholesky decomposition: A = LL'. A is kept. */
+static int mat_chol(double *A, double *L, int n)
 {
-  int i, j, k, start;
-  double sum, Lii;
-  
-  /* store L in lower triangle of A (Cholesky factor) */
+  int i, j, k;
+  double sum;
+
   for (i = 0; i < n; ++i)
     for (j = 0; j <= i; ++j)
     {
       sum = A[i * n + j];
       for (k = 0; k < j; ++k)
-        sum -= A[i * n + k] * A[j * n + k];
+        sum -= L[i * n + k] * L[j * n + k];
       if (i == j)
       {
         if (sum <= 0.0) return -1;  // not positive definite
-        A[i * n + j] = sqrt(sum);
+        L[i * n + i] = sqrt(sum);
       }
       else
       {
-        A[i * n + j] = sum / A[j * n + j];
+        L[i * n + j] = sum / L[j * n + j];
+        L[j * n + i] = 0.0;  // upper triangle is zero
       }
     }
-  
-  /* compute L^(-1) in-place, storing in upper triangle (including diagonal) 
-     store L_inv^T, so L_inv[i,j] goes to A[j,i] */
-  for (i = 0; i < n; ++i)
-  {
-    Lii = A[i * n + i];
-    A[i * n + i] = 1.0 / Lii;  // diagonal: (L_inv^T)[i,i] = 1/L[i,i]
-    for (j = 0; j < i; ++j)
-    {
-      /* compute L_inv[i,j] = -(1/L[i,i]) * sum_{k=j}^{i-1} L[i,k]*L_inv[k,j] 
-         L[i,k] is in lower triangle: A[i,k]
-         L_inv[k,j] in upper triangle: A[j,k] */
-      for (sum = 0, k = j; k < i; ++k)
-        sum += A[i * n + k] * A[j * n + k];
-      A[j * n + i] = -sum / Lii;  // store (L_inv^T)[j,i] = L_inv[i,j]
-    }
-  }
 
-  /* A_inv = L_inv^T * L_inv where L_inv^T is in A's upper triangle */
-  for (i = 0; i < n; ++i)
-    for (j = 0; j <= i; ++j)
-    {
-      start = i > j ? i : j;
-      for (sum = 0.0, k = start; k < n; ++k)
-        sum += A[j * n + k] * A[i * n + k];
-      Ainv[i * n + j] = Ainv[j * n + i] = sum;
-    }
-  
   return 0;
 }
 
@@ -1953,30 +1925,33 @@ int sim_parse_disc(const char * line)
 
 int sim_parse_cont(const char * line)
 {
-  if (sscanf(line, "%ld %lf", &opt_sim_cont_nchar, &opt_sim_cont_rate) != 2
-      || opt_sim_cont_nchar < 0 || opt_sim_cont_rate <= 0.0)
+  if (sscanf(line, "%ld %lf",
+              &opt_sim_cont_nchar,
+              &opt_sim_cont_rate) != 2)
     return 1;
   
+  if (opt_sim_cont_nchar < 0 || opt_sim_cont_rate <= 0.0)
+    return 1;
+
   return 0;
 }
 
 void trait_init_sim(stree_t * stree)
 {
-  int i, j, nchar;
+  int i, j;
   snode_t * snode;
-  trait_t * trait;
 
   stree->trait_count = 2; // two partitions: discrete and continuous
   stree->trait_type = (int *)xmalloc(2 * sizeof(int));
   stree->trait_type[0] = BPP_DATA_DISC;
   stree->trait_type[1] = BPP_DATA_CONT;
-  stree->trait_dim  = (int *)xcalloc(2, sizeof(int));
+  stree->trait_dim  = (int *)xmalloc(2 * sizeof(int));
   stree->trait_dim[0] = opt_sim_disc_nchar[0] 
                       + opt_sim_disc_nchar[1]
                       + opt_sim_disc_nchar[2];
   stree->trait_dim[1] = opt_sim_cont_nchar;
 
-  stree->trait_nstate = (int **)xmalloc(2 * sizeof(int *));
+  stree->trait_nstate = (int **)xcalloc(2, sizeof(int *));
   stree->trait_nstate[0] = (int *)xcalloc(stree->trait_dim[0], sizeof(int));
   for (j = 0; j < stree->trait_dim[0]; ++j)
   {
@@ -1987,43 +1962,39 @@ void trait_init_sim(stree_t * stree)
     else
       stree->trait_nstate[0][j] = 4;
   }
-   
+  
+  stree->trait_Rs   = (double **)xcalloc(2, sizeof(double *));
+  stree->trait_Rs_1 = (double **)xcalloc(2, sizeof(double *));
+  stree->trait_Phi  = (double **)xcalloc(2, sizeof(double *));
+  stree->trait_Rs[1] =
+    (double *)xmalloc(opt_sim_cont_nchar * opt_sim_cont_nchar * sizeof(double));
+  stree->trait_Rs_1[1] =
+    (double *)xmalloc(opt_sim_cont_nchar * opt_sim_cont_nchar * sizeof(double));
+  stree->trait_Phi[1] = (double *)xmalloc(opt_sim_cont_nchar * sizeof(double));
+
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
     snode->trait = (trait_t **)xmalloc(2 * sizeof(trait_t *));
-    
-    /* 0: discrete characters */
-    trait = snode->trait[0] = (trait_t *)xmalloc(sizeof(trait_t));
-    nchar = stree->trait_dim[0];
-    trait->state_d = (int *)xcalloc(nchar, sizeof(int));
+    snode->trait[0] = (trait_t *)xmalloc(sizeof(trait_t));
+    snode->trait[1] = (trait_t *)xmalloc(sizeof(trait_t));
+    snode->trait[0]->state_d = (int *)xcalloc(stree->trait_dim[0], sizeof(int));
+    snode->trait[1]->state_m = (double *)xcalloc(stree->trait_dim[1], sizeof(double));
 
     if (snode->parent)
     {
       /* update the branch length */
-      trait->brate = opt_sim_disc_rate;
-      trait->brlen = (snode->parent->tau - snode->tau) * trait->brate;
+      snode->trait[0]->brate = opt_sim_disc_rate;
+      snode->trait[0]->brlen = (snode->parent->tau - snode->tau) * opt_sim_disc_rate;
+      snode->trait[1]->brate = opt_sim_cont_rate;
+      snode->trait[1]->brlen = (snode->parent->tau - snode->tau) * opt_sim_cont_rate;
 
       /* transition probabilities for characters of 2, 3, 4 states */
-      trait->tranprob = (double **)xcalloc(9, sizeof(double *));
+      snode->trait[0]->tranprob = (double **)xcalloc(9, sizeof(double *));
       for (j = 0; j < 3; ++j)
-        trait->tranprob[j] = (double *)xcalloc(2, sizeof(double));
+        snode->trait[0]->tranprob[j] = (double *)xcalloc(2, sizeof(double));
       /* calculate the transition probabilities */
-      mk_trprob(trait->tranprob, trait->brlen, 4);
-    }
-    
-    /* 1: continuous characters */
-    trait = snode->trait[1] = (trait_t *)xmalloc(sizeof(trait_t));
-    nchar = stree->trait_dim[1];
-    trait->state_m = (double *)xcalloc(nchar, sizeof(double));
-
-    if (snode->parent)
-    {
-      /* update the branch length */
-      trait->brate = opt_sim_cont_rate;
-      trait->brlen = (snode->parent->tau - snode->tau) * trait->brate;
-    
-      /* TODO */
+      mk_trprob(snode->trait[0]->tranprob, snode->trait[0]->brlen, 4);
     }
   }
 }
@@ -2085,6 +2056,55 @@ static int constant_char(int pt, int col, stree_t * stree)
   return 1; // constant
 }
 
+static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
+{
+  int i, j, nchar;
+  double v, *x, *a, *vR, *L, *z;
+  
+  nchar = stree->trait_dim[pt];
+  x = snode->trait[pt]->state_m;
+
+  if (snode->parent)
+  {
+    /* evolve from ancestral node to current node */
+    v  = snode->trait[pt]->brlen;
+    vR = stree->trait_Rs[pt];
+    L  = stree->trait_Rs_1[pt];
+    z  = stree->trait_Phi[pt];
+
+    mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
+
+    /* Cholesky decomposition of v*R: L*L' = v*R */
+    if (mat_chol(vR, L, nchar))
+      fatal("Correlation matrix is not positive definite");
+
+    /* sample independent standard normal variates */
+    for (j = 0; j < nchar; ++j)
+      z[j] = rndNormal(0);
+
+    /* x = a + L*z ~ MVN(a, v*R) */
+    a = snode->parent->trait[pt]->state_m;
+    for (j = 0; j < nchar; ++j)
+    {
+      x[j] = a[j];
+      for (i = 0; i <= j; ++i)
+        x[j] += L[j * nchar + i] * z[i];
+    }
+  }
+  else
+  {
+    /* initialize states at the root as 0.0 */
+    for (j = 0; j < nchar; ++j)
+      x[j] = 0.0;
+  }
+  
+  /* then recursively simulate for children */
+  if (snode->left)
+    sim_cont_BM(pt, snode->left, stree);
+  if (snode->right)
+    sim_cont_BM(pt, snode->right, stree); 
+}
+
 void trait_simulate(stree_t * stree)
 {
   /* simulate discrete traits from root to tips
@@ -2096,6 +2116,49 @@ void trait_simulate(stree_t * stree)
     while (constant_char(0, j, stree));
   }
   
-  /* and continuous traits (TODO) */
-  // sim_cont_BM(1, stree->root, stree);
+  /* and continuous traits */
+  if (stree->trait_dim[1] > 0)
+    sim_cont_BM(1, stree->root, stree);
+}
+
+void trait_write(FILE * fp, stree_t * stree)
+{
+  /* write tip states to file */
+
+  int i, j, n;
+  snode_t * snode;
+
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    int nchar = stree->trait_dim[n];
+    if (nchar == 0) continue;
+
+    /* header: ntips nchar  D|C */
+    fprintf(fp, " %d %d  %c\n",
+            stree->tip_count, nchar,
+            stree->trait_type[n] == BPP_DATA_DISC ? 'D' : 'C');
+
+    /* TODO: missing states */
+    for (i = 0; i < stree->tip_count; ++i)
+    {
+      snode = stree->nodes[i];
+      fprintf(fp, "%-10s  ", snode->label);
+
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+      {
+        /* discrete: concatenated integers */
+        for (j = 0; j < nchar; ++j)
+          fprintf(fp, "%d", snode->trait[n]->state_d[j]);
+      }
+      else
+      {
+        /* continuous: space-separated floats */
+        for (j = 0; j < nchar; ++j)
+          fprintf(fp, "%9.4lf ", snode->trait[n]->state_m[j]);
+      }
+      fprintf(fp, "\n");
+    }
+
+    fprintf(fp, "\n");
+  }
 }

@@ -1458,7 +1458,7 @@ void load_cfile_sim()
       else if (!strncasecmp(token,"trait_disc",10)) 
       {
         if (sim_parse_disc(value))
-          fatal("Option expects one integer and one rate value (line %ld)", line_count);
+          fatal("Option expects 3 integers and one rate value (line %ld)", line_count);
         valid = 1;
       }
       else if (!strncasecmp(token,"trait_cont",10)) 
@@ -1466,16 +1466,28 @@ void load_cfile_sim()
         if (sim_parse_cont(value))
           fatal("Option expects one integer and one rate value (line %ld)", line_count);
         
+        /* read correlation matrix (R) */
         int c, n = opt_sim_cont_nchar;
         opt_sim_cont_R = (double *)xmalloc(n * n * sizeof(double));
         while (isspace(c = fgetc(fp)));
         if (c == 'R')
         {
           if (parse_matrix(fp, opt_sim_cont_R, n, n))
-            fatal("Error reading correlation matrix (R)\n");
+            fatal("Error reading correlation matrix (R)");
+        
+          /* check correlation matrix */
+          for (int i = 0; i < n; ++i)
+          {
+            if (fabs(opt_sim_cont_R[i * n + i] - 1.0) > 1e-8)
+              fatal("Invalid correlation matrix (R)");
+            for (int j = i + 1; j < n; ++j)
+              if (fabs(opt_sim_cont_R[i * n + j]) > 1.0 ||
+                  fabs(opt_sim_cont_R[i * n + j] - opt_sim_cont_R[j * n + i]) > 1e-8)
+                fatal("Invalid correlation matrix (R)");
+          }
         }
         else {
-          ungetc(c, fp); 
+          ungetc(c, fp);
           /* fill in identity matrix */
           for (int i = 0; i < n; ++i)
             for (int j = 0; j < n; ++j)
