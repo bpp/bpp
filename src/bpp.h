@@ -1365,6 +1365,7 @@ extern double opt_sim_disc_rate;
 extern long   opt_sim_cont_nchar;
 extern double opt_sim_cont_rate;
 extern double opt_sim_cont_vpop;
+extern long   opt_sim_cont_npop;
 extern double * opt_sim_cont_R;
 
 /* common data */

@@ -1915,6 +1915,7 @@ double   opt_sim_disc_rate = 0.0;
 long     opt_sim_cont_nchar = 0;
 double   opt_sim_cont_rate = 0.0;
 double   opt_sim_cont_vpop = 0.0;
+long     opt_sim_cont_npop = 0;
 double * opt_sim_cont_R = NULL;  // correlation matrix
 
 int sim_parse_disc(const char * line)
@@ -1937,15 +1938,16 @@ int sim_parse_disc(const char * line)
 
 int sim_parse_cont(const char * line)
 {
-  if (sscanf(line, "%ld %lf %lf",
+  if (sscanf(line, "%ld %lf %lf %ld",
               &opt_sim_cont_nchar,
               &opt_sim_cont_rate,
-              &opt_sim_cont_vpop) != 3)
+              &opt_sim_cont_vpop,
+              &opt_sim_cont_npop) != 4)
     return 1;
   
   if (opt_sim_cont_nchar < 0 ||
-      opt_sim_cont_vpop  < 0 ||
-      opt_sim_cont_rate <= 0.0)
+      opt_sim_cont_rate <= 0 ||
+      opt_sim_cont_vpop < 0.0)
     return 1;
 
   return 0;
@@ -1978,11 +1980,9 @@ void trait_init_sim(stree_t * stree)
       stree->trait_nstate[0][j] = 4;
   }
   
-  stree->trait_vpop = (double *)xcalloc(2, sizeof(double));
   stree->trait_Rs   = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Rs_1 = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Phi  = (double **)xcalloc(2, sizeof(double *));
-  stree->trait_vpop[1] = opt_sim_cont_vpop;
   stree->trait_Rs[1] =
     (double *)xmalloc(opt_sim_cont_nchar * opt_sim_cont_nchar * sizeof(double));
   stree->trait_Rs_1[1] =
@@ -1995,16 +1995,19 @@ void trait_init_sim(stree_t * stree)
     snode->trait = (trait_t **)xmalloc(2 * sizeof(trait_t *));
     snode->trait[0] = (trait_t *)xmalloc(sizeof(trait_t));
     snode->trait[1] = (trait_t *)xmalloc(sizeof(trait_t));
-    snode->trait[0]->state_d = (int *)xcalloc(stree->trait_dim[0], sizeof(int));
-    snode->trait[1]->state_m = (double *)xcalloc(stree->trait_dim[1], sizeof(double));
-
+    snode->trait[0]->state_d =
+          (int *)xcalloc(stree->trait_dim[0], sizeof(int));
+    snode->trait[1]->state_m =
+          (double *)xcalloc(stree->trait_dim[1], sizeof(double));
     if (snode->parent)
     {
       /* update the branch length */
       snode->trait[0]->brate = opt_sim_disc_rate;
-      snode->trait[0]->brlen = (snode->parent->tau - snode->tau) * opt_sim_disc_rate;
+      snode->trait[0]->brlen = 
+          (snode->parent->tau - snode->tau) * opt_sim_disc_rate;
       snode->trait[1]->brate = opt_sim_cont_rate;
-      snode->trait[1]->brlen = (snode->parent->tau - snode->tau) * opt_sim_cont_rate;
+      snode->trait[1]->brlen =
+          (snode->parent->tau - snode->tau) * opt_sim_cont_rate;
 
       /* transition probabilities for characters of 2, 3, 4 states */
       snode->trait[0]->tranprob = (double **)xcalloc(9, sizeof(double *));
@@ -2073,9 +2076,31 @@ static int constant_char(int pt, int col, stree_t * stree)
   return 1; // constant
 }
 
+static void rndMVN(double *x, double *mu, double *V,
+                   double *L, double *z, int n)
+{
+  int i, j;
+
+  /* Cholesky decomposition of V: L*L' = V */
+  if (mat_chol(V, L, n))
+    fatal("Correlation matrix is not positive definite");
+
+  /* sample independent standard normal variates */
+  for (j = 0; j < n; ++j)
+    z[j] = rndNormal(0);
+
+  /* x = mu + L*z ~ MVN(mu, V) */
+  for (j = 0; j < n; ++j)
+  {
+    x[j] = mu[j];
+    for (i = 0; i <= j; ++i)
+      x[j] += L[j * n + i] * z[i];
+  }
+}
+
 static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 {
-  int i, j, nchar;
+  int j, nchar;
   double v, *x, *a, *vR, *L, *z;
   
   nchar = stree->trait_dim[pt];
@@ -2091,22 +2116,8 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 
     mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
 
-    /* Cholesky decomposition of v*R: L*L' = v*R */
-    if (mat_chol(vR, L, nchar))
-      fatal("Correlation matrix is not positive definite");
-
-    /* sample independent standard normal variates */
-    for (j = 0; j < nchar; ++j)
-      z[j] = rndNormal(0);
-
-    /* x = a + L*z ~ MVN(a, v*R) */
     a = snode->parent->trait[pt]->state_m;
-    for (j = 0; j < nchar; ++j)
-    {
-      x[j] = a[j];
-      for (i = 0; i <= j; ++i)
-        x[j] += L[j * nchar + i] * z[i];
-    }
+    rndMVN(x, a, vR, L, z, nchar);
   }
   else
   {
@@ -2124,9 +2135,12 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 
 void trait_simulate(stree_t * stree)
 {
+  int i, j, nchar;
+  double v, *a, *vR, *L, *z, **s;
+
   /* simulate discrete traits from root to tips
      given the species tree and evolutionary rate */
-  for (int j = 0; j < stree->trait_dim[0]; ++j)
+  for (j = 0; j < stree->trait_dim[0]; ++j)
   {
     // Mkv: only variable characters
     do sim_disc_Mk(0, j, stree->root, stree);
@@ -2135,7 +2149,58 @@ void trait_simulate(stree_t * stree)
   
   /* and continuous traits */
   if (stree->trait_dim[1] > 0)
+  {
     sim_cont_BM(1, stree->root, stree);
+  
+    /* simulate population-level variation */
+    if (opt_sim_cont_vpop > 0.0)
+    {
+      nchar = stree->trait_dim[1];
+      v = opt_sim_cont_vpop;
+      vR = stree->trait_Rs[1];
+      mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
+
+      /* generate population samples */
+      a = stree->nodes[0]->trait[1]->state_m;
+      L = stree->trait_Rs_1[1];
+      z = stree->trait_Phi[1];
+      s = (double **)malloc(opt_sim_cont_npop * sizeof(double *));
+      for (i = 0; i < opt_sim_cont_npop; ++i)
+      {
+        s[i] = (double *)malloc(nchar * sizeof(double));
+        rndMVN(s[i], a, vR, L, z, nchar);
+      }
+
+      /* update a as the mean of s[i] */
+      for (j = 0; j < nchar; ++j)
+      {
+        a[j] = 0.0;
+        for (i = 0; i < opt_sim_cont_npop; ++i)
+          a[j] += s[i][j];
+        a[j] /= opt_sim_cont_npop;
+      }
+
+      /* calculate the shrinkage estimate of R 
+         and store in stree->trait_Rs[1] */
+      /* TODO */
+
+      /* and the rest of the species */
+      for (i = 1; i < stree->tip_count; ++i)
+      {
+        a = stree->nodes[i]->trait[1]->state_m;
+        rndMVN(s[0], a, vR, L, z, nchar);
+        memcpy(a, s[0], nchar * sizeof(double));
+      }
+
+      for (i = 0; i < opt_sim_cont_npop; ++i)
+        free(s[i]);
+      free(s);
+    }
+    else {
+      memcpy(stree->trait_Rs[1], opt_sim_cont_R,
+             nchar * nchar * sizeof(double));
+    }
+  }
 }
 
 void trait_write(FILE * fp, stree_t * stree)
@@ -2150,32 +2215,46 @@ void trait_write(FILE * fp, stree_t * stree)
     int nchar = stree->trait_dim[n];
     if (nchar == 0) continue;
 
-    /* header: ntips nchar  D|C */
-    fprintf(fp, " %d %d  %c\n",
-            stree->tip_count, nchar,
-            stree->trait_type[n] == BPP_DATA_DISC ? 'D' : 'C');
-
-    /* TODO: missing states */
-    for (i = 0; i < stree->tip_count; ++i)
+    if (stree->trait_type[n] == BPP_DATA_DISC)
     {
-      snode = stree->nodes[i];
-      fprintf(fp, "%-10s  ", snode->label);
+      fprintf(fp, " %d %d  D\n", stree->tip_count, nchar);
+        
+      for (i = 0; i < stree->tip_count; ++i)
+      {
+        snode = stree->nodes[i];     // species name
+        fprintf(fp, "%-10s  ", snode->label);
 
-      if (stree->trait_type[n] == BPP_DATA_DISC)
-      {
-        /* discrete: concatenated integers */
-        for (j = 0; j < nchar; ++j)
+        for (j = 0; j < nchar; ++j)  // concatenated integers
           fprintf(fp, "%d", snode->trait[n]->state_d[j]);
-      }
-      else
-      {
-        /* continuous: space-separated floats */
-        for (j = 0; j < nchar; ++j)
-          fprintf(fp, "%9.4lf ", snode->trait[n]->state_m[j]);
+          
+        fprintf(fp, "\n");
       }
       fprintf(fp, "\n");
     }
+    else {
+      fprintf(fp, " %d %d  C  %.4lf\n", stree->tip_count, nchar,
+                                        opt_sim_cont_vpop);
+      for (i = 0; i < stree->tip_count; ++i)
+      {
+        snode = stree->nodes[i];     // species name
+        fprintf(fp, "%-10s  ", snode->label);
 
-    fprintf(fp, "\n");
+        for (j = 0; j < nchar; ++j)  // space-separated floats
+          fprintf(fp, "%9.4lf ", snode->trait[n]->state_m[j]);
+          
+        fprintf(fp, "\n");
+      }
+
+      /* also print the correlation matrix */
+      fprintf(fp, " R* \n");
+      for (i = 0; i < nchar; ++i)
+      {
+        for (j = 0; j < nchar; ++j)
+          fprintf(fp, "%7.4lf ", stree->trait_Rs[n][i * nchar + j]);
+        fprintf(fp, "\n");
+      }
+      fprintf(fp, "\n");
+    }
+    /* TODO: missing states */
   }
 }
