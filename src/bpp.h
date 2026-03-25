@@ -682,6 +682,7 @@ typedef struct stree_s
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
   int    * trait_missing;    /* partition has missing states? */
+  double * trait_vpop;                 /* population variance */
   double **trait_Phi;         /* identity matrix for BM model */
   double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
   double **trait_Rs_1;                       /* inverse of R* */
@@ -820,6 +821,7 @@ typedef struct morph_s
   int    ** discr;  // discrete trait matrix
   double ** conti;  // continuous trait matrix
 
+  double v_pop;     // population variance
   double  * matRs;  // shrinkage estimate of correlation matrix
   int model;
 } morph_t;
@@ -1362,6 +1364,7 @@ extern long   opt_sim_disc_nchar[3];
 extern double opt_sim_disc_rate;
 extern long   opt_sim_cont_nchar;
 extern double opt_sim_cont_rate;
+extern double opt_sim_cont_vpop;
 extern double * opt_sim_cont_R;
 
 /* common data */

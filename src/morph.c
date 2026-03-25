@@ -273,6 +273,13 @@ static morph_t * morph_parse(FILE * fp)
     fprintf(stderr, "Error in header\n");
     return NULL;
   }
+  if (morph->dtype == BPP_DATA_CONT &&
+      fscanf(fp, "%lf", &morph->v_pop) != 1)
+  {
+    fprintf(stderr, "Error reading population variance\n");
+    return NULL;
+  }
+
   nchar = morph->length;
   
   /* allocate space */
@@ -431,7 +438,7 @@ static void bm_update_vxm(int idx, snode_t * snode, stree_t * stree)
 
   int j;
   double v_k, v_k1, v_k2, *m_k1, *m_k2;
-  double v_pop = 1.0;  // population noise
+  double v_pop = stree->trait_vpop[idx];  // population noise
 
 #ifdef DEBUG_Chi
   v_pop = 0.0;
@@ -559,7 +566,7 @@ static void bm_ACEf_Lmr(int idx, snode_t * snode, stree_t * stree,
 
   int    nchar, k_i, k_j, *act, *act_p;
   double t, *R, *I, *A, *C, *E, *L, *m, r,  *V, *T, *x, *y;
-  double v_pop = 1.0;  // population noise
+  double v_pop = stree->trait_vpop[idx];  // population noise
 
 #ifdef DEBUG_Chi
   v_pop = 0.0;
@@ -1085,6 +1092,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
   stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_vpop = (double *)xcalloc(n_part, sizeof(double));
   
   stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
   stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
@@ -1204,6 +1212,8 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_missing);
   if (stree->trait_ldetRs)
     free(stree->trait_ldetRs);
+  if (stree->trait_vpop)
+    free(stree->trait_vpop);
 
   if (stree->trait_nstate)
   {
@@ -1255,6 +1265,7 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   for (n = 0; n < n_part; ++n) {
     stree->trait_dim[n] = morph_list[n]->length;
     stree->trait_type[n] = morph_list[n]->dtype;
+    stree->trait_vpop[n] = morph_list[n]->v_pop;
   }
   
   /* fill the trait values for the tip nodes; */
@@ -1903,6 +1914,7 @@ long     opt_sim_disc_nchar[3] = {0, 0, 0};
 double   opt_sim_disc_rate = 0.0;
 long     opt_sim_cont_nchar = 0;
 double   opt_sim_cont_rate = 0.0;
+double   opt_sim_cont_vpop = 0.0;
 double * opt_sim_cont_R = NULL;  // correlation matrix
 
 int sim_parse_disc(const char * line)
@@ -1925,12 +1937,15 @@ int sim_parse_disc(const char * line)
 
 int sim_parse_cont(const char * line)
 {
-  if (sscanf(line, "%ld %lf",
+  if (sscanf(line, "%ld %lf %lf",
               &opt_sim_cont_nchar,
-              &opt_sim_cont_rate) != 2)
+              &opt_sim_cont_rate,
+              &opt_sim_cont_vpop) != 3)
     return 1;
   
-  if (opt_sim_cont_nchar < 0 || opt_sim_cont_rate <= 0.0)
+  if (opt_sim_cont_nchar < 0 ||
+      opt_sim_cont_vpop  < 0 ||
+      opt_sim_cont_rate <= 0.0)
     return 1;
 
   return 0;
@@ -1963,9 +1978,11 @@ void trait_init_sim(stree_t * stree)
       stree->trait_nstate[0][j] = 4;
   }
   
+  stree->trait_vpop = (double *)xcalloc(2, sizeof(double));
   stree->trait_Rs   = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Rs_1 = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Phi  = (double **)xcalloc(2, sizeof(double *));
+  stree->trait_vpop[1] = opt_sim_cont_vpop;
   stree->trait_Rs[1] =
     (double *)xmalloc(opt_sim_cont_nchar * opt_sim_cont_nchar * sizeof(double));
   stree->trait_Rs_1[1] =
