@@ -1950,6 +1950,12 @@ int sim_parse_cont(const char * line)
       opt_sim_cont_vpop < 0.0)
     return 1;
 
+  if (opt_sim_cont_vpop > 0 && opt_sim_cont_npop < 2)
+  {
+    fprintf(stderr, "Number of population samples must be at least 2\n");
+    return 1;
+  }
+
   return 0;
 }
 
@@ -2076,6 +2082,8 @@ static int constant_char(int pt, int col, stree_t * stree)
   return 1; // constant
 }
 
+/* sample from a multivariate normal distribution 
+   with mean mu and variance-covariance matrix V */
 static void rndMVN(double *x, double *mu, double *V,
                    double *L, double *z, int n)
 {
@@ -2096,6 +2104,75 @@ static void rndMVN(double *x, double *mu, double *V,
     for (i = 0; i <= j; ++i)
       x[j] += L[j * n + i] * z[i];
   }
+}
+
+/* compute the sample correlation matrix from n samples s[0..n-1],
+   each of length p, the result is written into R (p x p, row-major)
+   mu: sample means;  sd: sample standard deviations  */
+static void sample_corr(double **s, int n, int p,
+                        double *mu, double *sd, double *R)
+{
+  int i, j, k;
+
+  /* compute sample mean into mu */
+  for (j = 0; j < p; ++j)
+  {
+    mu[j] = 0.0;
+    for (i = 0; i < n; ++i)
+      mu[j] += s[i][j];
+    mu[j] /= n;
+  }
+
+  /* sample variance */
+  for (j = 0; j < p; ++j)
+  {
+    sd[j] = 0.0;
+    for (i = 0; i < n; ++i)
+      sd[j] += (s[i][j] - mu[j]) * (s[i][j] - mu[j]);
+    sd[j] = sqrt(sd[j] / (n - 1));
+  }
+
+  /* sample correlation matrix; diagonal is 1.0 */
+  for (j = 0; j < p; ++j)
+    for (k = 0; k < p; ++k)
+    {
+      if (j == k) { R[j * p + j] = 1.0; continue; }
+      R[j * p + k] = 0.0;
+      for (i = 0; i < n; ++i)
+        R[j * p + k] += (s[i][j] - mu[j]) * (s[i][k] - mu[k]);
+      R[j * p + k] /= (n - 1) * sd[j] * sd[k];
+    }
+}
+
+/* estimate the shrinkage parameter, lambda (Schäfer & Strimmer 2005) */
+static double shrinkage_lambda(double **s, int n, int p,
+                               double *mu, double *sd, double *R)
+{
+  int i, j, k;
+  double num, den, w, r_jk;
+
+  num = 0.0;
+  den = 0.0;
+
+  for (j = 0; j < p; ++j)
+    for (k = 0; k < p; ++k)
+    {
+      if (j == k) continue;
+      r_jk = R[j * p + k];
+      den += r_jk * r_jk;
+      for (i = 0; i < n; ++i)
+      {
+        w = (s[i][j] - mu[j]) * (s[i][k] - mu[k]) / (sd[j] * sd[k])
+            - (n - 1) * r_jk / n;
+        num += w * w;
+      }
+    }
+
+  num *= (double)n / ((double)(n - 1) * (n - 1) * (n - 1));
+
+  if (den < 1e-10) return 1.0;
+
+  return (num / den < 1.0) ? (num / den) : 1.0;
 }
 
 static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
@@ -2135,8 +2212,8 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 
 void trait_simulate(stree_t * stree)
 {
-  int i, j, nchar;
-  double v, *a, *vR, *L, *z, **s;
+  int i, j, k, nchar, nind;
+  double *a, *vR, *L, *z, **s;
 
   /* simulate discrete traits from root to tips
      given the species tree and evolutionary rate */
@@ -2153,37 +2230,38 @@ void trait_simulate(stree_t * stree)
     sim_cont_BM(1, stree->root, stree);
   
     /* simulate population-level variation */
-    if (opt_sim_cont_vpop > 0.0)
+    if (opt_sim_cont_vpop > 1e-8)
     {
       nchar = stree->trait_dim[1];
-      v = opt_sim_cont_vpop;
       vR = stree->trait_Rs[1];
-      mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
+      mat_scale(opt_sim_cont_R, opt_sim_cont_vpop, vR, nchar, nchar);
 
       /* generate population samples */
+      nind = opt_sim_cont_npop;
       a = stree->nodes[0]->trait[1]->state_m;
       L = stree->trait_Rs_1[1];
       z = stree->trait_Phi[1];
-      s = (double **)malloc(opt_sim_cont_npop * sizeof(double *));
-      for (i = 0; i < opt_sim_cont_npop; ++i)
+      s = (double **)malloc(nind * sizeof(double *));
+      for (i = 0; i < nind; ++i)
       {
         s[i] = (double *)malloc(nchar * sizeof(double));
         rndMVN(s[i], a, vR, L, z, nchar);
       }
 
-      /* update a as the mean of s[i] */
-      for (j = 0; j < nchar; ++j)
-      {
-        a[j] = 0.0;
-        for (i = 0; i < opt_sim_cont_npop; ++i)
-          a[j] += s[i][j];
-        a[j] /= opt_sim_cont_npop;
+      /* correlation coefficient estimated from s;
+         a is updated with the sample mean */
+      sample_corr(s, nind, nchar, a, z, vR);
+
+      /* shrink the correlation matrix for large p */
+      if (nind <= nchar)
+      {  // R*_jk = (1 - lambda) * R_jk for j != k
+        double lam = shrinkage_lambda(s, nind, nchar, a, z, vR);
+        for (j = 0; j < nchar; ++j)
+          for (k = 0; k < nchar; ++k)
+            if (j != k)
+              vR[j * nchar + k] *= (1.0 - lam);
       }
-
-      /* calculate the shrinkage estimate of R 
-         and store in stree->trait_Rs[1] */
-      /* TODO */
-
+      
       /* and the rest of the species */
       for (i = 1; i < stree->tip_count; ++i)
       {
@@ -2192,7 +2270,7 @@ void trait_simulate(stree_t * stree)
         memcpy(a, s[0], nchar * sizeof(double));
       }
 
-      for (i = 0; i < opt_sim_cont_npop; ++i)
+      for (i = 0; i < nind; ++i)
         free(s[i]);
       free(s);
     }

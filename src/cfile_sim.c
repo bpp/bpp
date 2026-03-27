@@ -1458,13 +1458,13 @@ void load_cfile_sim()
       else if (!strncasecmp(token,"trait_disc",10)) 
       {
         if (sim_parse_disc(value))
-          fatal("Option expects 3 integers and one rate value (line %ld)", line_count);
+          fatal("Invalid format for discrete traits (line %ld)", line_count);
         valid = 1;
       }
       else if (!strncasecmp(token,"trait_cont",10)) 
       {
         if (sim_parse_cont(value))
-          fatal("Option expects one integer and one rate value (line %ld)", line_count);
+          fatal("Invalid format for continuous traits (line %ld)", line_count);
         
         /* read correlation matrix (R) */
         int c, n = opt_sim_cont_nchar;
