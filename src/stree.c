@@ -3115,7 +3115,7 @@ void stree_init(stree_t * stree,
   assert(opt_msci == !!stree->hybrid_count);
 
   stree_init_pptable(stree);
-  
+
   stree_reset_leaves(stree);
 
   if (opt_msci)
@@ -3136,11 +3136,37 @@ void stree_init(stree_t * stree,
   else
     stree->nodes[0]->tau = 0;
 
-  //ANNA
-  //stree->nodes[2]->tau = 1.4;
-  /*stree->nodes[4]->tau = .1; 
-  stree->nodes[3]->tau = .016;
-  stree->nodes[4]->tau = .008; */
+  /* apply taufixed: set tau to specified values and disable proposals */
+  if (opt_taufixed_count > 0)
+  {
+    unsigned int total = stree->tip_count + stree->inner_count +
+                         stree->hybrid_count;
+    for (long tf = 0; tf < opt_taufixed_count; tf++)
+    {
+      int found = 0;
+      for (unsigned int ni = 0; ni < total; ni++)
+      {
+        if (stree->nodes[ni]->label &&
+            !strcmp(stree->nodes[ni]->label, opt_taufixed_labels[tf]))
+        {
+          stree->nodes[ni]->tau = opt_taufixed_values[tf];
+          stree->nodes[ni]->prop_tau = 0;
+          if (opt_msci && stree->nodes[ni]->hybrid)
+          {
+            stree->nodes[ni]->hybrid->tau = opt_taufixed_values[tf];
+            stree->nodes[ni]->hybrid->prop_tau = 0;
+          }
+          printf("  taufixed: node %s tau = %.6e (fixed)\n",
+                 opt_taufixed_labels[tf], opt_taufixed_values[tf]);
+          found = 1;
+          break;
+        }
+      }
+      if (!found)
+        fatal("taufixed: node label '%s' not found in species tree",
+              opt_taufixed_labels[tf]);
+    }
+  }
 
   nodes_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
 

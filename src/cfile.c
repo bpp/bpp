@@ -1627,6 +1627,72 @@ l_unwind:
 
 }
 
+static long parse_taufixed(const char * line)
+{
+  /* Parse: taufixed = Label1:value1 Label2:value2 ... */
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long count = 0;
+  long alloc = 4;
+  size_t ws;
+
+  opt_taufixed_count = 0;
+  opt_taufixed_labels = (char **)xmalloc((size_t)alloc * sizeof(char *));
+  opt_taufixed_values = (double *)xmalloc((size_t)alloc * sizeof(double));
+
+  while (1)
+  {
+    /* skip whitespace */
+    ws = strspn(p, " \t\r\n");
+    p += ws;
+    if (!*p || *p == '#' || *p == '*') break;
+
+    /* find colon separator */
+    char * colon = strchr(p, ':');
+    if (!colon) goto l_unwind;
+
+    /* extract label */
+    long label_len = colon - p;
+    if (label_len == 0) goto l_unwind;
+    char * label = xstrndup(p, label_len);
+
+    /* parse value after colon */
+    double value;
+    p = colon + 1;
+    count = get_double(p, &value);
+    if (!count) { free(label); goto l_unwind; }
+    p += count;
+
+    if (value < 0)
+    {
+      free(label);
+      goto l_unwind;
+    }
+
+    /* grow arrays if needed */
+    if (opt_taufixed_count >= alloc)
+    {
+      alloc *= 2;
+      opt_taufixed_labels = (char **)xrealloc(opt_taufixed_labels,
+                                              (size_t)alloc * sizeof(char *));
+      opt_taufixed_values = (double *)xrealloc(opt_taufixed_values,
+                                               (size_t)alloc * sizeof(double));
+    }
+
+    opt_taufixed_labels[opt_taufixed_count] = label;
+    opt_taufixed_values[opt_taufixed_count] = value;
+    opt_taufixed_count++;
+  }
+
+  if (opt_taufixed_count > 0)
+    ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_tauprior(const char * line)
 {
   long ret = 0;
@@ -3195,6 +3261,14 @@ void load_cfile()
           fatal("Option 'tauprior' (line %ld) expects the following syntax:\n"
                 "  tauprior = invgamma alpha beta     # for inverse gamma prior\n"
                 "  tauprior = gamma alpha beta        # for gamma prior\n",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"taufixed",8))
+      {
+        if (!parse_taufixed(value))
+          fatal("Option 'taufixed' (line %ld) expects the following syntax:\n"
+                "  taufixed = NodeLabel1:value1 NodeLabel2:value2 ...\n",
                 line_count);
         valid = 1;
       }
