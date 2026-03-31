@@ -6,13 +6,13 @@
 #include "bpp.h"
 
 #define LABEL_LEN 99
-#define BM_AC     1
-#define BM_Mitov  0
 
 // #define DEBUG_Chi          1
 // #define DEBUG_Morph_Matrix 1
 // #define DEBUG_Morph_BM_M   1
 // #define DEBUG_Morph_BM_A   1
+
+static int BM_Mitov;
 
 /* matrix related operations */
 static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c);
@@ -343,6 +343,7 @@ static morph_t * morph_parse(FILE * fp)
         morph_destroy(morph);
         return NULL;
       }
+      BM_Mitov = 1;  // using Mitov et al. 2020
     }
     else if (c == 'l')
     {
@@ -354,6 +355,7 @@ static morph_t * morph_parse(FILE * fp)
         morph_destroy(morph);
         return NULL;
       }
+      BM_Mitov = 0;  // using Alvarez-Carretero et al. 2019
     }
     else
     {
@@ -546,6 +548,8 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
             stree->trait_Phi[n][i*nchar + j] = 1.0;
           else  
             stree->trait_Phi[n][i*nchar + j] = 0.0;
+    
+      fprintf(stdout, "Using Mitov et al. 2020 for trait partition %d\n", n+1);
     }
     else  // no missing data, use logdet(R*) directly
     {
@@ -553,6 +557,9 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
         stree->trait_ldetRs[n] = 0.0;  // identity matrix
       else
         stree->trait_ldetRs[n] = *(morph->matRs);
+              
+      fprintf(stdout, "Using Alvarez-Carretero et al. 2019 "
+                      "for trait partition %d\n", n+1);
     }
   }
 
@@ -1912,25 +1919,29 @@ static int mat_asym(double *A, int n)
 /* functions for simulation */
 long     opt_sim_disc_nchar[3] = {0, 0, 0};
 double   opt_sim_disc_rate = 0.0;
+double   opt_sim_disc_miss = 0.0;
 long     opt_sim_cont_nchar = 0;
 double   opt_sim_cont_rate = 0.0;
 double   opt_sim_cont_vpop = 0.0;
 long     opt_sim_cont_npop = 0;
 double * opt_sim_cont_R = NULL;  // correlation matrix
+double   opt_sim_cont_miss = 0.0;
 
 int sim_parse_disc(const char * line)
 {
-  if (sscanf(line, "%ld %ld %ld %lf", 
+  if (sscanf(line, "%ld %ld %ld %lf %lf", 
               &opt_sim_disc_nchar[0],
               &opt_sim_disc_nchar[1],
               &opt_sim_disc_nchar[2],
-              &opt_sim_disc_rate) != 4)
+              &opt_sim_disc_rate,
+              &opt_sim_disc_miss) != 5)
     return 1;
 
   if (opt_sim_disc_nchar[0] < 0 ||
       opt_sim_disc_nchar[1] < 0 ||
       opt_sim_disc_nchar[2] < 0 ||
-      opt_sim_disc_rate <= 0.0)
+      opt_sim_disc_rate <= 0.0  ||
+      opt_sim_disc_miss < 0.0)
     return 1;
   
   return 0;
@@ -1938,16 +1949,18 @@ int sim_parse_disc(const char * line)
 
 int sim_parse_cont(const char * line)
 {
-  if (sscanf(line, "%ld %lf %lf %ld",
+  if (sscanf(line, "%ld %lf %lf %ld %lf",
               &opt_sim_cont_nchar,
               &opt_sim_cont_rate,
               &opt_sim_cont_vpop,
-              &opt_sim_cont_npop) != 4)
+              &opt_sim_cont_npop,
+              &opt_sim_cont_miss) != 5)
     return 1;
   
-  if (opt_sim_cont_nchar < 0 ||
-      opt_sim_cont_rate <= 0 ||
-      opt_sim_cont_vpop < 0.0)
+  if (opt_sim_cont_nchar < 0  ||
+      opt_sim_cont_rate <= 0. ||
+      opt_sim_cont_vpop < 0.0 ||
+      opt_sim_cont_miss < 0.0)
     return 1;
 
   if (opt_sim_cont_vpop > 0 && opt_sim_cont_npop < 2)
