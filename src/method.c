@@ -3916,7 +3916,7 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)  //Chi
   {
     /* parse the trait file */
-    printf("Parsing trait file...");
+    printf("\nParsing trait file...");
     morph_list = parse_traitfile(opt_traitfile, &opt_trait_count);
     assert(morph_list);
     printf(" Done\n");

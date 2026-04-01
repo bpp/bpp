@@ -20,7 +20,7 @@ static int mat_scale(double *A, double b, double *C, int n, int m);
 static int mat_add(double *A, double *B, double *C, int n, int m);
 static int mat_multi(double *A, double *B, double *C, int n, int m, int k);
 static int mat_trans(double *A, double *At, int n, int m);
-static int mat_inv_chol(double *A, double *Ainv, int n);
+static int mat_chol(double *A, double *L, int n);
 static int mat_inv_plu (double *A, double *Ainv, int n);
 static double mat_logdet(double *U, int n);
 static int mat_asym(double *A, int n);
@@ -1969,6 +1969,11 @@ int sim_parse_cont(const char * line)
     return 1;
   }
 
+  if (opt_sim_cont_miss > 0.0)
+    BM_Mitov = 1;  // using Mitov et al. 2020
+  else
+    BM_Mitov = 0;  // using Alvarez-Carretero et al. 2019
+
   return 0;
 }
 
@@ -1999,6 +2004,7 @@ void trait_init_sim(stree_t * stree)
       stree->trait_nstate[0][j] = 4;
   }
   
+  stree->trait_ldetRs = (double *)xcalloc(2, sizeof(double));
   stree->trait_Rs   = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Rs_1 = (double **)xcalloc(2, sizeof(double *));
   stree->trait_Phi  = (double **)xcalloc(2, sizeof(double *));
@@ -2226,7 +2232,7 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 void trait_simulate(stree_t * stree)
 {
   int i, j, k, nchar, nind;
-  double *a, *vR, *L, *z, **s;
+  double *x, *vR, *L, *z, **s;
 
   /* simulate discrete traits from root to tips
      given the species tree and evolutionary rate */
@@ -2238,59 +2244,60 @@ void trait_simulate(stree_t * stree)
   }
   
   /* and continuous traits */
-  if (stree->trait_dim[1] > 0)
+  if (stree->trait_dim[1] == 0)
+    return;
+  sim_cont_BM(1, stree->root, stree);
+
+  /* simulate population-level variation */
+  if (opt_sim_cont_vpop > 1e-8)
   {
-    sim_cont_BM(1, stree->root, stree);
-  
-    /* simulate population-level variation */
-    if (opt_sim_cont_vpop > 1e-8)
+    nind = opt_sim_cont_npop;
+    nchar = stree->trait_dim[1];
+    s = (double **)malloc((nind +1) * sizeof(double *));
+    for (i = 0; i <= nind; ++i)
+      s[i] = (double *)malloc(nchar * sizeof(double));
+
+    vR = stree->trait_Rs[1];
+    L = stree->trait_Rs_1[1];
+    z = stree->trait_Phi[1];
+
+    mat_scale(opt_sim_cont_R, opt_sim_cont_vpop, vR, nchar, nchar);
+
+    /* evolve tip traits a bit more */
+    for (i = 0; i < stree->tip_count; ++i)
     {
-      nchar = stree->trait_dim[1];
-      vR = stree->trait_Rs[1];
-      mat_scale(opt_sim_cont_R, opt_sim_cont_vpop, vR, nchar, nchar);
-
-      /* generate population samples */
-      nind = opt_sim_cont_npop;
-      a = stree->nodes[0]->trait[1]->state_m;
-      L = stree->trait_Rs_1[1];
-      z = stree->trait_Phi[1];
-      s = (double **)malloc(nind * sizeof(double *));
-      for (i = 0; i < nind; ++i)
-      {
-        s[i] = (double *)malloc(nchar * sizeof(double));
-        rndMVN(s[i], a, vR, L, z, nchar);
-      }
-
-      /* correlation coefficient estimated from s;
-         a is updated with the sample mean */
-      sample_corr(s, nind, nchar, a, z, vR);
-
-      /* shrink the correlation matrix for large p */
-      if (nind <= nchar)
-      {  // R*_jk = (1 - lambda) * R_jk for j != k
-        double lam = shrinkage_lambda(s, nind, nchar, a, z, vR);
-        for (j = 0; j < nchar; ++j)
-          for (k = 0; k < nchar; ++k)
-            if (j != k)
-              vR[j * nchar + k] *= (1.0 - lam);
-      }
+      x = stree->nodes[i]->trait[1]->state_m;
       
-      /* and the rest of the species */
-      for (i = 1; i < stree->tip_count; ++i)
-      {
-        a = stree->nodes[i]->trait[1]->state_m;
-        rndMVN(s[0], a, vR, L, z, nchar);
-        memcpy(a, s[0], nchar * sizeof(double));
-      }
+      /* store the population mean */
+      memcpy(s[nind], x, nchar * sizeof(double));
 
-      for (i = 0; i < nind; ++i)
-        free(s[i]);
-      free(s);
+      /* update tip traits, x */
+      rndMVN(x, s[nind], vR, L, z, nchar);
     }
-    else {
-      memcpy(stree->trait_Rs[1], opt_sim_cont_R,
-             nchar * nchar * sizeof(double));
+
+    /* generate population samples */
+    for (i = 0; i < nind; ++i)
+      rndMVN(s[i], s[nind], vR, L, z, nchar);
+    
+    /* correlation coefficient estimated from s (into vR) */
+    sample_corr(s, nind, nchar, s[nind], z, vR);
+    /* shrink the correlation matrix for large p */
+    if (nind <= nchar)
+    {  // R*_jk = (1 - lambda) * R_jk for j != k
+      double lam = shrinkage_lambda(s, nind, nchar, s[nind], z, vR);
+      for (j = 0; j < nchar; ++j)
+        for (k = 0; k < nchar; ++k)
+          if (j != k)
+            vR[j * nchar + k] *= (1.0 - lam);
     }
+
+    for (i = 0; i < nind; ++i) free(s[i]);
+    free(s);
+  }
+  else {  // store exact correlation matrix
+    nchar = stree->trait_dim[1];
+    memcpy(stree->trait_Rs[1], opt_sim_cont_R,
+           nchar * nchar * sizeof(double));
   }
 }
 
@@ -2316,36 +2323,83 @@ void trait_write(FILE * fp, stree_t * stree)
         fprintf(fp, "%-10s  ", snode->label);
 
         for (j = 0; j < nchar; ++j)  // concatenated integers
-          fprintf(fp, "%d", snode->trait[n]->state_d[j]);
-          
+        {
+          if (legacy_rndu(0) < opt_sim_disc_miss)
+            fprintf(fp, "?");
+          else
+            fprintf(fp, "%d", snode->trait[n]->state_d[j]);
+        }
         fprintf(fp, "\n");
       }
       fprintf(fp, "\n");
     }
-    else {
+    else {  // stree->trait_type[n] == BPP_DATA_CONT
       fprintf(fp, " %d %d  C  %.4lf\n", stree->tip_count, nchar,
                                         opt_sim_cont_vpop);
-      for (i = 0; i < stree->tip_count; ++i)
+      if (BM_Mitov)  // could have missing data
       {
-        snode = stree->nodes[i];     // species name
-        fprintf(fp, "%-10s  ", snode->label);
-
-        for (j = 0; j < nchar; ++j)  // space-separated floats
-          fprintf(fp, "%9.4lf ", snode->trait[n]->state_m[j]);
-          
+        for (i = 0; i < stree->tip_count; ++i)
+        {
+          snode = stree->nodes[i];     // species name
+          fprintf(fp, "%-10s  ", snode->label);
+  
+          for (j = 0; j < nchar; ++j)  // space-separated floats
+          {
+            if (legacy_rndu(0) < opt_sim_cont_miss)
+              fprintf(fp, "    ?     ");
+            else
+              fprintf(fp, "%9.4lf ", snode->trait[n]->state_m[j]);
+          }
+          fprintf(fp, "\n");
+        }
+  
+        /* also print the correlation matrix */
+        fprintf(fp, " R* \n");
+        for (i = 0; i < nchar; ++i)
+        {
+          for (j = 0; j < nchar; ++j)
+            fprintf(fp, "%7.4lf ", stree->trait_Rs[n][i * nchar + j]);
+          fprintf(fp, "\n");
+        }
         fprintf(fp, "\n");
       }
-
-      /* also print the correlation matrix */
-      fprintf(fp, " R* \n");
-      for (i = 0; i < nchar; ++i)
+      else  // no missing data
       {
-        for (j = 0; j < nchar; ++j)
-          fprintf(fp, "%7.4lf ", stree->trait_Rs[n][i * nchar + j]);
-        fprintf(fp, "\n");
+        /* transform the data */
+        double * Z = (double *)xmalloc(stree->tip_count * nchar * sizeof(double));
+        double * M = (double *)xmalloc(stree->tip_count * nchar * sizeof(double));
+        double * L   = (double *)xmalloc(nchar * nchar * sizeof(double));
+        double * L_1 = (double *)xmalloc(nchar * nchar * sizeof(double));
+
+        /* copy tip trait values into M row by row */
+        for (i = 0; i < stree->tip_count; ++i)
+          memcpy(M + i * nchar,
+                 stree->nodes[i]->trait[n]->state_m, nchar * sizeof(double));
+
+        /* compute L from chol decomp of stree->trait_Rs[n] */
+        if (mat_chol(stree->trait_Rs[n], L, nchar))
+          fatal("Correlation matrix is not positive definite");
+        /* log|det(R*)| = 2*log|det(L)| */
+        stree->trait_ldetRs[n] = 2.0 * mat_logdet(L, nchar);
+
+        mat_inv_plu(L, L_1, nchar);       // L_1 = L^{-1}; L is overwritten
+        mat_trans(L_1, L, nchar, nchar);  // reuse L for (L^{-1})'
+        mat_multi(M, L, Z, stree->tip_count, nchar, nchar);  // Z = M(L^{-1})'
+
+        /* print data (Z) and log(det(R*))*/
+        for (i = 0; i < stree->tip_count; ++i)
+        {
+          snode = stree->nodes[i];     // species name
+          fprintf(fp, "%-10s  ", snode->label);
+  
+          for (j = 0; j < nchar; ++j)  // space-separated floats
+            fprintf(fp, "%9.4lf ", Z[i * nchar + j]);
+          fprintf(fp, "\n");
+        }
+        fprintf(fp, " ldetR*  %.4lf\n\n", stree->trait_ldetRs[n]);
+
+        free(Z); free(M); free(L); free(L_1);
       }
-      fprintf(fp, "\n");
     }
-    /* TODO: missing states */
   }
 }
