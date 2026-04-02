@@ -361,6 +361,8 @@ static morph_t * morph_parse(FILE * fp)
     {
       ungetc(c, fp);
       morph->matRs = NULL;  // assume identity matrix
+      fprintf(stdout, "\n Correlation matrix (R) unspecified,"
+                        " using identity matrix\n");
     }
   }
 

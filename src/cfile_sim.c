@@ -1148,7 +1148,7 @@ static void check_validity()
   if (!opt_streenewick)
     fatal("Initial species tree newick format is required in 'species&tree'");
 
-  if (!opt_mapfile)
+  if ((opt_msafile || opt_treefile) && !opt_mapfile)
     fatal("Option 'imapfile' is required");
 
   if (!opt_locus_count || !opt_locus_simlen)
@@ -1217,13 +1217,14 @@ static void check_validity()
   }
   else
   {
-    if (opt_siterate_cats)
+    if (opt_siterate_alpha == 0.0);
+      // fprintf(stdout, "Site rates: one rate (1.0) for all sites\n");
+    else if (opt_siterate_cats)
       fprintf(stdout, "Site rates: from discrete Gamma(%f), K = %ld\n",
               opt_siterate_alpha, opt_siterate_cats);
     else
       fprintf(stdout, "Site rates: from discrete Gamma(%f), K = inf\n",
               opt_siterate_alpha);
-
   }
 
   if ((opt_datefile && ! opt_seqDates) || (!opt_datefile && opt_seqDates) ) 
@@ -1485,6 +1486,8 @@ void load_cfile_sim()
                   fabs(opt_sim_cont_R[i * n + j] - opt_sim_cont_R[j * n + i]) > 1e-8)
                 fatal("Invalid correlation matrix (R)");
           }
+          
+          fprintf(stdout, "Correlation matrix (R) read from file\n\n");
         }
         else {
           ungetc(c, fp);
@@ -1495,6 +1498,9 @@ void load_cfile_sim()
                 opt_sim_cont_R[i * n + j] = 1.0;
               else  
                 opt_sim_cont_R[i * n + j] = 0.0;
+
+          fprintf(stdout, "Correlation matrix (R) unspecified, "
+                          "using identity matrix\n\n");
         }
         valid = 1;
       }

@@ -1669,7 +1669,6 @@ static void simulate(stree_t * stree)
      fp_mig = xopen("mig.txt", "w");
   if (opt_modelparafile)
     fp_param = xopen(opt_modelparafile, "w");
-  assert(opt_mapfile);
   if (opt_mapfile)
     fp_map = xopen(opt_mapfile, "w");
   if (opt_seqDates)
@@ -1936,79 +1935,78 @@ static void simulate(stree_t * stree)
         fprintf(fp_param, " %9.6f", vi_array[i]);
     }
 
-    if (opt_msafile || opt_treefile)
-    {
-      msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
+    /* create sequence labels and populate msa structure
+       (always needed for gene tree simulation) */
+    msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
+    if (opt_msafile)
       msa[i]->sequence = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
 
-      /* create sequence labels and populate msa structure */
+    for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
+    {
+      if (opt_diploid[j])
+        for (k = 0; k < opt_sp_seqcount[j]; ++k)
+          xasprintf(msa[i]->label+m++,
+                    "%s^%s%ld%c",
+                    stree->nodes[j]->label,
+                    stree->nodes[j]->label,
+                    k / 2 + 1,
+                    (char)('a' + k % 2));
+      else
+        for (k = 0; k < opt_sp_seqcount[j]; ++k)
+          xasprintf(msa[i]->label+m++,
+                    "%s^%s%ld",
+                    stree->nodes[j]->label,
+                    stree->nodes[j]->label,
+                    k+1);
+          /*xasprintf(msa[i]->label+m++,
+                      "%s%ld^%s",
+                      stree->nodes[j]->label,
+                      k+1,
+                      stree->nodes[j]->label); */
+
+      msa[i]->count += opt_sp_seqcount[j];
+    }
+    msa[i]->length = opt_locus_simlen;
+
+    /* change all sequence labels to lowercase */
+    for (j = 0; j < m; ++j)
+    {
+      char * c;
+      for (c = strchr(msa[i]->label[j], '^')+1; *c; ++c)
+        *c = xtolower(*c);
+    }
+
+    if ((opt_msafile || opt_treefile) && i == 0)
+    {
+      int l = 0;
+
+      /* print imap file */
       for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
       {
-        if (opt_diploid[j])
-          for (k = 0; k < opt_sp_seqcount[j]; ++k)
-            xasprintf(msa[i]->label+m++,
-                      "%s^%s%ld%c",
-                      stree->nodes[j]->label,
-                      stree->nodes[j]->label,
-                      k / 2 + 1,
-                      (char)('a' + k % 2));
-        else
-          for (k = 0; k < opt_sp_seqcount[j]; ++k)
-            xasprintf(msa[i]->label+m++,
-                      "%s^%s%ld",
-                      stree->nodes[j]->label,
-                      stree->nodes[j]->label,
-                      k+1);
-            /*xasprintf(msa[i]->label+m++,
-                        "%s%ld^%s",
-                        stree->nodes[j]->label,
-                        k+1,
-                        stree->nodes[j]->label); */
-
-        msa[i]->count += opt_sp_seqcount[j];
-      }
-      msa[i]->length = opt_locus_simlen;
-
-      /* change all sequence labels to lowercase */
-      for (j = 0; j < m; ++j)
-      {
-        char * c;
-        for (c = strchr(msa[i]->label[j], '^')+1; *c; ++c)
-          *c = xtolower(*c);
-      }
-
-      if (i == 0)
-      {
-        int l = 0;
-
-        /* print imap file */
-        for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
+        for (k = 0; k < opt_sp_seqcount[j]; ++k)
         {
-          for (k = 0; k < opt_sp_seqcount[j]; ++k)
+          char * c = strchr(msa[i]->label[l], '^') + 1;
+          if (opt_diploid[j])
           {
-            char * c = strchr(msa[i]->label[l], '^') + 1;
-            if (opt_diploid[j])
-            {
-              fprintf(stdout,
-                      "%.*s\t%.*s\n",
-                      (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
-              fprintf(fp_map,
-                      "%.*s\t%.*s\n",
-                      (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
-              l++;
-              k++;
-            }
-            else
-            {
-              fprintf(stdout,
-                      "%s\t%.*s\n",
-                      c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
-              fprintf(fp_map,
-                      "%s\t%.*s\n",
-                      c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
-            }
+            fprintf(stdout,
+                    "%.*s\t%.*s\n",
+                    (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
+            fprintf(fp_map,
+                    "%.*s\t%.*s\n",
+                    (int)strlen(c)-1,c,(int)(c-(msa[i]->label[l])-1),msa[i]->label[l]);
             l++;
+            k++;
           }
+          else
+          {
+            fprintf(stdout,
+                    "%s\t%.*s\n",
+                    c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
+            fprintf(fp_map,
+                    "%s\t%.*s\n",
+                    c, (int)(c-(msa[i]->label[l]) - 1), msa[i]->label[l]);
+          }
+          l++;
         }
       }
     }
@@ -2404,7 +2402,6 @@ static void simulate(stree_t * stree)
     fclose(fp_mig);
   if (opt_modelparafile)
     fclose(fp_param);
-  assert(opt_mapfile);
   if (opt_mapfile)
     fclose(fp_map);
   if (opt_seqDates)
