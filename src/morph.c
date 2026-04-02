@@ -207,7 +207,7 @@ static void parse_comment(FILE * fp)
 {
   int c;
   
-  while ((c = get_nb_char(fp)) == '#')
+  while ((c = get_nb_char(fp)) == '#' || c == '*')
     while ((c = fgetc(fp)) != '\n'); //eat the line
 
   ungetc(c, fp);
@@ -263,9 +263,6 @@ static morph_t * morph_parse(FILE * fp)
   char tmpstr[10];
   
   morph_t * morph = (morph_t *)xmalloc(sizeof(morph_t));
-  
-  /* skip comments, assuming they are at the beginning of the trait block */
-  parse_comment(fp);
   
   /* read header */
   if (parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype)))
@@ -417,6 +414,9 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
       free(pmorph);
       pmorph = temp;
     }
+
+    /* skip comments before reading the trait block */
+    parse_comment(fp);
 
     pmorph[*count] = morph_parse(fp);
     if (pmorph[*count] == NULL)
@@ -1007,10 +1007,20 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         }
         if (l == stree->tip_count)
         {
-          fprintf(stderr, "Constant char at column %d partition %d\n", j, n);
-          return 1;
+          fprintf(stdout, "Warning: "
+                  "constant char at column %d partition %d\n", j+1, n+1);
+          stree->root->trait[n]->active[j] = 0;
+          continue;
         }
-        
+        else {
+          stree->root->trait[n]->active[j] = 1;
+          for (i = 0; i < stree->tip_count; ++i)  
+          {
+            snode = stree->nodes[i];
+            snode->trait[n]->active[j] = 1;  // not used for now
+          }
+        }
+
         /* record the number of states for each character */
         for (k = 2; state_bin(k) <= max_state; ++k);
         stree->trait_nstate[n][j] = k;
@@ -1146,6 +1156,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
       }
       else
       {
+        trait->active = (int *)xcalloc(nchar, sizeof(int));
         trait->state_d = (int *)xcalloc(nchar, sizeof(int));
         /* each character has maximally ten states; the last 2+3+...+10=54
            cells are for storing conditional probs of dummy constant chars
@@ -1465,6 +1476,10 @@ static double loglikelihood_Mkv(int idx, stree_t * stree)
   /* assuming the characters are independent */
   for (h = 0; h < nchar; ++h)
   {
+    /* skip constant characters (column being inactive) */
+    if (stree->root->trait[idx]->active[h] == 0)
+      continue;
+
     /* average the conditional probabilities over the root states */
     prob = 0.0;
     for (x = 0; x < nstate[h]; ++x)
