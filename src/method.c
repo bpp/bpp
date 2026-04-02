@@ -2839,7 +2839,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out,
                      FILE ** ptr_fp_a1b1,
-		     int ** ptr_printLocusIndex)
+                     int ** ptr_printLocusIndex)
 {
   long i,j;
   FILE * fp_mcmc;
@@ -3918,12 +3918,12 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)  //Chi
   {
     /* parse the trait file */
-    printf("Parsing trait file...");
+    printf("\nParsing trait file...");
     morph_list = parse_traitfile(opt_traitfile, &opt_trait_count);
     assert(morph_list);
     printf(" Done\n");
 
-    /* initialize trait values and contrasts */
+    /* initialize trait values, etc */
     trait_init(stree, morph_list, opt_trait_count);
     
     /* calculate log likelihood for morphological traits */
@@ -4051,7 +4051,6 @@ static FILE * init(stree_t ** ptr_stree,
     gtree[i]->original_index = msa_list[i]->original_index;
     gtree[i]->msa_index = i;
   }
-
 
 
   /* Generate space for cloning the species and gene trees (used for species
@@ -5082,7 +5081,7 @@ void cmd_run()
                      &fp_migcount,
                      &fp_out,
                      &fp_a1b1,
-		     &printLocusIndex);
+                     &printLocusIndex);
   else
   {
     fp_mcmc = init(&stree,
@@ -5108,7 +5107,7 @@ void cmd_run()
                    &fp_migcount,
                    &fp_out, 
                    &fp_a1b1,
-		   &printLocusIndex);
+                   &printLocusIndex);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
     if (opt_migration && !opt_est_geneflow)
@@ -5531,6 +5530,9 @@ void cmd_run()
           SWAP(stree,sclone);
           SWAP(gtree,gclones);
           stree_label(stree);
+          
+          if (opt_traitfile)
+            trait_store(stree);
         }
         if (opt_debug_bruce)
           debug_bruce(stree,gtree,stree_snl == 0 ? "SSPR" : "SNL", i, fp_debug);
@@ -6742,6 +6744,12 @@ void cmd_run()
     free(ft_round_theta_slide);
   if (ft_round_theta_gibbs)
     free(ft_round_theta_gibbs);
+
+  /* free trait related memory once! as the pointers in cloned nodes point to
+     the same locations --- this is how they are initialized in stree_clone().
+     this is a bad practice, and need to be refined */
+  if (opt_traitfile)  //Chi
+    trait_destroy(stree);
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

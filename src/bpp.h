@@ -493,10 +493,13 @@ typedef struct trait_s
   double old_brate;
   
   /* for continuous traits */
-  double brlen;      // transformed branch length (v_k')
-  double * state_m;  // (ancestral) state values (m_k')
-  double * contrast; // independent contrasts (x_k)
-  
+  double   brlen;    // (transformed) branch length
+  double * state_m;  // state values, or m in GLInv model
+  double * contrast; // independent contrasts
+  int    * active;   // indicator for active coordinates
+  double * glinv_L;  // L matrix in GLInv model
+  double   glinv_r;  // r in GLInv model
+
   /* for discrete traits */
   int    * state_d;  // discrete state values
   double **condprob; // conditional probabilities (L)
@@ -600,9 +603,7 @@ typedef struct snode_s
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
-  /* trait related things (per partition): branch length, rate, trait values;
-     for discrete traits, it contains transition & conditional probabilities;
-     for continuous traits, it contains phylogenetic indepandent contrasts */
+  /* trait related things (per partition): branch length, rate, trait values, etc */
   trait_t ** trait;
 
   long flag;
@@ -683,9 +684,12 @@ typedef struct stree_s
   double * trait_logpr;        /* log prior of each partition */
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
-  double * trait_v_pop;         /* within population variance */
-  double * trait_ldetRs;  /* log determinant of shrinkage estimate of
-                             correlation matrix, i.e. log(det(R*)) */
+  int    * trait_missing;    /* partition has missing states? */
+  double * trait_vpop;                 /* population variance */
+  double **trait_Phi;         /* identity matrix for BM model */
+  double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
+  double **trait_Rs_1;                       /* inverse of R* */
+  double * trait_ldetRs;             /* log determinant of R* */
 } stree_t;
 
 typedef struct mutation_s
@@ -814,15 +818,14 @@ typedef struct morph_s
 {
   int ntaxa;        // number of species (populations)
   int length;       // number of characters
+  int dtype;        // data type: continuous or discrete
 
-  double ** conti;  // continuous trait matrix
-  int    ** discr;  // discrete trait matrix
   char   ** label;  // species labels
+  int    ** discr;  // discrete trait matrix
+  double ** conti;  // continuous trait matrix
 
   double v_pop;     // population variance
-  double ldetRs;    // log determinant of R*
-
-  int dtype;        // data type: continuous or discrete
+  double  * matRs;  // shrinkage estimate of correlation matrix
   int model;
 } morph_t;
 
@@ -1262,8 +1265,8 @@ extern long opt_version;
 extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
-extern double opt_brate_alpha;
-extern double opt_brate_beta;
+extern double opt_brate_m_alpha;
+extern double opt_brate_m_beta;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
@@ -1359,6 +1362,13 @@ extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
 extern partition_t ** opt_partition_list;
 extern int  opt_seqAncestral;
+extern long   opt_sim_disc_nchar[3];
+extern double opt_sim_disc_rate;
+extern long   opt_sim_cont_nchar;
+extern double opt_sim_cont_rate;
+extern double opt_sim_cont_vpop;
+extern long   opt_sim_cont_npop;
+extern double * opt_sim_cont_R;
 
 /* common data */
 
@@ -1524,13 +1534,20 @@ void trait_update(stree_t * stree);
 double loglikelihood_trait(stree_t * stree);
 double logprior_trait(stree_t * stree);
 
+int sim_parse_disc(const char * line);
+int sim_parse_cont(const char * line);
+int parse_matrix(FILE * fp, double * mat, int n, int m);
+void trait_init_sim(stree_t * stree);
+void trait_simulate(stree_t * stree);
+void trait_write(FILE * fp, stree_t * stree);
+
 /* functions in rtree.c */
 
 void stree_show_ascii(const snode_t * root, int options);
 
 char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *));
 
-char* msci_export_newick(const snode_t* root, char* (*cb_serialize)(const snode_t*));
+char * msci_export_newick(const snode_t * root, char * (*cb_serialize)(const snode_t *));
 
 int stree_traverse(snode_t * root,
                    int traversal,

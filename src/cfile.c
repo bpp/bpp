@@ -3232,7 +3232,7 @@ void load_cfile()
       else if (!strncasecmp(token,"traitfile",9))
       {
         if (!get_string(value, &opt_traitfile))
-          fatal("Option %s expects a string (line %ld)", token, line_count);
+          fatal("Option '%s' expects a string (line %ld)", token, line_count);
         valid = 1;
       }
     }
