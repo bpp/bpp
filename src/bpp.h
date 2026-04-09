@@ -1265,7 +1265,8 @@ extern long opt_extend;
 extern double opt_alpha_alpha;
 extern double opt_alpha_beta;
 extern double opt_brate_m_alpha;
-extern double opt_brate_m_beta;
+extern double opt_brate_m_beta_c;
+extern double opt_brate_m_beta_d;
 extern double opt_bfbeta;
 extern double opt_finetune_alpha;
 extern double opt_finetune_branchrate;
@@ -1532,12 +1533,15 @@ void trait_update(stree_t * stree);
 double loglikelihood_trait(stree_t * stree);
 double logprior_trait(stree_t * stree);
 
-int sim_parse_disc(const char * line);
-int sim_parse_cont(const char * line);
-int parse_matrix(FILE * fp, double * mat, int n, int m);
+void trait_print_header(FILE * fp, stree_t * stree);
+void trait_print_mcmc(FILE * fp, int gen, stree_t * stree);
+
+int  sim_parse_disc(const char * line);
+int  sim_parse_cont(const char * line);
+int  parse_matrix(FILE * fp, double * mat, int n, int m);
 void trait_init_sim(stree_t * stree);
 void trait_simulate(stree_t * stree);
-void trait_write(FILE * fp, stree_t * stree);
+void sim_trait_write(FILE * fp, stree_t * stree);
 
 /* functions in rtree.c */
 

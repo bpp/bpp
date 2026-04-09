@@ -2382,7 +2382,7 @@ static void simulate(stree_t * stree)
     trait_simulate(stree);
 
     /* write traits to file */
-    trait_write(fp_trait, stree);
+    sim_trait_write(fp_trait, stree);
 
     /* free memory */
     free(opt_sim_cont_R);

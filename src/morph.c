@@ -11,6 +11,7 @@
 // #define DEBUG_Morph_Matrix 1
 // #define DEBUG_Morph_BM_M   1
 // #define DEBUG_Morph_BM_A   1
+// #define DEBUG_Morph_BrRate 1
 
 static int BM_Mitov;
 
@@ -395,7 +396,7 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
 {
   int c, i, m_slotalloc = 10, m_maxcount = 10;
   
-  FILE * fp = xopen(traitfile,"r");
+  FILE * fp = xopen(traitfile, "r");
 
   morph_t ** pmorph = (morph_t **)xmalloc(m_maxcount*sizeof(morph_t *));
 
@@ -551,7 +552,7 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
           else  
             stree->trait_Phi[n][i*nchar + j] = 0.0;
     
-      fprintf(stdout, "Using Mitov et al. 2020 for trait partition %d\n", n+1);
+      fprintf(stdout, "Using Mitov et al. 2020 for trait partition %d\n\n", n+1);
     }
     else  // no missing data, use logdet(R*) directly
     {
@@ -561,7 +562,7 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
         stree->trait_ldetRs[n] = *(morph->matRs);
               
       fprintf(stdout, "Using Alvarez-Carretero et al. 2019 "
-                      "for trait partition %d\n", n+1);
+                      "for trait partition %d\n\n", n+1);
     }
   }
 
@@ -1545,8 +1546,8 @@ static double logprior_trait_part(int idx, stree_t * stree)
   /* the branch rates follow i.i.d. gamma distributions
      with parameters opt_brate_m_alpha and opt_brate_m_beta */
   a = opt_brate_m_alpha;
-  b = opt_brate_m_beta;
-
+  b = stree->trait_type[idx] == BPP_DATA_CONT ? opt_brate_m_beta_c
+                                              : opt_brate_m_beta_d;
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
   {
     snode = stree->nodes[i];
@@ -1584,16 +1585,16 @@ static double prop_branch_rates_relax(stree_t * stree)
   double lnacceptance, a, b;
   snode_t * snode;
 
-  /* the branch rates follow i.i.d. gamma distributions
-     with parameters opt_brate_m_alpha and opt_brate_m_beta */
-  a = opt_brate_m_alpha;
-  b = opt_brate_m_beta;
-
   /* morphological rates are independent among partitions,
      and within a partition, each branch has a rate parameter */
   proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
+    /* the branch rates follow i.i.d. gamma distributions
+       with parameters opt_brate_m_alpha and opt_brate_m_beta */
+    a = opt_brate_m_alpha;
+    b = stree->trait_type[n] == BPP_DATA_CONT ? opt_brate_m_beta_c
+                                              : opt_brate_m_beta_d;
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
@@ -1638,36 +1639,44 @@ static double prop_branch_rates_relax(stree_t * stree)
   return (double)accepted/proposed;
 }
 
-static double prop_branch_rates_strict(stree_t * stree)
+double prop_branch_rates_trait(stree_t * stree)
 {
   int n, i,  proposed, accepted;
   long thread_index = 0;
   double old_rate, old_lograte, new_rate, new_lograte;
-  double lnacceptance, a, b;
+  double tuning, lnacceptance, a, b, logpr_diff;
   snode_t * snode;
  
-  /* the branch rates follow i.i.d. gamma distributions
-     with parameters opt_brate_m_alpha and opt_brate_m_beta */
-  a = opt_brate_m_alpha;
-  b = opt_brate_m_beta;
-
-  /* morphological rates are independent among partitions (?); within each
+  /* morphological rates are independent among partitions; within each
      partition, there is a single rate parameter shared across branches */
   proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
+    /* if no molecular data is used, we cannot distinguish the times and rates;
+       in this case, we fix the rate to 1.0 for the first trait partition, and
+       estimate the rates for subsequent partitions (relative to the first) */
+    if (n == 0 && opt_usedata == 0)
+      continue;
+
+    /* the branch rates follow i.i.d. gamma distributions
+       with parameters opt_brate_m_alpha and opt_brate_m_beta */
+    a = opt_brate_m_alpha;
+    b = stree->trait_type[n] == BPP_DATA_CONT ? opt_brate_m_beta_c
+                                              : opt_brate_m_beta_d;
+    tuning = opt_finetune_brate_m;
     old_rate = stree->nodes[0]->trait[n]->brate;
     old_lograte = log(old_rate);
-    new_lograte = old_lograte +
-         opt_finetune_brate_m * legacy_rnd_symmetrical(thread_index);
+    new_lograte = old_lograte + tuning * legacy_rnd_symmetrical(thread_index);
     new_lograte = reflect(new_lograte, -99, 99, thread_index);
     new_rate = exp(new_lograte);
     
     lnacceptance = new_lograte - old_lograte;
     
     /* calculate the log prior difference */
-    lnacceptance += (a - 1) * log(new_rate / old_rate)
-                           - b * (new_rate - old_rate);
+    logpr_diff = (a - 1) * log(new_rate / old_rate)
+                       - b * (new_rate - old_rate);
+    stree->trait_logpr[n] += logpr_diff;
+    lnacceptance += logpr_diff;
 
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
@@ -1702,12 +1711,30 @@ static double prop_branch_rates_strict(stree_t * stree)
   return (double)accepted/proposed;
 }
 
-double prop_branch_rates_trait(stree_t * stree)
+void trait_print_header(FILE * fp, stree_t * stree)
 {
-  if (opt_clock == BPP_CLOCK_GLOBAL)
-    return prop_branch_rates_strict(stree);
-  else
-    return prop_branch_rates_relax(stree);
+  int n;
+  
+  fprintf(fp, "Gen\t");
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    fprintf(fp, "rate_pt%d\t",   n+1);
+    fprintf(fp, "loglik_pt%d\t", n+1);
+    fprintf(fp, "logpr_pt%d\t",  n+1);
+  }
+}
+
+void trait_print_mcmc(FILE * fp, int gen, stree_t * stree)
+{
+  int n;
+  
+  fprintf(fp, "%d\t", gen);
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    fprintf(fp, "%lf\t", stree->nodes[0]->trait[n]->brate);
+    fprintf(fp, "%lf\t", stree->trait_logl[n]);
+    fprintf(fp, "%lf\t", stree->trait_logpr[n]);
+  }
 }
 
 
@@ -2318,7 +2345,7 @@ void trait_simulate(stree_t * stree)
   }
 }
 
-void trait_write(FILE * fp, stree_t * stree)
+void sim_trait_write(FILE * fp, stree_t * stree)
 {
   /* write tip states to file */
 
