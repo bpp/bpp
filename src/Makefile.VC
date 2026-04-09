@@ -92,6 +92,7 @@ OBJ_BPP = \
 	a1b1.obj \
 	morph.obj \
 	ancestry.obj \
+	migflow.obj \
 
 all: $(PROG)
 

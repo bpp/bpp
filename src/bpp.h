@@ -673,6 +673,10 @@ typedef struct stree_s
   long *** ancestry_count;
   snode_t ** ancestry_tips;
 
+  /* gene flow tracking for migration bands (MSC-M) */
+  long *** migflow_count;
+  snode_t ** migflow_tips;
+
 
   /* morphological traits //Chi */
   int      trait_count;         /* number of trait partitions */
@@ -3164,4 +3168,13 @@ void ancestry_update(stree_t * stree, gtree_t ** gtree_list);
 void ancestry_print(stree_t * stree);
 void ancestry_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
 void ancestry_write(stree_t * stree, gtree_t ** gtree_list);
+
+/* functions in migflow.c */
+void migflow_init(stree_t * stree, gtree_t ** gtree_list);
+void migflow_reset(stree_t * stree, gtree_t ** gtree_list);
+void migflow_reset_mean(stree_t * stree, gtree_t ** gtree_list);
+void migflow_update(stree_t * stree, gtree_t ** gtree_list);
+void migflow_print(stree_t * stree);
+void migflow_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
+void migflow_write(stree_t * stree, gtree_t ** gtree_list);
 

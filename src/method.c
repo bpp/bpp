@@ -5375,6 +5375,8 @@ void cmd_run()
   /* TF: 20.10.2025 */
   if (opt_msci && opt_ancestry)
     ancestry_init(stree, gtree);
+  if (opt_migration && opt_ancestry)
+    migflow_init(stree, gtree);
 
   /* compute checkpoint trigger points */
   if (opt_checkpoint && opt_checkpoint_percent > 0)
@@ -5481,6 +5483,11 @@ void cmd_run()
       {
         ancestry_reset(stree,gtree); /* not needed as it's done at the end before update */
         ancestry_reset_mean(stree,gtree);
+      }
+      if (opt_migration && opt_ancestry)
+      {
+        migflow_reset(stree,gtree);
+        migflow_reset_mean(stree,gtree);
       }
     }
 
@@ -6078,11 +6085,17 @@ void cmd_run()
         mig_rate_counts[opt_migration_count]++;
     }
 
-    if (opt_ancestry)
+    if (opt_msci && opt_ancestry)
     {
       ancestry_reset(stree, gtree);
       ancestry_update(stree, gtree);
       ancestry_update_mean(stree, gtree, ft_round);
+    }
+    if (opt_migration && opt_ancestry)
+    {
+      migflow_reset(stree, gtree);
+      migflow_update(stree, gtree);
+      migflow_update_mean(stree, gtree, ft_round);
     }
 
     /* print MCMC status on screen */
@@ -6437,11 +6450,19 @@ void cmd_run()
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
   #if 0
-  if (opt_ancestry)
+  if (opt_msci && opt_ancestry)
     ancestry_print(stree);
+  if (opt_migration && opt_ancestry)
+    migflow_print(stree);
   #endif
+
   if (opt_ancestry)
-    ancestry_write(stree, gtree);
+  {
+    if (opt_msci)
+      ancestry_write(stree, gtree);
+    if (opt_migration)
+      migflow_write(stree, gtree);
+  }
 
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);
