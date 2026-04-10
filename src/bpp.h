@@ -847,6 +847,9 @@ typedef struct msa_s
   int model;
   int original_index;
 
+  unsigned int * pattern_weights;  /* weights from compressed file, or NULL */
+  int compress_model;              /* COMPRESS_JC69 or COMPRESS_GENERAL, or -1 */
+
 } msa_t;
 
 /* used for creating FigTree.tre */
@@ -2141,7 +2144,8 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
-                                      int attrib);
+                                      int attrib,
+                                      const unsigned int * input_weights);
 
 unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                const unsigned int * map,

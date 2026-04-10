@@ -3384,6 +3384,11 @@ static FILE * init(stree_t ** ptr_stree,
   /* remove missing sequences */
   for (i = 0; i < msa_count; ++i)
   {
+    msa_list[i]->original_index = i;
+
+    /* skip for pre-compressed loci (already done before compression) */
+    if (msa_list[i]->pattern_weights) continue;
+
     int deleted = msa_remove_missing_sequences(msa_list[i]);
     if (deleted == -1)
       fatal("[ERROR]: Locus %ld contains missing sequences only.\n"
@@ -3398,7 +3403,6 @@ static FILE * init(stree_t ** ptr_stree,
         "[WARNING]: Removing %d missing sequences from locus %ld\n",
         deleted, i);
     }
-    msa_list[i]->original_index = i;
   }
 
   /* remove ambiguous sites */
@@ -3407,6 +3411,9 @@ static FILE * init(stree_t ** ptr_stree,
     printf("Removing sites containing ambiguous characters...");
     for (i = 0; i < msa_count; ++i)
     {
+      /* skip for pre-compressed loci (already done before compression) */
+      if (msa_list[i]->pattern_weights) continue;
+
       if (msa_list[i]->dtype == BPP_DATA_AA)
         continue;
 
@@ -3418,10 +3425,16 @@ static FILE * init(stree_t ** ptr_stree,
   else
   {
     for (i = 0; i < msa_count; ++i)
+    {
+      /* skip for pre-compressed loci (already done before compression) */
+      if (msa_list[i]->pattern_weights) continue;
+
       msa_count_ambiguous_sites(msa_list[i], pll_map_amb);
+    }
   }
 
   /* compress it */
+  int input_is_compressed = 0;
   unsigned int** weights = (unsigned int**)xmalloc(msa_count * sizeof(unsigned int*));
   for (i = 0; i < msa_count; ++i)
   {
@@ -3450,13 +3463,56 @@ static FILE * init(stree_t ** ptr_stree,
 
     msa_list[i]->freqs = NULL;
 
-    /* NOTE: Original length is the length after opt_cleandata is applied */
-    msa_list[i]->original_length = msa_list[i]->length;
-    weights[i] = compress_site_patterns(msa_list[i]->sequence,
-      pll_map,
-      msa_list[i]->count,
-      &(msa_list[i]->length),
-      compress_method);
+    if (msa_list[i]->pattern_weights)
+    {
+      input_is_compressed = 1;
+      int file_cm = msa_list[i]->compress_model;
+
+      /* JC69 compressed + non-JC69 analysis is an error */
+      if (file_cm == COMPRESS_JC69 && compress_method != COMPRESS_JC69)
+        fatal("Locus %ld: compressed file uses JC69 compression but "
+              "analysis model requires general (GTR) compression. "
+              "Use the original alignment or a GTR-compressed file.",
+              i+1);
+
+      /* compute original_length as sum of pattern weights */
+      unsigned int wsum = 0;
+      for (int w = 0; w < msa_list[i]->length; ++w)
+        wsum += msa_list[i]->pattern_weights[w];
+      msa_list[i]->original_length = (int)wsum;
+
+      if (file_cm == compress_method ||
+          (file_cm == COMPRESS_GENERAL && compress_method == COMPRESS_GENERAL))
+      {
+        /* compatible: use stored weights directly */
+        weights[i] = msa_list[i]->pattern_weights;
+        msa_list[i]->pattern_weights = NULL;  /* transfer ownership */
+      }
+      else
+      {
+        /* file_cm == COMPRESS_GENERAL && compress_method == COMPRESS_JC69 */
+        /* re-compress from GTR to JC69 */
+        weights[i] = compress_site_patterns(msa_list[i]->sequence,
+                                             pll_map,
+                                             msa_list[i]->count,
+                                             &(msa_list[i]->length),
+                                             compress_method,
+                                             msa_list[i]->pattern_weights);
+        free(msa_list[i]->pattern_weights);
+        msa_list[i]->pattern_weights = NULL;
+      }
+    }
+    else
+    {
+      /* normal (non-compressed) input */
+      msa_list[i]->original_length = msa_list[i]->length;
+      weights[i] = compress_site_patterns(msa_list[i]->sequence,
+                                           pll_map,
+                                           msa_list[i]->count,
+                                           &(msa_list[i]->length),
+                                           compress_method,
+                                           NULL);
+    }
 
     /* compute base frequencies */
     compute_base_freqs(msa_list[i], weights[i], pll_map);
@@ -3574,25 +3630,27 @@ static FILE * init(stree_t ** ptr_stree,
       fatal("Cannot open file %s for writing...", opt_mcmcfile);
   }
 
-  /* print compressed alignmens in output file */
+  /* print compressed alignments in output file (skip if input was compressed) */
+  if (!input_is_compressed)
+  {
+    char * fn_seqaln_zip;
+    xasprintf(&fn_seqaln_zip, "%s.compressed-aln.phy", opt_jobname);
 
-  char * fn_seqaln_zip;
-  xasprintf(&fn_seqaln_zip, "%s.compressed-aln.phy", opt_jobname);
+    fprintf(stdout,
+            "Writing multilocus alignments with compressed site patterns in %s\n\n",
+            fn_seqaln_zip);
+    fprintf(fp_out,
+            "Writing multilocus alignments with compressed site patterns in %s\n\n",
+            fn_seqaln_zip);
 
-  fprintf(stdout,
-          "Writing multilocus alignments with compressed site patterns in %s\n\n",
-          fn_seqaln_zip);
-  fprintf(fp_out,
-          "Writing multilocus alignments with compressed site patterns in %s\n\n",
-          fn_seqaln_zip);
+    FILE * fp_seqaln_zip = xopen(fn_seqaln_zip, "w");
 
-  FILE * fp_seqaln_zip = xopen(fn_seqaln_zip, "w");
+    /* print the alignments */
+    msa_print_phylip(fp_seqaln_zip,msa_list,msa_count, weights);
 
-  /* print the alignments */
-  msa_print_phylip(fp_seqaln_zip,msa_list,msa_count, weights);
-
-  free(fn_seqaln_zip);
-  fclose(fp_seqaln_zip);
+    free(fn_seqaln_zip);
+    fclose(fp_seqaln_zip);
+  }
 
   /* TODO: PLACE DIPLOID CODE HERE */
   /* mapping from A2 -> A3 if diploid sequences used */

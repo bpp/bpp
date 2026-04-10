@@ -51,7 +51,8 @@ static void print_pretty_phylip_dna(FILE * fp,
   long i,j;
   if (!msa) return;
 
-  fprintf(fp, "%d %d P\n", msa->count, msa->length);
+  const char * cm = (msa->model == BPP_DNA_MODEL_JC69) ? "JC69" : "GTR";
+  fprintf(fp, "%d %d P %s\n", msa->count, msa->length, cm);
   for (i = 0; i < msa->count; ++i)
   {
     fprintf(fp, "%-*s", pad, msa->label[i]);
@@ -88,7 +89,7 @@ static void print_pretty_phylip(FILE * fp,
     return;
   }
 
-  fprintf(fp, "%d %d P\n", msa->count, msa->length);
+  fprintf(fp, "%d %d P GTR\n", msa->count, msa->length);
   for (i = 0; i < msa->count; ++i)
   {
     fprintf(fp, "%-*s", pad, msa->label[i]);
@@ -333,6 +334,9 @@ void msa_destroy(msa_t * msa)
 
   if (msa->freqs)
     free(msa->freqs);
+
+  if (msa->pattern_weights)
+    free(msa->pattern_weights);
 
   free(msa);
 }
