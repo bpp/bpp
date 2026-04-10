@@ -151,8 +151,9 @@ long opt_version;
 long opt_extend;
 double opt_alpha_alpha;
 double opt_alpha_beta;
-double opt_brate_alpha;
-double opt_brate_beta;
+double opt_brate_m_alpha;
+double opt_brate_m_beta_c;
+double opt_brate_m_beta_d;
 double opt_bfbeta;
 double opt_clock_vbar;
 double opt_clock_alpha;
@@ -452,8 +453,9 @@ void args_init(int argc, char ** argv)
   opt_arch = -1;
   opt_basefreqs_fixed = -1;
   opt_basefreqs_params = NULL;
-  opt_brate_alpha = 1;
-  opt_brate_beta = 1;
+  opt_brate_m_alpha = 1;
+  opt_brate_m_beta_c = 0.01;
+  opt_brate_m_beta_d = 1;
   opt_bfbeta = 1;
   opt_bfdriver = NULL;
   opt_bfd_points = 0;
@@ -527,7 +529,7 @@ void args_init(int argc, char ** argv)
 #endif
   opt_finetune_alpha = 0.1;
   opt_finetune_branchrate = 0.1;
-  opt_finetune_brate_m = 0.1;
+  opt_finetune_brate_m = 1;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;
