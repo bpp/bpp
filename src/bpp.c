@@ -219,6 +219,8 @@ char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_traitfile;  // morphological traits
 char * opt_msafile;
+char * opt_seqfilep;
+char * opt_concatfilep;
 char * opt_mscifile;
 char * opt_partition_file;
 char * opt_reorder;
@@ -475,6 +477,7 @@ void args_init(int argc, char ** argv)
   opt_cleandata = 0;
   opt_comply = 0;
   opt_concatfile = NULL;
+  opt_concatfilep = NULL;
   opt_constraintfile = NULL;
   opt_constraint_count = 0;
   opt_corepin = 1;
@@ -588,6 +591,7 @@ void args_init(int argc, char ** argv)
   opt_modelparafile = NULL;
   opt_traitfile = NULL;
   opt_msafile = NULL;
+  opt_seqfilep = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
   opt_onlysummary = 0;

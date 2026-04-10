@@ -1398,6 +1398,12 @@ void load_cfile_sim()
           fatal("Option 'imapfile' expects a string (line %ld)", line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"seqfilep",8))
+      {
+        if (!get_string(value, &opt_seqfilep))
+          fatal("Option 'seqfilep' expects a string (line %ld)", line_count);
+        valid = 1;
+      }
     else if (!strncasecmp(token,"datefile",8))
       {
         if (!get_string(value, &opt_datefile))
@@ -1457,6 +1463,12 @@ void load_cfile_sim()
         if (!parse_loci_and_lengths(value))
           fatal("Option 'loci&length' expects two positive integer values (line %ld)",
                 line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"concatfilep",11))
+      {
+        if (!get_string(value, &opt_concatfilep))
+          fatal("Option 'concatfilep' expects a string (line %ld)", line_count);
         valid = 1;
       }
     }

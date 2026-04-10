@@ -1345,6 +1345,8 @@ extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_traitfile;
 extern char * opt_msafile;
+extern char * opt_seqfilep;
+extern char * opt_concatfilep;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
 extern char * opt_partition_file;
