@@ -204,14 +204,16 @@ static int parse_value_d(FILE * fp, int * std, int len)
   return 0;
 }
 
-static void parse_comment(FILE * fp)
+static int parse_comment(FILE * fp)
 {
   int c;
   
   while ((c = get_nb_char(fp)) == '#' || c == '*')
-    while ((c = fgetc(fp)) != '\n'); //eat the line
+    while ((c = fgetc(fp)) != '\n' && c != EOF); //eat the line
 
   ungetc(c, fp);
+
+  return c;
 }
 
 int parse_matrix(FILE * fp, double * mat, int n, int m)
@@ -402,11 +404,8 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
 
   *count = 0;
 
-  while ((c=fgetc(fp)) != EOF)
+  while ((c = parse_comment(fp)) != EOF)
   {
-    if (isspace(c)) continue;
-    ungetc(c,fp);
-    
     if (*count == m_maxcount)
     {
       m_maxcount += m_slotalloc;
@@ -415,9 +414,6 @@ morph_t ** parse_traitfile(const char * traitfile, long * count)
       free(pmorph);
       pmorph = temp;
     }
-
-    /* skip comments before reading the trait block */
-    parse_comment(fp);
 
     pmorph[*count] = morph_parse(fp);
     if (pmorph[*count] == NULL)
@@ -552,7 +548,7 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
           else  
             stree->trait_Phi[n][i*nchar + j] = 0.0;
     
-      fprintf(stdout, "Using Mitov et al. 2020 for trait partition %d\n\n", n+1);
+      fprintf(stdout, "Using Mitov et al. 2020 for trait partition %d\n", n+1);
     }
     else  // no missing data, use logdet(R*) directly
     {
@@ -562,7 +558,7 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
         stree->trait_ldetRs[n] = *(morph->matRs);
               
       fprintf(stdout, "Using Alvarez-Carretero et al. 2019 "
-                      "for trait partition %d\n\n", n+1);
+                      "for trait partition %d\n", n+1);
     }
   }
 
@@ -1306,6 +1302,8 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   
   /* then fill up relevant things */
   trait_update(stree);
+
+  fprintf(stdout, "Trait data loaded for %d partitions\n\n", n_part);
 }
 
 static void trait_store_part(int idx, stree_t * stree)
@@ -1722,6 +1720,7 @@ void trait_print_header(FILE * fp, stree_t * stree)
     fprintf(fp, "loglik_pt%d\t", n+1);
     fprintf(fp, "logpr_pt%d\t",  n+1);
   }
+  fprintf(fp, "\n");
 }
 
 void trait_print_mcmc(FILE * fp, int gen, stree_t * stree)
@@ -1735,6 +1734,7 @@ void trait_print_mcmc(FILE * fp, int gen, stree_t * stree)
     fprintf(fp, "%lf\t", stree->trait_logl[n]);
     fprintf(fp, "%lf\t", stree->trait_logpr[n]);
   }
+  fprintf(fp, "\n");
 }
 
 
