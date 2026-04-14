@@ -2043,10 +2043,10 @@ static void simulate(stree_t * stree)
         fprintf(fp_param, " %9.6f", vi_array[i]);
     }
 
-    if (opt_msafile || opt_seqfilep || opt_concatfile || opt_concatfilep || opt_treefile)
-    {
-      msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
-      msa[i]->sequence = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
+    /* create sequence labels and populate msa structure
+       (always needed for gene tree simulation) */
+    msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
+    msa[i]->sequence = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
 
     for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
     {
@@ -2083,7 +2083,7 @@ static void simulate(stree_t * stree)
         *c = xtolower(*c);
     }
 
-    if ((opt_msafile || opt_treefile) && i == 0)
+    if (i == 0 && (opt_msafile || opt_seqfilep || opt_concatfile || opt_concatfilep))
     {
       int l = 0;
 
