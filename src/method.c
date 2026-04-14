@@ -292,7 +292,7 @@ static void print_mcmc_headerline(FILE * fp,
     k = 0;
     if (opt_est_theta)
     {
-      for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+      for (j=0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
       {
         if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta)
           continue;
@@ -3385,6 +3385,11 @@ static FILE * init(stree_t ** ptr_stree,
   /* remove missing sequences */
   for (i = 0; i < msa_count; ++i)
   {
+    msa_list[i]->original_index = i;
+
+    /* skip for pre-compressed loci (already done before compression) */
+    if (msa_list[i]->pattern_weights) continue;
+
     int deleted = msa_remove_missing_sequences(msa_list[i]);
     if (deleted == -1)
       fatal("[ERROR]: Locus %ld contains missing sequences only.\n"
@@ -3399,7 +3404,6 @@ static FILE * init(stree_t ** ptr_stree,
         "[WARNING]: Removing %d missing sequences from locus %ld\n",
         deleted, i);
     }
-    msa_list[i]->original_index = i;
   }
 
   /* remove ambiguous sites */
@@ -3408,6 +3412,9 @@ static FILE * init(stree_t ** ptr_stree,
     printf("Removing sites containing ambiguous characters...");
     for (i = 0; i < msa_count; ++i)
     {
+      /* skip for pre-compressed loci (already done before compression) */
+      if (msa_list[i]->pattern_weights) continue;
+
       if (msa_list[i]->dtype == BPP_DATA_AA)
         continue;
 
@@ -3419,10 +3426,16 @@ static FILE * init(stree_t ** ptr_stree,
   else
   {
     for (i = 0; i < msa_count; ++i)
+    {
+      /* skip for pre-compressed loci (already done before compression) */
+      if (msa_list[i]->pattern_weights) continue;
+
       msa_count_ambiguous_sites(msa_list[i], pll_map_amb);
+    }
   }
 
   /* compress it */
+  int input_is_compressed = 0;
   unsigned int** weights = (unsigned int**)xmalloc(msa_count * sizeof(unsigned int*));
   for (i = 0; i < msa_count; ++i)
   {
@@ -3451,13 +3464,56 @@ static FILE * init(stree_t ** ptr_stree,
 
     msa_list[i]->freqs = NULL;
 
-    /* NOTE: Original length is the length after opt_cleandata is applied */
-    msa_list[i]->original_length = msa_list[i]->length;
-    weights[i] = compress_site_patterns(msa_list[i]->sequence,
-      pll_map,
-      msa_list[i]->count,
-      &(msa_list[i]->length),
-      compress_method);
+    if (msa_list[i]->pattern_weights)
+    {
+      input_is_compressed = 1;
+      int file_cm = msa_list[i]->compress_model;
+
+      /* JC69 compressed + non-JC69 analysis is an error */
+      if (file_cm == COMPRESS_JC69 && compress_method != COMPRESS_JC69)
+        fatal("Locus %ld: compressed file uses JC69 compression but "
+              "analysis model requires general (GTR) compression. "
+              "Use the original alignment or a GTR-compressed file.",
+              i+1);
+
+      /* compute original_length as sum of pattern weights */
+      unsigned int wsum = 0;
+      for (int w = 0; w < msa_list[i]->length; ++w)
+        wsum += msa_list[i]->pattern_weights[w];
+      msa_list[i]->original_length = (int)wsum;
+
+      if (file_cm == compress_method ||
+          (file_cm == COMPRESS_GENERAL && compress_method == COMPRESS_GENERAL))
+      {
+        /* compatible: use stored weights directly */
+        weights[i] = msa_list[i]->pattern_weights;
+        msa_list[i]->pattern_weights = NULL;  /* transfer ownership */
+      }
+      else
+      {
+        /* file_cm == COMPRESS_GENERAL && compress_method == COMPRESS_JC69 */
+        /* re-compress from GTR to JC69 */
+        weights[i] = compress_site_patterns(msa_list[i]->sequence,
+                                             pll_map,
+                                             msa_list[i]->count,
+                                             &(msa_list[i]->length),
+                                             compress_method,
+                                             msa_list[i]->pattern_weights);
+        free(msa_list[i]->pattern_weights);
+        msa_list[i]->pattern_weights = NULL;
+      }
+    }
+    else
+    {
+      /* normal (non-compressed) input */
+      msa_list[i]->original_length = msa_list[i]->length;
+      weights[i] = compress_site_patterns(msa_list[i]->sequence,
+                                           pll_map,
+                                           msa_list[i]->count,
+                                           &(msa_list[i]->length),
+                                           compress_method,
+                                           NULL);
+    }
 
     /* compute base frequencies */
     compute_base_freqs(msa_list[i], weights[i], pll_map);
@@ -3575,25 +3631,27 @@ static FILE * init(stree_t ** ptr_stree,
       fatal("Cannot open file %s for writing...", opt_mcmcfile);
   }
 
-  /* print compressed alignmens in output file */
+  /* print compressed alignments in output file (skip if input was compressed) */
+  if (!input_is_compressed)
+  {
+    char * fn_seqaln_zip;
+    xasprintf(&fn_seqaln_zip, "%s.compressed-aln.phy", opt_jobname);
 
-  char * fn_seqaln_zip;
-  xasprintf(&fn_seqaln_zip, "%s.compressed-aln.phy", opt_jobname);
+    fprintf(stdout,
+            "Writing multilocus alignments with compressed site patterns in %s\n\n",
+            fn_seqaln_zip);
+    fprintf(fp_out,
+            "Writing multilocus alignments with compressed site patterns in %s\n\n",
+            fn_seqaln_zip);
 
-  fprintf(stdout,
-          "Writing multilocus alignments with compressed site patterns in %s\n\n",
-          fn_seqaln_zip);
-  fprintf(fp_out,
-          "Writing multilocus alignments with compressed site patterns in %s\n\n",
-          fn_seqaln_zip);
+    FILE * fp_seqaln_zip = xopen(fn_seqaln_zip, "w");
 
-  FILE * fp_seqaln_zip = xopen(fn_seqaln_zip, "w");
+    /* print the alignments */
+    msa_print_phylip(fp_seqaln_zip,msa_list,msa_count, weights);
 
-  /* print the alignments */
-  msa_print_phylip(fp_seqaln_zip,msa_list,msa_count, weights);
-
-  free(fn_seqaln_zip);
-  fclose(fp_seqaln_zip);
+    free(fn_seqaln_zip);
+    fclose(fp_seqaln_zip);
+  }
 
   /* TODO: PLACE DIPLOID CODE HERE */
   /* mapping from A2 -> A3 if diploid sequences used */
@@ -3663,8 +3721,10 @@ static FILE * init(stree_t ** ptr_stree,
                                                   compress_method);
     }
     fprintf(fp_out, "COMPRESSED ALIGNMENTS AFTER PHASING OF DIPLOID SEQUENCES\n\n");
-    msa_print_phylip(fp_out,msa_list,msa_count,tmpwgt);
-
+    msa_print_phylip(fp_out, msa_list, msa_count, NULL);
+    /* Ziheng-2026.2.25 */
+    /* msa_print_phylip(fp_out, msa_list, msa_count, tmpwgt); */
+    
     /* deallocate temporary pattern weights */
     for (i = 0; i < msa_count; ++i)
       free(tmpwgt[i]);
@@ -5041,6 +5101,11 @@ void cmd_run()
 
   unsigned long curstep = 0;
 
+  /* checkpoint trigger variables */
+  long chk_trigger_count = 0;
+  unsigned long * chk_triggers = NULL;
+  long chk_next_idx = 0;
+
   int * printLocusIndex = NULL;
 
   printf("\nStarting timer..\n");
@@ -5317,6 +5382,15 @@ void cmd_run()
   else
     i = curstep - opt_burnin;
 
+  if (opt_resume && !opt_onlysummary &&
+      i >= opt_samples * opt_samplefreq)
+  {
+    fprintf(stdout, "\nRun already completed (%ld samples). "
+                    "Generating summary...\n"
+                    "Use --extend N to add more samples.\n\n",
+            opt_samples);
+  }
+
   /* TODO: Delete after debugging */
   if (opt_debug_rates)
   {
@@ -5372,6 +5446,35 @@ void cmd_run()
   /* TF: 20.10.2025 */
   if (opt_msci && opt_ancestry)
     ancestry_init(stree, gtree);
+  if (opt_migration && opt_ancestry)
+    migflow_init(stree, gtree);
+
+  /* compute checkpoint trigger points */
+  if (opt_checkpoint && opt_checkpoint_percent > 0)
+  {
+    unsigned long total_steps_chk = (unsigned long)opt_burnin +
+                                    (unsigned long)opt_samples *
+                                    (unsigned long)opt_samplefreq;
+    chk_trigger_count = 100 / opt_checkpoint_percent;
+    chk_triggers = (unsigned long *)xmalloc((size_t)chk_trigger_count *
+                                             sizeof(unsigned long));
+    for (j = 0; j < chk_trigger_count; ++j)
+      chk_triggers[j] = (unsigned long)((double)total_steps_chk *
+                         (j + 1) * opt_checkpoint_percent / 100.0);
+
+    /* don't checkpoint at the very last step (run is done) */
+    if (chk_trigger_count > 0 &&
+        chk_triggers[chk_trigger_count-1] >= total_steps_chk)
+      chk_trigger_count--;
+
+    chk_next_idx = 0;
+
+    /* if resuming, skip past already-completed triggers */
+    if (opt_resume)
+      while (chk_next_idx < chk_trigger_count &&
+             chk_triggers[chk_next_idx] <= curstep)
+        chk_next_idx++;
+  }
 
   /* *** start of MCMC loop *** */
   active_pjumps_alloc();
@@ -5451,6 +5554,11 @@ void cmd_run()
       {
         ancestry_reset(stree,gtree); /* not needed as it's done at the end before update */
         ancestry_reset_mean(stree,gtree);
+      }
+      if (opt_migration && opt_ancestry)
+      {
+        migflow_reset(stree,gtree);
+        migflow_reset_mean(stree,gtree);
       }
     }
 
@@ -5968,7 +6076,7 @@ void cmd_run()
       if (opt_est_theta)
       {
         max_param_count = MIN(total_nodes, MAX_THETA_OUTPUT);
-        for (j=0; j < stree->tip_count+stree->inner_count; ++j)
+        for (j=0; j < stree->tip_count+stree->inner_count+stree->hybrid_count; ++j)
         {
           if (stree->nodes[j]->theta < 0 || stree->nodes[j]->linked_theta) 
             continue;
@@ -6054,11 +6162,17 @@ void cmd_run()
         mig_rate_counts[opt_migration_count]++;
     }
 
-    if (opt_ancestry)
+    if (opt_msci && opt_ancestry)
     {
       ancestry_reset(stree, gtree);
       ancestry_update(stree, gtree);
       ancestry_update_mean(stree, gtree, ft_round);
+    }
+    if (opt_migration && opt_ancestry)
+    {
+      migflow_reset(stree, gtree);
+      migflow_update(stree, gtree);
+      migflow_update_mean(stree, gtree, ft_round);
     }
 
     /* print MCMC status on screen */
@@ -6237,11 +6351,9 @@ void cmd_run()
     curstep++;
 
     /* Create a checkpoint file... */
-    if (opt_checkpoint)
+    if (opt_checkpoint && chk_next_idx < chk_trigger_count &&
+        curstep >= chk_triggers[chk_next_idx])
     {
-      if (((long)curstep == opt_checkpoint_initial) ||
-          (opt_checkpoint_step && ((long)curstep > opt_checkpoint_initial) &&
-           (((long)curstep-opt_checkpoint_initial) % opt_checkpoint_step == 0)))
       {
         /* if migcount printing is enabled get current file offsets */
         if (opt_migration && opt_debug_migration)
@@ -6317,9 +6429,11 @@ void cmd_run()
                         mean_theta_count,
                         mean_phi_count,
                         prec_logpr,
-                        prec_logl, 
+                        prec_logl,
                         printLocusIndex);
+        fprintf(stdout, " [CHK]");
 
+        chk_next_idx++;
       }
     }
     if (opt_debug_abort == opt_debug_counter)
@@ -6331,15 +6445,101 @@ void cmd_run()
     }
   }
   active_pjumps_dealloc();
+  free(chk_triggers);
+
+  /* write final checkpoint so a completed run can be resumed/extended */
+  if (opt_checkpoint && !opt_onlysummary)
+  {
+    if (opt_migration && opt_debug_migration)
+      for (j = 0; j < opt_locus_count; ++j)
+        migcount_offset[j] = ftell(fp_migcount[j]);
+
+    if (opt_print_genetrees) {
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (!printLocusIndex || printLocusIndex[j])
+          gtree_offset[j] = ftell(fp_gtree[j]);
+        else
+          gtree_offset[j] = 0;
+      }
+    }
+
+    if (printLocusIndex) {
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (printLocusIndex[j])
+          mig_offset[j] = ftell(fp_mig[j]);
+        else
+          mig_offset[j] = 0;
+      }
+    }
+
+    if (opt_print_locusfile)
+      for (j = 0; j < opt_locus_count; ++j) {
+        if (!printLocusIndex || printLocusIndex[j])
+          rates_offset[j] = ftell(fp_locus[j]);
+        else
+          rates_offset[j] = 0;
+      }
+
+    checkpoint_dump(stree,
+                    gtree,
+                    locus,
+                    curstep,
+                    ft_round,
+                    ndspecies,
+                    ftell(fp_mcmc),
+                    ftell(fp_out),
+                    fp_a1b1 ? ftell(fp_a1b1) : 0,
+                    gtree_offset,
+                    mig_offset,
+                    rates_offset,
+                    migcount_offset,
+                    dparam_count,
+                    posterior,
+                    pspecies,
+                    opt_est_delimit ?
+                      delimitation_getparam_count() : 0,
+                    ft_round_rj,
+                    ft_round_spr,
+                    ft_round_snl,
+                    ft_round_theta_gibbs,
+                    ft_round_theta_slide,
+                    ft_round_mrate_gibbs,
+                    ft_round_mrate_slide,
+                    mean_logl,
+                    mean_mrate_row,
+                    mean_mrate_col,
+                    mean_mrate_round,
+                    mean_mrate,
+                    mean_tau,
+                    mean_theta,
+                    mean_phi,
+                    mean_mrate_count,
+                    mean_tau_count,
+                    mean_theta_count,
+                    mean_phi_count,
+                    prec_logpr,
+                    prec_logl,
+                    printLocusIndex);
+    fprintf(stdout, " [CHK]");
+  }
+
   if (!opt_onlysummary)
     timer_print("\n", " spent in MCMC\n\n", fp_out);
 
   #if 0
-  if (opt_ancestry)
+  if (opt_msci && opt_ancestry)
     ancestry_print(stree);
+  if (opt_migration && opt_ancestry)
+    migflow_print(stree);
   #endif
+
   if (opt_ancestry)
-    ancestry_write(stree, gtree);
+  {
+    if (opt_msci)
+      ancestry_write(stree, gtree);
+    if (opt_migration)
+      migflow_write(stree, gtree);
+  }
 
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);

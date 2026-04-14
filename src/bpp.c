@@ -41,9 +41,7 @@ long opt_basefreqs_fixed;
 long opt_bfd_points;
 long opt_burnin;
 long opt_checkpoint;
-long opt_checkpoint_current;
-long opt_checkpoint_initial;
-long opt_checkpoint_step;
+long opt_checkpoint_percent;
 long opt_cleandata;
 long opt_clock;
 long opt_comply;
@@ -222,10 +220,13 @@ char * opt_mcmcfile;
 char * opt_modelparafile;
 char * opt_traitfile;  // morphological traits
 char * opt_msafile;
+char * opt_seqfilep;
+char * opt_concatfilep;
 char * opt_mscifile;
 char * opt_partition_file;
 char * opt_reorder;
 char * opt_resume;
+char * opt_checkpoint_info;
 char * opt_seqDates;
 char * opt_simulate;
 char * opt_streenewick;
@@ -345,6 +346,9 @@ static struct option long_options[] =
   {"keep-labels",          no_argument,       0, 0 },  /* 52 */
   {"wrate_mode",           required_argument, 0, 0 },  /* 53 */
   {"wrate-showeps",        no_argument,       0, 0 },  /* 54 */
+  {"checkpoint-percent",   required_argument, 0, 0 },  /* 55 */
+  {"no-checkpoint",        no_argument,       0, 0 },  /* 56 */
+  {"checkpoint-info",      required_argument, 0, 0 },  /* 57 */
   { 0, 0, 0, 0 }
 };
 
@@ -470,13 +474,12 @@ void args_init(int argc, char ** argv)
   opt_clock_vbar = 0;
   opt_clock_alpha = -1;
 
-  opt_checkpoint = 0;
-  opt_checkpoint_initial = 0;
-  opt_checkpoint_current = 0;
-  opt_checkpoint_step = 0;
+  opt_checkpoint = 1;
+  opt_checkpoint_percent = 10;
   opt_cleandata = 0;
   opt_comply = 0;
   opt_concatfile = NULL;
+  opt_concatfilep = NULL;
   opt_constraintfile = NULL;
   opt_constraint_count = 0;
   opt_corepin = 1;
@@ -590,6 +593,7 @@ void args_init(int argc, char ** argv)
   opt_modelparafile = NULL;
   opt_traitfile = NULL;
   opt_msafile = NULL;
+  opt_seqfilep = NULL;
   opt_msci = 0;
   opt_mscifile = NULL;
   opt_onlysummary = 0;
@@ -958,6 +962,20 @@ void args_init(int argc, char ** argv)
         opt_mrate_gibbs_showall_eps = 1;
         break;
 
+      case 55:
+        opt_checkpoint_percent = atol(optarg);
+        if (opt_checkpoint_percent < 1 || opt_checkpoint_percent > 100)
+          fatal("--checkpoint-percent must be between 1 and 100");
+        break;
+
+      case 56:
+        opt_checkpoint = 0;
+        break;
+
+      case 57:
+        opt_checkpoint_info = optarg;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -999,6 +1017,8 @@ void args_init(int argc, char ** argv)
   if (opt_comply)
     commands++;
   if (opt_bfdriver)
+    commands++;
+  if (opt_checkpoint_info)
     commands++;
 
   /* if more than one independent command, fail */
@@ -1090,6 +1110,7 @@ void cmd_help()
           "  --resume FILENAME        resume analysis from a specified checkpoint file\n"
           "  --msci-create FILENAME   construct an MSci graph using a definitions file\n"
           "  --summary FILENAME       summarize results using specified control file\n"
+          "  --checkpoint-info FILE   display checkpoint file summary and exit\n"
           "\n"
           "Advanced options:\n"
           "  --arch SIMD              force specific vector instruction set (default: auto)\n"
@@ -1106,6 +1127,8 @@ void cmd_help()
           "  --wrate-showeps          show individual step lengths/pjumps for each W\n"
           "  --extend INTEGER         extend resumed analysis by number of MCMC samples\n"
           "  --keep-labels            keep original node labels when summarizing results\n"
+          "  --checkpoint-percent N   checkpoint every N%% of MCMC run (default: 10)\n"
+          "  --no-checkpoint          disable automatic checkpointing\n"
           "\n"
          );
 
@@ -1154,6 +1177,14 @@ int main (int argc, char * argv[])
   getentirecommandline(argc, argv);
 
   args_init(argc, argv);
+
+  if (opt_checkpoint_info)
+  {
+    cmd_checkpoint_info(opt_checkpoint_info);
+    dealloc_switches();
+    free(cmdline);
+    return 0;
+  }
 
   cpu_features_detect();
   cpu_features_show();

@@ -219,7 +219,8 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
-                                      int attrib)
+                                      int attrib,
+                                      const unsigned int * input_weights)
 {
   int i,j;
   char * memptr;
@@ -297,10 +298,10 @@ unsigned int * compress_site_patterns(char ** sequence,
   /* sort the columns and keep original indices */
   ssort1(column, *length, 0, oi);
 
-  /* we have at least one unique site with weight 1 (the first site) */
+  /* we have at least one unique site with its weight (the first site) */
   int compressed_length = 1;
   size_t ref = 0;
-  weight[ref] = 1;
+  weight[ref] = input_weights ? input_weights[oi[0]] : 1;
 
   /* find all unique columns and set their weights */
   int * compressed_oi = (int *)xmalloc(*length * sizeof(int));
@@ -314,10 +315,10 @@ unsigned int * compress_site_patterns(char ** sequence,
       compressed_oi[ref+1] = oi[i];
       ++ref;
       ++compressed_length;
-      weight[ref] = 1;
+      weight[ref] = input_weights ? input_weights[oi[i]] : 1;
     }
     else
-      weight[ref]++;
+      weight[ref] += input_weights ? input_weights[oi[i]] : 1;
   }
 
   /* decode the jc69 encoding */

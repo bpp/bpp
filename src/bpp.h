@@ -86,6 +86,7 @@
 #define PROG_OS "win"
 #include <windows.h>
 #include <psapi.h>
+#include <io.h>    /* _commit, _fileno for atomic checkpoint writes */
 
 #elif __FreeBSD__
 #define PROG_OS "freebsd"
@@ -161,13 +162,15 @@
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
 /* checkpoint version */
-#define VERSION_CHKP 1
+#define VERSION_CHKP 3
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
 
 #define BPP_MAGIC_BYTES 4
 #define BPP_MAGIC "BPPX"
+
+#define BPP_SHA1_DIGEST_SIZE 20
 
 #define BPP_FALSE 0
 #define BPP_TRUE  1
@@ -671,6 +674,10 @@ typedef struct stree_s
   long *** ancestry_count;
   snode_t ** ancestry_tips;
 
+  /* gene flow tracking for migration bands (MSC-M) */
+  long *** migflow_count;
+  snode_t ** migflow_tips;
+
 
   /* morphological traits //Chi */
   int      trait_count;         /* number of trait partitions */
@@ -842,6 +849,9 @@ typedef struct msa_s
   int dtype;
   int model;
   int original_index;
+
+  unsigned int * pattern_weights;  /* weights from compressed file, or NULL */
+  int compress_model;              /* COMPRESS_JC69 or COMPRESS_GENERAL, or -1 */
 
 } msa_t;
 
@@ -1154,9 +1164,7 @@ extern long opt_basefreqs_fixed;
 extern long opt_bfd_points;
 extern long opt_burnin;
 extern long opt_checkpoint;
-extern long opt_checkpoint_current;
-extern long opt_checkpoint_initial;
-extern long opt_checkpoint_step;
+extern long opt_checkpoint_percent;
 extern long opt_cleandata;
 extern long opt_clock;
 extern long opt_comply;
@@ -1341,11 +1349,14 @@ extern char * opt_mcmcfile;
 extern char * opt_modelparafile;
 extern char * opt_traitfile;
 extern char * opt_msafile;
+extern char * opt_seqfilep;
+extern char * opt_concatfilep;
 extern char * opt_mscifile;
 extern char * opt_locusrate_filename;
 extern char * opt_partition_file;
 extern char * opt_reorder;
 extern char * opt_resume;
+extern char * opt_checkpoint_info;
 extern char * opt_seqDates;
 extern char * opt_simulate;
 extern char * opt_streenewick;
@@ -1814,6 +1825,10 @@ unsigned long hash_djb2a(char * s);
 
 unsigned long hash_fnv(char * s);
 
+void sha1_compute(const unsigned char * data,
+                  size_t len,
+                  unsigned char digest[20]);
+
 int hashtable_insert(hashtable_t * ht,
                      void * x,
                      unsigned long hash,
@@ -2152,7 +2167,8 @@ unsigned int * compress_site_patterns(char ** sequence,
                                       const unsigned int * map,
                                       int count,
                                       int * length,
-                                      int attrib);
+                                      int attrib,
+                                      const unsigned int * input_weights);
 
 unsigned long * compress_site_patterns_diploid(char ** sequence,
                                                const unsigned int * map,
@@ -2288,6 +2304,7 @@ int checkpoint_load(gtree_t *** gtreep,
 		    int ** ptr_printLocusIndex);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
+void cmd_checkpoint_info(const char * filename);
 
 /* functions in core_partials.c */
 
@@ -3178,4 +3195,13 @@ void ancestry_update(stree_t * stree, gtree_t ** gtree_list);
 void ancestry_print(stree_t * stree);
 void ancestry_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
 void ancestry_write(stree_t * stree, gtree_t ** gtree_list);
+
+/* functions in migflow.c */
+void migflow_init(stree_t * stree, gtree_t ** gtree_list);
+void migflow_reset(stree_t * stree, gtree_t ** gtree_list);
+void migflow_reset_mean(stree_t * stree, gtree_t ** gtree_list);
+void migflow_update(stree_t * stree, gtree_t ** gtree_list);
+void migflow_print(stree_t * stree);
+void migflow_update_mean(stree_t * stree, gtree_t ** gtree_list, long round);
+void migflow_write(stree_t * stree, gtree_t ** gtree_list);
 

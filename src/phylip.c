@@ -170,9 +170,14 @@ static int whitespace(char c)
 static int parse_header(const char * line,
                         int * seq_count,
                         int * seq_len,
-                        int format)
+                        int format,
+                        int * is_compressed,
+                        int * compress_model)
 {
   int len;
+
+  *is_compressed = 0;
+  *compress_model = -1;
 
   /* read number of sequences */
   if (!(*seq_count = args_getint(line,&len)))
@@ -200,6 +205,31 @@ static int parse_header(const char * line,
   /* if end of line then return successfully */
   if (!*line)
     return 1;
+
+  /* check for pattern-compressed format marker 'P' */
+  if (*line == 'P' || *line == 'p')
+  {
+    *is_compressed = 1;
+    *compress_model = COMPRESS_GENERAL;  /* default if no model specified */
+    ++line;
+    while (*line && whitespace(*line)) ++line;
+
+    if (!strncasecmp(line, "JC69", 4))
+    {
+      *compress_model = COMPRESS_JC69;
+      line += 4;
+    }
+    else if (!strncasecmp(line, "GTR", 3))
+    {
+      *compress_model = COMPRESS_GENERAL;
+      line += 3;
+    }
+    /* else: no model specified, default to COMPRESS_GENERAL (backward compat) */
+
+    while (*line && whitespace(*line)) ++line;
+    if (!*line) return 1;
+    return 0;  /* unexpected trailing content */
+  }
 
   /* otherwise, continue only if interleaved format specified, otherwise die */
   if (format == PHYLIP_SEQUENTIAL)
@@ -353,16 +383,22 @@ msa_t * phylip_parse_interleaved(phylip_t * fd)
   int seqno;
   long headerlen;
 
-  msa_t * msa = (msa_t *)xmalloc(sizeof(msa_t));
+  msa_t * msa = (msa_t *)xcalloc(1,sizeof(msa_t));
 
   while (emptyline(fd->line)) getnextline(fd);
 
   /* read header */
+  int is_compressed_il = 0, compress_model_il = -1;
   if (!parse_header(fd->line,
                     &(msa->count),
                     &(msa->length),
-                    PHYLIP_INTERLEAVED))
+                    PHYLIP_INTERLEAVED,
+                    &is_compressed_il,
+                    &compress_model_il))
     return NULL;
+
+  if (is_compressed_il)
+    fatal("Pattern-compressed format is not supported for interleaved phylip");
 
   /* allocate msa placeholders */
   msa->sequence = (char **)xcalloc((size_t)(msa->count),sizeof(char *));
@@ -510,17 +546,23 @@ msa_t * phylip_parse_sequential(phylip_t * fd)
 {
   int i,j;
   long headerlen;
+  int is_compressed = 0;
+  int file_compress_model = -1;
 
   msa_t * msa = (msa_t *)xcalloc(1,sizeof(msa_t));
 
   while (emptyline(fd->line)) getnextline(fd);
-    
+
   /* read header */
   if (!parse_header(fd->line,
                     &(msa->count),
                     &(msa->length),
-                    PHYLIP_SEQUENTIAL))
+                    PHYLIP_SEQUENTIAL,
+                    &is_compressed,
+                    &file_compress_model))
     return NULL;
+
+  msa->compress_model = file_compress_model;
 
   msa->sequence = (char **)xcalloc((size_t)(msa->count),sizeof(char *));
   msa->label = (char **)xcalloc((size_t)(msa->count),sizeof(char *));
@@ -611,9 +653,51 @@ msa_t * phylip_parse_sequential(phylip_t * fd)
     ++seqno;
     /* TODO: Updated for BPP */
     if (seqno == msa->count)
+    {
+      if (is_compressed)
+      {
+        /* read weight vector from next line */
+        char * wp = getnextline(fd);
+        if (!wp)
+        {
+          bpp_errno = ERROR_PHYLIP_SYNTAX;
+          snprintf(bpp_errmsg, 200,
+                   "Expected weight vector for compressed alignment");
+          msa_destroy(msa);
+          return NULL;
+        }
+        msa->pattern_weights = (unsigned int *)xmalloc(
+            (size_t)msa->length * sizeof(unsigned int));
+        for (int w = 0; w < msa->length; ++w)
+        {
+          while (*wp && whitespace(*wp)) ++wp;
+          if (!*wp)
+          {
+            bpp_errno = ERROR_PHYLIP_SYNTAX;
+            snprintf(bpp_errmsg, 200,
+                     "Weight vector has fewer entries (%d) than patterns (%d)",
+                     w, msa->length);
+            msa_destroy(msa);
+            return NULL;
+          }
+          char * end;
+          long val = strtol(wp, &end, 10);
+          if (end == wp || val <= 0)
+          {
+            bpp_errno = ERROR_PHYLIP_SYNTAX;
+            snprintf(bpp_errmsg, 200,
+                     "Invalid weight value at position %d", w);
+            msa_destroy(msa);
+            return NULL;
+          }
+          msa->pattern_weights[w] = (unsigned int)val;
+          wp = end;
+        }
+      }
       return msa;
+    }
   }
-  
+
   if (seqno != msa->count)
   {
     bpp_errno = ERROR_PHYLIP_SYNTAX;

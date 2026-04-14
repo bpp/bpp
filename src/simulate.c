@@ -1247,6 +1247,104 @@ static void write_concat_seqs(FILE * fp, msa_t ** msa)
   free(x);
 }
 
+static void write_seqs_compressed(FILE * fp, msa_t * msa)
+{
+  long i,j;
+  int compress_method;
+
+  /* select compression method based on global model */
+  if (opt_model == BPP_DNA_MODEL_JC69)
+    compress_method = COMPRESS_JC69;
+  else
+    compress_method = COMPRESS_GENERAL;
+
+  /* allocate a temporary msa_t with ASCII-converted sequences */
+  msa_t * tmp = (msa_t *)xcalloc(1, sizeof(msa_t));
+  tmp->count  = msa->count;
+  tmp->length = (int)opt_locus_simlen;
+  tmp->dtype  = BPP_DATA_DNA;
+  tmp->model  = (int)opt_model;
+  tmp->label  = msa->label;  /* shared pointer; do NOT free in cleanup */
+
+  tmp->sequence = (char **)xmalloc((size_t)tmp->count * sizeof(char *));
+  for (i = 0; i < tmp->count; ++i)
+  {
+    tmp->sequence[i] = (char *)xmalloc((size_t)(tmp->length + 1) * sizeof(char));
+    for (j = 0; j < opt_locus_simlen; ++j)
+      tmp->sequence[i][j] = charmap_nt_tcag[(int)msa->sequence[i][j]];
+    tmp->sequence[i][tmp->length] = 0;
+  }
+
+  /* compress and get pattern weights */
+  unsigned int * weights = compress_site_patterns(tmp->sequence,
+                                                  pll_map_nt,
+                                                  tmp->count,
+                                                  &(tmp->length),
+                                                  compress_method,
+                                                  NULL);
+
+  /* write using existing msa_print_phylip with a single-element array */
+  msa_t * arr[1] = { tmp };
+  unsigned int * warr[1] = { weights };
+  msa_print_phylip(fp, arr, 1, warr);
+
+  /* cleanup */
+  free(weights);
+  for (i = 0; i < tmp->count; ++i)
+    free(tmp->sequence[i]);
+  free(tmp->sequence);
+  /* tmp->label was shared - do NOT free */
+  free(tmp);
+}
+
+static void write_concat_seqs_compressed(FILE * fp, msa_t ** msa)
+{
+  long i,j,k;
+  int compress_method;
+
+  if (opt_model == BPP_DNA_MODEL_JC69)
+    compress_method = COMPRESS_JC69;
+  else
+    compress_method = COMPRESS_GENERAL;
+
+  long total_length = opt_locus_simlen * opt_locus_count;
+
+  msa_t * tmp = (msa_t *)xcalloc(1, sizeof(msa_t));
+  tmp->count  = msa[0]->count;
+  tmp->length = (int)total_length;
+  tmp->dtype  = BPP_DATA_DNA;
+  tmp->model  = (int)opt_model;
+  tmp->label  = msa[0]->label;  /* shared pointer */
+
+  tmp->sequence = (char **)xmalloc((size_t)tmp->count * sizeof(char *));
+  for (i = 0; i < tmp->count; ++i)
+  {
+    tmp->sequence[i] = (char *)xmalloc((size_t)(total_length + 1) * sizeof(char));
+    for (k = 0; k < opt_locus_count; ++k)
+      for (j = 0; j < opt_locus_simlen; ++j)
+        tmp->sequence[i][k * opt_locus_simlen + j] =
+            charmap_nt_tcag[(int)msa[k]->sequence[i][j]];
+    tmp->sequence[i][total_length] = 0;
+  }
+
+  unsigned int * weights = compress_site_patterns(tmp->sequence,
+                                                  pll_map_nt,
+                                                  tmp->count,
+                                                  &(tmp->length),
+                                                  compress_method,
+                                                  NULL);
+
+  msa_t * arr[1] = { tmp };
+  unsigned int * warr[1] = { weights };
+  msa_print_phylip(fp, arr, 1, warr);
+
+  free(weights);
+  for (i = 0; i < tmp->count; ++i)
+    free(tmp->sequence[i]);
+  free(tmp->sequence);
+  free(tmp);
+}
+
 
 
 /*** Ziheng 2020-10-17
@@ -1642,6 +1740,8 @@ static void simulate(stree_t * stree)
   FILE * fp_trait = NULL;
   FILE * fp_seq = NULL;
   FILE * fp_concat = NULL;
+  FILE * fp_seqp = NULL;
+  FILE * fp_concatp = NULL;
   FILE * fp_tree = NULL;
   FILE * fp_param = NULL;
   FILE * fp_map = NULL;
@@ -1662,6 +1762,10 @@ static void simulate(stree_t * stree)
     fp_seq = xopen(opt_msafile, "w");
   if (opt_concatfile)
     fp_concat = xopen(opt_concatfile, "w");
+  if (opt_seqfilep)
+    fp_seqp = xopen(opt_seqfilep, "w");
+  if (opt_concatfilep)
+    fp_concatp = xopen(opt_concatfilep, "w");
   if (opt_treefile)
     fp_tree = xopen(opt_treefile, "w");
   //ANNA fix this
@@ -1683,6 +1787,10 @@ static void simulate(stree_t * stree)
     fprintf(stdout, "Trees -> %s\n", opt_treefile);
   if (opt_concatfile)
     fprintf(stdout, "Concatenated sequence alignment -> %s\n", opt_msafile);
+  if (opt_seqfilep)
+    fprintf(stdout, "Pattern-compressed sequence data file -> %s\n", opt_seqfilep);
+  if (opt_concatfilep)
+    fprintf(stdout, "Pattern-compressed concatenated alignment -> %s\n", opt_concatfilep);
   if (opt_modelparafile)
     fprintf(stdout, "Model parameters for loci -> %s\n", opt_modelparafile);
   if (opt_mapfile)
@@ -1935,10 +2043,9 @@ static void simulate(stree_t * stree)
         fprintf(fp_param, " %9.6f", vi_array[i]);
     }
 
-    /* create sequence labels and populate msa structure
-       (always needed for gene tree simulation) */
-    msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
-    if (opt_msafile)
+    if (opt_msafile || opt_seqfilep || opt_concatfile || opt_concatfilep || opt_treefile)
+    {
+      msa[i]->label = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
       msa[i]->sequence = (char **)xmalloc((size_t)locus_seqcount*sizeof(char *));
 
     for (j = 0, m = 0; j < stree->tip_count + opt_seqAncestral; ++j)
@@ -2098,7 +2205,7 @@ static void simulate(stree_t * stree)
       }
     }
 
-    if (opt_msafile)
+    if (opt_msafile || opt_seqfilep || opt_concatfile || opt_concatfilep)
     {
       /* calculate rates for each site */
       if (locus_siterate_alpha)
@@ -2236,7 +2343,10 @@ static void simulate(stree_t * stree)
       }
 
       /* write sequences */
-      write_seqs(fp_seq, msa[i], stree->tip_count);
+      if (opt_msafile)
+        write_seqs(fp_seq, msa[i], stree->tip_count);
+      if (opt_seqfilep)
+        write_seqs_compressed(fp_seqp, msa[i]);
       H = msa_mean_heterozygosity(msa[i]->count, opt_locus_simlen, msa[i]);
       if (opt_simulate_read_depth)
       {
@@ -2279,6 +2389,11 @@ static void simulate(stree_t * stree)
   {
     fprintf(stdout, "Generating concatenated sequence alignment...\n");
     write_concat_seqs(fp_concat, msa);
+  }
+  if (opt_concatfilep)
+  {
+    fprintf(stdout, "Generating pattern-compressed concatenated alignment...\n");
+    write_concat_seqs_compressed(fp_concatp, msa);
   }
 
   if (opt_migration)
@@ -2396,6 +2511,10 @@ static void simulate(stree_t * stree)
     fclose(fp_seq);
   if (opt_concatfile)
     fclose(fp_concat);
+  if (opt_seqfilep)
+    fclose(fp_seqp);
+  if (opt_concatfilep)
+    fclose(fp_concatp);
   if (opt_treefile)
     fclose(fp_tree);
   if (opt_print_locus)

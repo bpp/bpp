@@ -59,6 +59,7 @@ OBJ_BPP = \
 	gamma.obj \
 	gtree.obj \
 	hash.obj \
+	sha1.obj \
 	list.obj \
 	locus.obj \
 	mapping.obj \
@@ -91,6 +92,7 @@ OBJ_BPP = \
 	a1b1.obj \
 	morph.obj \
 	ancestry.obj \
+	migflow.obj \
 
 all: $(PROG)
 

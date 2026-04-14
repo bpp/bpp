@@ -156,9 +156,6 @@ void load_chk_header(FILE * fp)
   if (sizeof(double) != chk_size_double)
     fatal("Mismatching double size");
 
-  unsigned int sections;
-  unsigned long size_section;
-
   if (!LOAD(&opt_threads,1,fp))
     fatal("Cannot read number of threads");
   if (!LOAD(&opt_threads_start,1,fp))
@@ -176,18 +173,6 @@ void load_chk_header(FILE * fp)
   if (!LOAD(rng,opt_threads,fp))
     fatal("Cannot read RNG states");
   set_legacy_rndu_array(rng);
-
-  if (!LOAD(&sections,1,fp))
-    fatal("Cannot read number of sections");
-  #if 0
-  printf(" Sections: %u\n", sections);
-  #endif
-
-  if (!LOAD(&size_section,1,fp))
-    fatal("Cannot read number of sections");
-  #if 0
-  printf("   Section 1: %ld bytes\n\n", size_section);
-  #endif
 }
 
 int load_string(FILE * fp, char ** buffer)
@@ -353,13 +338,9 @@ static void load_chk_section_1(FILE * fp,
 
   /* read checkpoint info */
   if (!LOAD(&opt_checkpoint,1,fp))
-    fatal("Cannot read 'checkpoint' flag");
-  if (!LOAD(&opt_checkpoint_current,1,fp))
-    fatal("Cannot read 'checkpoint' status");
-  if (!LOAD(&opt_checkpoint_initial,1,fp))
-    fatal("Cannot read 'checkpoint' tag initial value");
-  if (!LOAD(&opt_checkpoint_step,1,fp))
-    fatal("Cannot read 'checkpoint' tag step value");
+    fatal("Cannot read checkpoint flag");
+  if (!LOAD(&opt_checkpoint_percent,1,fp))
+    fatal("Cannot read checkpoint percent");
 
   /* read network info */
   if (!LOAD(&opt_msci,1,fp))
@@ -369,6 +350,10 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read migration flag");
   if (!LOAD(&opt_migration_count,1,fp))
     fatal("Cannot read migration count");
+  if (!LOAD(&opt_finetune_mrate_mode,1,fp))
+    fatal("Cannot read finetune mrate mode");
+  if (!LOAD(&opt_est_geneflow,1,fp))
+    fatal("Cannot read est_geneflow flag");
 
   /* read method info */
   if (!LOAD(&opt_method,1,fp))
@@ -787,12 +772,6 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_theta_gibbs");
   if (!(LOAD(g_pj_theta_slide, opt_finetune_theta_count, fp)))
     fatal("Cannot read g_pj_theta_slide");
-  /* DEBUG */
-  printf("g_pj_theta_gibbs[0] = %f\n", g_pj_theta_gibbs[0]);
-  printf("g_pj_theta_slide[0] = %f\n", g_pj_theta_slide[0]);
-  printf("opt_finetune_theta_count: %ld\n", opt_finetune_theta_count);
-  printf("g_pj_gage = %f\n", g_pj_gage);
-  printf("g_pj_gspr = %f\n", g_pj_gspr);
   if (!(LOAD(&g_pj_tau, 1, fp)))
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))
@@ -822,7 +801,6 @@ static void load_chk_section_1(FILE * fp,
 
   if (opt_migration && !opt_est_geneflow)
   {
-    printf("opt_mrate_slide_prob: %f\n", opt_mrate_slide_prob);
     assert(opt_mrate_slide_prob >= 0 && opt_mrate_slide_prob <= 1);
 
     long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
@@ -834,7 +812,6 @@ static void load_chk_section_1(FILE * fp,
       g_pj_mrate_slide = (double *)xmalloc((size_t)slots * sizeof(double));
       if (!LOAD(g_pj_mrate_slide,slots,fp))
         fatal("Cannot read g_pj_mrate_slide...");
-      printf("g_pj_mrate_slide: %f\n", g_pj_mrate_slide[0]);
     }
     if (opt_mrate_slide_prob < 1)
     {
@@ -886,7 +863,6 @@ static void load_chk_section_1(FILE * fp,
       fatal("Cannot read rates files offsets");
   }
 
-  printf("Opt_debug_migration: %ld\n", opt_debug_migration);
   if (opt_debug_migration)
   {
     *migcount_offset = (long *)xmalloc((size_t)opt_locus_count*sizeof(long));
@@ -2196,6 +2172,43 @@ int checkpoint_load(gtree_t *** gtreep,
   if (!fp)
     fatal("Cannot open checkpoint file %s", opt_resume);
 
+  /* verify SHA-1 integrity */
+  {
+    long file_size, data_size;
+    unsigned char * buffer;
+    unsigned char stored[BPP_SHA1_DIGEST_SIZE];
+    unsigned char computed[BPP_SHA1_DIGEST_SIZE];
+
+    fseek(fp, 0, SEEK_END);
+    file_size = ftell(fp);
+    if (file_size <= BPP_SHA1_DIGEST_SIZE)
+      fatal("Checkpoint file %s is too small", opt_resume);
+
+    data_size = file_size - BPP_SHA1_DIGEST_SIZE;
+    buffer = (unsigned char *)xmalloc((size_t)data_size);
+    fseek(fp, 0, SEEK_SET);
+    if (fread(buffer, 1, (size_t)data_size, fp) != (size_t)data_size)
+    {
+      free(buffer);
+      fatal("Cannot read checkpoint file %s", opt_resume);
+    }
+    if (fread(stored, 1, BPP_SHA1_DIGEST_SIZE, fp) != BPP_SHA1_DIGEST_SIZE)
+    {
+      free(buffer);
+      fatal("Cannot read SHA-1 from checkpoint file %s", opt_resume);
+    }
+
+    sha1_compute(buffer, (size_t)data_size, computed);
+    free(buffer);
+
+    if (memcmp(stored, computed, BPP_SHA1_DIGEST_SIZE) != 0)
+      fatal("Checkpoint file %s failed integrity check.\n"
+            "       The file may be corrupted or from an older BPP version.",
+            opt_resume);
+
+    fseek(fp, 0, SEEK_SET);  /* rewind for normal loading */
+  }
+
   /* read header */
   #if 0
   fprintf(stdout,"HEADER:\n");
@@ -2327,4 +2340,1137 @@ void checkpoint_truncate(const char * filename, long offset)
     fatal("Cannot truncate file %s to %ld bytes...", filename, offset);
   
   fclose(fp);
+}
+
+static const char * info_method_string(long method)
+{
+  switch (method)
+  {
+    case METHOD_00: return "A00 (fixed species tree, fixed delimitation)";
+    case METHOD_01: return "A01 (species tree inference)";
+    case METHOD_10: return "A10 (species delimitation)";
+    case METHOD_11: return "A11 (joint species tree + delimitation)";
+    default: return "Unknown";
+  }
+}
+
+static const char * info_clock_string(long clock)
+{
+  switch (clock)
+  {
+    case BPP_CLOCK_GLOBAL: return "Global (strict)";
+    case BPP_CLOCK_IND:    return "Independent rates (relaxed)";
+    case BPP_CLOCK_CORR:   return "Correlated rates (autocorrelated)";
+    case BPP_CLOCK_SIMPLE: return "Simple relaxed clock";
+    default: return "Unknown";
+  }
+}
+
+static const char * info_theta_prior_string(long prior)
+{
+  switch (prior)
+  {
+    case BPP_THETA_PRIOR_INVGAMMA: return "Inverse-Gamma";
+    case BPP_THETA_PRIOR_GAMMA:    return "Gamma";
+    default: return "Unknown";
+  }
+}
+
+static const char * info_linkedtheta_string(long lt)
+{
+  switch (lt)
+  {
+    case BPP_LINKEDTHETA_NONE:  return "None (independent)";
+    case BPP_LINKEDTHETA_ALL:   return "All (M0)";
+    case BPP_LINKEDTHETA_INNER: return "Inner nodes (M1)";
+    case BPP_LINKEDTHETA_MSCI:  return "MSC-I (M2)";
+    case BPP_LINKEDTHETA_MSCM:  return "MSC-M (M3)";
+    default: return "Unknown";
+  }
+}
+
+static void info_filesize_string(long size, char * buf, size_t bufsize)
+{
+  if (size < 1024L)
+    snprintf(buf, bufsize, "%ld bytes", size);
+  else if (size < 1024L * 1024)
+    snprintf(buf, bufsize, "%.1f KB", size / 1024.0);
+  else if (size < 1024L * 1024 * 1024)
+    snprintf(buf, bufsize, "%.1f MB", size / (1024.0 * 1024.0));
+  else
+    snprintf(buf, bufsize, "%.2f GB", size / (1024.0 * 1024.0 * 1024.0));
+}
+
+#define INFO_HLINE "----------------------------------------" \
+                   "----------------------------------------"
+#define INFO_HLINE2 "========================================" \
+                    "========================================"
+
+void cmd_checkpoint_info(const char * filename)
+{
+  long i;
+  FILE * fp;
+  long file_size;
+  int sha1_ok = 1;
+
+  /* open file and get size */
+
+  fp = fopen(filename, "rb");
+  if (!fp)
+    fatal("Cannot open checkpoint file %s", filename);
+
+  fseek(fp, 0, SEEK_END);
+  file_size = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  /* SHA-1 verification */
+
+  if (file_size <= BPP_SHA1_DIGEST_SIZE)
+  {
+    sha1_ok = 0;
+  }
+  else
+  {
+    long data_size = file_size - BPP_SHA1_DIGEST_SIZE;
+    unsigned char * buffer = (unsigned char *)xmalloc((size_t)data_size);
+    unsigned char stored[BPP_SHA1_DIGEST_SIZE];
+    unsigned char computed[BPP_SHA1_DIGEST_SIZE];
+
+    fseek(fp, 0, SEEK_SET);
+    if (fread(buffer, 1, (size_t)data_size, fp) != (size_t)data_size)
+    {
+      free(buffer);
+      sha1_ok = 0;
+    }
+    else
+    {
+      if (fread(stored, 1, BPP_SHA1_DIGEST_SIZE, fp) != BPP_SHA1_DIGEST_SIZE)
+      {
+        free(buffer);
+        sha1_ok = 0;
+      }
+      else
+      {
+        sha1_compute(buffer, (size_t)data_size, computed);
+        free(buffer);
+        sha1_ok = (memcmp(stored, computed, BPP_SHA1_DIGEST_SIZE) == 0);
+      }
+    }
+    fseek(fp, 0, SEEK_SET);
+  }
+
+  /* read header */
+
+  BYTE magic[BPP_MAGIC_BYTES];
+  BYTE hbuf[16];
+  BYTE tbuf[3];
+
+  if (!LOAD(magic, BPP_MAGIC_BYTES, fp))
+    fatal("Cannot read checkpoint header");
+  if (memcmp(magic, BPP_MAGIC, BPP_MAGIC_BYTES))
+    fatal("File %s is not a BPP checkpoint file", filename);
+
+  if (!LOAD(hbuf, 16, fp))
+    fatal("Cannot read version information");
+
+  long version_major = (hbuf[0]) | (hbuf[1] << 8) | (hbuf[2] << 16) | (hbuf[3] << 24);
+  long version_minor = (hbuf[4]) | (hbuf[5] << 8) | (hbuf[6] << 16) | (hbuf[7] << 24);
+  long version_patch = (hbuf[8]) | (hbuf[9] << 8) | (hbuf[10] << 16) | (hbuf[11] << 24);
+  long version_chkp  = (hbuf[12]) | (hbuf[13] << 8) | (hbuf[14] << 16) | (hbuf[15] << 24);
+
+  if (!LOAD(tbuf, 3, fp))
+    fatal("Cannot read data type sizes");
+  size_t sz_int    = tbuf[0];
+  size_t sz_long   = tbuf[1];
+  size_t sz_double = tbuf[2];
+
+  int version_ok = (version_major == VERSION_MAJOR) &&
+                   (version_minor == VERSION_MINOR) &&
+                   (version_patch == VERSION_PATCH);
+
+  /* read thread info */
+  long threads, threads_start, threads_step;
+  if (!LOAD(&threads, 1, fp))
+    fatal("Cannot read number of threads");
+  if (!LOAD(&threads_start, 1, fp))
+    fatal("Cannot read first thread slot");
+  if (!LOAD(&threads_step, 1, fp))
+    fatal("Cannot read thread stepping");
+
+  /* skip RNG states */
+  fseek(fp, threads * sizeof(unsigned int), SEEK_CUR);
+
+  /* print header info */
+
+  char szbuf[64];
+  info_filesize_string(file_size, szbuf, sizeof(szbuf));
+
+  fprintf(stdout, "\n%s\n", INFO_HLINE2);
+  fprintf(stdout, "  BPP Checkpoint Summary\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE2);
+
+  fprintf(stdout, "  %-22s: %s\n", "File", filename);
+  fprintf(stdout, "  %-22s: %s\n", "File size", szbuf);
+  fprintf(stdout, "  %-22s: %s\n", "SHA-1 integrity",
+          sha1_ok ? "PASSED" : "FAILED");
+  fprintf(stdout, "  %-22s: %ld.%ld.%ld\n", "BPP version",
+          version_major, version_minor, version_patch);
+  fprintf(stdout, "  %-22s: %ld\n", "Checkpoint format", version_chkp);
+  fprintf(stdout, "  %-22s: int(%zu) long(%zu) double(%zu)\n",
+          "Data type sizes", sz_int, sz_long, sz_double);
+
+  if (!version_ok)
+  {
+    fprintf(stdout, "\n  WARNING: Checkpoint was created by BPP %ld.%ld.%ld "
+            "but this is BPP %d.%d.%d.\n"
+            "  Cannot read checkpoint contents.\n\n",
+            version_major, version_minor, version_patch,
+            VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+    fprintf(stdout, "%s\n\n", INFO_HLINE2);
+    fclose(fp);
+    return;
+  }
+
+  if (sizeof(int) != sz_int || sizeof(long) != sz_long ||
+      sizeof(double) != sz_double)
+  {
+    fprintf(stdout, "\n  WARNING: Data type sizes do not match this platform.\n"
+            "  Cannot read checkpoint contents.\n\n");
+    fprintf(stdout, "%s\n\n", INFO_HLINE2);
+    fclose(fp);
+    return;
+  }
+
+  /* ===================================================================
+     Section 1: Configuration
+     Mirrors load_chk_section_1() read order exactly
+     =================================================================== */
+
+  long seed;
+  char * cfile_s = NULL;
+  char * msafile_s = NULL;
+  char * constraintfile_s = NULL;
+  char * mapfile_s = NULL;
+  char * jobname_s = NULL;
+  char * a1b1file_s = NULL;
+  char * mcmcfile_s = NULL;
+  long constraint_count;
+  long mapfile_present;
+  long print_a1b1;
+  long checkpoint_on, checkpoint_pct;
+  long msci, migration, migration_count;
+  long finetune_mrate_mode, est_geneflow;
+  long method;
+  long est_delimit, rjmcmc_method;
+  double rjmcmc_epsilon = 0, rjmcmc_alpha = 0, rjmcmc_mean = 0;
+  long est_stree;
+  long delimit_prior;
+  unsigned int stree_tip_count, stree_inner_count;
+  unsigned int stree_hybrid_count, stree_edge_count;
+  char ** labels = NULL;
+  long * sp_seqcount = NULL;
+  long usedata, usedata_fix_gtree, cleandata, locus_count;
+  long print_samples, print_locusrate, print_hscalars;
+  long print_genetrees, print_rates, print_qmatrix;
+  long print_locusfile, print_locus;
+  long keep_labels;
+  long theta_prior, est_theta, linkedtheta, theta_prop;
+  double theta_alpha, theta_beta;
+  double theta_gibbs_eps, theta_slide_prob;
+  double phi_slide_prob, mrate_slide_prob;
+  long tau_dist;
+  double tau_alpha, tau_beta;
+  double phi_alpha, phi_beta;
+  double mig_alpha, mig_beta;
+  long model, alpha_cats;
+  double alpha_alpha, alpha_beta;
+  long est_locusrate, est_mubar, est_heredity;
+  double heredity_alpha, heredity_beta;
+  long clock;
+  long rate_prior, locusrate_prior;
+  long * diploid_arr = NULL;
+  long diploid_size;
+  long burnin, samplefreq, samples;
+  unsigned long curstep;
+  long ft_round, ndspecies;
+  long load_balance;
+  long debug_migration;
+  long mig_vrates_exist;
+  migspec_t * mig_specs = NULL;
+
+  /* seed */
+  if (!LOAD(&seed, 1, fp)) fatal("Cannot read seed");
+
+  /* control file */
+  if (!load_string(fp, &cfile_s)) fatal("Cannot read control file name");
+
+  /* MSA file */
+  if (!load_string(fp, &msafile_s)) fatal("Cannot read MSA file name");
+
+  /* constraint file */
+  if (!LOAD(&constraint_count, 1, fp)) fatal("Cannot read constraint count");
+  if (constraint_count)
+    if (!load_string(fp, &constraintfile_s))
+      fatal("Cannot read constraint file name");
+
+  /* map file */
+  if (!LOAD(&mapfile_present, 1, fp)) fatal("Cannot read mapfile flag");
+  if (mapfile_present)
+    if (!load_string(fp, &mapfile_s)) fatal("Cannot read map file name");
+
+  /* output file */
+  if (!load_string(fp, &jobname_s)) fatal("Cannot read output file name");
+
+  /* a1b1 file */
+  if (!LOAD(&print_a1b1, 1, fp)) fatal("Cannot read a1b1 flag");
+  if (print_a1b1)
+    if (!load_string(fp, &a1b1file_s)) fatal("Cannot read a1b1 file name");
+
+  /* mcmc file */
+  if (!load_string(fp, &mcmcfile_s)) fatal("Cannot read mcmc file name");
+
+  /* checkpoint info */
+  if (!LOAD(&checkpoint_on, 1, fp)) fatal("Cannot read checkpoint flag");
+  if (!LOAD(&checkpoint_pct, 1, fp)) fatal("Cannot read checkpoint percent");
+
+  /* network / migration info */
+  if (!LOAD(&msci, 1, fp)) fatal("Cannot read msci flag");
+  if (!LOAD(&migration, 1, fp)) fatal("Cannot read migration flag");
+  if (!LOAD(&migration_count, 1, fp)) fatal("Cannot read migration count");
+  if (!LOAD(&finetune_mrate_mode, 1, fp))
+    fatal("Cannot read finetune mrate mode");
+  if (!LOAD(&est_geneflow, 1, fp)) fatal("Cannot read est_geneflow flag");
+
+  /* method */
+  if (!LOAD(&method, 1, fp)) fatal("Cannot read method");
+
+  /* species delimitation */
+  if (!LOAD(&est_delimit, 1, fp)) fatal("Cannot read est_delimit");
+  if (!LOAD(&rjmcmc_method, 1, fp)) fatal("Cannot read rjmcmc_method");
+
+  if (rjmcmc_method == 0)
+  {
+    if (!LOAD(&rjmcmc_epsilon, 1, fp)) fatal("Cannot read rjmcmc epsilon");
+    if (!LOAD(dummy, sizeof(double), fp)) fatal("Cannot read rjmcmc dummy");
+  }
+  else
+  {
+    if (!LOAD(&rjmcmc_alpha, 1, fp)) fatal("Cannot read rjmcmc alpha");
+    if (!LOAD(&rjmcmc_mean, 1, fp)) fatal("Cannot read rjmcmc mean");
+  }
+
+  /* species tree estimation */
+  if (!LOAD(&est_stree, 1, fp)) fatal("Cannot read est_stree");
+  if (!LOAD(dummy, 3 * sizeof(double), fp)) fatal("Cannot read stree dummy");
+
+  /* species model prior */
+  if (!LOAD(&delimit_prior, 1, fp)) fatal("Cannot read delimit_prior");
+
+  /* species & tree counts */
+  if (!LOAD(&stree_tip_count, 1, fp)) fatal("Cannot read tip count");
+  if (!LOAD(&stree_inner_count, 1, fp)) fatal("Cannot read inner count");
+  if (!LOAD(&stree_hybrid_count, 1, fp)) fatal("Cannot read hybrid count");
+  if (!LOAD(&stree_edge_count, 1, fp)) fatal("Cannot read edge count");
+
+  /* species labels */
+  labels = (char **)xmalloc((size_t)(stree_tip_count + stree_hybrid_count) *
+                            sizeof(char *));
+  for (i = 0; i < stree_tip_count; ++i)
+    if (!load_string(fp, labels + i)) fatal("Cannot read species label");
+  for (i = 0; i < stree_hybrid_count; ++i)
+    if (!load_string(fp, labels + stree_tip_count + i))
+      fatal("Cannot read hybrid label");
+
+  /* sequences per species */
+  sp_seqcount = (long *)xmalloc((size_t)stree_tip_count * sizeof(long));
+  if (!LOAD(sp_seqcount, stree_tip_count, fp))
+    fatal("Cannot read sp_seqcount");
+
+  /* usedata, cleandata, locus_count */
+  if (!LOAD(&usedata, 1, fp)) fatal("Cannot read usedata");
+  if (!LOAD(&usedata_fix_gtree, 1, fp)) fatal("Cannot read usedata_fix_gtree");
+  if (!LOAD(&cleandata, 1, fp)) fatal("Cannot read cleandata");
+  if (!LOAD(&locus_count, 1, fp)) fatal("Cannot read locus_count");
+
+  /* print flags */
+  if (!LOAD(&print_samples, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_locusrate, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_hscalars, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_genetrees, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_rates, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_qmatrix, 1, fp)) fatal("Cannot read print flags");
+  if (!LOAD(&print_locusfile, 1, fp)) fatal("Cannot read print flags");
+
+  if (!LOAD(&print_locus, 1, fp)) fatal("Cannot read print_locus");
+  if (print_locus)
+  {
+    /* skip print_locus_num array + printLocusIndex array */
+    fseek(fp, print_locus * sizeof(long), SEEK_CUR);
+    fseek(fp, locus_count * sizeof(int), SEEK_CUR);
+  }
+
+  /* keep_labels */
+  if (!LOAD(&keep_labels, 1, fp)) fatal("Cannot read keep_labels");
+
+  /* theta prior */
+  if (!LOAD(&theta_prior, 1, fp)) fatal("Cannot read theta_prior");
+  if (!LOAD(&theta_alpha, 1, fp)) fatal("Cannot read theta_alpha");
+  if (!LOAD(&theta_beta, 1, fp)) fatal("Cannot read theta_beta");
+  if (!LOAD(&est_theta, 1, fp)) fatal("Cannot read est_theta");
+  if (!LOAD(&linkedtheta, 1, fp)) fatal("Cannot read linkedtheta");
+  if (!LOAD(&theta_prop, 1, fp)) fatal("Cannot read theta_prop");
+  if (!LOAD(&theta_gibbs_eps, 1, fp)) fatal("Cannot read theta_gibbs_eps");
+  if (!LOAD(&theta_slide_prob, 1, fp)) fatal("Cannot read theta_slide_prob");
+  if (!LOAD(&phi_slide_prob, 1, fp)) fatal("Cannot read phi_slide_prob");
+  if (!LOAD(&mrate_slide_prob, 1, fp)) fatal("Cannot read mrate_slide_prob");
+
+  /* tau prior */
+  if (!LOAD(&tau_dist, 1, fp)) fatal("Cannot read tau_dist");
+  if (!LOAD(&tau_alpha, 1, fp)) fatal("Cannot read tau_alpha");
+  if (!LOAD(&tau_beta, 1, fp)) fatal("Cannot read tau_beta");
+
+  /* phi prior */
+  if (!LOAD(&phi_alpha, 1, fp)) fatal("Cannot read phi_alpha");
+  if (!LOAD(&phi_beta, 1, fp)) fatal("Cannot read phi_beta");
+
+  /* migration prior */
+  if (!LOAD(&mig_alpha, 1, fp)) fatal("Cannot read mig_alpha");
+  if (!LOAD(&mig_beta, 1, fp)) fatal("Cannot read mig_beta");
+
+  /* substitution model */
+  if (!LOAD(&model, 1, fp)) fatal("Cannot read model");
+
+  /* gamma rate variation */
+  if (!LOAD(&alpha_cats, 1, fp)) fatal("Cannot read alpha_cats");
+  if (!LOAD(&alpha_alpha, 1, fp)) fatal("Cannot read alpha_alpha");
+  if (!LOAD(&alpha_beta, 1, fp)) fatal("Cannot read alpha_beta");
+
+  /* locusrate, mubar, heredity */
+  if (!LOAD(&est_locusrate, 1, fp)) fatal("Cannot read est_locusrate");
+  if (!LOAD(&est_mubar, 1, fp)) fatal("Cannot read est_mubar");
+  if (!LOAD(&est_heredity, 1, fp)) fatal("Cannot read est_heredity");
+  if (!LOAD(&heredity_alpha, 1, fp)) fatal("Cannot read heredity_alpha");
+  if (!LOAD(&heredity_beta, 1, fp)) fatal("Cannot read heredity_beta");
+
+  /* clock */
+  if (!LOAD(&clock, 1, fp)) fatal("Cannot read clock");
+
+  /* clock/rate params: mubar_alpha, mubar_beta, mui_alpha,
+     vbar_alpha, vbar_beta, vi_alpha, clock_alpha, rate_prior,
+     locusrate_prior */
+  {
+    double d_tmp;
+    long l_tmp;
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read mubar_alpha");   /* mubar_alpha */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read mubar_beta");    /* mubar_beta */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read mui_alpha");     /* mui_alpha */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read vbar_alpha");    /* vbar_alpha */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read vbar_beta");     /* vbar_beta */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read vi_alpha");      /* vi_alpha */
+    if (!LOAD(&d_tmp, 1, fp)) fatal("Cannot read clock_alpha");   /* clock_alpha */
+    if (!LOAD(&rate_prior, 1, fp)) fatal("Cannot read rate_prior");
+    if (!LOAD(&locusrate_prior, 1, fp)) fatal("Cannot read locusrate_prior");
+
+    /* finetune_theta_mode, finetune_theta_count */
+    long ft_theta_mode, ft_theta_count;
+    if (!LOAD(&ft_theta_mode, 1, fp)) fatal("Cannot read ft_theta_mode");
+    if (!LOAD(&ft_theta_count, 1, fp)) fatal("Cannot read ft_theta_count");
+
+    /* finetune_reset + finetune values */
+    long ft_reset;
+    if (!LOAD(&ft_reset, 1, fp)) fatal("Cannot read finetune_reset");
+
+    /* migration finetune arrays: 2 arrays of 'slots' doubles */
+    long slots = finetune_mrate_mode == 1 ? 1 : migration_count;
+    fseek(fp, 2 * slots * sizeof(double), SEEK_CUR); /* migrates + mig_Mi */
+
+    /* phi, gtage, gtspr finetune */
+    fseek(fp, 3 * sizeof(double), SEEK_CUR);
+
+    /* theta finetune array */
+    fseek(fp, ft_theta_count * sizeof(double), SEEK_CUR);
+
+    /* tau, mix, locusrate, qrates, freqs, alpha finetune */
+    fseek(fp, 6 * sizeof(double), SEEK_CUR);
+
+    /* mubar, mui, nubar, nui, branchrate finetune */
+    fseek(fp, 5 * sizeof(double), SEEK_CUR);
+
+    /* max_species_count */
+    if (!LOAD(&l_tmp, 1, fp)) fatal("Cannot read max_species_count");
+
+    /* prob_snl, prob_snl_shrink, snl_lambda_expand, snl_lambda_shrink */
+    fseek(fp, 4 * sizeof(double), SEEK_CUR);
+
+    /* pseudop_exist, mig_vrates_exist */
+    long pseudop_exist;
+    if (!LOAD(&pseudop_exist, 1, fp)) fatal("Cannot read pseudop_exist");
+    if (!LOAD(&mig_vrates_exist, 1, fp))
+      fatal("Cannot read mig_vrates_exist");
+
+    /* locusrate_mubar, locusrate_nubar, nui_sum, lnprior_rates_simple */
+    fseek(fp, 4 * sizeof(double), SEEK_CUR);
+
+    /* diploid array */
+    diploid_arr = (long *)xmalloc((size_t)stree_tip_count * sizeof(long));
+    if (!LOAD(diploid_arr, stree_tip_count, fp))
+      fatal("Cannot read diploid");
+    if (!LOAD(&diploid_size, 1, fp)) fatal("Cannot read diploid_size");
+
+    /* MCMC run info */
+    if (!LOAD(&burnin, 1, fp)) fatal("Cannot read burnin");
+    if (!LOAD(&samplefreq, 1, fp)) fatal("Cannot read samplefreq");
+    if (!LOAD(&samples, 1, fp)) fatal("Cannot read samples");
+    if (!LOAD(&curstep, 1, fp)) fatal("Cannot read curstep");
+    if (!LOAD(&ft_round, 1, fp)) fatal("Cannot read ft_round");
+    if (!LOAD(&ndspecies, 1, fp)) fatal("Cannot read ndspecies");
+
+    /* acceptance rates: gage, gspr */
+    fseek(fp, 2 * sizeof(double), SEEK_CUR);
+    /* theta_gibbs, theta_slide arrays */
+    fseek(fp, 2 * ft_theta_count * sizeof(double), SEEK_CUR);
+    /* tau, mix, lrht, phi_slide, phi_gibbs, freqs, qmat, alpha */
+    fseek(fp, 8 * sizeof(double), SEEK_CUR);
+    /* mubar, nubar, mui, nui, brate */
+    fseek(fp, 5 * sizeof(double), SEEK_CUR);
+
+    /* migration acceptance rates */
+    if (migration && !est_geneflow)
+    {
+      long mslots = (finetune_mrate_mode == 1) ? 1 : migration_count;
+
+      if (mrate_slide_prob > 0)
+        fseek(fp, mslots * sizeof(double), SEEK_CUR);  /* mrate_slide */
+      if (mrate_slide_prob < 1)
+        fseek(fp, mslots * sizeof(double), SEEK_CUR);  /* mrate_gibbs */
+      if (mig_vrates_exist)
+        fseek(fp, mslots * sizeof(double), SEEK_CUR);  /* migvr */
+    }
+
+    /* file offsets: mcmc, out, a1b1 */
+    fseek(fp, 3 * sizeof(long), SEEK_CUR);
+
+    /* bfbeta */
+    fseek(fp, sizeof(long), SEEK_CUR);
+
+    /* debug_migration */
+    if (!LOAD(&debug_migration, 1, fp))
+      fatal("Cannot read debug_migration");
+
+    /* conditional offset arrays */
+    if (print_genetrees)
+      fseek(fp, locus_count * sizeof(long), SEEK_CUR);
+    if (print_locus)
+      fseek(fp, locus_count * sizeof(long), SEEK_CUR);
+    if (print_locusfile)
+      fseek(fp, locus_count * sizeof(long), SEEK_CUR);
+    if (debug_migration)
+      fseek(fp, locus_count * sizeof(long), SEEK_CUR);
+
+    /* dparam_count, dmodels_count */
+    long dparam_count, dmodels_count;
+    if (!LOAD(&dparam_count, 1, fp)) fatal("Cannot read dparam_count");
+    if (!LOAD(&dmodels_count, 1, fp)) fatal("Cannot read dmodels_count");
+    if (dmodels_count)
+      fseek(fp, dmodels_count * sizeof(double), SEEK_CUR); /* posterior */
+
+    /* pspecies */
+    if (est_stree && est_delimit)
+      fseek(fp, l_tmp * sizeof(double), SEEK_CUR);  /* l_tmp = max_species_count */
+
+    /* ft_round_rj + g_pj_rj */
+    fseek(fp, sizeof(long) + sizeof(double), SEEK_CUR);
+
+    /* ft_round_spr, ft_round_snl */
+    fseek(fp, 2 * sizeof(long), SEEK_CUR);
+
+    /* ft_round_theta_gibbs, ft_round_theta_slide */
+    fseek(fp, 2 * ft_theta_count * sizeof(long), SEEK_CUR);
+
+    /* migration finetune rounds */
+    if (migration)
+    {
+      if (finetune_mrate_mode == 1)
+      {
+        if (mrate_slide_prob == 0)
+          fseek(fp, sizeof(long), SEEK_CUR);           /* gibbs only */
+        else if (mrate_slide_prob == 1)
+          fseek(fp, sizeof(long), SEEK_CUR);           /* slide only */
+        else
+          fseek(fp, 2 * sizeof(long), SEEK_CUR);      /* both */
+      }
+      else if (finetune_mrate_mode == 2)
+      {
+        if (mrate_slide_prob == 1)
+          fseek(fp, migration_count * sizeof(long), SEEK_CUR);
+        else if (mrate_slide_prob > 0 && mrate_slide_prob < 1)
+          fseek(fp, 2 * migration_count * sizeof(long), SEEK_CUR);
+      }
+    }
+
+    /* g_pj_sspr, g_pj_ssnl */
+    fseek(fp, 2 * sizeof(double), SEEK_CUR);
+
+    /* mean_logl */
+    fseek(fp, sizeof(double), SEEK_CUR);
+
+    /* mean migration rates */
+    long mean_mrate_count = 0;
+    if (migration)
+    {
+      if (!LOAD(&mean_mrate_count, 1, fp))
+        fatal("Cannot read mean_mrate_count");
+      /* mean_mrate (double) + mean_mrate_row + col + round (long each) */
+      fseek(fp, mean_mrate_count * sizeof(double), SEEK_CUR);
+      fseek(fp, 3 * mean_mrate_count * sizeof(long), SEEK_CUR);
+    }
+
+    /* mean_tau_count */
+    long mean_tau_count;
+    if (!LOAD(&mean_tau_count, 1, fp)) fatal("Cannot read mean_tau_count");
+
+    /* mean_theta_count */
+    long mean_theta_count = 0;
+    if (est_theta)
+    {
+      if (!LOAD(&mean_theta_count, 1, fp))
+        fatal("Cannot read mean_theta_count");
+    }
+
+    /* mean_phi_count */
+    long mean_phi_count;
+    if (!LOAD(&mean_phi_count, 1, fp)) fatal("Cannot read mean_phi_count");
+
+    /* mean_tau array */
+    fseek(fp, mean_tau_count * sizeof(double), SEEK_CUR);
+
+    /* mean_theta array */
+    if (est_theta)
+      fseek(fp, mean_theta_count * sizeof(double), SEEK_CUR);
+
+    /* mean_phi array */
+    if (mean_phi_count)
+      fseek(fp, mean_phi_count * sizeof(double), SEEK_CUR);
+
+    /* prec_logpg, prec_logl */
+    fseek(fp, 2 * sizeof(int), SEEK_CUR);
+
+    /* load_balance */
+    if (!LOAD(&load_balance, 1, fp)) fatal("Cannot read load_balance");
+
+    /* thread load distribution */
+    if (threads > 1)
+      fseek(fp, threads * 2 * sizeof(long), SEEK_CUR);
+
+    /* migration specs */
+    if (migration)
+    {
+      unsigned int total_nodes = stree_tip_count + stree_inner_count;
+
+      /* migration_matrix: total_nodes * total_nodes longs */
+      fseek(fp, (long)total_nodes * total_nodes * sizeof(long), SEEK_CUR);
+
+      /* mig_bitmatrix: total_nodes * total_nodes longs */
+      fseek(fp, (long)total_nodes * total_nodes * sizeof(long), SEEK_CUR);
+
+      /* migration specs */
+      mig_specs = (migspec_t *)xcalloc((size_t)(2*stree_tip_count *
+                                       (stree_tip_count-1)),
+                                       sizeof(migspec_t));
+      for (i = 0; i < migration_count; ++i)
+      {
+        migspec_t * spec = mig_specs + i;
+        if (!load_string(fp, &(spec->source)))
+          fatal("Cannot read migration source");
+        if (!load_string(fp, &(spec->target)))
+          fatal("Cannot read migration target");
+        if (!LOAD(&(spec->si), 1, fp)) fatal("Cannot read migration si");
+        if (!LOAD(&(spec->ti), 1, fp)) fatal("Cannot read migration ti");
+        if (!LOAD(&(spec->am), 1, fp)) fatal("Cannot read migration am");
+        if (!LOAD(&(spec->alpha), 1, fp))
+          fatal("Cannot read migration alpha");
+        if (!LOAD(&(spec->beta), 1, fp))
+          fatal("Cannot read migration beta");
+        if (!LOAD(&(spec->pseudo_a), 1, fp))
+          fatal("Cannot read migration pseudo_a");
+        if (!LOAD(&(spec->pseudo_b), 1, fp))
+          fatal("Cannot read migration pseudo_b");
+        if (!LOAD(&(spec->params), 1, fp))
+          fatal("Cannot read migration params");
+        if (!LOAD(&(spec->M), 1, fp)) fatal("Cannot read migration M");
+        if (!LOAD(&(spec->index), 1, fp))
+          fatal("Cannot read migration index");
+        if (spec->params == 1 || spec->params == 3 || spec->params == 5)
+          fseek(fp, locus_count * sizeof(double), SEEK_CUR);  /* Mi array */
+      }
+    }
+  }
+
+  /* ===================================================================
+     Section 2 (partial): Species tree topology + theta/tau
+     =================================================================== */
+
+  unsigned int total_nodes = stree_tip_count + stree_inner_count +
+                             stree_hybrid_count;
+  unsigned int hoffset = stree_tip_count + stree_inner_count;
+
+  /* allocate minimal stree */
+  stree_t * st = (stree_t *)xcalloc(1, sizeof(stree_t));
+  st->tip_count = stree_tip_count;
+  st->inner_count = stree_inner_count;
+  st->hybrid_count = stree_hybrid_count;
+  st->edge_count = stree_edge_count;
+  st->locus_count = locus_count;
+
+  st->nodes = (snode_t **)xmalloc((size_t)total_nodes * sizeof(snode_t *));
+  for (i = 0; i < total_nodes; ++i)
+    st->nodes[i] = (snode_t *)xcalloc(1, sizeof(snode_t));
+
+  /* set tip labels */
+  for (i = 0; i < st->tip_count; ++i)
+    st->nodes[i]->label = labels[i];
+  for (i = 0; i < st->hybrid_count; ++i)
+    st->nodes[hoffset + i]->label = labels[stree_tip_count + i];
+  free(labels);
+  labels = NULL;
+
+  for (i = 0; i < st->inner_count; ++i)
+    st->nodes[stree_tip_count + i]->label = NULL;
+
+  for (i = 0; i < total_nodes; ++i)
+    st->nodes[i]->node_index = i;
+
+  /* read hybrid indices */
+  unsigned int * hindices = (unsigned int *)xcalloc((size_t)stree_hybrid_count,
+                                                    sizeof(unsigned int));
+  if (stree_hybrid_count)
+    if (!LOAD(hindices, stree_hybrid_count, fp))
+      fatal("Cannot read hybrid indices");
+
+  /* set hybrid links */
+  for (i = 0; i < stree_hybrid_count; ++i)
+  {
+    st->nodes[hoffset + i]->hybrid = st->nodes[hindices[i]];
+    st->nodes[hindices[i]]->hybrid = st->nodes[hoffset + i];
+    st->nodes[hindices[i]]->label = xstrdup(st->nodes[hoffset + i]->label);
+  }
+  free(hindices);
+
+  /* read topology: left children */
+  for (i = 0; i < st->inner_count; ++i)
+  {
+    unsigned int lci;
+    if (!LOAD(&lci, 1, fp)) fatal("Cannot read left child index");
+    st->nodes[stree_tip_count + i]->left = st->nodes[lci];
+    st->nodes[lci]->parent = st->nodes[stree_tip_count + i];
+  }
+
+  /* read topology: right children */
+  for (i = 0; i < st->inner_count; ++i)
+  {
+    unsigned int valid, rci;
+    if (!LOAD(&valid, 1, fp)) fatal("Cannot read right child valid flag");
+    if (!valid) continue;
+    if (!LOAD(&rci, 1, fp)) fatal("Cannot read right child index");
+    st->nodes[stree_tip_count + i]->right = st->nodes[rci];
+    st->nodes[rci]->parent = st->nodes[stree_tip_count + i];
+  }
+
+  /* find root */
+  if (stree_tip_count == 1)
+  {
+    st->root = st->nodes[0];
+  }
+  else
+  {
+    for (i = 0; i < st->inner_count; ++i)
+      if (!st->nodes[stree_tip_count + i]->parent)
+        st->root = st->nodes[stree_tip_count + i];
+  }
+
+  /* read hphi for hybrids */
+  for (i = 0; i < stree_hybrid_count; ++i)
+  {
+    if (!LOAD(&(st->nodes[hoffset + i]->hybrid->hphi), 1, fp))
+      fatal("Cannot read hphi");
+    st->nodes[hoffset + i]->hphi = 1 - st->nodes[hoffset + i]->hybrid->hphi;
+  }
+
+  /* read has_phi, htau, prop_tau */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->has_phi), 1, fp))
+      fatal("Cannot read has_phi");
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->htau), 1, fp))
+      fatal("Cannot read htau");
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->prop_tau), 1, fp))
+      fatal("Cannot read prop_tau");
+
+  /* read linked_theta */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    long ltheta_index;
+    if (!LOAD(&ltheta_index, 1, fp)) fatal("Cannot read linked_theta");
+    if (ltheta_index == -1)
+      st->nodes[i]->linked_theta = NULL;
+    else
+      st->nodes[i]->linked_theta = st->nodes[ltheta_index];
+  }
+
+  /* read theta_step_index */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->theta_step_index), 1, fp))
+      fatal("Cannot read theta_step_index");
+
+  /* generate inner node labels */
+  stree_label(st);
+
+  /* read theta */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->theta), 1, fp))
+      fatal("Cannot read theta");
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->has_theta), 1, fp))
+      fatal("Cannot read has_theta");
+
+  /* read tau */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->tau), 1, fp))
+      fatal("Cannot read tau");
+
+  /* export newick */
+  char * newick = stree_export_newick(st->root, NULL);
+
+  /* ===================================================================
+     Print formatted output
+     =================================================================== */
+
+  /* -- Run Configuration -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Run Configuration\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %s\n", "Analysis method",
+          info_method_string(method));
+  fprintf(stdout, "  %-22s: %s\n", "Model framework",
+          msci ? "MSC-I (introgression)" :
+          (migration ? "MSC-M (migration)" : "MSC"));
+  fprintf(stdout, "  %-22s: %s\n", "Control file", cfile_s);
+  fprintf(stdout, "  %-22s: %s\n", "Sequence file", msafile_s);
+  fprintf(stdout, "  %-22s: %s\n", "Map (Imap) file",
+          mapfile_s ? mapfile_s : "(none)");
+  fprintf(stdout, "  %-22s: %s\n", "Output file", jobname_s);
+  fprintf(stdout, "  %-22s: %s\n", "MCMC sample file", mcmcfile_s);
+
+  /* -- Species & Data -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Species & Data\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %u\n", "Number of species", stree_tip_count);
+  fprintf(stdout, "  %-22s:", "Species");
+  for (i = 0; i < stree_tip_count; ++i)
+    fprintf(stdout, " %s", st->nodes[i]->label);
+  fprintf(stdout, "\n");
+  fprintf(stdout, "  %-22s:", "Sequences/species");
+  for (i = 0; i < stree_tip_count; ++i)
+    fprintf(stdout, " %ld", sp_seqcount[i]);
+  fprintf(stdout, "\n");
+  if (stree_hybrid_count)
+  {
+    fprintf(stdout, "  %-22s: %u\n", "Hybridizations",
+            stree_hybrid_count);
+    fprintf(stdout, "  %-22s:", "Hybrid nodes");
+    for (i = 0; i < stree_hybrid_count; ++i)
+      fprintf(stdout, " %s", st->nodes[hoffset + i]->label);
+    fprintf(stdout, "\n");
+  }
+  fprintf(stdout, "  %-22s: %ld\n", "Number of loci", locus_count);
+  fprintf(stdout, "  %-22s: %s\n", "Use data", usedata ? "Yes" : "No");
+  fprintf(stdout, "  %-22s: %s\n", "Clean data", cleandata ? "Yes" : "No");
+
+  /* diploid */
+  {
+    int has_diploid = 0;
+    if (diploid_arr)
+      for (i = 0; i < stree_tip_count; ++i)
+        if (diploid_arr[i]) { has_diploid = 1; break; }
+
+    if (has_diploid)
+    {
+      fprintf(stdout, "  %-22s:", "Diploid");
+      for (i = 0; i < stree_tip_count; ++i)
+        fprintf(stdout, " %ld", diploid_arr[i]);
+      fprintf(stdout, "\n");
+    }
+    else
+    {
+      fprintf(stdout, "  %-22s: No\n", "Diploid");
+    }
+  }
+
+  /* -- MCMC Progress -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  MCMC Progress\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  long total_iterations = burnin + samplefreq * samples;
+  double progress = total_iterations > 0 ?
+                    100.0 * curstep / total_iterations : 0;
+  long samples_collected;
+  if ((long)curstep <= burnin)
+    samples_collected = 0;
+  else
+    samples_collected = ((long)curstep - burnin) / samplefreq;
+
+  fprintf(stdout, "  %-22s: %ld\n", "Burn-in", burnin);
+  fprintf(stdout, "  %-22s: %ld\n", "Sample frequency", samplefreq);
+  fprintf(stdout, "  %-22s: %ld\n", "Total samples", samples);
+  fprintf(stdout, "  %-22s: %ld\n", "Total iterations", total_iterations);
+  fprintf(stdout, "  %-22s: %lu\n", "Current iteration", curstep);
+  fprintf(stdout, "  %-22s: %.1f%%\n", "Progress", progress);
+  fprintf(stdout, "  %-22s: %ld\n", "Samples collected", samples_collected);
+
+  /* -- Model Settings -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Model Settings\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %s\n", "Substitution model",
+          (model >= 0 && model < 28) ? global_model_strings[model] :
+                                       "Unknown");
+  if (alpha_cats > 1)
+    fprintf(stdout, "  %-22s: %ld (prior: G(%.3f, %.3f))\n",
+            "Gamma rate cats", alpha_cats, alpha_alpha, alpha_beta);
+  else
+    fprintf(stdout, "  %-22s: None\n", "Gamma rate cats");
+
+  fprintf(stdout, "  %-22s: %s\n", "Clock model",
+          info_clock_string(clock));
+
+  if (est_locusrate)
+    fprintf(stdout, "  %-22s: Estimated\n", "Locus rates");
+  else
+    fprintf(stdout, "  %-22s: Constant\n", "Locus rates");
+
+  if (est_heredity)
+    fprintf(stdout, "  %-22s: Estimated (prior: G(%.3f, %.3f))\n",
+            "Heredity scalers", heredity_alpha, heredity_beta);
+  else
+    fprintf(stdout, "  %-22s: None\n", "Heredity scalers");
+
+  /* -- Priors -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Priors\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %s(%.4f, %.4f)\n", "Theta prior",
+          info_theta_prior_string(theta_prior), theta_alpha, theta_beta);
+  fprintf(stdout, "  %-22s: %s\n", "Theta estimation",
+          est_theta ? "Yes" : "No");
+  fprintf(stdout, "  %-22s: %s\n", "Linked theta",
+          info_linkedtheta_string(linkedtheta));
+  fprintf(stdout, "  %-22s: %s(%.4f, %.4f)\n", "Tau prior",
+          (tau_dist == BPP_TAU_PRIOR_INVGAMMA) ? "Inverse-Gamma" :
+          (tau_dist == BPP_TAU_PRIOR_GAMMA) ? "Gamma" : "Unknown",
+          tau_alpha, tau_beta);
+
+  if (msci)
+    fprintf(stdout, "  %-22s: Beta(%.4f, %.4f)\n", "Phi prior",
+            phi_alpha, phi_beta);
+
+  if (migration)
+    fprintf(stdout, "  %-22s: Gamma(%.4f, %.4f)\n", "Migration prior",
+            mig_alpha, mig_beta);
+
+  /* -- Species Delimitation (conditional) -- */
+  if (est_delimit)
+  {
+    fprintf(stdout, "\n%s\n", INFO_HLINE);
+    fprintf(stdout, "  Species Delimitation\n");
+    fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+    if (rjmcmc_method == 0)
+      fprintf(stdout, "  %-22s: 0 (epsilon = %.4f)\n", "rjMCMC method",
+              rjmcmc_epsilon);
+    else
+      fprintf(stdout, "  %-22s: 1 (alpha = %.4f, mean = %.4f)\n",
+              "rjMCMC method", rjmcmc_alpha, rjmcmc_mean);
+
+    fprintf(stdout, "  %-22s: %s\n", "Model prior",
+            delimit_prior == 0 ? "Uniform" :
+            delimit_prior == 1 ? "Dirichlet" :
+            delimit_prior == 2 ? "User-specified" : "Unknown");
+  }
+
+  /* -- Species Tree -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Species Tree\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  Newick: %s\n\n", newick);
+
+  /* find max label width for table alignment */
+  {
+    int maxw = 10;
+    for (i = 0; i < total_nodes; ++i)
+    {
+      if (st->nodes[i]->label)
+      {
+        int w = (int)strlen(st->nodes[i]->label);
+        if (w > maxw) maxw = w;
+      }
+    }
+    if (maxw > 40) maxw = 40;
+
+    fprintf(stdout, "  %-*s  %14s  %14s\n", maxw, "Population",
+            "theta", "tau");
+    fprintf(stdout, "  ");
+    for (i = 0; i < maxw + 32; ++i) fprintf(stdout, "-");
+    fprintf(stdout, "\n");
+
+    /* print tips first */
+    for (i = 0; i < stree_tip_count; ++i)
+    {
+      snode_t * n = st->nodes[i];
+      if (n->has_theta)
+        fprintf(stdout, "  %-*s  %14.6f  %14s\n",
+                maxw, n->label ? n->label : "-", n->theta, "-");
+      else
+        fprintf(stdout, "  %-*s  %14s  %14s\n",
+                maxw, n->label ? n->label : "-", "-", "-");
+    }
+
+    /* print inner nodes */
+    for (i = stree_tip_count; i < stree_tip_count + stree_inner_count; ++i)
+    {
+      snode_t * n = st->nodes[i];
+      char theta_str[32], tau_str[32];
+
+      if (n->has_theta)
+        snprintf(theta_str, sizeof(theta_str), "%.6f", n->theta);
+      else
+        snprintf(theta_str, sizeof(theta_str), "-");
+
+      if (n->tau > 0)
+        snprintf(tau_str, sizeof(tau_str), "%.6f", n->tau);
+      else
+        snprintf(tau_str, sizeof(tau_str), "-");
+
+      fprintf(stdout, "  %-*s  %14s  %14s\n",
+              maxw, n->label ? n->label : "(inner)",
+              theta_str, tau_str);
+    }
+
+    /* print hybrid nodes if present */
+    for (i = hoffset; i < total_nodes; ++i)
+    {
+      snode_t * n = st->nodes[i];
+      char theta_str[32];
+
+      if (n->has_theta)
+        snprintf(theta_str, sizeof(theta_str), "%.6f", n->theta);
+      else
+        snprintf(theta_str, sizeof(theta_str), "-");
+
+      fprintf(stdout, "  %-*s  %14s  %14s  (phi=%.4f)\n",
+              maxw, n->label ? n->label : "(hybrid)",
+              theta_str, "-", n->hphi);
+    }
+  }
+
+  /* -- Migration (conditional) -- */
+  if (migration && mig_specs)
+  {
+    fprintf(stdout, "\n%s\n", INFO_HLINE);
+    fprintf(stdout, "  Migration\n");
+    fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+    fprintf(stdout, "  %-22s: %ld\n", "Migration bands", migration_count);
+    fprintf(stdout, "\n");
+
+    /* find max source/target label widths */
+    int sw = 6, tw = 6;
+    for (i = 0; i < migration_count; ++i)
+    {
+      int sl = (int)strlen(mig_specs[i].source);
+      int tl = (int)strlen(mig_specs[i].target);
+      if (sl > sw) sw = sl;
+      if (tl > tw) tw = tl;
+    }
+
+    fprintf(stdout, "  %-*s  %-*s  %14s\n", sw, "Source", tw, "Target", "M");
+    fprintf(stdout, "  ");
+    for (i = 0; i < sw + tw + 18; ++i) fprintf(stdout, "-");
+    fprintf(stdout, "\n");
+
+    for (i = 0; i < migration_count; ++i)
+      fprintf(stdout, "  %-*s  %-*s  %14.6f\n",
+              sw, mig_specs[i].source,
+              tw, mig_specs[i].target,
+              mig_specs[i].M);
+  }
+
+  /* -- Threading -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Threading\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %ld\n", "Threads", threads);
+  if (threads > 1)
+  {
+    fprintf(stdout, "  %-22s: %ld\n", "Thread start slot", threads_start);
+    fprintf(stdout, "  %-22s: %ld\n", "Thread step", threads_step);
+    fprintf(stdout, "  %-22s: %s\n", "Load balancing",
+            load_balance == 0 ? "Zigzag" : "Linear");
+  }
+
+  /* -- Checkpointing -- */
+  fprintf(stdout, "\n%s\n", INFO_HLINE);
+  fprintf(stdout, "  Checkpointing\n");
+  fprintf(stdout, "%s\n\n", INFO_HLINE);
+
+  fprintf(stdout, "  %-22s: %s\n", "Enabled",
+          checkpoint_on ? "Yes" : "No");
+  if (checkpoint_on)
+    fprintf(stdout, "  %-22s: Every %ld%%\n", "Frequency", checkpoint_pct);
+
+  fprintf(stdout, "\n%s\n\n", INFO_HLINE2);
+
+  /* --- cleanup --- */
+  fclose(fp);
+  free(newick);
+  free(sp_seqcount);
+  free(diploid_arr);
+
+  /* free stree nodes and labels */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    if (st->nodes[i]->label)
+      free(st->nodes[i]->label);
+    free(st->nodes[i]);
+  }
+  free(st->nodes);
+  free(st);
+
+  /* free strings */
+  free(cfile_s);
+  free(msafile_s);
+  free(constraintfile_s);
+  free(mapfile_s);
+  free(jobname_s);
+  free(a1b1file_s);
+  free(mcmcfile_s);
+
+  /* free migration specs */
+  if (mig_specs)
+  {
+    for (i = 0; i < migration_count; ++i)
+    {
+      free(mig_specs[i].source);
+      free(mig_specs[i].target);
+    }
+    free(mig_specs);
+  }
 }

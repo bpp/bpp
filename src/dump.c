@@ -27,12 +27,21 @@
 
 #define DUMP(x,n,fp) fwrite((void *)(x),sizeof(*(x)),n,fp)
 
+static int atomic_rename(const char * src, const char * dst)
+{
+#ifdef _WIN32
+  if (!MoveFileExA(src, dst, MOVEFILE_REPLACE_EXISTING))
+    return -1;
+  return 0;
+#else
+  return rename(src, dst);
+#endif
+}
+
 static BYTE dummy[256] = {0};
 
-static void dump_chk_header(FILE * fp, stree_t * stree)
+static void dump_chk_header(FILE * fp)
 {
-  long i;
-
   BYTE header[76];
   BYTE size_type;
 
@@ -91,83 +100,6 @@ static void dump_chk_header(FILE * fp, stree_t * stree)
   unsigned int * rng = get_legacy_rndu_array();
   DUMP(rng,opt_threads,fp);
 
-  /* number of sections */
-  unsigned int sections = 3;
-  DUMP(&sections,1,fp);
-
-  /* compute length of section 1 */
-  unsigned long size_section = 0;
-  size_section += sizeof(unsigned long);              /* seed */
-  size_section += strlen(opt_msafile)+1;              /* msa filename */
-  if (opt_mapfile)
-    size_section += strlen(opt_mapfile)+1;            /* imap filename */
-  size_section += strlen(opt_jobname)+1;              /* output filename */
-  size_section += strlen(opt_mcmcfile)+1;             /* mcmc filename */
-  
-  size_section += 2*sizeof(long) + 2*sizeof(double);  /* speciesdelimitation */
-
-  size_section += sizeof(long) + 3*sizeof(double);    /* speciestree */
-
-  size_section += sizeof(long);                       /* speciesmodelprior */
-
-  size_section += sizeof(long);                       /* species&tree */
-  for (i = 0; i < stree->tip_count; ++i)
-    size_section += strlen(stree->nodes[i]->label)+1;
-
-  size_section += sizeof(long);                       /* usedata */
-  size_section += sizeof(long);                       /* cleandata */
-  size_section += sizeof(long);                       /* nloci */
-
-  size_section += 2*sizeof(double) + sizeof(long);    /* thetaprior */
-  size_section += 2*sizeof(double);                   /* tauprior */
-
-  size_section += sizeof(long) + 5*sizeof(double);    /* finetune */
-  size_section += stree->tip_count*sizeof(long);      /* diploid */
-  size_section += sizeof(long);                       /* burnin */
-  size_section += sizeof(long);                       /* sampfreq */
-  size_section += sizeof(long);                       /* nsample */
-  size_section += sizeof(long);                       /* current step */
-  size_section += sizeof(long);                       /* finetune round */
-  size_section += sizeof(unsigned long);              /* MCMC file offset */
-  size_section += sizeof(unsigned long);              /* output file offset */
-
-  if (opt_print_genetrees)
-     size_section += opt_locus_count*sizeof(long);    /* gtree file offsets */
-  /* ANNA note: I did not include the size of other 
-   * variables because the size counter is not 
-   * being used */
-  if (opt_print_locus)
-     size_section += opt_locus_count*sizeof(long);    /* mig file offsets */
-  if (opt_print_rates && opt_clock != BPP_CLOCK_GLOBAL)
-     size_section += opt_locus_count*sizeof(long);
-    
-
-  size_t pjump_size = PROP_COUNT + 1+1 + GTR_PROP_COUNT + CLOCK_PROP_COUNT + opt_migration + opt_mig_vrates_exist;
-
-  size_section += pjump_size*sizeof(double);          /* pjump */
-  size_section += sizeof(long);                       /* dparam_count */
-  size_section += sizeof(long);                       /* ft_round_rj*/
-  size_section += sizeof(double);                     /* pjump_rj*/
-  size_section += sizeof(long);                       /* ft_round_spr */
-  size_section += sizeof(long);                       /* ft_round_snl */
-  size_section += sizeof(long);                       /* pjump_spr */
-  size_section += sizeof(long);                       /* pjump_snl */
-  size_section += sizeof(double);                     /* mean_logl */
-  size_section += sizeof(double);                     /* mean_root_age */
-  size_section += sizeof(double);                     /* mean_root_theta */
-  size_section += sizeof(long);                       /* opt_est_locusrate */
-  size_section += sizeof(long);                       /* opt_est_heredity */
-  size_section += sizeof(double);                     /* opt_heredity_alpha */
-  size_section += sizeof(double);                     /* opt_heredity_beta */
-  size_section += 4*sizeof(long);                     /* opt_print_* */
-  if (opt_est_locusrate || opt_est_heredity == HEREDITY_ESTIMATE)
-    size_section += sizeof(double);                   /* locusrate finetune */
-
-  /* TODO: Check which parameters are written for notheta option */
-
-
-  /* write section 1 size */
-  DUMP(&size_section,1,fp);
 }
 
 static void dump_chk_section_1(FILE * fp,
@@ -246,11 +178,9 @@ static void dump_chk_section_1(FILE * fp,
   /* write mcmcfile */
   DUMP(opt_mcmcfile,strlen(opt_mcmcfile)+1,fp);
 
-  /* write checkpint info */
+  /* write checkpoint info */
   DUMP(&opt_checkpoint,1,fp);
-  DUMP(&opt_checkpoint_current,1,fp);
-  DUMP(&opt_checkpoint_initial,1,fp);
-  DUMP(&opt_checkpoint_step,1,fp);
+  DUMP(&opt_checkpoint_percent,1,fp);
 
   /* write network info */
   DUMP(&opt_msci,1,fp);
@@ -258,6 +188,8 @@ static void dump_chk_section_1(FILE * fp,
   /* write migration info */
   DUMP(&opt_migration,1,fp);
   DUMP(&opt_migration_count,1,fp);
+  DUMP(&opt_finetune_mrate_mode,1,fp);
+  DUMP(&opt_est_geneflow,1,fp);
 
   /* write method info */
   DUMP(&opt_method,1,fp);
@@ -447,12 +379,6 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_gspr, 1, fp);
   DUMP(g_pj_theta_gibbs, opt_finetune_theta_count, fp);
   DUMP(g_pj_theta_slide, opt_finetune_theta_count, fp);
-  /* DEBUG */
-  printf("g_pj_theta_gibbs[0] = %f\n", g_pj_theta_gibbs[0]);
-  printf("g_pj_theta_slide[0] = %f\n", g_pj_theta_slide[0]);
-  printf("opt_finetune_theta_count: %ld\n", opt_finetune_theta_count);
-  printf("g_pj_gage = %f\n", g_pj_gage);
-  printf("g_pj_gspr = %f\n", g_pj_gspr);
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
@@ -1109,23 +1035,24 @@ int checkpoint_dump(stree_t * stree,
 		    int * printLocusIndex)
 {
   FILE * fp;
-  char * s = NULL;
+  char * s_final = NULL;
+  char * s_tmp = NULL;
 
-  xasprintf(&s, "%s.%ld.chk", opt_jobname, ++opt_checkpoint_current);
+  xasprintf(&s_final, "%s.chk", opt_jobname);
+  xasprintf(&s_tmp, "%s.chk.tmp", opt_jobname);
 
-  fprintf(stdout,"\n\nWriting checkpoint file %s\n\n",s);
-
-  fp = fopen(s,"wb");
-  free(s);
+  fp = fopen(s_tmp,"w+b");
   if (!fp)
   {
-    fprintf(stderr, "Cannot open file %s for checkpointing...",s);
+    fprintf(stderr, "Cannot open file %s for checkpointing...",s_tmp);
+    free(s_final);
+    free(s_tmp);
     return 0;
   }
 
 
   /* write checkpoint header */
-  dump_chk_header(fp,stree);
+  dump_chk_header(fp);
 
   /* write section 1 */
   dump_chk_section_1(fp,
@@ -1164,7 +1091,7 @@ int checkpoint_dump(stree_t * stree,
                      mean_theta_count,
                      mean_phi_count,
                      prec_logpg,
-                     prec_logl, 
+                     prec_logl,
 		     printLocusIndex);
 
   /* write section 2 */
@@ -1176,7 +1103,41 @@ int checkpoint_dump(stree_t * stree,
   /* write section 4 */
   dump_chk_section_4(fp,gtree_list,locus_list,stree->locus_count);
 
+  /* compute and append SHA-1 digest */
+  {
+    long data_size;
+    unsigned char * buffer;
+    unsigned char digest[BPP_SHA1_DIGEST_SIZE];
+
+    fflush(fp);
+    data_size = ftell(fp);
+    buffer = (unsigned char *)xmalloc((size_t)data_size);
+    fseek(fp, 0, SEEK_SET);
+    if (fread(buffer, 1, (size_t)data_size, fp) != (size_t)data_size)
+    {
+      free(buffer);
+      fatal("Cannot read checkpoint data for SHA-1 computation");
+    }
+    sha1_compute(buffer, (size_t)data_size, digest);
+    free(buffer);
+    fseek(fp, 0, SEEK_END);
+    fwrite(digest, 1, BPP_SHA1_DIGEST_SIZE, fp);
+  }
+
+  /* flush and sync to disk before atomic rename */
+  fflush(fp);
+#ifdef _WIN32
+  _commit(_fileno(fp));
+#else
+  fsync(fileno(fp));
+#endif
   fclose(fp);
-  
+
+  if (atomic_rename(s_tmp, s_final) != 0)
+    fprintf(stderr, "WARNING: Failed to rename %s to %s\n", s_tmp, s_final);
+
+  free(s_final);
+  free(s_tmp);
+
   return 1;
 }
