@@ -737,7 +737,7 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       DUMP(&(stree->nodes[i]->mb_count),1,fp);
       DUMP(stree->nodes[i]->migbuffer,stree->nodes[i]->mb_count,fp);
 
-      for (j = 0; j < stree->inner_count; ++j)
+      for (j = 0; j < stree->nodes[i]->mb_count; ++j)
       {
         DUMP(stree->nodes[i]->migbuffer[j].mrsum,
              stree->nodes[i]->migbuffer[j].active_count,fp);
