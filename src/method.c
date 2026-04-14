@@ -1081,7 +1081,6 @@ static void active_pjumps_alloc()
     ++k;
   }
 
-  #if 0
   if (opt_traitfile)
   {
     active_pjump_titles[k] = xstrdup("br_m");
@@ -1089,7 +1088,6 @@ static void active_pjumps_alloc()
     finetune_values_ptr[k] = &opt_finetune_brate_m;
     ++k;
   }
-  #endif
 
   if (opt_migration && !opt_est_geneflow)
   {

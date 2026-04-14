@@ -529,7 +529,7 @@ void args_init(int argc, char ** argv)
 #endif
   opt_finetune_alpha = 0.1;
   opt_finetune_branchrate = 0.1;
-  opt_finetune_brate_m = 1;
+  opt_finetune_brate_m = 0.2;
   opt_finetune_freqs = 0.1;
   opt_finetune_gtage = 5;
   opt_finetune_gtspr = 0.001;

@@ -1303,7 +1303,7 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
   /* then fill up relevant things */
   trait_update(stree);
 
-  fprintf(stdout, "Trait data loaded for %d partitions\n\n", n_part);
+  fprintf(stdout, "Trait data loaded for %d partition(s)\n\n", n_part);
 }
 
 static void trait_store_part(int idx, stree_t * stree)
@@ -1575,6 +1575,7 @@ double logprior_trait(stree_t * stree)
   return logpr_sum;
 }
 
+#ifdef DEBUG_Morph_BrRate
 static double prop_branch_rates_relax(stree_t * stree)
 {
   int n, i,  proposed, accepted;
@@ -1636,6 +1637,7 @@ static double prop_branch_rates_relax(stree_t * stree)
   
   return (double)accepted/proposed;
 }
+#endif
 
 double prop_branch_rates_trait(stree_t * stree)
 {
@@ -1650,10 +1652,11 @@ double prop_branch_rates_trait(stree_t * stree)
   proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
-    /* if no molecular data is used, we cannot distinguish the times and rates;
-       in this case, we fix the rate to 1.0 for the first trait partition, and
-       estimate the rates for subsequent partitions (relative to the first) */
-    if (n == 0 && opt_usedata == 0)
+    /* for discrete traits, the partition rate is not identifiable due to only
+       variable traits are coded for living species; for continuous traits,
+       the rate is not identifiable either if no molecular data is used.
+       we only consider the former situation for now */
+    if (stree->trait_type[n] == BPP_DATA_DISC)
       continue;
 
     /* the branch rates follow i.i.d. gamma distributions
