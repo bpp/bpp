@@ -3161,6 +3161,7 @@ void stree_init(stree_t * stree,
   stree->trait_missing = NULL;
   stree->trait_ldetRs = NULL;
   stree->trait_vpop = NULL;
+  stree->trait_model = NULL;
 
   if (opt_migration)
   {

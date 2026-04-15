@@ -13,7 +13,9 @@
 // #define DEBUG_Morph_BM_A   1
 // #define DEBUG_Morph_BrRate 1
 
-static int BM_Mitov;
+#define Morph_BM_AC    0
+#define Morph_BM_Mitov 1
+#define Morph_Mkv      2
 
 /* matrix related operations */
 static int mat_sub(double *A, double *Asub, int n, int m, int *r, int *c);
@@ -343,7 +345,7 @@ static morph_t * morph_parse(FILE * fp)
         morph_destroy(morph);
         return NULL;
       }
-      BM_Mitov = 1;  // using Mitov et al. 2020
+      morph->model = Morph_BM_Mitov;  // using Mitov et al. 2020
     }
     else if (c == 'l')
     {
@@ -355,7 +357,7 @@ static morph_t * morph_parse(FILE * fp)
         morph_destroy(morph);
         return NULL;
       }
-      BM_Mitov = 0;  // using Alvarez-Carretero et al. 2019
+      morph->model = Morph_BM_AC;  // using Alvarez-Carretero et al. 2019
     }
     else
     {
@@ -363,6 +365,7 @@ static morph_t * morph_parse(FILE * fp)
       morph->matRs = NULL;  // assume identity matrix
       fprintf(stdout, "\n Correlation matrix (R) unspecified,"
                         " using identity matrix\n");
+      morph->model = -1;  // unset
     }
   }
 
@@ -500,7 +503,7 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
     
     nchar = morph->length;
 
-    if (stree->trait_missing[n] || BM_Mitov)
+    if (stree->trait_missing[n] || stree->trait_model[n] == Morph_BM_Mitov)
     {
       stree->trait_Rs[n]   = (double *)xmalloc(nchar*nchar*sizeof(double));
       stree->trait_Rs_1[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
@@ -928,7 +931,7 @@ static void trait_update_part(int idx, stree_t * stree)
 
   if (stree->trait_type[idx] == BPP_DATA_DISC)
     mk_update_cp(idx, stree->root, stree);
-  else if (stree->trait_missing[idx] || BM_Mitov)
+  else if (stree->trait_missing[idx] || stree->trait_model[idx] == Morph_BM_Mitov)
     bm_update_Lmr(idx, stree->root, stree);
   else
     bm_update_vxm(idx, stree->root, stree);
@@ -1109,6 +1112,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
   stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_vpop = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_model = (int *)xcalloc(n_part, sizeof(int));
   
   stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
   stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
@@ -1231,6 +1235,8 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_ldetRs);
   if (stree->trait_vpop)
     free(stree->trait_vpop);
+  if (stree->trait_model)
+    free(stree->trait_model);
 
   if (stree->trait_nstate)
   {
@@ -1283,6 +1289,7 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
     stree->trait_dim[n] = morph_list[n]->length;
     stree->trait_type[n] = morph_list[n]->dtype;
     stree->trait_vpop[n] = morph_list[n]->v_pop;
+    stree->trait_model[n] = morph_list[n]->model;
   }
   
   /* fill the trait values for the tip nodes; */
@@ -1403,40 +1410,44 @@ static double loglikelihood_BM_AC(int idx, stree_t * stree)
 static double loglikelihood_BM_Mitov(int idx, stree_t * stree)
 {
   int nchar, k_0;
-  double logl, *L0, *m0, r0, *x0, *T, *L0_1, *y, z;
+  double logl, *L0, *m0, r0, *T, *L0_1, *y, z;
   snode_t * root = stree->root;
+
+  /* how to deal with the root state (x0)?
+   1. profile likelihood: use MLE of x0 = -0.5 * inv(L0) * m0 (Mitov et al.
+      2020; Eq. S2), the log-likelihood is r0 - 0.25 * m0' * inv(L0) * m0. 
+   2. marginal likelihood: integrate out x0 with an improper flat prior
+      (p(x_0)\propto 1)) for g(x) = x' L x + m' x + r with L negative
+      definite, complete the square at x* = -0.5 * inv(L) * m, then
+      g(x*) = r - 0.25 * m' * inv(L) * m and
+      integral exp(g(x)) dx = exp(g(x*)) * pi^(k/2) * det(-L)^(-1/2).
+      so the log-likelihood is r0 - 0.25 * m0' * inv(L0) * m0 
+                               + 0.5 * k_0 * log(pi) - 0.5 * log(det(-L0)).
+      the latter approach is used in the following implementation.
+      in fact, it is equivalent to REML and gives the same result as AC
+      implementation when there is no missing data.
+   */
 
   /* find stratch space */
   T    = root->trait[idx]->tranprob[0];
   L0_1 = root->trait[idx]->tranprob[1];
-  x0   = root->trait[idx]->tranprob[7];
   y    = root->trait[idx]->tranprob[8];
 
   /* number of active coordinates */
   nchar = stree->trait_dim[idx];
   k_0 = root->trait[idx]->active[nchar];
 
-  /* Mitov et al. 2020; Eq. S2
-     x0 = -0.5 * inv(L0) * m0 */
   L0 = root->trait[idx]->glinv_L;
   m0 = root->trait[idx]->state_m;
-  /* keep L0 when inverting to L0_1 */
+  r0 = root->trait[idx]->glinv_r;
+
   memcpy(T, L0, k_0 * k_0 * sizeof(double));
   if(mat_inv_plu(T, L0_1, k_0))
     fatal("Failed to invert L0 in likelihood calculation");
-  mat_multi(L0_1, m0, y, k_0, k_0, 1);
-  mat_scale(y, -0.5, x0, k_0, 1);
+  mat_multi(m0, L0_1, y, 1, k_0, k_0);
+  mat_multi(y, m0, &z, 1, k_0, 1);
 
-  // for (int i = 0; i < k_0; ++i) x0[i] = 0.0;
-  
-  /* logl = t(x0) * L0 * x0 + t(x0) * m0 + r0 */
-  mat_multi(x0, L0, y, 1, k_0, k_0);
-  mat_multi(y, x0, &z, 1, k_0, 1);
-  logl = z;
-
-  mat_multi(x0, m0, &z, 1, k_0, 1);
-  r0 = root->trait[idx]->glinv_r;
-  logl += z + r0;
+  logl = r0 - 0.25 * z + 0.5 * k_0 * log(BPP_PI) - 0.5 * mat_logdet(T, k_0);
 
   stree->trait_logl[idx] = logl;
 
@@ -1509,7 +1520,7 @@ static double loglikelihood_trait_part(int idx, stree_t * stree)
     /* Mkv model */
     return loglikelihood_Mkv(idx, stree);
   }
-  else if (stree->trait_missing[idx] || BM_Mitov)
+  else if (stree->trait_missing[idx] || stree->trait_model[idx] == Morph_BM_Mitov)
   {
     /* BM model with missing data; Mitov et al. 2020 */
     return loglikelihood_BM_Mitov(idx, stree);
@@ -2016,11 +2027,6 @@ int sim_parse_cont(const char * line)
     return 1;
   }
 
-  if (opt_sim_cont_miss > 0.0)
-    BM_Mitov = 1;  // using Mitov et al. 2020
-  else
-    BM_Mitov = 0;  // using Alvarez-Carretero et al. 2019
-
   return 0;
 }
 
@@ -2383,7 +2389,7 @@ void sim_trait_write(FILE * fp, stree_t * stree)
     else {  // stree->trait_type[n] == BPP_DATA_CONT
       fprintf(fp, " %d %d  C  %.4lf\n", stree->tip_count, nchar,
                                         opt_sim_cont_vpop);
-      if (BM_Mitov)  // could have missing data
+      if (opt_sim_cont_miss > 0.0)  // could have missing data
       {
         for (i = 0; i < stree->tip_count; ++i)
         {

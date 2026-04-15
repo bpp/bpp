@@ -689,6 +689,7 @@ typedef struct stree_s
   double * trait_old_logpr;     /* store old log prior values */
   int   ** trait_nstate;   /* # states for each discrete character */
   int    * trait_missing;    /* partition has missing states? */
+  int    * trait_model;           /* model for each partition */
   double * trait_vpop;                 /* population variance */
   double **trait_Phi;         /* identity matrix for BM model */
   double **trait_Rs; /* shrinkage estimate of correlation matrix (R*) */
