@@ -18,25 +18,28 @@
 # University College London, Gower Street, London WC1E 6BT, England
 
 # Profiling
-#PROFILING=-g -pg -no-pie
-#PROFILING=-g
+#PROFILING = -g -pg -no-pie
 
 # Compiler warnings
-WARN=-Wall -Wsign-compare
+WARN = -Wall -Wsign-compare
 
-NEONDEF=-DHAVE_NEON
-NEONOBJ=core_partials_neon.o core_likelihood_neon.o
+NEONDEF = -DHAVE_NEON
+NEONOBJ = core_partials_neon.o core_likelihood_neon.o
 
 ifndef CC
 CC = gcc
 endif
-CFLAGS = -D_GNU_SOURCE $(NEONDEF) -g -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
-LINKFLAGS=$(PROFILING)
-LIBS=-lm -lpthread
+CFLAGS = -D_GNU_SOURCE $(NEONDEF) -O3 $(WARN)
+DBFLAGS = -D_GNU_SOURCE $(NEONDEF) -g $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+# LDFLAGS = $(PROFILING)
+LIBS = -lm -lpthread
 
-PROG=bpp
+PROG = bpp
 
 all: $(PROG)
+
+debug: CFLAGS = $(DBFLAGS)
+debug: $(PROG)
 
 OBJS=bpp.o rtree.o util.o \
      arch.o phylip.o msa.o \
@@ -58,3 +61,5 @@ $(PROG): $(OBJS)
 
 clean:
 	rm -f *~ $(OBJS) gmon.out $(PROG)
+
+.PHONY: all debug clean

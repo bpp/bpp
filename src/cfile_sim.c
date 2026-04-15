@@ -1148,7 +1148,7 @@ static void check_validity()
   if (!opt_streenewick)
     fatal("Initial species tree newick format is required in 'species&tree'");
 
-  if (!opt_mapfile)
+  if ((opt_msafile || opt_treefile) && !opt_mapfile)
     fatal("Option 'imapfile' is required");
 
   if (!opt_locus_count || !opt_locus_simlen)
@@ -1217,13 +1217,14 @@ static void check_validity()
   }
   else
   {
-    if (opt_siterate_cats)
+    if (opt_siterate_alpha == 0.0);
+      // fprintf(stdout, "Site rates: one rate (1.0) for all sites\n");
+    else if (opt_siterate_cats)
       fprintf(stdout, "Site rates: from discrete Gamma(%f), K = %ld\n",
               opt_siterate_alpha, opt_siterate_cats);
     else
       fprintf(stdout, "Site rates: from discrete Gamma(%f), K = inf\n",
               opt_siterate_alpha);
-
   }
 
   if ((opt_datefile && ! opt_seqDates) || (!opt_datefile && opt_seqDates) ) 
@@ -1440,6 +1441,12 @@ void load_cfile_sim()
         parse_migration(fp, value, line_count);
         valid = 1;
       }
+      else if (!strncasecmp(token,"traitfile",9))
+      {
+        if (!get_string(value, &opt_traitfile))
+          fatal("Option '%s' expects a string (line %ld)", token, line_count);
+        valid = 1;
+      }
     }
     else if (token_len == 10)
     {
@@ -1453,6 +1460,54 @@ void load_cfile_sim()
       {
         if (!parse_printlocus(value,&opt_print_locus))
           fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"trait_disc",10)) 
+      {
+        if (sim_parse_disc(value))
+          fatal("Invalid format for discrete traits (line %ld)", line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"trait_cont",10)) 
+      {
+        if (sim_parse_cont(value))
+          fatal("Invalid format for continuous traits (line %ld)", line_count);
+        
+        /* read correlation matrix (R) */
+        int c, n = opt_sim_cont_nchar;
+        opt_sim_cont_R = (double *)xmalloc(n * n * sizeof(double));
+        while (isspace(c = fgetc(fp)));
+        if (c == 'R')
+        {
+          if (parse_matrix(fp, opt_sim_cont_R, n, n))
+            fatal("Error reading correlation matrix (R)");
+        
+          /* check correlation matrix */
+          for (int i = 0; i < n; ++i)
+          {
+            if (fabs(opt_sim_cont_R[i * n + i] - 1.0) > 1e-8)
+              fatal("Invalid correlation matrix (R)");
+            for (int j = i + 1; j < n; ++j)
+              if (fabs(opt_sim_cont_R[i * n + j]) > 1.0 ||
+                  fabs(opt_sim_cont_R[i * n + j] - opt_sim_cont_R[j * n + i]) > 1e-8)
+                fatal("Invalid correlation matrix (R)");
+          }
+          
+          fprintf(stdout, "Correlation matrix (R) read from file\n\n");
+        }
+        else {
+          ungetc(c, fp);
+          /* fill in identity matrix */
+          for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+              if (i == j)
+                opt_sim_cont_R[i * n + j] = 1.0;
+              else  
+                opt_sim_cont_R[i * n + j] = 0.0;
+
+          fprintf(stdout, "Correlation matrix (R) unspecified, "
+                          "using identity matrix\n\n");
+        }
         valid = 1;
       }
     }
