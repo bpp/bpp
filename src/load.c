@@ -1833,9 +1833,10 @@ static void load_gene_tree(FILE * fp, long index)
       fatal("Cannot read gene tree marks");
 
   /* load hpath */
-  for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
-      fatal("Cannot read gene tree path flags");
+  if (stree->hybrid_count)
+    for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
+      if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
+        fatal("Cannot read gene tree path flags");
 
   if (!LOAD(&(gt->rate_mui),1,fp))
       fatal("Cannot read gene tree mu_%ld", index);

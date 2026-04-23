@@ -826,8 +826,9 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
     DUMP(&(gtree->nodes[i]->mark),1,fp);
 
   /* write hpath */
-  for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
-    DUMP(gtree->nodes[i]->hpath,hybrid_count,fp);
+  if (hybrid_count)
+    for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
+      DUMP(gtree->nodes[i]->hpath,hybrid_count,fp);
 
   DUMP(&(gtree->rate_mui),1,fp);
   if (opt_clock != BPP_CLOCK_GLOBAL)

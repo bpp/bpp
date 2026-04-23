@@ -267,18 +267,20 @@ static morph_t * morph_parse(FILE * fp)
   int  i, j, nchar, c;
   char tmpstr[10];
   
-  morph_t * morph = (morph_t *)xmalloc(sizeof(morph_t));
+  morph_t * morph = (morph_t *)xcalloc(1, sizeof(morph_t));
   
   /* read header */
   if (parse_header(fp, &(morph->ntaxa), &(morph->length), &(morph->dtype)))
   {
     fprintf(stderr, "Error in header\n");
+    free(morph);
     return NULL;
   }
   if (morph->dtype == BPP_DATA_CONT &&
       fscanf(fp, "%lf", &morph->v_pop) != 1)
   {
     fprintf(stderr, "Error reading population variance\n");
+    free(morph);
     return NULL;
   }
 
@@ -367,6 +369,9 @@ static morph_t * morph_parse(FILE * fp)
                         " using identity matrix\n");
       morph->model = -1;  // unset
     }
+  }
+  else {
+    morph->model = Morph_Mkv;  // using Mkv Lewis 2001 (the only model now)
   }
 
 #ifdef DEBUG_Morph_Matrix
@@ -1134,7 +1139,7 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
     stree->nodes[i]->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
     for (n = 0; n < n_part; ++n)
     {
-      stree->nodes[i]->trait[n] = (trait_t *)xmalloc(sizeof(trait_t));
+      stree->nodes[i]->trait[n] = (trait_t *)xcalloc(1, sizeof(trait_t));
       trait = stree->nodes[i]->trait[n];
       
       nchar = morph_list[n]->length;
@@ -1669,6 +1674,12 @@ double prop_branch_rates_trait(stree_t * stree)
        we only consider the former situation for now */
     if (stree->trait_type[n] == BPP_DATA_DISC)
       continue;
+    else if (opt_usedata == 0)
+    { // set to the true value in simulation
+      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+        stree->nodes[i]->trait[n]->brate = 200.0;  
+      continue;
+    }
 
     /* the branch rates follow i.i.d. gamma distributions
        with parameters opt_brate_m_alpha and opt_brate_m_beta */
@@ -2071,8 +2082,8 @@ void trait_init_sim(stree_t * stree)
   {
     snode = stree->nodes[i];
     snode->trait = (trait_t **)xmalloc(2 * sizeof(trait_t *));
-    snode->trait[0] = (trait_t *)xmalloc(sizeof(trait_t));
-    snode->trait[1] = (trait_t *)xmalloc(sizeof(trait_t));
+    snode->trait[0] = (trait_t *)xcalloc(1, sizeof(trait_t));
+    snode->trait[1] = (trait_t *)xcalloc(1, sizeof(trait_t));
     snode->trait[0]->state_d =
           (int *)xcalloc(stree->trait_dim[0], sizeof(int));
     snode->trait[1]->state_m =
@@ -2387,7 +2398,7 @@ void sim_trait_write(FILE * fp, stree_t * stree)
       fprintf(fp, "\n");
     }
     else {  // stree->trait_type[n] == BPP_DATA_CONT
-      fprintf(fp, " %d %d  C  %.4lf\n", stree->tip_count, nchar,
+      fprintf(fp, " %d %d  C  %lf\n", stree->tip_count, nchar,
                                         opt_sim_cont_vpop);
       if (opt_sim_cont_miss > 0.0)  // could have missing data
       {
@@ -2411,7 +2422,7 @@ void sim_trait_write(FILE * fp, stree_t * stree)
         for (i = 0; i < nchar; ++i)
         {
           for (j = 0; j < nchar; ++j)
-            fprintf(fp, "%7.4lf ", stree->trait_Rs[n][i * nchar + j]);
+            fprintf(fp, "%9.6lf ", stree->trait_Rs[n][i * nchar + j]);
           fprintf(fp, "\n");
         }
         fprintf(fp, "\n");
@@ -2449,7 +2460,7 @@ void sim_trait_write(FILE * fp, stree_t * stree)
             fprintf(fp, "%9.4lf ", Z[i * nchar + j]);
           fprintf(fp, "\n");
         }
-        fprintf(fp, " ldetR*  %.4lf\n\n", stree->trait_ldetRs[n]);
+        fprintf(fp, " ldetR*  %lf\n\n", stree->trait_ldetRs[n]);
 
         free(Z); free(M); free(L); free(L_1);
       }

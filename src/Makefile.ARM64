@@ -18,7 +18,7 @@
 # University College London, Gower Street, London WC1E 6BT, England
 
 # Profiling
-#PROFILING = -g -pg -no-pie
+# PROFILING = -g -pg -no-pie
 
 # Compiler warnings
 WARN = -Wall -Wsign-compare
@@ -31,7 +31,7 @@ CC = gcc
 endif
 CFLAGS = -D_GNU_SOURCE $(NEONDEF) -O3 $(WARN)
 DBFLAGS = -D_GNU_SOURCE $(NEONDEF) -g $(WARN) # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
-# LDFLAGS = $(PROFILING)
+# LDFLAGS += $(PROFILING)
 LIBS = -lm -lpthread
 
 PROG = bpp
