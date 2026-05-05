@@ -3357,7 +3357,6 @@ static int cb_cmp_double_asc(const void * a, const void * b)
   return -1;
 }
 
-
 static double cubic_f(double x, double coeff[4]) {
   return (coeff[0] * x * x * x + coeff[1] * x * x + coeff[2] * x + coeff[3]);
 }
@@ -3369,9 +3368,12 @@ static double cubic_root(double coeff[4], double x0, double x1)
   double a = coeff[0], b = coeff[1], c = coeff[2], d = coeff[3];
   double p = (3*a*c-b*b)/(3*a*a), q = (2*b*b*b-9*a*b*c+27*a*a*d)/(27*a*a*a), det, x;
   double f0 = cubic_f(x0, coeff), f1 = cubic_f(x1, coeff), f, e = 1e-6;
+  double status = 0, xb[2];
 
   det = -(4 * p * p * p + 27 * q * q);
-  if (det > 0) printf("? three distinct real roots?\n");
+  if (det > 0) {
+    status = 1;  xb[0] = x0; xb[1] = x1;
+  }
   if (f0 * f1 > 0)
     fatal("root_cubic bounds error");
   /* bisection to find cubic root.  Try something smarter? */
@@ -3382,6 +3384,9 @@ static double cubic_root(double coeff[4], double x0, double x1)
     if (f0 * f > 0) { x0 = x; f0 = f; }
     else            { x1 = x; f1 = f; }
   }
+  if (opt_debug && status)
+    printf("\np = %12.6g q = %12.6g det = %12.6g > 0..  x[0,1] = %9.6f %9.6f x = %9.6f\n",
+           p, q, det, xb[0], xb[1], x);
   return(x);
 }
 

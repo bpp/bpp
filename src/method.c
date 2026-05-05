@@ -911,6 +911,19 @@ static stree_t * load_tree_or_network(void)
   if (!stree)
     fatal("Error while reading species tree");
 
+  /*** ziheng-2026.5.2: Reset opt_keep_labels=1 if all snode labels are present & short.
+  ***/
+  if (!opt_keep_labels) {
+    int i, len, max_name_length = 0, shortname = 9;
+    for (i = 0; i < stree->tip_count + stree->inner_count + stree->hybrid_count; i++) {
+      if(!stree->nodes[i]->label) 
+        max_name_length = 99;
+      else
+        if (max_name_length < (len = strlen(stree->nodes[i]->label)))
+          max_name_length = len;
+    }
+    if (max_name_length <= shortname) opt_keep_labels = 1;
+  }
 
   return stree;
 }
@@ -2946,7 +2959,7 @@ static FILE * resume(stree_t ** ptr_stree,
       }
       else
       {
-	gtree_files[i] = NULL;
+        gtree_files[i] = NULL;
       }
     }
     free(gtree_offset);
@@ -2968,7 +2981,7 @@ static FILE * resume(stree_t ** ptr_stree,
       }
       else
       {
-	mig_files[i] = NULL;
+        mig_files[i] = NULL;
       }
     }
     free(mig_offset);
