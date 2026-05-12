@@ -1309,9 +1309,13 @@ void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
 
   /* initialize branch rates */
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-    for (n = 0; n < n_part; ++n)
-      stree->nodes[i]->trait[n]->brate = 1.0;
-  
+    for (n = 0; n < n_part; ++n) {
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+        stree->nodes[i]->trait[n]->brate = 1.0;
+      else  // set to the true value in simulation
+        stree->nodes[i]->trait[n]->brate = 200.0;
+    }
+
   /* then fill up relevant things */
   trait_update(stree);
 
@@ -1668,19 +1672,10 @@ double prop_branch_rates_trait(stree_t * stree)
   proposed = accepted = 0;
   for (n = 0; n < stree->trait_count; ++n)
   {
-    /* for discrete traits, the partition rate is not identifiable due to only
-       variable traits are coded for living species; for continuous traits,
-       the rate is not identifiable either if no molecular data is used.
-       we only consider the former situation for now */
-    if (stree->trait_type[n] == BPP_DATA_DISC)
-      continue;
-    else if (opt_usedata == 0)
-    { // set to the true value in simulation
-      for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-        stree->nodes[i]->trait[n]->brate = 200.0;  
-      continue;
-    }
-
+    /* the rate is not identifiable if no molecular data is used,
+       so keep the initialized rate unchanged */
+    if (opt_usedata == 0) continue;
+    
     /* the branch rates follow i.i.d. gamma distributions
        with parameters opt_brate_m_alpha and opt_brate_m_beta */
     a = opt_brate_m_alpha;
@@ -1700,18 +1695,17 @@ double prop_branch_rates_trait(stree_t * stree)
                        - b * (new_rate - old_rate);
     stree->trait_logpr[n] += logpr_diff;
     lnacceptance += logpr_diff;
-
+    
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
       
       /* skip the root */
-      if (!snode->parent)
-        continue;
+      if (!snode->parent) continue;
       
       snode->trait[n]->brate = new_rate;
     }
-      
+    
     /* then calculate the log likelihood difference */
     trait_update_part(n, stree);
     lnacceptance += loglikelihood_trait_part(n, stree)
