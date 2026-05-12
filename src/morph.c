@@ -1014,16 +1014,14 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         {
           fprintf(stdout, "Warning: "
                   "constant char at column %d partition %d\n", j+1, n+1);
-          stree->root->trait[n]->active[j] = 0;
+          // keep active flags consistent on all nodes because root may change
+          for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+            stree->nodes[i]->trait[n]->active[j] = 0;
           continue;
         }
         else {
-          stree->root->trait[n]->active[j] = 1;
-          for (i = 0; i < stree->tip_count; ++i)  
-          {
-            snode = stree->nodes[i];
-            snode->trait[n]->active[j] = 1;  // not used for now
-          }
+          for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
+            stree->nodes[i]->trait[n]->active[j] = 1;
         }
 
         /* record the number of states for each character */
