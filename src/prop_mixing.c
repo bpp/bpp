@@ -622,7 +622,7 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
       #endif
       {
         logpr -= stree->nodes[j]->notheta_logpr_contrib;
-        logpr += update_logpg_contrib(stree,stree->nodes[j]);
+        logpr += update_logpg_contrib(stree,stree->nodes[j],1);
       }
     }
   }

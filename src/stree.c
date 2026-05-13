@@ -6083,6 +6083,7 @@ static long propose_tau(locus_t ** loci,
       if (!x->linked_theta)
       {
         if (marks[x->node_index]) continue;
+        x->notheta_old_logpr_contrib = x->notheta_logpr_contrib;
         logpr -= x->notheta_logpr_contrib;  
         marks[x->node_index] = 1;
       }
@@ -6092,6 +6093,7 @@ static long propose_tau(locus_t ** loci,
 
         if (marks[master->node_index]) continue;
 
+        master->notheta_old_logpr_contrib = master->notheta_logpr_contrib;
         logpr -= master->notheta_logpr_contrib;
         marks[master->node_index] = 1;
       }
@@ -6221,7 +6223,7 @@ static long propose_tau(locus_t ** loci,
       /* update contributions */
       if (!x->linked_theta)
       {
-        logpr += update_logpg_contrib(stree,x);
+        logpr += update_logpg_contrib(stree,x,0);
         marks[x->node_index] = 1;
       }
       else
@@ -6230,7 +6232,7 @@ static long propose_tau(locus_t ** loci,
 
         if (marks[master->node_index]) continue;
 
-        logpr += update_logpg_contrib(stree,master);
+        logpr += update_logpg_contrib(stree,master,0);
         marks[master->node_index] = 1;
       }
 
@@ -8822,7 +8824,7 @@ long stree_propose_spr(stree_t ** streeptr,
           
           if (!marks[master->node_index])
           {
-            logpr_notheta += update_logpg_contrib(stree,master);
+            logpr_notheta += update_logpg_contrib(stree,master,1);
             marks[master->node_index] = 1;
           }
         }
@@ -11311,7 +11313,7 @@ long snl_expand_and_shrink(stree_t * stree,
           
           if (!marks[master->node_index])
           {
-            logpr_notheta += update_logpg_contrib(stree,master);
+            logpr_notheta += update_logpg_contrib(stree,master,1);
             marks[master->node_index] = 1;
           }
         }

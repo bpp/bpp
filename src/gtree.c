@@ -3777,7 +3777,7 @@ void gtree_update_C2j(snode_t * snode,
   }
 }
 
-double update_logpg_contrib(stree_t * stree, snode_t * snode)
+double update_logpg_contrib(stree_t * stree, snode_t * snode, int store)
 {
   unsigned int j;
   assert(!opt_est_theta);
@@ -3843,7 +3843,13 @@ double update_logpg_contrib(stree_t * stree, snode_t * snode)
      in the caller functions by storing the 'notheta_old_logpr_contrib' in
      some array allocated at the caller, but I should change this to only
      update the value through a flag passed to this function */
-  snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
+  /* update: if non-zero, also snapshot notheta_logpr_contrib into
+     notheta_old_logpr_contrib before updating (single-locus proposals).
+     If zero, the caller has already frozen notheta_old_logpr_contrib before
+     the proposal loop and is responsible for rollback via logprob_revert_contribs
+     (multi-locus proposals: tau, prop_split, prop_join). */
+  if (store)
+    snode->notheta_old_logpr_contrib = snode->notheta_logpr_contrib;
   snode->notheta_logpr_contrib = logpr;
   if (opt_msci && opt_linkedtheta)
   {
@@ -4972,7 +4978,7 @@ static long propose_ages(locus_t * locus,
               gtree_update_C2j(node->pop,locus->heredity[0],msa_index,thread_index);
               snode_t * master = node->pop->linked_theta ?
                                    node->pop->linked_theta : node->pop;
-              logpr += update_logpg_contrib(stree,master);
+              logpr += update_logpg_contrib(stree,master,1);
             }
           }
         }
@@ -5152,7 +5158,7 @@ static long propose_ages(locus_t * locus,
             #else
             if (!stree->td[j]->linked_theta)
             #endif
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
 
           }
         }
@@ -5343,7 +5349,7 @@ static long propose_ages(locus_t * locus,
             #else
             if (!stree->td[j]->linked_theta)
             #endif
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
           }
         }
       } /* end of MSCI */
@@ -5407,7 +5413,7 @@ static long propose_ages(locus_t * locus,
                b) linked theta, but stree->td[j] is the primary node
             */
             if (!stree->td[j]->linked_theta)
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
 
           }
         }
@@ -7164,7 +7170,7 @@ static long propose_spr(locus_t * locus,
             #else
             if (!stree->td[j]->linked_theta)
             #endif
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
           }
         }
       } /* end of opt_msci */
@@ -7209,7 +7215,7 @@ static long propose_spr(locus_t * locus,
             gtree_update_C2j(father->pop,locus->heredity[0],msa_index,thread_index);
             snode_t * master = father->pop->linked_theta ?
                                  father->pop->linked_theta : father->pop;
-            logpr += update_logpg_contrib(stree,master);
+            logpr += update_logpg_contrib(stree,master,1);
           }
           #endif
         }
@@ -7404,7 +7410,7 @@ static long propose_spr(locus_t * locus,
             #else
             if (!stree->td[j]->linked_theta)
             #endif
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
           }
         }
       } /* end of msci */
@@ -7468,7 +7474,7 @@ static long propose_spr(locus_t * locus,
                b) linked theta, but stree->td[j] is the primary node
             */
             if (!stree->td[j]->linked_theta)
-              logpr += update_logpg_contrib(stree,stree->td[j]);
+              logpr += update_logpg_contrib(stree,stree->td[j],1);
           }
         }
       } /* end of msc / mscm */
@@ -9353,7 +9359,7 @@ static long propose_spr_sim(locus_t * locus,
              b) linked theta, but stree->td[j] is the primary node
           */
           if (!stree->td[j]->linked_theta)
-            logpr += update_logpg_contrib(stree,stree->td[j]);
+            logpr += update_logpg_contrib(stree,stree->td[j],1);
 
         }
       }

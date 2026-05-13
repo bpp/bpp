@@ -1953,7 +1953,7 @@ void gtree_update_C2j(snode_t * snode,
                       double heredity,
                       long msa_index,
                       long thread_index);
-double update_logpg_contrib(stree_t * stree, snode_t * snode);
+double update_logpg_contrib(stree_t * stree, snode_t * snode, int store);
 void logprob_revert_C2j(snode_t * snode, long msa_index);
 void logprob_revert_contribs(snode_t * snode);
 double gtree_propose_spr_serial(locus_t ** locus,

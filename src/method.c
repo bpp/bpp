@@ -4431,7 +4431,7 @@ static FILE * init(stree_t ** ptr_stree,
       if (!stree->nodes[j]->linked_theta)
       #endif
       {
-        logpr_sum += update_logpg_contrib(stree,stree->nodes[j]);
+        logpr_sum += update_logpg_contrib(stree,stree->nodes[j],1);
       }
     }
     stree->notheta_logpr += logpr_sum;
