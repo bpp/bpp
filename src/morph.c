@@ -2024,12 +2024,6 @@ int sim_parse_cont(const char * line)
       opt_sim_cont_miss < 0.0)
     return 1;
 
-  if (opt_sim_cont_vpop > 0 && opt_sim_cont_npop < 2)
-  {
-    fprintf(stderr, "Number of population samples must be at least 2\n");
-    return 1;
-  }
-
   return 0;
 }
 
@@ -2198,7 +2192,7 @@ static void sample_corr(double **s, int n, int p,
     mu[j] /= n;
   }
 
-  /* sample variance */
+  /* sample variance into sd */
   for (j = 0; j < p; ++j)
   {
     sd[j] = 0.0;
@@ -2266,10 +2260,14 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
     L  = stree->trait_Rs_1[pt];
     z  = stree->trait_Phi[pt];
 
-    mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
-
     a = snode->parent->trait[pt]->state_m;
-    rndMVN(x, a, vR, L, z, nchar);
+    if (v == 0.0)
+      memcpy(x, a, nchar * sizeof(double));
+    else
+    {
+      mat_scale(opt_sim_cont_R, v, vR, nchar, nchar);
+      rndMVN(x, a, vR, L, z, nchar);
+    }
   }
   else
   {
@@ -2287,8 +2285,8 @@ static void sim_cont_BM(int pt, snode_t * snode, stree_t * stree)
 
 void trait_simulate(stree_t * stree)
 {
-  int i, j, k, nchar, nind;
-  double *x, *vR, *L, *z, **s;
+  int i, j, k, nchar;
+  double *x, *mu = NULL, *vR, *L, *z;
 
   /* simulate discrete traits from root to tips
      given the species tree and evolutionary rate */
@@ -2304,15 +2302,13 @@ void trait_simulate(stree_t * stree)
     return;
   sim_cont_BM(1, stree->root, stree);
 
-  /* simulate population-level variation */
+
+  nchar = stree->trait_dim[1];
   if (opt_sim_cont_vpop > 1e-8)
   {
-    nind = opt_sim_cont_npop;
-    nchar = stree->trait_dim[1];
-    s = (double **)malloc((nind +1) * sizeof(double *));
-    for (i = 0; i <= nind; ++i)
-      s[i] = (double *)malloc(nchar * sizeof(double));
+    mu = (double *)malloc(nchar * sizeof(double));
 
+    /* simulate population-level variation */
     vR = stree->trait_Rs[1];
     L = stree->trait_Rs_1[1];
     z = stree->trait_Phi[1];
@@ -2325,22 +2321,30 @@ void trait_simulate(stree_t * stree)
       x = stree->nodes[i]->trait[1]->state_m;
       
       /* store the population mean */
-      memcpy(s[nind], x, nchar * sizeof(double));
+      memcpy(mu, x, nchar * sizeof(double));
 
       /* update tip traits, x */
-      rndMVN(x, s[nind], vR, L, z, nchar);
+      rndMVN(x, mu, vR, L, z, nchar);
+    }
+  }
+
+  if (opt_sim_cont_vpop > 1e-8 && opt_sim_cont_npop > 1)
+  {
+    /* generate population samples */
+    int nind = opt_sim_cont_npop;
+    double ** s = (double **)malloc(nind * sizeof(double *));
+    for (i = 0; i < nind; ++i)
+    {
+      s[i] = (double *)malloc(nchar * sizeof(double));
+      rndMVN(s[i], mu, vR, L, z, nchar);
     }
 
-    /* generate population samples */
-    for (i = 0; i < nind; ++i)
-      rndMVN(s[i], s[nind], vR, L, z, nchar);
-    
     /* correlation coefficient estimated from s (into vR) */
-    sample_corr(s, nind, nchar, s[nind], z, vR);
+    sample_corr(s, nind, nchar, mu, z, vR);
     /* shrink the correlation matrix for large p */
     if (nind <= nchar)
     {  // R*_jk = (1 - lambda) * R_jk for j != k
-      double lam = shrinkage_lambda(s, nind, nchar, s[nind], z, vR);
+      double lam = shrinkage_lambda(s, nind, nchar, mu, z, vR);
       for (j = 0; j < nchar; ++j)
         for (k = 0; k < nchar; ++k)
           if (j != k)
@@ -2350,11 +2354,14 @@ void trait_simulate(stree_t * stree)
     for (i = 0; i < nind; ++i) free(s[i]);
     free(s);
   }
-  else {  // store exact correlation matrix
+  else {
+    /* store exact correlation matrix */
     nchar = stree->trait_dim[1];
     memcpy(stree->trait_Rs[1], opt_sim_cont_R,
            nchar * nchar * sizeof(double));
   }
+
+  if (mu) free(mu);
 }
 
 void sim_trait_write(FILE * fp, stree_t * stree)

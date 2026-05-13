@@ -2733,7 +2733,7 @@ static void check_taus(stree_t * stree)
 
     while (x->parent)
     {
-      if (x->parent->tau <= x->tau && (!opt_msci || x->parent->htau))
+      if (x->parent->tau < x->tau) // relaxed for species delimitation and msci
         fatal("[ERROR] Parental node %s (tau=%f) is younger than daughter %s"
               " (tau=%f)\n",
               x->parent->label, x->parent->tau, x->label, x->tau);
