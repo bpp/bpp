@@ -21,83 +21,87 @@
 
 #include "bpp.h"
 
-static void vecswap(int i, int j, int n, char ** x, int * oi)
+static void vecswap(int i, int j, int n, char** x, int* oi)
 {
-  while (n--)
-  {
-    SWAP(x[i],x[j]);
-    if (oi)
-      SWAP(oi[i],oi[j]);
-    ++i; ++j;
-  }
+   char* ctmp;
+   int itmp;
+
+   while (n--)
+   {
+      swap2(x[i], x[j], ctmp);
+      if (oi)
+         swap2(oi[i], oi[j], itmp);
+      ++i; ++j;
+   }
 }
 
-static void ssort1(char ** x, int n, int depth, int * oi)
+static void ssort1(char** x, int n, int depth, int* oi)
 {
-  int a,b,c,d,r,v;
+  int a, b, c, d, r, v, itmp;
+  char* ctmp;
 
   if (n <= 1) return;
 
   a = rand() % n;
 
-  SWAP(x[0], x[a]);
+  swap2(x[0], x[a], ctmp);
   if (oi)
-    SWAP(oi[0], oi[a]);
+    swap2(oi[0], oi[a], itmp);
 
   v = x[0][depth];
 
   a = b = 1;
-  c = d = n-1;
+  c = d = n - 1;
 
   while (1)
   {
-    while (b <= c && (r = x[b][depth]-v) <= 0)
+    while (b <= c && (r = x[b][depth] - v) <= 0)
     {
       if (r == 0)
       {
-        SWAP(x[a], x[b]);
+        swap2(x[a], x[b], ctmp);
         if (oi)
-          SWAP(oi[a], oi[b]);
+          swap2(oi[a], oi[b], itmp);
         ++a;
       }
       ++b;
     }
-    while (b <= c && (r = x[c][depth]-v) >= 0)
+    while (b <= c && (r = x[c][depth] - v) >= 0)
     {
       if (r == 0)
       {
-        SWAP(x[c], x[d]);
+        swap2(x[c], x[d], ctmp);
         if (oi)
-          SWAP(oi[c], oi[d]);
+          swap2(oi[c], oi[d], itmp);
         --d;
       }
       --c;
     }
     if (b > c) break;
-    SWAP(x[b], x[c]);
+    swap2(x[b], x[c], ctmp);
     if (oi)
-      SWAP(oi[b], oi[c]);
+      swap2(oi[b], oi[c], itmp);
     ++b; --c;
   }
 
-  r = MIN(a,b-a); vecswap(0,b-r,r,x,oi);
-  r = MIN(d-c,n-d-1); vecswap(b,n-r,r,x,oi);
-  r = b-a; ssort1(x,r,depth,oi);
+  r = MIN(a, b - a); vecswap(0, b - r, r, x, oi);
+  r = MIN(d - c, n - d - 1); vecswap(b, n - r, r, x, oi);
+  r = b - a; ssort1(x, r, depth, oi);
 
   if (x[r][depth] != 0)
   {
     if (oi)
-      ssort1 (x + r, a + n - d - 1, depth + 1, oi + r);
+      ssort1(x + r, a + n - d - 1, depth + 1, oi + r);
     else
-      ssort1 (x + r, a + n - d - 1, depth + 1, NULL);
+      ssort1(x + r, a + n - d - 1, depth + 1, NULL);
 
   }
 
-    r = d - c; 
-    if (oi)
-      ssort1(x+n-r,r,depth,oi+n-r);
-    else
-      ssort1(x+n-r,r,depth,NULL);
+  r = d - c;
+  if (oi)
+    ssort1(x + n - r, r, depth, oi + n - r);
+  else
+    ssort1(x + n - r, r, depth, NULL);
 }
 
 static void remap_range(const unsigned int * map,

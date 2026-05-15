@@ -1118,6 +1118,8 @@ typedef struct thread_info_s
 #define SWAP(x,y) do { __typeof__ (x) _t = x; x = y; y = _t; } while(0)
 #endif
 
+#define swap2(a,b,tmp) { tmp=a; a=b; b=tmp; }
+
 #ifdef _MSC_VER
 #define PLL_POPCOUNT pll_popcount
 #define PLL_POPCOUNTL pll_popcount64
