@@ -43,6 +43,100 @@ static size_t readfile(const char * filename, char ** bufptr)
   return filesize;
 }
 
+/* Scan a (non-null-terminated) control-file buffer of 'size' bytes for the
+   'jobname' option line. On success return a freshly allocated copy of the
+   jobname value and set the vstart/vend out-params to the byte offsets in
+   'buf' delimiting the trimmed value (so the caller can splice in a
+   replacement). Return NULL
+   if no 'jobname' line is present. Aborts via fatal() if 'jobname' is present
+   but has no value. Line/token/value handling mirrors get_token() and
+   get_string() in cfile.c. */
+static char * find_jobname(const char * buf,
+                           size_t size,
+                           size_t * vstart,
+                           size_t * vend)
+{
+  size_t i = 0;
+
+  while (i < size)
+  {
+    /* end of current line: [i, eol) */
+    size_t eol = i;
+    while (eol < size && buf[eol] != '\n') ++eol;
+
+    size_t p = i;
+
+    /* skip leading white-space */
+    while (p < eol &&
+           (buf[p] == ' ' || buf[p] == '\t' || buf[p] == '\r'))
+      ++p;
+
+    /* blank line or comment */
+    if (p == eol || buf[p] == '*' || buf[p] == '#')
+    {
+      i = eol + 1;
+      continue;
+    }
+
+    /* token starts at p; find '=' within the line */
+    size_t tok_start = p;
+    while (p < eol && buf[p] != '=') ++p;
+
+    /* no '=' on this line */
+    if (p == eol)
+    {
+      i = eol + 1;
+      continue;
+    }
+
+    size_t eq = p;
+
+    /* trim trailing white-space from the token */
+    size_t tok_end = eq;
+    while (tok_end > tok_start &&
+           (buf[tok_end-1] == ' '  || buf[tok_end-1] == '\t' ||
+            buf[tok_end-1] == '\r' || buf[tok_end-1] == '\n'))
+      --tok_end;
+
+    /* match the option the same loose way cfile.c does */
+    if (tok_end - tok_start >= 7 &&
+        strncasecmp(buf+tok_start, "jobname", 7) == 0)
+    {
+      /* value: skip leading white-space after '=' */
+      size_t v = eq + 1;
+      while (v < eol &&
+             (buf[v] == ' ' || buf[v] == '\t' || buf[v] == '\r'))
+        ++v;
+
+      /* value ends at first '*' or '#' (inline comment) or end of line */
+      size_t ve = v;
+      while (ve < eol && buf[ve] != '*' && buf[ve] != '#') ++ve;
+
+      /* trim trailing white-space from the value */
+      while (ve > v &&
+             (buf[ve-1] == ' '  || buf[ve-1] == '\t' ||
+              buf[ve-1] == '\r' || buf[ve-1] == '\n'))
+        --ve;
+
+      if (ve == v)
+        fatal("Option 'jobname' has no value in control file %s",
+              opt_bfdriver);
+
+      *vstart = v;
+      *vend   = ve;
+
+      char * jobname = (char *)xmalloc((ve - v + 1) * sizeof(char));
+      memcpy(jobname, buf+v, ve-v);
+      jobname[ve-v] = 0;
+      return jobname;
+    }
+
+    i = eol + 1;
+  }
+
+  return NULL;
+}
+
 static const double x4[] = 
  {
    0.3399810435848562648026658, 0.8611363115940525752239465
@@ -1168,6 +1262,8 @@ void cmd_bfdriver()
   char * cfdata= NULL;
   size_t cfsize = 0;
   char * bwfile = NULL;
+  char * jobname = NULL;
+  size_t jn_start = 0, jn_end = 0;
 
   xasprintf(&bwfile, "%s.betaweights.csv", opt_bfdriver);
 
@@ -1185,6 +1281,11 @@ void cmd_bfdriver()
 
   /* read control file into a buffer */
   cfsize = readfile(opt_bfdriver, &cfdata);
+
+  /* locate the jobname option so it can be made unique per generated file */
+  jobname = find_jobname(cfdata, cfsize, &jn_start, &jn_end);
+  if (!jobname)
+    fatal("Option 'jobname' is required in control file %s", opt_bfdriver);
 
   for (i = 0; i < opt_bfd_points; ++i)
   {
@@ -1210,12 +1311,15 @@ void cmd_bfdriver()
 
     /* print in file */
     fprintf(fp_beta, "%.6f,%.6f,\n", beta, weight);
-    fwrite(cfdata, sizeof(char), cfsize, fp_ctl);
+    fwrite(cfdata, sizeof(char), jn_start, fp_ctl);
+    fprintf(fp_ctl, "%s-%ld", jobname, i+1);
+    fwrite(cfdata + jn_end, sizeof(char), cfsize - jn_end, fp_ctl);
     fprintf(fp_ctl, "\nBayesFactorBeta = %f   # w=%f\n", beta, weight);
 
     fclose(fp_ctl);
   }
 
+  free(jobname);
   free(cfdata);
   fclose(fp_beta);
 }
