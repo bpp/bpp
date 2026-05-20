@@ -21,8 +21,8 @@
  # gamma(a, b) for theta
  thetaprior = gamma 2 2000   
  
- # auto (0 or 1): finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
- #finetune = 1: 2 0.00001 0.0001  0.0005 0.5 0.2 1.0  
+ # auto-tune step lengths during burnin (append key:val pairs such as
+ #   Gage:5 Gspr:0.001 mix:0.3   to override defaults)
  finetune = 1
 
  print = 1 0 0 0  * MCMC samples, locusrate, heredityscalars, Genetrees

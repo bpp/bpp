@@ -21,13 +21,13 @@
 
      cleandata = 1    * remove sites with ambiguity data (1:yes, 0:no)?
 
-*    thetaprior = 3 0.04 e  # Inv-gamma(a, b) for theta (integrated out by default; add E to also sample theta)
-*      tauprior = 3 0.2     # Inv-gamma(a, b) for root tau
+*    thetaprior = invgamma 3 0.04      # Inv-gamma(a, b) for theta (estimated by default; add 'int' to integrate out)
+*      tauprior = invgamma 3 0.2       # Inv-gamma(a, b) for root tau
     thetaprior = gamma 2 100  # gamma(a, b) for theta
       tauprior = gamma 2 10   # gamma(a, b) for root tau
-    phiprior = 1 1  # Beta(a, b) for root tau & Dirichlet(a) for other tau's
+    phiprior = 1 1  # Beta(a, b) for the introgression probability phi
 
-      finetune =  1: 3 0.003 0.002 0.00002 0.005 0.9 0.001 0.001 # finetune for GBtj, GBspr, theta, tau, mix
+      finetune = 1  # auto-tune step lengths during burnin (append key:val pairs to customize)
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
         burnin = 32000
