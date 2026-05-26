@@ -1323,3 +1323,107 @@ void cmd_bfdriver()
   free(cfdata);
   fclose(fp_beta);
 }
+
+void cmd_bfcollect()
+{
+  int found;
+  long i, ixw;
+  double log_marginal;
+  double sign, beta_i, weight_i;
+  double sum = 0.0;
+  double beta_tmp, elnf_tmp;
+  char * sumfile = NULL;
+  char * fname;
+  FILE * fp;
+  FILE * fp_sum;
+  char buf[1024];
+
+  /* gauss-legendre quadrature points and weights */
+  const double * xni;
+  const double * wni;
+
+  if (opt_bfd_points <= 0)
+    fatal("--bfcollect requires --points N "
+          "(N in {4,8,16,32,64,128,256,512,1024})");
+
+  /* same supported point counts as --bfdriver; gauss_legendre_rule fatals
+     on an unsupported value */
+  gauss_legendre_rule(&xni, &wni, opt_bfd_points);
+
+  /* open the summary record file */
+  xasprintf(&sumfile, "%s.marginal_lnL.txt", opt_bfcollect);
+  fp_sum = xopen(sumfile, "w");
+  free(sumfile);
+  fprintf(fp_sum, "# point, beta, weight, E_b(lnf(X))\n");
+
+  fprintf(stdout, "collecting E_b(lnf(X)) from %ld output files "
+                  "with prefix '%s'\n\n", opt_bfd_points, opt_bfcollect);
+
+  for (i = 0; i < opt_bfd_points; ++i)
+  {
+    /* mirror the index-to-point mapping used by cmd_bfdriver() so the
+       (beta, weight) computed here match what the driver wrote into the
+       per-point control file */
+    if (i < opt_bfd_points/2)
+    {
+      ixw = opt_bfd_points/2 - 1 - i;
+      sign = -1;
+    }
+    else
+    {
+      ixw = i - opt_bfd_points/2;
+      sign = 1;
+    }
+    beta_i   = 0.5 + sign / 2 * xni[ixw];
+    weight_i = wni[ixw];
+
+    fname = NULL;
+    xasprintf(&fname, "%s-%ld.txt", opt_bfcollect, i+1);
+    fp = xopen(fname, "r");
+
+    /* scan for the (last) "BFbeta = X  E_b(lnf(X)) = Y" line; the output
+       file is opened in append mode by bpp, so a re-run could leave
+       multiple BFbeta lines — the freshest one is the relevant one */
+    found = 0;
+    double beta_in_file = 0.0, elnf = 0.0;
+    while (fgets(buf, (int)sizeof(buf), fp))
+    {
+      if (!strstr(buf, "BFbeta") || !strstr(buf, "E_b(lnf(X))"))
+        continue;
+      if (sscanf(buf, " BFbeta = %lf  E_b(lnf(X)) = %lf",
+                 &beta_tmp, &elnf_tmp) == 2)
+      {
+        beta_in_file = beta_tmp;
+        elnf = elnf_tmp;
+        found = 1;
+      }
+    }
+    fclose(fp);
+
+    if (!found)
+      fatal("No 'BFbeta = ... E_b(lnf(X)) = ...' line found in %s", fname);
+    if (fabs(beta_in_file - beta_i) > 1e-4)
+      fatal("beta mismatch in %s: expected %.6f, found %.6f "
+            "(wrong --points or wrong prefix?)",
+            fname, beta_i, beta_in_file);
+
+    free(fname);
+
+    sum += weight_i * elnf;
+
+    printf("b%02ld: beta = %.4f  w = %8.6f  E_b(lnf(X)) = %12.4f\n",
+           i+1, beta_i, weight_i, elnf);
+    fprintf(fp_sum, "%ld,%.6f,%.6f,%.6f\n", i+1, beta_i, weight_i, elnf);
+  }
+
+  log_marginal = sum / 2.0;
+
+  printf("\nMarginal log-likelihood (log m(D)) = %.6f\n", log_marginal);
+  printf("  (using %ld Gauss-Legendre points, prefix '%s')\n",
+         opt_bfd_points, opt_bfcollect);
+
+  fprintf(fp_sum,
+          "\n# marginal log-likelihood = 0.5 * sum(w_i * E_b(lnf(X))_i)\n");
+  fprintf(fp_sum, "log_marginal_likelihood = %.6f\n", log_marginal);
+  fclose(fp_sum);
+}

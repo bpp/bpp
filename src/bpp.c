@@ -207,6 +207,7 @@ double opt_vbar_beta;
 double opt_vi_alpha;
 char * opt_a1b1file;
 char * opt_bfdriver;
+char * opt_bfcollect;
 char * opt_cfile;
 char * opt_concatfile;
 char * opt_constraintfile;
@@ -348,6 +349,7 @@ static struct option long_options[] =
   {"checkpoint-percent",   required_argument, 0, 0 },  /* 55 */
   {"no-checkpoint",        no_argument,       0, 0 },  /* 56 */
   {"checkpoint-info",      required_argument, 0, 0 },  /* 57 */
+  {"bfcollect",            required_argument, 0, 0 },  /* 58 */
   { 0, 0, 0, 0 }
 };
 
@@ -458,6 +460,7 @@ void args_init(int argc, char ** argv)
   opt_brate_beta = 1;
   opt_bfbeta = 1;
   opt_bfdriver = NULL;
+  opt_bfcollect = NULL;
   opt_bfd_points = 0;
   opt_mubar_alpha = -1;
   opt_mubar_beta = -1;
@@ -974,6 +977,10 @@ void args_init(int argc, char ** argv)
         opt_checkpoint_info = optarg;
         break;
 
+      case 58:
+        opt_bfcollect = xstrdup(optarg);
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1015,6 +1022,8 @@ void args_init(int argc, char ** argv)
   if (opt_comply)
     commands++;
   if (opt_bfdriver)
+    commands++;
+  if (opt_bfcollect)
     commands++;
   if (opt_checkpoint_info)
     commands++;
@@ -1079,6 +1088,7 @@ static void dealloc_switches()
   if (opt_sp_seqcount) free(opt_sp_seqcount);
   if (opt_streenewick) free(opt_streenewick);
   if (opt_bfdriver) free(opt_bfdriver);
+  if (opt_bfcollect) free(opt_bfcollect);
   if (opt_print_locus_num) free(opt_print_locus_num);
   if (opt_a1b1file) free(opt_a1b1file);
 
@@ -1113,7 +1123,8 @@ void cmd_help()
           "Advanced options:\n"
           "  --arch SIMD              force specific vector instruction set (default: auto)\n"
           "  --bfdriver FILENAME      create control files to calculate marginal likelihood\n"
-          "  --points INTEGER         number of G-L quadrature points (used with --bfdriver)\n"
+          "  --points INTEGER         number of G-L quadrature points (used with --bfdriver/--bfcollect)\n"
+          "  --bfcollect PREFIX       compute marginal log-likelihood from bfdriver output files\n"
           "  --no-pin                 do not pin threads to cores\n"
           "  --theta_mode INTEGER     definition of theta step lengths (default: 2)\n"
           "  --theta-prop STRING      prop. dist. for theta gibbs move ('mg_invg' or 'mg_gamma')\n"
@@ -1233,6 +1244,10 @@ int main (int argc, char * argv[])
   else if (opt_bfdriver)
   {
     cmd_bfdriver();
+  }
+  else if (opt_bfcollect)
+  {
+    cmd_bfcollect();
   }
 
   free(opt_finetune_migrates);

@@ -1334,6 +1334,7 @@ extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
 extern long * opt_sp_seqcount;
 extern char * opt_bfdriver;
+extern char * opt_bfcollect;
 extern char * cmdline;
 extern char * opt_a1b1file;
 extern char * opt_cfile;
@@ -3127,6 +3128,7 @@ int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
 
 /* functions in bfdriver.c */
 void cmd_bfdriver();
+void cmd_bfcollect();
 
 /* functions in visual.c */
 void stree_export_pdf(const stree_t * stree);
