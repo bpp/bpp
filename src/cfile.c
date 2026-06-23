@@ -2601,6 +2601,7 @@ static void update_theta_finetunes()
   }
   list_clear(theta_eps_list,free);
   free(theta_eps_list);
+  theta_eps_list = NULL;
 }
 
 static void update_wr_finetunes()
@@ -2640,6 +2641,7 @@ static void update_wr_finetunes()
   }
   list_clear(wr_eps_list,free);
   free(wr_eps_list);
+  wr_eps_list = NULL;
 }
 
 static void update_wi_finetunes()
@@ -2679,6 +2681,7 @@ static void update_wi_finetunes()
   }
   list_clear(wi_eps_list,free);
   free(wi_eps_list);
+  wi_eps_list = NULL;
 }
 
 static void check_validity()
@@ -3446,6 +3449,24 @@ void load_cfile()
   {
     update_wr_finetunes();
     update_wi_finetunes();
+  }
+  else
+  {
+    /* parse_finetune unconditionally allocates wr_eps_list and wi_eps_list;
+       update_w[ri]_finetunes are only reached under opt_migration, so
+       release these lists here to avoid leaking them in non-migration runs */
+    if (wr_eps_list)
+    {
+      list_clear(wr_eps_list,free);
+      free(wr_eps_list);
+      wr_eps_list = NULL;
+    }
+    if (wi_eps_list)
+    {
+      list_clear(wi_eps_list,free);
+      free(wi_eps_list);
+      wi_eps_list = NULL;
+    }
   }
   check_validity();
   if (opt_migration)
