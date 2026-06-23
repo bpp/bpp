@@ -4523,10 +4523,11 @@ static FILE * init(stree_t ** ptr_stree,
 
       g_pj_mrate_slide = (double *)xcalloc((size_t)opt_migration_count,
                                            sizeof(double));
-      g_pj_mrate_gibbs = NULL; 
-      if (opt_mrate_slide_prob == 1)
-        g_pj_mrate_gibbs = (double *)xcalloc((size_t)opt_migration_count,
-                                             sizeof(double));
+      /* allocate the Gibbs pjump array whenever Gibbs moves can occur
+         (slide_prob < 1), mirroring the mode-1 path above and load.c */
+      g_pj_mrate_gibbs = (opt_mrate_slide_prob == 1) ?
+                           NULL : (double *)xcalloc((size_t)opt_migration_count,
+                                                    sizeof(double));
 
       if (opt_mig_vrates_exist)
         g_pj_migvr = (double *)xcalloc(opt_migration_count,sizeof(double));
