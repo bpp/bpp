@@ -6831,6 +6831,13 @@ void cmd_run()
       free(ft_round_mrate_gibbs);
   }
 
+  if (opt_dem)
+  {
+    for (i = 0; i < opt_dem_count; ++i)
+      free(opt_dem_specs[i].label);
+    free(opt_dem_specs);
+  }
+
   if (ft_round_theta_slide)
     free(ft_round_theta_slide);
   if (ft_round_theta_gibbs)

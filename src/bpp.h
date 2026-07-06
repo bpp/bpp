@@ -272,6 +272,9 @@ extern const char * global_freqs_strings[28];
 #define BPP_TAU_PRIOR_INVGAMMA          2
 #define BPP_TAU_PRIOR_MAX               2
 
+#define BPP_DEM_PIECEWISE_CONSTANT      0
+#define BPP_DEM_PIECEWISE_LINEAR        1
+
 
 #define BPP_THETA_PRIOR_MIN             1
 #define BPP_THETA_PRIOR_INVGAMMA        1
@@ -474,6 +477,13 @@ typedef struct migspec_s
 
   char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
+
+typedef struct dem_spec_s
+{
+  char * label;             /* population label from the control file */
+  long segments;            /* number of constant-size segments (>= 2) */
+  unsigned int snode_index; /* resolved species-tree node index (filled later) */
+} dem_spec_t;
 
 typedef struct migbuffer_s
 {
@@ -1223,6 +1233,9 @@ extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
 extern long opt_migration_count;
+extern long opt_dem;
+extern long opt_dem_count;
+extern long opt_dem_model;
 extern long opt_mig_vrates_exist;
 extern long opt_mix_theta_update;
 extern long opt_mix_w_update;
@@ -1366,6 +1379,7 @@ extern double * opt_finetune_mig_Mi;
 extern double * opt_finetune_theta;
 extern double * opt_qrates_params;
 extern migspec_t * opt_mig_specs;
+extern dem_spec_t * opt_dem_specs;
 extern long ** opt_migration_matrix;
 extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;

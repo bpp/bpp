@@ -1464,6 +1464,103 @@ l_unwind:
   return ret;
 }
 
+static long parse_demography(const char * line)
+{
+  /* Parse the 'demography' option: a comma-separated list of
+       population_label:num_segments
+     items, e.g.  demography = A:3, X:4, D:2
+     Each label is a species-tree node (tip or labelled inner node) whose
+     population size is made piecewise-constant with 'num_segments' segments
+     (num_segments-1 break points). Labels are resolved to species-tree nodes
+     later (after the tree is built). */
+
+  long i;
+  long ret = 0;
+  long count;
+  long segments;
+  char * s = xstrdup(line);
+  char * p = s;
+  char * token = NULL;
+  char * sval;
+
+  opt_dem_count = 0;
+  opt_dem_specs = NULL;
+
+  while (*p)
+  {
+    /* skip separators (whitespace and commas) */
+    p += strspn(p, " \t\r\n,");
+    if (!*p || *p == '*' || *p == '#')
+      break;
+
+    /* read one label:count item up to the next separator/comment */
+    count = strcspn(p, " \t\r\n,*#");
+    token = xstrndup(p, count);
+    p += count;
+
+    /* split label:count on the colon */
+    sval = strchr(token, ':');
+    if (!sval || sval == token || sval[1] == '\0')
+      goto l_unwind;
+    *sval++ = '\0';
+
+    if (!get_long(sval, &segments))
+      goto l_unwind;
+
+    if (segments < 2)
+    {
+      fprintf(stderr,
+              "Error: 'demography' segment count for population '%s' must be an "
+              "integer >= 2\n(a single-segment branch is the ordinary MSC and "
+              "need not be listed).\n", token);
+      goto l_unwind;
+    }
+
+    /* reject a population listed more than once */
+    for (i = 0; i < opt_dem_count; ++i)
+      if (!strcmp(opt_dem_specs[i].label, token))
+      {
+        fprintf(stderr,
+                "Error: 'demography' lists population '%s' more than once.\n",
+                token);
+        goto l_unwind;
+      }
+
+    /* append a new spec */
+    opt_dem_specs = (dem_spec_t *)xrealloc(opt_dem_specs,
+                        (size_t)(opt_dem_count + 1) * sizeof(dem_spec_t));
+    opt_dem_specs[opt_dem_count].label = xstrdup(token);
+    opt_dem_specs[opt_dem_count].segments = segments;
+    opt_dem_specs[opt_dem_count].snode_index = 0;
+    ++opt_dem_count;
+
+    free(token);
+    token = NULL;
+  }
+
+  /* the option must list at least one population */
+  if (opt_dem_count < 1)
+    goto l_unwind;
+
+  opt_dem = 1;
+  ret = 1;
+
+l_unwind:
+  if (token)
+    free(token);
+  free(s);
+  if (!ret)
+  {
+    for (i = 0; i < opt_dem_count; ++i)
+      free(opt_dem_specs[i].label);
+    if (opt_dem_specs)
+      free(opt_dem_specs);
+    opt_dem_specs = NULL;
+    opt_dem_count = 0;
+    opt_dem = 0;
+  }
+  return ret;
+}
 
 static long parse_thetaprior_args(const char * line)
 {
@@ -3293,7 +3390,18 @@ void load_cfile()
                 line_count);
         valid = 1;
       }
-      else if (!strncasecmp(token,"printlocus",10)) 
+      else if (!strncasecmp(token,"demography",10))
+      {
+        if (!parse_demography(value))
+          fatal("Erroneous format of 'demography' (line %ld)\n"
+                "Expected a comma-separated list of population:segments, e.g.\n"
+                "  demography = A:3, X:4, D:2\n"
+                "where each population label is a species-tree node (tip or\n"
+                "labelled inner node) and each segment count is an integer >= 2.",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"printlocus",10))
       {
         if (!parse_printlocus(value,&opt_print_locus))
           fatal("Erroneous format of 'printlocus' (line %ld)", line_count);
