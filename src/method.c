@@ -3969,35 +3969,21 @@ static FILE * init(stree_t ** ptr_stree,
     if (!opt_est_theta)
       fatal("The 'demography' (piecewise-constant) model requires estimated "
             "theta in this version.");
+    if (opt_est_stree)
+      fatal("The 'demography' (piecewise-constant) model is not compatible with "
+            "species-tree estimation (A01/A11) in this version.");
+    if (opt_est_delimit)
+      fatal("The 'demography' (piecewise-constant) model is not compatible with "
+            "species delimitation (A10/A11) in this version.");
+    if (opt_clock != BPP_CLOCK_GLOBAL)
+      fatal("The 'demography' (piecewise-constant) model requires the strict "
+            "clock (clock = 1) in this version.");
     stree_expand_demography(stree);
   }
 
   int tau_ctl = 0;
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count, &tau_ctl, fp_out);
-
-  /* TEMP (Task 2 verification; removed later): dump the expanded species tree */
-  if (opt_dem)
-  {
-    long z;
-    printf("\n[demography] expanded species tree: tips=%u inner=%u (unary dem=%u) "
-           "edges=%u\n", stree->tip_count, stree->inner_count, stree->dem_count,
-           stree->edge_count);
-    for (z = 0; z < (long)(stree->tip_count + stree->inner_count); ++z)
-    {
-      snode_t * n = stree->nodes[z];
-      printf("  [%2ld] %-10s dem=%ld base=%-4s seg=%ld  tau=%.6f theta=%.6f  "
-             "L=%s R=%s P=%s\n",
-             z, n->label ? n->label : "(null)", n->dem,
-             n->dem_base ? n->dem_base->label : "-", n->dem_index,
-             n->tau, n->theta,
-             n->left ? n->left->label : "-",
-             n->right ? n->right->label : "-",
-             n->parent ? n->parent->label : "-");
-    }
-    printf("\n");
-    fflush(stdout);
-  }
 
   stree_show_pptable(stree, BPP_FALSE);
 
@@ -6822,7 +6808,9 @@ void cmd_run()
   if (opt_method == METHOD_00)
   {
     allfixed_summary(fp_out,stree);
-    if (!opt_msci && stree->tip_count > 1)
+    /* the PDF tree drawer assumes a binary tree; skip it for the piecewise
+       demographic model (unary segment nodes) until it is made segment-aware */
+    if (!opt_msci && !opt_dem && stree->tip_count > 1)
       stree_export_pdf(stree);
     for (i = 0; i < stree->tip_count+stree->inner_count+stree->hybrid_count; ++i)
     {

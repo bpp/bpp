@@ -393,7 +393,8 @@ static void stree_traverse_postorder(snode_t * node,
     return;
 
   stree_traverse_postorder(node->left, cbtrav, index, outbuffer);
-  stree_traverse_postorder(node->right, cbtrav, index, outbuffer);
+  if (node->right)   /* unary demographic (break-point) nodes have no right child */
+    stree_traverse_postorder(node->right, cbtrav, index, outbuffer);
 
   outbuffer[*index] = node;
   *index = *index + 1;
@@ -420,7 +421,8 @@ static void stree_traverse_preorder(snode_t * node,
   *index = *index + 1;
 
   stree_traverse_preorder(node->left, cbtrav, index, outbuffer);
-  stree_traverse_preorder(node->right, cbtrav, index, outbuffer);
+  if (node->right)   /* unary demographic (break-point) nodes have no right child */
+    stree_traverse_preorder(node->right, cbtrav, index, outbuffer);
 
 }
 

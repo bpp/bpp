@@ -963,6 +963,7 @@ static void replace_hybrid(stree_t * stree,
 static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_t * stree, int * maxSeqIndex)
 {
   int i,j;
+  unsigned int l;
 
   /* delete the two children of epoch from the pop list, by replacing the child
      with the smaller index with epoch, and deleting the second child. It also
@@ -974,9 +975,17 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
   for (i = 0; i < count; ++i)
   {
     if (pop[i].snode == epoch->left)
-      break; 
+      break;
   }
   assert(i != count);
+
+  /* unary demographic (break-point) node: a single child, no merge — the child's
+     lineages simply carry through into the segment population */
+  if (!epoch->right)
+  {
+    pop[i].snode = epoch;
+    return;
+  }
 
   /* delete right descendant of epoch */
   for (j = 0; j < count; ++j)
@@ -999,19 +1008,20 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
   else 
     alloc_size = msa->count;
   /* add number of sampled lineages in ancestral population*/
-   if (opt_seqAncestral) {
-           snode_t * parent = pop[i].snode->parent;
-           for (unsigned l = stree->tip_count; l < stree->tip_count + stree->inner_count; l++){
-                   if (parent == stree->nodes[l]) {
-                           parentIndex = l;
-                           break;
-                   }
-
-           }
-
-   }
-   if (opt_seqAncestral && !opt_migration)
-           alloc_size = pop[i].seq_count + pop[j].seq_count + pop[parentIndex].seq_count;
+  if (opt_seqAncestral)
+  {
+    snode_t * parent = pop[i].snode->parent;
+    for (l = stree->tip_count; l < stree->tip_count + stree->inner_count; l++)
+    {
+      if (parent == stree->nodes[l])
+      {
+        parentIndex = l;
+        break;
+      }
+    }
+  }
+  if (opt_seqAncestral && !opt_migration)
+    alloc_size = pop[i].seq_count + pop[j].seq_count + pop[parentIndex].seq_count;
   
 
   /* allocate indices and nodes arrays for the new population */
@@ -1029,18 +1039,18 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
   memcpy(nodes+pop[i].seq_count,
          pop[j].nodes,
          pop[j].seq_count*sizeof(gnode_t *));
-  if(opt_seqAncestral) {
-        memcpy(nodes+pop[i].seq_count+pop[j].seq_count,
-                  pop[parentIndex].nodes,
-                  pop[parentIndex].seq_count*sizeof(gnode_t *));
-	memcpy(indices+pop[i].seq_count+pop[j].seq_count, 
-			pop[parentIndex].seq_indices,
-			pop[parentIndex].seq_count *sizeof(int));
-
-	free(pop[parentIndex].seq_indices);
-	pop[parentIndex].seq_indices = NULL;
-	free(pop[parentIndex].nodes);
-	pop[parentIndex].nodes = NULL;
+  if(opt_seqAncestral)
+  {
+    memcpy(nodes+pop[i].seq_count+pop[j].seq_count,
+           pop[parentIndex].nodes,
+           pop[parentIndex].seq_count*sizeof(gnode_t *));
+    memcpy(indices+pop[i].seq_count+pop[j].seq_count, 
+           pop[parentIndex].seq_indices,
+           pop[parentIndex].seq_count *sizeof(int));
+    free(pop[parentIndex].seq_indices);
+    pop[parentIndex].seq_indices = NULL;
+    free(pop[parentIndex].nodes);
+    pop[parentIndex].nodes = NULL;
   }
   pop[i].seq_count += pop[j].seq_count;
 
@@ -1057,23 +1067,24 @@ static void replace(pop_t * pop, int count, snode_t * epoch, msa_t * msa, stree_
   pop[i].seq_indices = indices;
   pop[i].nodes = nodes;
 
-  if (opt_migration && opt_datefile) {
-	  maxSeqIndex[i] = pop[i].seq_count;
-	  if (opt_seqAncestral)
-		maxSeqIndex[i] += maxSeqIndex[parentIndex];
+  if (opt_migration && opt_datefile)
+  {
+    maxSeqIndex[i] = pop[i].seq_count;
+    if (opt_seqAncestral)
+      maxSeqIndex[i] += maxSeqIndex[parentIndex];
   }
 
   /* if population j was not the last one, replace the last population in the
      list with j */
   //ANNA
-  if (j < count-1) {
+  if (j < count-1)
+  {
     memcpy(pop+j,pop+count-1,sizeof(pop_t));
-    if (opt_migration && opt_datefile) {
-	    maxSeqIndex[j] = maxSeqIndex[count-1];
+    if (opt_migration && opt_datefile)
+    {
+      maxSeqIndex[j] = maxSeqIndex[count-1];
     }
   }
-  
-
 }
 
 static int cb_cmp_spectime(const void * a, const void * b)
@@ -1245,11 +1256,13 @@ static void fill_seqin_counts_recursive(stree_t * stree,
   }
   else
   {
-    /* if no networks then this is valid */
-    node->seqin_count[msa_index] = lnode->seqin_count[msa_index] +
-                                   rnode->seqin_count[msa_index] -
-                                   lnode->coal_count[msa_index] -
-                                   rnode->coal_count[msa_index];
+    /* if no networks then this is valid; a unary demographic (break-point) node
+       has only a left child, so lineages enter from that child alone */
+    node->seqin_count[msa_index] = lnode->seqin_count[msa_index] -
+                                   lnode->coal_count[msa_index];
+    if (rnode)
+      node->seqin_count[msa_index] += rnode->seqin_count[msa_index] -
+                                      rnode->coal_count[msa_index];
   }
 
   if (opt_migration)
@@ -2799,8 +2812,14 @@ gtree_t * gtree_simulate(stree_t * stree, msa_t * msa, int msa_index,
     if (opt_msci && epoch[e]->hybrid)
       replace_hybrid(stree,pop,&pop_count,epoch[e],thread_index);
     else
+    {
       replace(pop,pop_count,epoch[e],msa, stree, maxSeqIndex);
-    
+      /* a unary demographic (break-point) epoch merges no populations, so undo
+         the loop's --pop_count for it (the population count is unchanged) */
+      if (!epoch[e]->right)
+        ++pop_count;
+    }
+
     if (e != epoch_count-1)
     {
       ++e;
@@ -3059,25 +3078,31 @@ static void reset_gene_leaves_count_recursive(snode_t * node, unsigned int locus
 
  
   int datedTips; 
-  if (opt_datefile) {
-  	for (j = 0; j < locus_count; ++j) {
-  	        datedTips = 0;
-  	        if (opt_seqAncestral) {
-  	      	for (int i = 0; i < node->epoch_count[j]; i++) 
-  	      		datedTips += node->date_count[j][i];
-  	      	
-  	        } 
-  		node->gene_leaves[j] = node->left->gene_leaves[j] +
-  	                 node->right->gene_leaves[j] + datedTips;
-  	}
-  
-  } else {
+  if (opt_datefile)
+  {
     for (j = 0; j < locus_count; ++j)
-    node->gene_leaves[j] = node->left->gene_leaves[j] +
-                           node->right->gene_leaves[j];
+    {
+      datedTips = 0;
+      if (opt_seqAncestral)
+      {
+        for (int i = 0; i < node->epoch_count[j]; i++) 
+          datedTips += node->date_count[j][i];
+      } 
+      node->gene_leaves[j] = node->left->gene_leaves[j] + datedTips;
+      if (node->right)
+        node->gene_leaves[j] += node->right->gene_leaves[j];
+    }
   }
-
-
+  else
+  {
+    for (j = 0; j < locus_count; ++j)
+    {
+      /* a unary demographic (break-point) node has only a left child */
+      node->gene_leaves[j] = node->left->gene_leaves[j];
+      if (node->right)
+        node->gene_leaves[j] += node->right->gene_leaves[j];
+    }
+  }
 }
 void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
 {
@@ -3092,24 +3117,27 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
   }
 
   /* Add the number of leaves from tip dated seqeunces*/
-  if (opt_datefile) {
-  	for (i = 0; i < stree->tip_count; ++i) {
-		snode_t * node = stree->nodes[i];
-  		for (j = 0; j < stree->locus_count; ++j) {
-  			int datedTips = 0;
-  		      	for (int k = 0; k < node->epoch_count[j]; k++) 
-  		      		datedTips += node->date_count[j][k];
-  		 
-  		node->gene_leaves[j] =  datedTips;
-		}	
-  	}
-
-  } else { 
-  /* gene leaves is the same as sequences coming in for tip nodes */
-   for (i = 0; i < stree->tip_count; ++i)
-     for (j = 0; j < stree->locus_count; ++j) {
-       stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
-     }
+  if (opt_datefile)
+  {
+    for (i = 0; i < stree->tip_count; ++i)
+    {
+      snode_t * node = stree->nodes[i];
+      for (j = 0; j < stree->locus_count; ++j)
+      {
+        int datedTips = 0;
+        for (int k = 0; k < node->epoch_count[j]; k++) 
+          datedTips += node->date_count[j][k];
+    		 
+        node->gene_leaves[j] =  datedTips;
+      }	
+    }
+  }
+  else
+  {
+    /* gene leaves is the same as sequences coming in for tip nodes */
+    for (i = 0; i < stree->tip_count; ++i)
+      for (j = 0; j < stree->locus_count; ++j)
+        stree->nodes[i]->gene_leaves[j] = stree->nodes[i]->seqin_count[j];
   }
 
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);

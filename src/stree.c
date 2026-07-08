@@ -464,6 +464,15 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   else
     snode->right = NULL;
 
+  /* piecewise-constant demographic model fields (opt_dem); dem_base is a node
+     pointer, so re-link it to the corresponding node in the clone */
+  clone->dem = snode->dem;
+  clone->dem_index = snode->dem_index;
+  if (snode->dem_base)
+    clone->dem_base = clone_stree->nodes[snode->dem_base->node_index];
+  else
+    clone->dem_base = NULL;
+
   /* label */
   if (snode->label)
     clone->label = xstrdup(snode->label);
@@ -3198,6 +3207,11 @@ void stree_expand_demography(stree_t * stree)
       u->dem_index = j;
       u->prop_tau = 1;
       u->tau = 1;      /* placeholder; stree_init_tau assigns the ordered value */
+      /* the per-node mark[] arrays are allocated for the original node set before
+         this function runs (method.c); allocate it for the appended unary nodes
+         too, so snode_clone's memcpy from ->mark and any ->mark[thread] deref are
+         safe */
+      u->mark = (int *)xcalloc((size_t)opt_threads, sizeof(int));
       xasprintf(&(u->label), "%s:%ld", p->label, j);
 
       stree->nodes[u->node_index] = u;
@@ -7542,15 +7556,19 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 
   long thread_index = 0;
 
-  /* compute number of nodes with tau > 0 */
+  /* compute number of nodes with tau > 0 (demographic break-point nodes are
+     excluded: they are moved by the dedicated break-point proposal, not the
+     rubber-band) */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->prop_tau))
+    if (stree->nodes[i]->tau > 0 && !stree->nodes[i]->dem &&
+        (!opt_msci || stree->nodes[i]->prop_tau))
       candidate_count++;
 
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
-    if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->prop_tau))
+    if (stree->nodes[i]->tau > 0 && !stree->nodes[i]->dem &&
+        (!opt_msci || stree->nodes[i]->prop_tau))
       accepted += propose_tau(loci,
                               stree->nodes[i],
                               gtree,
