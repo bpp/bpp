@@ -3956,9 +3956,48 @@ static FILE * init(stree_t ** ptr_stree,
     create_mig_bitmatrix(stree);
   }
 
+  /* piecewise-constant demographic model: expand each split population into a
+     chain of unary segment nodes (before stree_init sizes everything) */
+  if (opt_dem)
+  {
+    if (opt_msci)
+      fatal("The 'demography' (piecewise-constant) model is not compatible with "
+            "the MSci (introgression) model in this version.");
+    if (opt_migration)
+      fatal("The 'demography' (piecewise-constant) model is not compatible with "
+            "the migration (IM) model in this version.");
+    if (!opt_est_theta)
+      fatal("The 'demography' (piecewise-constant) model requires estimated "
+            "theta in this version.");
+    stree_expand_demography(stree);
+  }
+
   int tau_ctl = 0;
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count, &tau_ctl, fp_out);
+
+  /* TEMP (Task 2 verification; removed later): dump the expanded species tree */
+  if (opt_dem)
+  {
+    long z;
+    printf("\n[demography] expanded species tree: tips=%u inner=%u (unary dem=%u) "
+           "edges=%u\n", stree->tip_count, stree->inner_count, stree->dem_count,
+           stree->edge_count);
+    for (z = 0; z < (long)(stree->tip_count + stree->inner_count); ++z)
+    {
+      snode_t * n = stree->nodes[z];
+      printf("  [%2ld] %-10s dem=%ld base=%-4s seg=%ld  tau=%.6f theta=%.6f  "
+             "L=%s R=%s P=%s\n",
+             z, n->label ? n->label : "(null)", n->dem,
+             n->dem_base ? n->dem_base->label : "-", n->dem_index,
+             n->tau, n->theta,
+             n->left ? n->left->label : "-",
+             n->right ? n->right->label : "-",
+             n->parent ? n->parent->label : "-");
+    }
+    printf("\n");
+    fflush(stdout);
+  }
 
   stree_show_pptable(stree, BPP_FALSE);
 

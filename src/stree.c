@@ -1066,13 +1066,12 @@ static void stree_label_recursive(snode_t * node)
   if (!node->left)
     return;
 
-  if (node->left)
-    stree_label_recursive(node->left);
-  else
-    fatal("Specified species tree is not binary");
+  stree_label_recursive(node->left);
 
   if (node->right)
     stree_label_recursive(node->right);
+  else if (node->dem)
+    return;   /* unary demographic (break-point) node keeps its pre-set label */
   else
     fatal("Specified species tree is not binary");
 
@@ -1482,8 +1481,10 @@ static void stree_init_tau_recursive(snode_t * node, double prop, long thread_in
   else
     node->tau = 0;
 
-  stree_init_tau_recursive(node->left, prop, thread_index);
-  stree_init_tau_recursive(node->right, prop, thread_index);
+  if (node->left)
+    stree_init_tau_recursive(node->left, prop, thread_index);
+  if (node->right)
+    stree_init_tau_recursive(node->right, prop, thread_index);
 }
 
 static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
@@ -3114,6 +3115,103 @@ static void msci_validate(stree_t * stree)
             "ancestor-descendent relation",
             h1node->label, h2node->label);
   }
+}
+
+/* Piecewise-constant demographic model (opt_dem): turn each population listed
+   in 'demography = P:k, ...' into a chain of k constant-size segments by
+   splicing k-1 unary "break-point" nodes onto the branch (P -> P->parent).
+
+   The original nodes keep their indices: tips at [0,tip_count), the original
+   binary inner nodes at [tip_count, tip_count+orig_inner). The new unary nodes
+   are APPENDED as a contiguous tail block at [tip_count+orig_inner, ...), so
+   they are trivially iterable (count = stree->dem_count).
+
+   Run AFTER the (binary) species tree is parsed and BEFORE stree_init, so that
+   stree_init's pptable, per-node arrays, theta and tau initialisation all size
+   to the expanded tree. */
+void stree_expand_demography(stree_t * stree)
+{
+  long i, j;
+  unsigned int total = stree->tip_count + stree->inner_count;
+  long new_unary = 0;
+  unsigned int next_index;
+
+  assert(!opt_msci && !opt_migration);   /* v1: MSC only, no hybrids/migration */
+  assert(stree->hybrid_count == 0);
+
+  /* resolve each label to a species-tree node, validate, and count new nodes */
+  for (i = 0; i < opt_dem_count; ++i)
+  {
+    snode_t * p = NULL;
+
+    for (j = 0; j < (long)total; ++j)
+      if (stree->nodes[j]->label &&
+          !strcmp(stree->nodes[j]->label, opt_dem_specs[i].label))
+      {
+        p = stree->nodes[j];
+        break;
+      }
+
+    if (!p)
+      fatal("Error: 'demography' population '%s' was not found in the species "
+            "tree.\nInternal nodes must be labelled in the 'species&tree' "
+            "newick (e.g. ((A,B)X,C)R;).", opt_dem_specs[i].label);
+
+    if (!p->parent)
+      fatal("Error: 'demography' population '%s' is the root; splitting the "
+            "root population is not supported yet.", opt_dem_specs[i].label);
+
+    opt_dem_specs[i].snode_index = p->node_index;
+    new_unary += opt_dem_specs[i].segments - 1;
+  }
+
+  if (new_unary == 0)
+    return;
+
+  /* grow nodes[] to hold the appended unary nodes at the end of the inner block */
+  stree->nodes = (snode_t **)xrealloc(stree->nodes,
+                   (size_t)((long)total + new_unary) * sizeof(snode_t *));
+  next_index = total;
+
+  for (i = 0; i < opt_dem_count; ++i)
+  {
+    snode_t * p = stree->nodes[opt_dem_specs[i].snode_index];
+    long k = opt_dem_specs[i].segments;
+    snode_t * par = p->parent;
+    snode_t ** parlink = (par->left == p) ? &(par->left) : &(par->right);
+    snode_t * below = p;   /* node currently below the unary being created */
+
+    assert(*parlink == p);
+
+    /* build the chain  p -> U_1 -> U_2 -> ... -> U_{k-1} -> par  (youngest first) */
+    for (j = 1; j <= k - 1; ++j)
+    {
+      snode_t * u = (snode_t *)xcalloc(1, sizeof(snode_t));
+
+      u->left = below;
+      u->right = NULL;
+      below->parent = u;
+
+      u->node_index = next_index++;
+      u->dem = 1;
+      u->dem_base = p;
+      u->dem_index = j;
+      u->prop_tau = 1;
+      u->tau = 1;      /* placeholder; stree_init_tau assigns the ordered value */
+      xasprintf(&(u->label), "%s:%ld", p->label, j);
+
+      stree->nodes[u->node_index] = u;
+      below = u;
+    }
+
+    /* connect the topmost unary node to the original parent */
+    below->parent = par;
+    *parlink = below;
+  }
+
+  stree->inner_count += (unsigned int)new_unary;
+  stree->dem_count = (unsigned int)new_unary;
+  stree->edge_count = stree->tip_count + stree->inner_count - 1;
 }
 
 void stree_init(stree_t * stree,

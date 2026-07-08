@@ -615,6 +615,14 @@ typedef struct snode_s
      for continuous traits, it contains phylogenetic indepandent contrasts */
   trait_t ** trait;
 
+  /* piecewise-constant demographic model (opt_dem): a unary segment/break-point
+     node. dem==1 marks such a node; dem_base points to the base population
+     (segment 0, the original branch, which keeps label/theta:A/tau:A) and
+     dem_index is the segment number (1..K-1). Zero/NULL for ordinary nodes. */
+  long dem;
+  struct snode_s * dem_base;
+  long dem_index;
+
   long flag;
 } snode_t;
 
@@ -643,6 +651,7 @@ typedef struct stree_s
   unsigned int inner_count;
   unsigned int edge_count;
   unsigned int hybrid_count;
+  unsigned int dem_count;   /* number of unary demographic (segment) nodes (opt_dem) */
 
   unsigned int locus_count;
 
@@ -1641,6 +1650,8 @@ void stree_init(stree_t * stree,
                 int msa_count,
                 int * tau_ctl,
                 FILE * fp_out);
+
+void stree_expand_demography(stree_t * stree);
 
 void stree_init_pptable(stree_t * stree);
 
