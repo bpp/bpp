@@ -191,6 +191,17 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_mrate_mode,1,fp);
   DUMP(&opt_est_geneflow,1,fp);
 
+  /* write demography (piecewise-constant) info */
+  DUMP(&opt_dem,1,fp);
+  DUMP(&opt_dem_count,1,fp);
+  DUMP(&opt_dem_model,1,fp);
+  for (i = 0; i < (unsigned int)opt_dem_count; ++i)
+  {
+    DUMP(opt_dem_specs[i].label,strlen(opt_dem_specs[i].label)+1,fp);
+    DUMP(&(opt_dem_specs[i].segments),1,fp);
+    DUMP(&(opt_dem_specs[i].snode_index),1,fp);
+  }
+
   /* write method info */
   DUMP(&opt_method,1,fp);
 
@@ -330,6 +341,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(opt_finetune_theta,opt_finetune_theta_count,fp);
   DUMP(&opt_finetune_tau,1,fp);
   DUMP(&opt_finetune_mix,1,fp);
+  DUMP(&opt_finetune_dem,1,fp);
   DUMP(&opt_finetune_locusrate,1,fp);
   DUMP(&opt_finetune_qrates,1,fp);
   DUMP(&opt_finetune_freqs,1,fp);
@@ -381,6 +393,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(g_pj_theta_slide, opt_finetune_theta_count, fp);
   DUMP(&g_pj_tau, 1, fp);
   DUMP(&g_pj_mix, 1, fp);
+  DUMP(&g_pj_dem, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
   DUMP(&g_pj_phi_slide, 1, fp);
   DUMP(&g_pj_phi_gibbs, 1, fp);
@@ -610,6 +623,27 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->theta_step_index),1,fp);
+
+  /* write demographic (piecewise-constant) per-node fields; dem_base is a node
+     pointer, dumped as a validity flag + node index (mirrors the right-child
+     scheme above) */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    DUMP(&(stree->nodes[i]->dem),1,fp);
+    DUMP(&(stree->nodes[i]->dem_index),1,fp);
+    if (stree->nodes[i]->dem_base)
+    {
+      valid = 1;
+      DUMP(&valid,1,fp);
+      DUMP(&(stree->nodes[i]->dem_base->node_index),1,fp);
+    }
+    else
+    {
+      valid = 0;
+      DUMP(&valid,1,fp);
+    }
+  }
+  DUMP(&(stree->dem_count),1,fp);
 
 
   /* TODO: We do not need to write theta when !opt_est_theta */

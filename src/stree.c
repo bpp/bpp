@@ -1080,7 +1080,21 @@ static void stree_label_recursive(snode_t * node)
   if (node->right)
     stree_label_recursive(node->right);
   else if (node->dem)
-    return;   /* unary demographic (break-point) node keeps its pre-set label */
+  {
+    /* unary demographic (break-point) node: (re)generate its "<base>|<index>"
+       segment label from the base population and segment index. The base is
+       labelled earlier in this post-order traversal, so its label is available.
+       Regenerating here (rather than keeping a pre-set value) also restores the
+       label on checkpoint load, where inner-node labels are rebuilt rather than
+       read from file. */
+    if (node->dem_base)
+    {
+      if (node->label)
+        free(node->label);
+      xasprintf(&(node->label), "%s|%ld", node->dem_base->label, node->dem_index);
+    }
+    return;
+  }
   else
     fatal("Specified species tree is not binary");
 

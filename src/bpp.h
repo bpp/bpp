@@ -161,8 +161,7 @@
 
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
-/* checkpoint version */
-#define VERSION_CHKP 3
+#define VERSION_CHKP 4
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)

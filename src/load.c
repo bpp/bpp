@@ -132,8 +132,9 @@ void load_chk_header(FILE * fp)
   if (memcmp(magic,BPP_MAGIC,BPP_MAGIC_BYTES))
     fatal("File %s is not a BPP checkpoint file...", opt_resume);
 
-  if ((version_major != VERSION_MAJOR) || (version_minor != VERSION_MINOR) || (version_patch != VERSION_PATCH))
-    fatal("Incompatible CHKP: Checkpoint file version %ld, BPP version %ld",
+  if ((version_major != VERSION_MAJOR) || (version_minor != VERSION_MINOR) ||
+      (version_patch != VERSION_PATCH) || (version_chkp != VERSION_CHKP))
+    fatal("Incompatible CHKP: Checkpoint file format version %ld, BPP expects %ld",
           version_chkp, VERSION_CHKP);
 
   if (!LOAD(buffer,3,fp))
@@ -354,6 +355,27 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read finetune mrate mode");
   if (!LOAD(&opt_est_geneflow,1,fp))
     fatal("Cannot read est_geneflow flag");
+
+  /* read demography (piecewise-constant) info */
+  if (!LOAD(&opt_dem,1,fp))
+    fatal("Cannot read demography flag");
+  if (!LOAD(&opt_dem_count,1,fp))
+    fatal("Cannot read demography count");
+  if (!LOAD(&opt_dem_model,1,fp))
+    fatal("Cannot read demography model");
+  if (opt_dem_count)
+  {
+    opt_dem_specs = (dem_spec_t *)xcalloc((size_t)opt_dem_count,sizeof(dem_spec_t));
+    for (i = 0; i < (unsigned int)opt_dem_count; ++i)
+    {
+      if (!load_string(fp,&(opt_dem_specs[i].label)))
+        fatal("Cannot read demography label");
+      if (!LOAD(&(opt_dem_specs[i].segments),1,fp))
+        fatal("Cannot read demography segments");
+      if (!LOAD(&(opt_dem_specs[i].snode_index),1,fp))
+        fatal("Cannot read demography snode index");
+    }
+  }
 
   /* read method info */
   if (!LOAD(&opt_method,1,fp))
@@ -658,6 +680,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read species tree tau finetune parameter");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
+  if (!LOAD(&opt_finetune_dem,1,fp))
+    fatal("Cannot read demography break-point finetune parameter");
   if (!LOAD(&opt_finetune_locusrate,1,fp))
     fatal("Cannot read species locusrate/heredity finetune parameter");
   if (!LOAD(&opt_finetune_qrates,1,fp))
@@ -776,6 +800,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))
     fatal("Cannot read g_pj_mix");
+  if (!(LOAD(&g_pj_dem, 1, fp)))
+    fatal("Cannot read g_pj_dem");
   if (!(LOAD(&g_pj_lrht, 1, fp)))
     fatal("Cannot read g_pj_lrht");
   if (!(LOAD(&g_pj_phi_slide, 1, fp)))
@@ -1405,6 +1431,30 @@ void load_chk_section_2(FILE * fp)
     if (!LOAD(&(stree->nodes[i]->theta_step_index),1,fp))
       fatal("Cannot read theta step index for node %ld", i);
   }
+
+  /* read demographic (piecewise-constant) per-node fields before stree_label,
+     which regenerates the segment labels from dem_base + dem_index */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    unsigned int demvalid;
+    if (!LOAD(&(stree->nodes[i]->dem),1,fp))
+      fatal("Cannot read node dem flag");
+    if (!LOAD(&(stree->nodes[i]->dem_index),1,fp))
+      fatal("Cannot read node dem index");
+    if (!LOAD(&demvalid,1,fp))
+      fatal("Cannot read node dem_base flag");
+    if (demvalid)
+    {
+      unsigned int dembase_index;
+      if (!LOAD(&dembase_index,1,fp))
+        fatal("Cannot read node dem_base index");
+      stree->nodes[i]->dem_base = stree->nodes[dembase_index];
+    }
+    else
+      stree->nodes[i]->dem_base = NULL;
+  }
+  if (!LOAD(&(stree->dem_count),1,fp))
+    fatal("Cannot read stree dem_count");
 
   stree_label(stree);
 
@@ -3123,6 +3173,29 @@ void cmd_checkpoint_info(const char * filename)
   for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(st->nodes[i]->theta_step_index), 1, fp))
       fatal("Cannot read theta_step_index");
+
+  /* read demographic (piecewise-constant) per-node fields before stree_label */
+  for (i = 0; i < total_nodes; ++i)
+  {
+    unsigned int demvalid;
+    if (!LOAD(&(st->nodes[i]->dem), 1, fp))
+      fatal("Cannot read node dem flag");
+    if (!LOAD(&(st->nodes[i]->dem_index), 1, fp))
+      fatal("Cannot read node dem index");
+    if (!LOAD(&demvalid, 1, fp))
+      fatal("Cannot read node dem_base flag");
+    if (demvalid)
+    {
+      unsigned int dembase_index;
+      if (!LOAD(&dembase_index, 1, fp))
+        fatal("Cannot read node dem_base index");
+      st->nodes[i]->dem_base = st->nodes[dembase_index];
+    }
+    else
+      st->nodes[i]->dem_base = NULL;
+  }
+  if (!LOAD(&(st->dem_count), 1, fp))
+    fatal("Cannot read stree dem_count");
 
   /* generate inner node labels */
   stree_label(st);
