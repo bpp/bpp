@@ -275,7 +275,7 @@ static char * stree_export_newick_recursive(const snode_t * root,
   int size_alloced;
   assert(root != NULL);
 
-  if (!(root->left) || !(root->right))
+  if (!(root->left))
   {
     if (cb_serialize)
     {
@@ -286,6 +286,26 @@ static char * stree_export_newick_recursive(const snode_t * root,
     {
       size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
     }
+  }
+  else if (!(root->right))
+  {
+    /* unary (demographic break-point) node: a single child */
+    char * subtree1 = stree_export_newick_recursive(root->left, cb_serialize);
+    if (subtree1 == NULL)
+      return NULL;
+
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = xasprintf(&newick, "(%s)%s", subtree1, temp);
+      free(temp);
+    }
+    else
+    {
+      size_alloced = xasprintf(&newick, "(%s)%s:%f", subtree1,
+                               root->label ? root->label : "", root->length);
+    }
+    free(subtree1);
   }
   else
   {
@@ -335,7 +355,7 @@ char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const sn
   int size_alloced;
   if (!root) return NULL;
 
-  if (!(root->left) || !(root->right))
+  if (!(root->left))
   {
     if (cb_serialize)
     {
@@ -344,6 +364,24 @@ char * stree_export_newick(const snode_t * root, char * (*cb_serialize)(const sn
     }
     else
       size_alloced = xasprintf(&newick, "%s:%f", root->label, root->length);
+  }
+  else if (!(root->right))
+  {
+    /* unary (demographic break-point) node: a single child */
+    char * subtree1 = stree_export_newick_recursive(root->left, cb_serialize);
+    if (!subtree1)
+      fatal("Unable to allocate enough memory.");
+
+    if (cb_serialize)
+    {
+      char * temp = cb_serialize(root);
+      size_alloced = xasprintf(&newick, "(%s)%s;", subtree1, temp);
+      free(temp);
+    }
+    else
+      size_alloced = xasprintf(&newick, "(%s)%s:%f;", subtree1,
+                               root->label ? root->label : "", root->length);
+    free(subtree1);
   }
   else
   {

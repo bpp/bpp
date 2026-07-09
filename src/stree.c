@@ -3212,7 +3212,10 @@ void stree_expand_demography(stree_t * stree)
          too, so snode_clone's memcpy from ->mark and any ->mark[thread] deref are
          safe */
       u->mark = (int *)xcalloc((size_t)opt_threads, sizeof(int));
-      xasprintf(&(u->label), "%s:%ld", p->label, j);
+      /* segment label "<base>|<index>" (e.g. K|1); the '|' delimiter avoids
+         confusion with ':' used for branch lengths in newick and for the
+         index:label separator in the .mcmc.txt column headers */
+      xasprintf(&(u->label), "%s|%ld", p->label, j);
 
       stree->nodes[u->node_index] = u;
       below = u;
