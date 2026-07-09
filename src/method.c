@@ -659,6 +659,10 @@ static void print_mcmc_headerline(FILE * fp,
   //fprintf(fp," thet");    linewidth += 5;
   fprintf(fp,"  tau");      linewidth += 5;
   fprintf(fp,"  mix");      linewidth += 5;
+  if (opt_dem)
+  {
+    fprintf(fp,"  dem");    linewidth += 5;
+  }
   if (enabled_hrdt)
   {
     fprintf(fp," hrdt");    linewidth += 5;
@@ -1012,6 +1016,14 @@ static void active_pjumps_alloc()
   active_pjump_values[k] = &g_pj_mix;
   finetune_values_ptr[k] = &opt_finetune_mix;
   ++k;
+
+  if (opt_dem)
+  {
+    active_pjump_titles[k] = xstrdup("dem");
+    active_pjump_values[k] = &g_pj_dem;
+    finetune_values_ptr[k] = &opt_finetune_dem;
+    ++k;
+  }
 
   if (lrht)
   {
@@ -1744,6 +1756,8 @@ static void status_print_pjump(FILE * fp,
   }
   fprintf(fp, " %4.2f", g_pj_tau);
   fprintf(fp, " %4.2f", g_pj_mix);
+  if (opt_dem)
+    fprintf(fp, " %4.2f", g_pj_dem);
 
   if (extra)
     fprintf(fp, " %4.2f", g_pj_lrht);
@@ -4908,6 +4922,7 @@ static void pjump_reset()
   g_pj_gage = 0;
   g_pj_gspr = 0;
   g_pj_tau = 0;
+  g_pj_dem = 0;
   g_pj_mix = 0;
   g_pj_lrht = 0;
   g_pj_phi_slide = 0;
@@ -5761,7 +5776,17 @@ void cmd_run()
     }
     #endif
 
-    /* propose migration rates */      
+    /* propose demographic break points (piecewise-constant model) */
+    if (opt_dem && !opt_usedata_fix_gtree)
+    {
+      ratio = stree_propose_dem_tau(gtree, stree, locus);
+      RMEAN_UPDATE(g_pj_dem, ft_round, ratio);
+      #ifdef CHECK_LOGPR
+      debug_validate_logpg(stree, gtree, locus, "DEM");
+      #endif
+    }
+
+    /* propose migration rates */
     if (opt_migration)
       prop_migrates(stree,gtree,locus,ft_round_mrate_gibbs,ft_round_mrate_slide);
     

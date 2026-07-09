@@ -1311,6 +1311,7 @@ extern double opt_finetune_qrates;
 extern double opt_finetune_nubar;
 extern double opt_finetune_nui;
 extern double opt_finetune_tau;
+extern double opt_finetune_dem;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_snl_lambda_expand;
@@ -1470,6 +1471,7 @@ extern migbuffer_t ** global_migbuffer_r;
 extern double g_pj_gage;
 extern double g_pj_gspr;
 extern double g_pj_tau;
+extern double g_pj_dem;
 extern double g_pj_mix;
 extern double g_pj_lrht;
 extern double g_pj_phi_gibbs;
@@ -1599,6 +1601,7 @@ void stree_propose_theta(gtree_t ** gtree,
 hashtable_t * datelist_hash(list_t * datelist);
 
 double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
 double stree_propose_tau_mig(stree_t ** streeptr,
                              gtree_t *** gtreeptr,
                              stree_t ** scloneptr,

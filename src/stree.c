@@ -7543,8 +7543,6 @@ static long propose_tau_mig(locus_t ** loci,
   for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     stree->nodes[i]->flag = 0;
 
-  //if (accepted) printf("ACCEPTED!!!!!\n"); else printf("REJECTED\n");
-
   return accepted;
 }
 
@@ -7576,6 +7574,156 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
                               candidate_count,
                               thread_index);
   }
+
+  return ((double)accepted / candidate_count);
+}
+
+/* Piecewise-constant demographic model: break-point move.
+
+   A demographic (unary) node U represents a break point; U->left is the segment
+   below it, U->parent the segment above. Moving U->tau re-partitions the
+   coalescent events that the boundary crosses between U and its child, without
+   touching any gene-tree node age or the sequence likelihood. Only the
+   coalescent-density contributions of U and U->left change. */
+
+/* re-assign the coalescent events crossed as the U / U->left boundary slides
+   from 'from_tau' to 'to_tau', moving them between U and its child C=U->left and
+   updating coal_count and seqin_count accordingly (see fill_seqin_counts: only
+   seqin_count[U] changes, by +-1 per event; C's incoming count is unchanged) */
+static void reattribute_dem_events(snode_t * U,
+                                   snode_t * C,
+                                   double from_tau,
+                                   double to_tau,
+                                   long msa_index)
+{
+  dlist_item_t * item;
+  dlist_item_t * next;
+
+  if (to_tau > from_tau)
+  {
+    /* boundary moved up: events of U in [from_tau,to_tau) drop into C */
+    for (item = U->coalevent[msa_index]->head; item; item = next)
+    {
+      gnode_t * g = (gnode_t *)(item->data);
+      next = item->next;
+      if (g->time >= from_tau && g->time < to_tau)
+      {
+        unlink_event(g, (int)msa_index);
+        U->coal_count[msa_index]--;
+        g->pop = C;
+        dlist_item_append(C->coalevent[msa_index], g->coalevent);
+        C->coal_count[msa_index]++;
+        U->seqin_count[msa_index]--;
+      }
+    }
+  }
+  else if (to_tau < from_tau)
+  {
+    /* boundary moved down: events of C in [to_tau,from_tau) rise into U */
+    for (item = C->coalevent[msa_index]->head; item; item = next)
+    {
+      gnode_t * g = (gnode_t *)(item->data);
+      next = item->next;
+      if (g->time >= to_tau && g->time < from_tau)
+      {
+        unlink_event(g, (int)msa_index);
+        C->coal_count[msa_index]--;
+        g->pop = U;
+        dlist_item_append(U->coalevent[msa_index], g->coalevent);
+        U->coal_count[msa_index]++;
+        U->seqin_count[msa_index]++;
+      }
+    }
+  }
+}
+
+static int propose_dem_tau(stree_t * stree,
+                           gtree_t ** gtree,
+                           locus_t ** locus,
+                           snode_t * U,
+                           long thread_index)
+{
+  long i;
+  snode_t * C = U->left;                 /* child segment */
+  double old_tau = U->tau;
+  double lower = C->tau;                  /* younger neighbour (break point / node) */
+  double upper = U->parent->tau;          /* older neighbour (break point / divergence) */
+  double new_tau;
+  double lnacceptance = 0;
+
+  assert(!U->right);
+
+  new_tau = old_tau + opt_finetune_dem * legacy_rnd_symmetrical(thread_index);
+  new_tau = reflect(new_tau, lower, upper, thread_index);
+
+  /* save the two affected contributions and remove them from gtree->logpr */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree[i]->old_logpr = gtree[i]->logpr;
+    U->old_logpr_contrib[i] = U->logpr_contrib[i];
+    C->old_logpr_contrib[i] = C->logpr_contrib[i];
+    gtree[i]->logpr -= U->logpr_contrib[i];
+    gtree[i]->logpr -= C->logpr_contrib[i];
+  }
+
+  /* slide the boundary and re-assign the crossed coalescent events */
+  U->tau = new_tau;
+  for (i = 0; i < opt_locus_count; ++i)
+    reattribute_dem_events(U, C, old_tau, new_tau, i);
+
+  /* recompute only the two affected populations' contributions */
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree_update_logprob_contrib(U, locus[i]->heredity[0], i, thread_index);
+    gtree_update_logprob_contrib(C, locus[i]->heredity[0], i, thread_index);
+    gtree[i]->logpr += U->logpr_contrib[i];
+    gtree[i]->logpr += C->logpr_contrib[i];
+    lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
+  }
+
+  /* symmetric kernel (Hastings ratio 1); flat alpha=1 break-point prior (ratio
+     1); no Jacobian (no time rescaling) and no sequence-likelihood change */
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    return 1;
+
+  /* reject: reverse the re-assignment of coal events and restore */
+  U->tau = old_tau;
+  for (i = 0; i < opt_locus_count; ++i)
+    reattribute_dem_events(U, C, new_tau, old_tau, i);
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree[i]->logpr = gtree[i]->old_logpr;
+    U->logpr_contrib[i] = U->old_logpr_contrib[i];
+    C->logpr_contrib[i] = C->old_logpr_contrib[i];
+    U->C2ji[i] = U->old_C2ji[i];
+    C->C2ji[i] = C->old_C2ji[i];
+  }
+  return 0;
+}
+
+/* propose every break point (unary demographic node) in turn */
+double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
+{
+  unsigned int i;
+  unsigned int candidate_count = 0;
+  long accepted = 0;
+  long thread_index = 0;
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->dem)
+      candidate_count++;
+
+  if (!candidate_count)
+    return 0;
+
+  for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
+    if (stree->nodes[i]->dem)
+      accepted += propose_dem_tau(stree,
+                                  gtree,
+                                  loci,
+                                  stree->nodes[i],
+                                  thread_index);
 
   return ((double)accepted / candidate_count);
 }
