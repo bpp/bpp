@@ -157,7 +157,7 @@
 
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 8
-#define VERSION_PATCH 7
+#define VERSION_PATCH 8
 
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
@@ -1122,6 +1122,8 @@ typedef struct thread_info_s
 #define SWAP(x,y) do { __typeof__ (x) _t = x; x = y; y = _t; } while(0)
 #endif
 
+#define swap2(a,b,tmp) { tmp=a; a=b; b=tmp; }
+
 #ifdef _MSC_VER
 #define PLL_POPCOUNT pll_popcount
 #define PLL_POPCOUNTL pll_popcount64
@@ -1337,6 +1339,7 @@ extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
 extern long * opt_sp_seqcount;
 extern char * opt_bfdriver;
+extern char * opt_bfcollect;
 extern char * cmdline;
 extern char * opt_a1b1file;
 extern char * opt_cfile;
@@ -3147,6 +3150,7 @@ int ming2(FILE *fout, double *f, double(*fun)(double x[], int n),
 
 /* functions in bfdriver.c */
 void cmd_bfdriver();
+void cmd_bfcollect();
 
 /* functions in visual.c */
 void stree_export_pdf(const stree_t * stree);

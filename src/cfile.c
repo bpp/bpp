@@ -2601,6 +2601,7 @@ static void update_theta_finetunes()
   }
   list_clear(theta_eps_list,free);
   free(theta_eps_list);
+  theta_eps_list = NULL;
 }
 
 static void update_wr_finetunes()
@@ -2628,18 +2629,27 @@ static void update_wr_finetunes()
 
   if (!wr_eps_list) return;
 
+  /* number of distinct wr step lengths the user may reference (wr1..wr<slots>):
+     one shared step length in mode 1, one per migration band in mode 2 */
+  long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
   list_item_t * li = wr_eps_list->head;
   while (li)
   {
     eps_pair_t * pair = (eps_pair_t *)(li->data);
 
-    if (opt_finetune_mrate_mode == 1)
+    if (pair->indexm1 < 0 || pair->indexm1 >= slots)
+      fatal("Error: finetune in %s specifies wr%ld, but wrate_mode=%ld allows "
+            "only wr1..wr%ld", opt_cfile, pair->indexm1 + 1,
+            opt_finetune_mrate_mode, slots);
 
     opt_finetune_migrates[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+
     li = li->next;
   }
   list_clear(wr_eps_list,free);
   free(wr_eps_list);
+  wr_eps_list = NULL;
 }
 
 static void update_wi_finetunes()
@@ -2667,18 +2677,27 @@ static void update_wi_finetunes()
 
   if (!wi_eps_list) return;
 
+  /* number of distinct wi step lengths the user may reference (wi1..wi<slots>):
+     one shared step length in mode 1, one per migration band in mode 2 */
+  long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
+
   list_item_t * li = wi_eps_list->head;
   while (li)
   {
     eps_pair_t * pair = (eps_pair_t *)(li->data);
 
-    if (opt_finetune_mrate_mode == 1)
+    if (pair->indexm1 < 0 || pair->indexm1 >= slots)
+      fatal("Error: finetune in %s specifies wi%ld, but wrate_mode=%ld allows "
+            "only wi1..wi%ld", opt_cfile, pair->indexm1 + 1,
+            opt_finetune_mrate_mode, slots);
 
     opt_finetune_mig_Mi[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+
     li = li->next;
   }
   list_clear(wi_eps_list,free);
   free(wi_eps_list);
+  wi_eps_list = NULL;
 }
 
 static void check_validity()
@@ -3446,6 +3465,24 @@ void load_cfile()
   {
     update_wr_finetunes();
     update_wi_finetunes();
+  }
+  else
+  {
+    /* parse_finetune unconditionally allocates wr_eps_list and wi_eps_list;
+       update_w[ri]_finetunes are only reached under opt_migration, so
+       release these lists here to avoid leaking them in non-migration runs */
+    if (wr_eps_list)
+    {
+      list_clear(wr_eps_list,free);
+      free(wr_eps_list);
+      wr_eps_list = NULL;
+    }
+    if (wi_eps_list)
+    {
+      list_clear(wi_eps_list,free);
+      free(wi_eps_list);
+      wi_eps_list = NULL;
+    }
   }
   check_validity();
   if (opt_migration)

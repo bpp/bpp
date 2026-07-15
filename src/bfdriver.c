@@ -43,6 +43,100 @@ static size_t readfile(const char * filename, char ** bufptr)
   return filesize;
 }
 
+/* Scan a (non-null-terminated) control-file buffer of 'size' bytes for the
+   'jobname' option line. On success return a freshly allocated copy of the
+   jobname value and set the vstart/vend out-params to the byte offsets in
+   'buf' delimiting the trimmed value (so the caller can splice in a
+   replacement). Return NULL
+   if no 'jobname' line is present. Aborts via fatal() if 'jobname' is present
+   but has no value. Line/token/value handling mirrors get_token() and
+   get_string() in cfile.c. */
+static char * find_jobname(const char * buf,
+                           size_t size,
+                           size_t * vstart,
+                           size_t * vend)
+{
+  size_t i = 0;
+
+  while (i < size)
+  {
+    /* end of current line: [i, eol) */
+    size_t eol = i;
+    while (eol < size && buf[eol] != '\n') ++eol;
+
+    size_t p = i;
+
+    /* skip leading white-space */
+    while (p < eol &&
+           (buf[p] == ' ' || buf[p] == '\t' || buf[p] == '\r'))
+      ++p;
+
+    /* blank line or comment */
+    if (p == eol || buf[p] == '*' || buf[p] == '#')
+    {
+      i = eol + 1;
+      continue;
+    }
+
+    /* token starts at p; find '=' within the line */
+    size_t tok_start = p;
+    while (p < eol && buf[p] != '=') ++p;
+
+    /* no '=' on this line */
+    if (p == eol)
+    {
+      i = eol + 1;
+      continue;
+    }
+
+    size_t eq = p;
+
+    /* trim trailing white-space from the token */
+    size_t tok_end = eq;
+    while (tok_end > tok_start &&
+           (buf[tok_end-1] == ' '  || buf[tok_end-1] == '\t' ||
+            buf[tok_end-1] == '\r' || buf[tok_end-1] == '\n'))
+      --tok_end;
+
+    /* match the option the same loose way cfile.c does */
+    if (tok_end - tok_start >= 7 &&
+        strncasecmp(buf+tok_start, "jobname", 7) == 0)
+    {
+      /* value: skip leading white-space after '=' */
+      size_t v = eq + 1;
+      while (v < eol &&
+             (buf[v] == ' ' || buf[v] == '\t' || buf[v] == '\r'))
+        ++v;
+
+      /* value ends at first '*' or '#' (inline comment) or end of line */
+      size_t ve = v;
+      while (ve < eol && buf[ve] != '*' && buf[ve] != '#') ++ve;
+
+      /* trim trailing white-space from the value */
+      while (ve > v &&
+             (buf[ve-1] == ' '  || buf[ve-1] == '\t' ||
+              buf[ve-1] == '\r' || buf[ve-1] == '\n'))
+        --ve;
+
+      if (ve == v)
+        fatal("Option 'jobname' has no value in control file %s",
+              opt_bfdriver);
+
+      *vstart = v;
+      *vend   = ve;
+
+      char * jobname = (char *)xmalloc((ve - v + 1) * sizeof(char));
+      memcpy(jobname, buf+v, ve-v);
+      jobname[ve-v] = 0;
+      return jobname;
+    }
+
+    i = eol + 1;
+  }
+
+  return NULL;
+}
+
 static const double x4[] = 
  {
    0.3399810435848562648026658, 0.8611363115940525752239465
@@ -1168,6 +1262,8 @@ void cmd_bfdriver()
   char * cfdata= NULL;
   size_t cfsize = 0;
   char * bwfile = NULL;
+  char * jobname = NULL;
+  size_t jn_start = 0, jn_end = 0;
 
   xasprintf(&bwfile, "%s.betaweights.csv", opt_bfdriver);
 
@@ -1185,6 +1281,11 @@ void cmd_bfdriver()
 
   /* read control file into a buffer */
   cfsize = readfile(opt_bfdriver, &cfdata);
+
+  /* locate the jobname option so it can be made unique per generated file */
+  jobname = find_jobname(cfdata, cfsize, &jn_start, &jn_end);
+  if (!jobname)
+    fatal("Option 'jobname' is required in control file %s", opt_bfdriver);
 
   for (i = 0; i < opt_bfd_points; ++i)
   {
@@ -1210,12 +1311,119 @@ void cmd_bfdriver()
 
     /* print in file */
     fprintf(fp_beta, "%.6f,%.6f,\n", beta, weight);
-    fwrite(cfdata, sizeof(char), cfsize, fp_ctl);
+    fwrite(cfdata, sizeof(char), jn_start, fp_ctl);
+    fprintf(fp_ctl, "%s-%ld", jobname, i+1);
+    fwrite(cfdata + jn_end, sizeof(char), cfsize - jn_end, fp_ctl);
     fprintf(fp_ctl, "\nBayesFactorBeta = %f   # w=%f\n", beta, weight);
 
     fclose(fp_ctl);
   }
 
+  free(jobname);
   free(cfdata);
   fclose(fp_beta);
+}
+
+void cmd_bfcollect()
+{
+  int found;
+  long i, ixw;
+  double log_marginal;
+  double sign, beta_i, weight_i;
+  double sum = 0.0;
+  double beta_tmp, elnf_tmp;
+  char * sumfile = NULL;
+  char * fname;
+  FILE * fp;
+  FILE * fp_sum;
+  char buf[1024];
+
+  /* gauss-legendre quadrature points and weights */
+  const double * xni;
+  const double * wni;
+
+  if (opt_bfd_points <= 0)
+    fatal("--bfcollect requires --points N "
+          "(N in {4,8,16,32,64,128,256,512,1024})");
+
+  /* same supported point counts as --bfdriver; gauss_legendre_rule fatals
+     on an unsupported value */
+  gauss_legendre_rule(&xni, &wni, opt_bfd_points);
+
+  /* open the summary record file */
+  xasprintf(&sumfile, "%s.marginal_lnL.txt", opt_bfcollect);
+  fp_sum = xopen(sumfile, "w");
+  free(sumfile);
+  fprintf(fp_sum, "# point, beta, weight, E_b(lnf(X))\n");
+
+  fprintf(stdout, "collecting E_b(lnf(X)) from %ld output files "
+                  "with prefix '%s'\n\n", opt_bfd_points, opt_bfcollect);
+
+  for (i = 0; i < opt_bfd_points; ++i)
+  {
+    /* mirror the index-to-point mapping used by cmd_bfdriver() so the
+       (beta, weight) computed here match what the driver wrote into the
+       per-point control file */
+    if (i < opt_bfd_points/2)
+    {
+      ixw = opt_bfd_points/2 - 1 - i;
+      sign = -1;
+    }
+    else
+    {
+      ixw = i - opt_bfd_points/2;
+      sign = 1;
+    }
+    beta_i   = 0.5 + sign / 2 * xni[ixw];
+    weight_i = wni[ixw];
+
+    fname = NULL;
+    xasprintf(&fname, "%s-%ld.txt", opt_bfcollect, i+1);
+    fp = xopen(fname, "r");
+
+    /* scan for the (last) "BFbeta = X  E_b(lnf(X)) = Y" line; the output
+       file is opened in append mode by bpp, so a re-run could leave
+       multiple BFbeta lines — the freshest one is the relevant one */
+    found = 0;
+    double beta_in_file = 0.0, elnf = 0.0;
+    while (fgets(buf, (int)sizeof(buf), fp))
+    {
+      if (!strstr(buf, "BFbeta") || !strstr(buf, "E_b(lnf(X))"))
+        continue;
+      if (sscanf(buf, " BFbeta = %lf  E_b(lnf(X)) = %lf",
+                 &beta_tmp, &elnf_tmp) == 2)
+      {
+        beta_in_file = beta_tmp;
+        elnf = elnf_tmp;
+        found = 1;
+      }
+    }
+    fclose(fp);
+
+    if (!found)
+      fatal("No 'BFbeta = ... E_b(lnf(X)) = ...' line found in %s", fname);
+    if (fabs(beta_in_file - beta_i) > 1e-4)
+      fatal("beta mismatch in %s: expected %.6f, found %.6f "
+            "(wrong --points or wrong prefix?)",
+            fname, beta_i, beta_in_file);
+
+    free(fname);
+
+    sum += weight_i * elnf;
+
+    printf("b%02ld: beta = %.4f  w = %8.6f  E_b(lnf(X)) = %12.4f\n",
+           i+1, beta_i, weight_i, elnf);
+    fprintf(fp_sum, "%ld,%.6f,%.6f,%.6f\n", i+1, beta_i, weight_i, elnf);
+  }
+
+  log_marginal = sum / 2.0;
+
+  printf("\nMarginal log-likelihood (log m(D)) = %.6f\n", log_marginal);
+  printf("  (using %ld Gauss-Legendre points, prefix '%s')\n",
+         opt_bfd_points, opt_bfcollect);
+
+  fprintf(fp_sum,
+          "\n# marginal log-likelihood = 0.5 * sum(w_i * E_b(lnf(X))_i)\n");
+  fprintf(fp_sum, "log_marginal_likelihood = %.6f\n", log_marginal);
+  fclose(fp_sum);
 }

@@ -2182,6 +2182,19 @@ static void stree_init_phi(stree_t * stree)
 }
 
 
+/* A tip with fewer than 2 sequences cannot have an identifiable theta;
+   the tip loop in stree_init_theta later sets has_theta=0 and theta=-1
+   for such a tip. When msci_link_thetas picks a link target, refuse to
+   link into such a tip. The partner population must keep its own theta
+   as the shared parameter 
+   Note: linked-msci requires opt_msci, which excludes opt_migration, so
+   the migration-special tip case in stree_init_theta does not apply. */
+static int snode_is_ghost_tip(const stree_t * stree, const snode_t * s)
+{
+  if (s->node_index >= stree->tip_count) return 0;   /* not a tip */
+  return opt_sp_seqcount[s->node_index] < 2;
+}
+
 /*** $$$ Ziheng-linked-mscm-2024.9.30 $$$ ***/
 /* In msci_link_thetas(), i delleted head, tail, queue & hybrid.
 */
@@ -2211,29 +2224,36 @@ static void msci_link_thetas(stree_t * stree)
         /* parent is linked to sibling */
         sibling = (snode->parent->left == snode) ?
                     snode->parent->right : snode->parent->left;
-        snode->parent->linked_theta = sibling;
+        if (!snode_is_ghost_tip(stree, sibling))
+          snode->parent->linked_theta = sibling;
       }
       else
       {
         /* hybrid is linked to child */
         assert(snode->left && !snode->right);
-        snode->linked_theta = snode->left;
+        if (!snode_is_ghost_tip(stree, snode->left))
+          snode->linked_theta = snode->left;
       }
 
       if (!mnode->htau)
       {
         sibling = (mnode->parent->left == mnode) ?
                     mnode->parent->right : mnode->parent->left;
-        mnode->parent->linked_theta = sibling;
+        if (!snode_is_ghost_tip(stree, sibling))
+          mnode->parent->linked_theta = sibling;
       }
       else
       {
         assert(!mnode->left && !mnode->right && snode->left && !snode->right);
-        mnode->linked_theta = snode->left;
+        if (!snode_is_ghost_tip(stree, snode->left))
+          mnode->linked_theta = snode->left;
       }
     }
     else /* bidirection */
-      snode->linked_theta = snode->left;
+    {
+      if (!snode_is_ghost_tip(stree, snode->left))
+        snode->linked_theta = snode->left;
+    }
   }
 
   /* reset linked_theta to the youngest daughter */
@@ -3366,9 +3386,12 @@ static double cubic_root(double coeff[4], double x0, double x1)
   double a = coeff[0], b = coeff[1], c = coeff[2], d = coeff[3];
   double p = (3*a*c-b*b)/(3*a*a), q = (2*b*b*b-9*a*b*c+27*a*a*d)/(27*a*a*a), det, x;
   double f0 = cubic_f(x0, coeff), f1 = cubic_f(x1, coeff), f, e = 1e-6;
+  double status = 0, xb[2];
 
   det = -(4 * p * p * p + 27 * q * q);
-  if (det > 0) printf("? three distinct real roots?\n");
+  if (det > 0) {
+    status = 1;  xb[0] = x0; xb[1] = x1;
+  }
   if (f0 * f1 > 0)
     fatal("root_cubic bounds error");
   /* bisection to find cubic root.  Try something smarter? */
@@ -3379,6 +3402,9 @@ static double cubic_root(double coeff[4], double x0, double x1)
     if (f0 * f > 0) { x0 = x; f0 = f; }
     else            { x1 = x; f1 = f; }
   }
+  if (opt_debug && status)
+    printf("\np = %12.6g q = %12.6g det = %12.6g > 0..  x[0,1] = %9.6f %9.6f x = %9.6f\n",
+           p, q, det, xb[0], xb[1], x);
   return(x);
 }
 

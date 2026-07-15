@@ -1624,15 +1624,16 @@ void load_chk_section_2(FILE * fp)
 
 
       size_t allocsize = x->mb_mrsum_isarray ? opt_locus_count : 1;
+      size_t dcount = 2*stree->tip_count - 3;
       for (j = 0; j < stree->inner_count; ++j)
       {
         x->migbuffer[j].mrsum = (double *)xmalloc(allocsize*sizeof(double));
-
+        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
+      }
+      for (j = 0; j < x->mb_count; ++j)
+      {
         if (!LOAD(x->migbuffer[j].mrsum, x->migbuffer[j].active_count, fp))
           fatal("Cannot load mrsum for node with index %ld", i);
-
-        size_t dcount = 2*stree->tip_count - 3;
-        x->migbuffer[j].donors = (snode_t **)xmalloc(dcount*sizeof(snode_t *));
 
         for (k = 0; k < x->migbuffer[j].donors_count; ++k)
         {
