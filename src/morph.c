@@ -2342,14 +2342,12 @@ void trait_simulate(stree_t * stree)
     /* correlation coefficient estimated from s (into vR) */
     sample_corr(s, nind, nchar, mu, z, vR);
     /* shrink the correlation matrix for large p */
-    if (nind <= nchar)
-    {  // R*_jk = (1 - lambda) * R_jk for j != k
-      double lam = shrinkage_lambda(s, nind, nchar, mu, z, vR);
-      for (j = 0; j < nchar; ++j)
-        for (k = 0; k < nchar; ++k)
-          if (j != k)
-            vR[j * nchar + k] *= (1.0 - lam);
-    }
+    // R*_jk = (1 - lambda) * R_jk for j != k
+    double lam = shrinkage_lambda(s, nind, nchar, mu, z, vR);
+    for (j = 0; j < nchar; ++j)
+      for (k = 0; k < nchar; ++k)
+        if (j != k)
+          vR[j * nchar + k] *= (1.0 - lam);
 
     for (i = 0; i < nind; ++i) free(s[i]);
     free(s);

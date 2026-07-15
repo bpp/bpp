@@ -1836,6 +1836,22 @@ static void simulate(stree_t * stree)
     fprintf(fp_param, "\n");
   }
 
+  if (opt_traitfile)  //Chi
+  {
+    /* allocate memory and set things up */
+    trait_init_sim(stree);
+
+    /* simulate discrete and continuous traits */
+    trait_simulate(stree);
+
+    /* write traits to file */
+    sim_trait_write(fp_trait, stree);
+
+    /* free memory */
+    free(opt_sim_cont_R);
+    trait_destroy(stree);
+  }
+
   /* allocate MSA structures */
   msa_t ** msa = (msa_t **)xmalloc((size_t)opt_locus_count * sizeof(msa_t *));
   for (i = 0; i < opt_locus_count; ++i)
@@ -2486,22 +2502,6 @@ static void simulate(stree_t * stree)
     free(eigenvecs);
     free(inv_eigenvecs);
     free(eigenvals);
-  }
-
-  if (opt_traitfile)  //Chi
-  {
-    /* allocate memory and set things up */
-    trait_init_sim(stree);
-
-    /* simulate discrete and continuous traits */
-    trait_simulate(stree);
-
-    /* write traits to file */
-    sim_trait_write(fp_trait, stree);
-
-    /* free memory */
-    free(opt_sim_cont_R);
-    trait_destroy(stree);
   }
 
   /* close all open output files */
