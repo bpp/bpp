@@ -1033,7 +1033,8 @@ int checkpoint_dump(stree_t * stree,
                     long mean_phi_count,
                     int prec_logpg,
                     int prec_logl, 
-		    int * printLocusIndex)
+                    int * printLocusIndex,
+                    long trait_offset)
 {
   FILE * fp;
   char * s_final = NULL;
@@ -1093,7 +1094,10 @@ int checkpoint_dump(stree_t * stree,
                      mean_phi_count,
                      prec_logpg,
                      prec_logl,
-		     printLocusIndex);
+                     printLocusIndex);
+
+  /* write morphological trait section */
+  trait_dump(fp,stree,trait_offset);
 
   /* write section 2 */
   dump_chk_section_2(fp,stree);

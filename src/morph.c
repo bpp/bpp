@@ -1105,43 +1105,25 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
   return 0;
 }
 
-static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
+/* allocate per-node trait structures based on the already-populated
+   stree->trait_count / trait_dim / trait_type arrays. Shared by both the
+   initial setup (trait_alloc_mem) and checkpoint loading path (trait_load). */
+static void trait_alloc_nodes(stree_t * stree)
 {
-  int n, i, j, nchar;
+  unsigned int n, i, j, nchar;
   trait_t * trait;
-  
-  stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
-  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
-  stree->trait_vpop = (double *)xcalloc(n_part, sizeof(double));
-  stree->trait_model = (int *)xcalloc(n_part, sizeof(int));
-  
-  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
-  stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
-  stree->trait_Rs_1 =  (double **)xcalloc(n_part, sizeof(double *));
-  stree->trait_Phi = (double **)xcalloc(n_part, sizeof(double *));
-  for (n = 0; n < n_part; ++n)
+
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
-    nchar = morph_list[n]->length;
-    /* the number of states of each character
-       use the last element to store the max number of states */
-    if (morph_list[n]->dtype == BPP_DATA_DISC)
-      stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
-    
-    /* allocate trait_Rs[n] and trait_Phi[n] later if needed */
-  }
-  
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    stree->nodes[i]->trait = (trait_t **)xmalloc(n_part*sizeof(trait_t *));
-    for (n = 0; n < n_part; ++n)
+    stree->nodes[i]->trait =
+      (trait_t **)xmalloc((size_t)stree->trait_count * sizeof(trait_t *));
+    for (n = 0; n < stree->trait_count; ++n)
     {
       stree->nodes[i]->trait[n] = (trait_t *)xcalloc(1, sizeof(trait_t));
       trait = stree->nodes[i]->trait[n];
-      
-      nchar = morph_list[n]->length;
-      if (morph_list[n]->dtype == BPP_DATA_CONT)
+
+      nchar = stree->trait_dim[n];
+      if (stree->trait_type[n] == BPP_DATA_CONT)
       {
         trait->state_m = (double *)xcalloc(nchar, sizeof(double));
         trait->active = (int *)xcalloc(nchar +1, sizeof(int));
@@ -1176,6 +1158,42 @@ static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
       }
     }
   }
+}
+
+static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
+{
+  unsigned int n, nchar;
+  
+  stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_vpop = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_model = (int *)xcalloc(n_part, sizeof(int));
+  
+  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
+  stree->trait_Rs =  (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Rs_1 =  (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Phi = (double **)xcalloc(n_part, sizeof(double *));
+
+  /* trait_count, trait_dim and trait_type must be set before calling
+     trait_alloc_nodes(), which uses them to lay out the per-node memory */
+  stree->trait_count = n_part;
+  for (n = 0; n < n_part; ++n)
+  {
+    nchar = morph_list[n]->length;
+    stree->trait_dim[n] = nchar;
+    stree->trait_type[n] = morph_list[n]->dtype;
+    /* the number of states of each character
+       use the last element to store the max number of states */
+    if (morph_list[n]->dtype == BPP_DATA_DISC)
+      stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
+    
+    /* allocate trait_Rs[n] and trait_Phi[n] later if needed */
+  }
+  
+  /* allocate the per-node trait structures */
+  trait_alloc_nodes(stree);
   
   stree->trait_logl = (double *)xcalloc(n_part, sizeof(double));
   stree->trait_old_logl = (double *)xcalloc(n_part, sizeof(double));
@@ -1274,6 +1292,243 @@ void trait_destroy(stree_t * stree)
     free(stree->trait_logpr);
   if (stree->trait_old_logpr)
     free(stree->trait_old_logpr);
+}
+
+#define TRAIT_DUMP(x,n,fp) \
+  fwrite((void *)(x),sizeof(*(x)),(size_t)(n),fp)
+#define TRAIT_LOAD(x,n,fp) \
+  (fread((void *)(x),sizeof(*(x)),(size_t)(n),fp) == (size_t)(n))
+
+/* serialize the morphological trait state into an open checkpoint file.
+   Only the raw (tip) data, the per-partition data derived from the trait
+   file, and the MCMC-varying branch rates are stored. All quantities that
+   can be recomputed deterministically (contrasts, branch lengths,
+   conditional/transition probabilities, glinv terms, and internal-node
+   active counts) are rebuilt through trait_update() on load. */
+void trait_dump(FILE * fp, stree_t * stree, long trait_offset)
+{
+  unsigned int n, i, nchar;
+  long flag, present, len;
+  snode_t * snode;
+  trait_t * trait;
+
+  present = (opt_traitfile && stree->trait_count > 0) ? 1 : 0;
+  TRAIT_DUMP(&present, 1, fp);
+  if (!present) return;
+
+  /* trait input file name (used as a flag during MCMC), proposal tuning
+     and the trait output-file offset for truncation on resume */
+  len = (long)strlen(opt_traitfile);
+  TRAIT_DUMP(&len, 1, fp);
+  TRAIT_DUMP(opt_traitfile, len, fp);
+  TRAIT_DUMP(&opt_finetune_brate_m, 1, fp);
+  TRAIT_DUMP(&g_pj_brate_m, 1, fp);
+  TRAIT_DUMP(&trait_offset, 1, fp);
+
+  TRAIT_DUMP(&(stree->trait_count), 1, fp);
+
+  /* per-partition data */
+  for (n = 0; n < stree->trait_count; ++n)
+  {
+    nchar = stree->trait_dim[n];
+    TRAIT_DUMP(&(stree->trait_dim[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_type[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_missing[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_model[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_vpop[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_ldetRs[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_logl[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_old_logl[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_logpr[n]), 1, fp);
+    TRAIT_DUMP(&(stree->trait_old_logpr[n]), 1, fp);
+
+    if (stree->trait_type[n] == BPP_DATA_DISC)
+    {
+      TRAIT_DUMP(stree->trait_nstate[n], nchar+1, fp);
+    }
+    else
+    {
+      /* R*, inv(R*) and Phi are only allocated for the Mitov model */
+      flag = (stree->trait_Rs[n] != NULL) ? 1 : 0;
+      TRAIT_DUMP(&flag, 1, fp);
+      if (flag)
+      {
+        TRAIT_DUMP(stree->trait_Rs[n], nchar*nchar, fp);
+        TRAIT_DUMP(stree->trait_Rs_1[n], nchar*nchar, fp);
+        TRAIT_DUMP(stree->trait_Phi[n], nchar*nchar, fp);
+      }
+    }
+  }
+
+  /* per-node data */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    for (n = 0; n < stree->trait_count; ++n)
+    {
+      nchar = stree->trait_dim[n];
+      trait = snode->trait[n];
+
+      TRAIT_DUMP(&(trait->brate), 1, fp);
+      TRAIT_DUMP(&(trait->old_brate), 1, fp);
+
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+      {
+        TRAIT_DUMP(trait->active, nchar, fp);
+        if (i < stree->tip_count)
+          TRAIT_DUMP(trait->state_d, nchar, fp);
+      }
+      else
+      {
+        TRAIT_DUMP(trait->active, nchar+1, fp);
+        if (i < stree->tip_count)
+          TRAIT_DUMP(trait->state_m, nchar, fp);
+      }
+    }
+  }
+}
+
+/* restore the morphological trait state from a checkpoint file. This
+   reallocates all trait structures and rebuilds derived quantities through
+   trait_update(). The trait output-file offset is returned via
+   trait_offset (0 if there are no traits). */
+void trait_load(FILE * fp, stree_t * stree, long * trait_offset)
+{
+  unsigned int n, i, nchar, n_part;
+  long flag, present, len;
+  snode_t * snode;
+  trait_t * trait;
+
+  if (trait_offset)
+    *trait_offset = 0;
+
+  if (!TRAIT_LOAD(&present, 1, fp))
+    fatal("Cannot read trait section from checkpoint");
+  if (!present)
+  {
+    opt_traitfile = NULL;
+    opt_trait_count = 0;
+    stree->trait_count = 0;
+    return;
+  }
+
+  /* trait input file name, proposal tuning and output-file offset */
+  if (!TRAIT_LOAD(&len, 1, fp))
+    fatal("Cannot read trait file name length");
+  opt_traitfile = (char *)xmalloc((size_t)(len+1) * sizeof(char));
+  if (len && !TRAIT_LOAD(opt_traitfile, len, fp))
+    fatal("Cannot read trait file name");
+  opt_traitfile[len] = 0;
+
+  if (!TRAIT_LOAD(&opt_finetune_brate_m, 1, fp))
+    fatal("Cannot read trait branch-rate finetune value");
+  if (!TRAIT_LOAD(&g_pj_brate_m, 1, fp))
+    fatal("Cannot read trait branch-rate pjump value");
+  {
+    long off;
+    if (!TRAIT_LOAD(&off, 1, fp))
+      fatal("Cannot read trait output-file offset");
+    if (trait_offset)
+      *trait_offset = off;
+  }
+
+  if (!TRAIT_LOAD(&n_part, 1, fp))
+    fatal("Cannot read number of trait partitions");
+  stree->trait_count = n_part;
+  opt_trait_count = n_part;
+
+  /* allocate the per-partition arrays */
+  stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_missing = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_ldetRs = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_vpop = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_model = (int *)xcalloc(n_part, sizeof(int));
+  stree->trait_nstate = (int **)xcalloc(n_part, sizeof(int *));
+  stree->trait_Rs = (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Rs_1 = (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_Phi = (double **)xcalloc(n_part, sizeof(double *));
+  stree->trait_logl = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_old_logl = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_logpr = (double *)xcalloc(n_part, sizeof(double));
+  stree->trait_old_logpr = (double *)xcalloc(n_part, sizeof(double));
+
+  for (n = 0; n < n_part; ++n)
+  {
+    if (!TRAIT_LOAD(&(stree->trait_dim[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_type[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_missing[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_model[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_vpop[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_ldetRs[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_logl[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_old_logl[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_logpr[n]), 1, fp) ||
+        !TRAIT_LOAD(&(stree->trait_old_logpr[n]), 1, fp))
+      fatal("Cannot read trait partition %d header", n+1);
+
+    nchar = stree->trait_dim[n];
+
+    if (stree->trait_type[n] == BPP_DATA_DISC)
+    {
+      stree->trait_nstate[n] = (int *)xcalloc(nchar +1, sizeof(int));
+      if (!TRAIT_LOAD(stree->trait_nstate[n], nchar+1, fp))
+        fatal("Cannot read trait partition %d states", n+1);
+    }
+    else
+    {
+      if (!TRAIT_LOAD(&flag, 1, fp))
+        fatal("Cannot read trait partition %d matrix flag", n+1);
+      if (flag)
+      {
+        stree->trait_Rs[n]   = (double *)xmalloc(nchar*nchar*sizeof(double));
+        stree->trait_Rs_1[n] = (double *)xmalloc(nchar*nchar*sizeof(double));
+        stree->trait_Phi[n]  = (double *)xmalloc(nchar*nchar*sizeof(double));
+        if (!TRAIT_LOAD(stree->trait_Rs[n], nchar*nchar, fp) ||
+            !TRAIT_LOAD(stree->trait_Rs_1[n], nchar*nchar, fp) ||
+            !TRAIT_LOAD(stree->trait_Phi[n], nchar*nchar, fp))
+          fatal("Cannot read trait partition %d matrices", n+1);
+      }
+    }
+  }
+
+  /* allocate per-node trait structures */
+  trait_alloc_nodes(stree);
+
+  /* read the per-node data */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    snode = stree->nodes[i];
+    for (n = 0; n < n_part; ++n)
+    {
+      nchar = stree->trait_dim[n];
+      trait = snode->trait[n];
+
+      if (!TRAIT_LOAD(&(trait->brate), 1, fp) ||
+          !TRAIT_LOAD(&(trait->old_brate), 1, fp))
+        fatal("Cannot read trait branch rates");
+
+      if (stree->trait_type[n] == BPP_DATA_DISC)
+      {
+        if (!TRAIT_LOAD(trait->active, nchar, fp))
+          fatal("Cannot read trait active flags");
+        if (i < stree->tip_count &&
+            !TRAIT_LOAD(trait->state_d, nchar, fp))
+          fatal("Cannot read discrete trait states");
+      }
+      else
+      {
+        if (!TRAIT_LOAD(trait->active, nchar+1, fp))
+          fatal("Cannot read trait active flags");
+        if (i < stree->tip_count &&
+            !TRAIT_LOAD(trait->state_m, nchar, fp))
+          fatal("Cannot read continuous trait states");
+      }
+    }
+  }
+
+  /* rebuild all derived quantities from the restored tip data and rates */
+  trait_update(stree);
 }
 
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)

@@ -2851,6 +2851,7 @@ static FILE * resume(stree_t ** ptr_stree,
                      FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out,
                      FILE ** ptr_fp_a1b1,
+                     FILE ** ptr_fp_mcmc_trait,
                      int ** ptr_printLocusIndex)
 {
   long i,j;
@@ -2864,6 +2865,7 @@ static FILE * resume(stree_t ** ptr_stree,
   long mcmc_offset;
   long out_offset;
   long a1b1_offset;
+  long trait_offset = 0;
   long * gtree_offset;
   long * mig_offset;
   long * rates_offset;
@@ -2913,7 +2915,8 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mean_phi_count,
                   &prec_logpr,
                   &prec_logl, 
-		  ptr_printLocusIndex);
+                  ptr_printLocusIndex,
+                  &trait_offset);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
@@ -3157,6 +3160,18 @@ static FILE * resume(stree_t ** ptr_stree,
   {
     fp_a1b1 = xopen(opt_a1b1file,"a");
     *ptr_fp_a1b1 = fp_a1b1;
+  }
+
+  /* reopen the truncated morphological trait output file for appending */
+  *ptr_fp_mcmc_trait = NULL;
+  if (opt_traitfile)
+  {
+    char * trait_fn = NULL;
+    xasprintf(&trait_fn, "%s.trait.txt", opt_jobname);
+    checkpoint_truncate(trait_fn, trait_offset);
+    if (!(*ptr_fp_mcmc_trait = fopen(trait_fn, "a")))
+      fatal("Cannot open file %s for appending...", trait_fn);
+    free(trait_fn);
   }
 
   /* if we are infering the species tree or gene flow, then create another
@@ -5166,6 +5181,7 @@ void cmd_run()
                      &fp_migcount,
                      &fp_out,
                      &fp_a1b1,
+                     &fp_mcmc_trait,
                      &printLocusIndex);
   else
   {
@@ -6444,7 +6460,8 @@ void cmd_run()
                         mean_phi_count,
                         prec_logpr,
                         prec_logl,
-                        printLocusIndex);
+                        printLocusIndex,
+                        opt_traitfile ? ftell(fp_mcmc_trait) : 0);
         fprintf(stdout, " [CHK]");
 
         chk_next_idx++;
@@ -6533,7 +6550,8 @@ void cmd_run()
                     mean_phi_count,
                     prec_logpr,
                     prec_logl,
-                    printLocusIndex);
+                    printLocusIndex,
+                    opt_traitfile ? ftell(fp_mcmc_trait) : 0);
     fprintf(stdout, " [CHK]");
   }
 

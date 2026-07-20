@@ -1544,6 +1544,8 @@ void trait_destroy(stree_t * stree);
 void trait_store(stree_t * stree);
 void trait_restore(stree_t * stree);
 void trait_update(stree_t * stree);
+void trait_dump(FILE * fp, stree_t * stree, long trait_offset);
+void trait_load(FILE * fp, stree_t * stree, long * trait_offset);
 
 double loglikelihood_trait(stree_t * stree);
 double logprior_trait(stree_t * stree);
@@ -2264,7 +2266,8 @@ int checkpoint_dump(stree_t * stree,
                     long mean_phi_count,
                     int prec_logpg,
                     int prec_logl, 
-		    int * printLocusIndex);
+                    int * printLocusIndex,
+                    long trait_offset);
 
 /* functions in load.c */
 
@@ -2305,7 +2308,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_phi_count,
                     int * prec_logpg,
                     int * prec_logl,
-		    int ** ptr_printLocusIndex);
+                    int ** ptr_printLocusIndex,
+                    long * trait_offset);
 
 void checkpoint_truncate(const char * filename, long mcmc_offset);
 void cmd_checkpoint_info(const char * filename);

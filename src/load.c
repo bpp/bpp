@@ -2162,7 +2162,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_phi_count,
                     int * prec_logpg,
                     int * prec_logl, 
-		    int ** ptr_printLocusIndex)
+                    int ** ptr_printLocusIndex,
+                    long * trait_offset)
 {
   long i,j,k;
   FILE * fp;
@@ -2257,7 +2258,10 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_phi_count,
                      prec_logpg,
                      prec_logl,
-		     ptr_printLocusIndex);
+                     ptr_printLocusIndex);
+
+  /* load morphological trait section */
+  trait_load(fp,stree,trait_offset);
 
   /* load section 2 */
   load_chk_section_2(fp);
