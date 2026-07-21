@@ -5667,11 +5667,16 @@ static snode_t * return_ltheta_master(stree_t * stree, snode_t * snode)
 }
 #endif
 
+/* 'tau_count' is the TOTAL number of nodes carrying a tau > 0 (including
+   demographic break-point nodes, which this move does not propose on). It is
+   used only for the root's tau prior: the uniform-Dirichlet prior on the
+   non-root node ages contributes a factor tau_root^-(tau_count-1). It must not
+   be confused with the number of nodes the rubber-band proposes on. */
 static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
                         stree_t * stree,
-                        unsigned int candidate_count,
+                        unsigned int tau_count,
                         long thread_index)
 {
   unsigned int i, j, k;
@@ -5823,10 +5828,10 @@ static long propose_tau(locus_t ** loci,
   if (snode == stree->root)
   {
     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-      lnacceptance = (-opt_tau_alpha - 1 - candidate_count + 1) *
+      lnacceptance = (-opt_tau_alpha - 1 - tau_count + 1) *
                      log(newage / oldage) - opt_tau_beta*(1/newage - 1/oldage);
     else
-      lnacceptance = (opt_tau_alpha-1 - candidate_count + 1) *
+      lnacceptance = (opt_tau_alpha-1 - tau_count + 1) *
                      log(newage/oldage) - opt_tau_beta*(newage-oldage);
   }
 
@@ -7567,18 +7572,36 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 {
   unsigned int i;
   unsigned int candidate_count = 0;
+  unsigned int tau_count = 0;
   long accepted = 0;
 
   long thread_index = 0;
 
-  /* compute number of nodes with tau > 0 (demographic break-point nodes are
-     excluded: they are moved by the dedicated break-point proposal, not the
-     rubber-band) */
-  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
-    if (stree->nodes[i]->tau > 0 && !stree->nodes[i]->dem &&
-        (!opt_msci || stree->nodes[i]->prop_tau))
-      candidate_count++;
+  /* Two distinct counts:
 
+     tau_count       - ALL nodes carrying a tau > 0, including demographic
+                       break-point nodes. This sets the exponent of the root's
+                       tau prior (the uniform-Dirichlet prior on the non-root
+                       node ages contributes tau_root^-(tau_count-1)), so a
+                       break-point tau must be counted here even though the
+                       rubber-band never proposes on it.
+
+     candidate_count - the nodes the rubber-band actually proposes on, i.e.
+                       tau_count minus the demographic break-point nodes (those
+                       have their own proposal). Used only for bookkeeping of
+                       the acceptance rate. */
+  for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
+  {
+    if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->prop_tau))
+    {
+      tau_count++;
+      if (!stree->nodes[i]->dem)
+        candidate_count++;
+    }
+  }
+
+  if (!candidate_count)
+    return 0;
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
@@ -7588,7 +7611,7 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
                               stree->nodes[i],
                               gtree,
                               stree,
-                              candidate_count,
+                              tau_count,
                               thread_index);
   }
 
