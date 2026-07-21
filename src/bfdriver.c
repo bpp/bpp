@@ -43,6 +43,104 @@ static size_t readfile(const char * filename, char ** bufptr)
   return filesize;
 }
 
+/* Read the posterior mean, standard deviation and effective sample size of the
+   log-likelihood from a per-chain '<jobname>.summary.csv' written by
+   allfixed_summary().
+
+   That file has a fixed header
+
+     param,mean,median,S.D,min,max,2.5%,97.5%,2.5%HPD,97.5%HPD,ESS*,Eff*,rho1
+
+   followed by one row per sampled parameter, the last of which is 'lnL' when
+   the analysis used data. The wanted fields are located by NAME rather than by
+   a hard-coded index, so the file stays readable if the label list in
+   allfixed.c ever changes. Commas inside parameter labels are replaced by '|'
+   before the file is written (allfixed.c), so splitting on ',' is safe.
+
+   All three statistics are taken from this one file so that they describe the
+   same (thinned) MCMC sample: SD*SD/ESS is then exactly the squared Monte Carlo
+   standard error of the mean reported alongside it.
+
+   Aborts via fatal() if the file cannot be opened, if any label is absent from
+   the header, or if there is no 'lnL' row (e.g. a usedata=0 run, or an analysis
+   other than A00, which produces no summary at all). */
+static void read_lnl_stats(const char * fname,
+                           double * mean,
+                           double * sd,
+                           double * ess)
+{
+  char line[4096];
+  int found_mean, found_sd, found_ess;
+  char * p;
+  long col = 0;
+  long mean_col = -1, sd_col = -1, ess_col = -1;
+  FILE * fp;
+
+  fp = xopen(fname, "r");
+
+  /* header: locate the 'mean', 'S.D' and 'ESS*' columns by name */
+  if (!fgets(line, (int)sizeof(line), fp))
+    fatal("File %s is empty (expected a summary header)", fname);
+
+  for (p = strtok(line, ",\r\n"); p; p = strtok(NULL, ",\r\n"), ++col)
+  {
+    if (!strcmp(p, "mean"))
+      mean_col = col;
+    else if (!strcmp(p, "S.D"))
+      sd_col = col;
+    else if (!strcmp(p, "ESS*"))
+      ess_col = col;
+  }
+
+  if (mean_col < 0 || sd_col < 0 || ess_col < 0)
+    fatal("Cannot find the '%s' column in the header of %s",
+          (mean_col < 0) ? "mean" : ((sd_col < 0) ? "S.D" : "ESS*"), fname);
+
+  /* find the 'lnL' row and pick out those fields */
+  while (fgets(line, (int)sizeof(line), fp))
+  {
+    found_mean = found_sd = found_ess = 0;
+
+    col = 0;
+    for (p = strtok(line, ",\r\n"); p; p = strtok(NULL, ",\r\n"), ++col)
+    {
+      if (col == 0)
+      {
+        if (strcmp(p, "lnL"))
+          break;                        /* not the lnL row */
+        continue;
+      }
+
+      if (col == mean_col)
+      {
+        *mean = atof(p);
+        found_mean = 1;
+      }
+      else if (col == sd_col)
+      {
+        *sd = atof(p);
+        found_sd = 1;
+      }
+      else if (col == ess_col)
+      {
+        *ess = atof(p);
+        found_ess = 1;
+      }
+    }
+
+    if (found_mean && found_sd && found_ess)
+    {
+      fclose(fp);
+      return;
+    }
+  }
+
+  fclose(fp);
+  fatal("No complete 'lnL' row found in %s\n"
+        "(the per-point run must use usedata=1 and produce an A00 summary)",
+        fname);
+}
+
 /* Scan a (non-null-terminated) control-file buffer of 'size' bytes for the
    'jobname' option line. On success return a freshly allocated copy of the
    jobname value and set the vstart/vend out-params to the byte offsets in
@@ -1332,10 +1430,13 @@ void cmd_bfcollect()
   double sign, beta_i, weight_i;
   double sum = 0.0;
   double beta_tmp, elnf_tmp;
+  double mean_lnl, sd, ess;
   char * sumfile = NULL;
+  char * bfcsv = NULL;
   char * fname;
   FILE * fp;
   FILE * fp_sum;
+  FILE * fp_bf;
   char buf[1024];
 
   /* gauss-legendre quadrature points and weights */
@@ -1355,6 +1456,13 @@ void cmd_bfcollect()
   fp_sum = xopen(sumfile, "w");
   free(sumfile);
   fprintf(fp_sum, "# point, beta, weight, E_b(lnf(X))\n");
+
+  /* machine-readable per-point table: one row per quadrature point, with the
+     Monte Carlo error of E_b(lnf(X)) collected from the per-chain summaries */
+  xasprintf(&bfcsv, "%s.bf.csv", opt_bfcollect);
+  fp_bf = xopen(bfcsv, "w");
+  free(bfcsv);
+  fprintf(fp_bf, "beta_k,weight_k,ElnL_k,SD_k,ESS_k,var_k/ESS_k\n");
 
   fprintf(stdout, "collecting E_b(lnf(X)) from %ld output files "
                   "with prefix '%s'\n\n", opt_bfd_points, opt_bfcollect);
@@ -1385,7 +1493,7 @@ void cmd_bfcollect()
        file is opened in append mode by bpp, so a re-run could leave
        multiple BFbeta lines — the freshest one is the relevant one */
     found = 0;
-    double beta_in_file = 0.0, elnf = 0.0;
+    double beta_in_file = 0.0;
     while (fgets(buf, (int)sizeof(buf), fp))
     {
       if (!strstr(buf, "BFbeta") || !strstr(buf, "E_b(lnf(X))"))
@@ -1394,7 +1502,6 @@ void cmd_bfcollect()
                  &beta_tmp, &elnf_tmp) == 2)
       {
         beta_in_file = beta_tmp;
-        elnf = elnf_tmp;
         found = 1;
       }
     }
@@ -1409,11 +1516,34 @@ void cmd_bfcollect()
 
     free(fname);
 
-    sum += weight_i * elnf;
+    /* E_b(lnf(X)) and its Monte Carlo error are both taken from the summary of
+       the same run, so that every quantity reported for this point describes
+       one and the same (thinned) MCMC sample. SD*SD/ESS is then exactly the
+       squared Monte Carlo standard error of the mean reported next to it, and
+       the marginal likelihood below is the quadrature of those same means.
+
+       (The 'BFbeta' line parsed above carries a second estimate of the same
+       quantity, a running mean over every post-burnin iteration rather than
+       over the thinned samples. The two agree to well within one Monte Carlo
+       standard error; that line is still read in order to validate beta.) */
+    mean_lnl = sd = ess = 0;
+    fname = NULL;
+    xasprintf(&fname, "%s-%ld.summary.csv", opt_bfcollect, i+1);
+    read_lnl_stats(fname, &mean_lnl, &sd, &ess);
+
+    if (ess <= 0)
+      fatal("Non-positive ESS (%.6f) for lnL in %s\n"
+            "Cannot compute the Monte Carlo variance of E_b(lnf(X)); "
+            "the chain for this point is too short.", ess, fname);
+    free(fname);
+
+    sum += weight_i * mean_lnl;
 
     printf("b%02ld: beta = %.4f  w = %8.6f  E_b(lnf(X)) = %12.4f\n",
-           i+1, beta_i, weight_i, elnf);
-    fprintf(fp_sum, "%ld,%.6f,%.6f,%.6f\n", i+1, beta_i, weight_i, elnf);
+           i+1, beta_i, weight_i, mean_lnl);
+    fprintf(fp_sum, "%ld,%.6f,%.6f,%.6f\n", i+1, beta_i, weight_i, mean_lnl);
+    fprintf(fp_bf, "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+            beta_i, weight_i, mean_lnl, sd, ess, sd*sd/ess);
   }
 
   log_marginal = sum / 2.0;
@@ -1426,4 +1556,5 @@ void cmd_bfcollect()
           "\n# marginal log-likelihood = 0.5 * sum(w_i * E_b(lnf(X))_i)\n");
   fprintf(fp_sum, "log_marginal_likelihood = %.6f\n", log_marginal);
   fclose(fp_sum);
+  fclose(fp_bf);
 }
