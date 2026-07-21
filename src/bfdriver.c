@@ -1363,8 +1363,6 @@ void cmd_bfdriver()
   char * jobname = NULL;
   size_t jn_start = 0, jn_end = 0;
 
-  xasprintf(&bwfile, "%s.betaweights.csv", opt_bfdriver);
-
   /* gauss-legendre quadrature points and weights */
   const double * xni;
   const double * wni;
@@ -1373,9 +1371,6 @@ void cmd_bfdriver()
   gauss_legendre_rule(&xni,&wni,opt_bfd_points);
 
   fprintf(stdout, "quadrature: log{M} = 0.5 * SUM w_b * E_b(log{f(X)})\n\n");
-  fp_beta = xopen(bwfile, "w");
-  fprintf(fp_beta,"beta,weight,ElnfX\n");
-  free(bwfile);
 
   /* read control file into a buffer */
   cfsize = readfile(opt_bfdriver, &cfdata);
@@ -1384,6 +1379,15 @@ void cmd_bfdriver()
   jobname = find_jobname(cfdata, cfsize, &jn_start, &jn_end);
   if (!jobname)
     fatal("Option 'jobname' is required in control file %s", opt_bfdriver);
+
+  /* record the quadrature schedule. It is keyed on the jobname rather than on
+     the control file so that it sits with the other outputs of this analysis,
+     alongside the <jobname>.bf.csv that --bfcollect writes later with the same
+     beta and weight in its first two columns. */
+  xasprintf(&bwfile, "%s.betaweights.csv", jobname);
+  fp_beta = xopen(bwfile, "w");
+  fprintf(fp_beta,"beta_k,weight_k\n");
+  free(bwfile);
 
   for (i = 0; i < opt_bfd_points; ++i)
   {
@@ -1408,7 +1412,7 @@ void cmd_bfdriver()
     printf("b%02ld: beta = %.4f  w = %8.6f\n", i+1, beta, weight);
 
     /* print in file */
-    fprintf(fp_beta, "%.6f,%.6f,\n", beta, weight);
+    fprintf(fp_beta, "%.6f,%.6f\n", beta, weight);
     fwrite(cfdata, sizeof(char), jn_start, fp_ctl);
     fprintf(fp_ctl, "%s-%ld", jobname, i+1);
     fwrite(cfdata + jn_end, sizeof(char), cfsize - jn_end, fp_ctl);
