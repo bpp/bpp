@@ -7683,8 +7683,19 @@ static int propose_dem_tau(stree_t * stree,
                            snode_t * U,
                            long thread_index)
 {
-  long i;
+  /* when set, the move also draws new sizes for the two segments the break point
+     separates, from their conditionals given the proposed break-point age (a
+     Metropolised-Gibbs step, as propose_tau does for the rubber-band). Under the
+     inverse-gamma prior the conditional is exact, the theta prior and proposal
+     densities cancel against the coalescent density, and the move becomes a
+     theta-integrated (collapsed) update of the break point */
+  const int change_theta = 1;
+
+  long i,j;
   snode_t * C = U->left;                 /* child segment */
+  snode_t * affected[2];
+  long affected_count = 0;
+  long coal_old[2] = {0,0};
   double old_tau = U->tau;
   double lower = C->tau;                  /* younger neighbour (break point / node) */
   double upper = U->parent->tau;          /* older neighbour (break point / divergence) */
@@ -7695,6 +7706,27 @@ static int propose_dem_tau(stree_t * stree,
 
   new_tau = old_tau + opt_finetune_dem * legacy_rnd_symmetrical(thread_index);
   new_tau = reflect(new_tau, lower, upper, thread_index);
+
+  /* the populations whose sizes are resampled along with the break point. Under
+     a linked-theta model a segment shares its theta with populations this move
+     does not touch, so their coalescent data would have to enter the conditional
+     as well; we then leave the sizes alone, which is the plain break-point move
+     and equally valid, only less well mixing */
+  if (change_theta && opt_linkedtheta == BPP_LINKEDTHETA_NONE)
+  {
+    snode_t * cand[2] = {U, C};
+    for (j = 0; j < 2; ++j)
+      if (cand[j]->theta > 0 && cand[j]->has_theta)
+        affected[affected_count++] = cand[j];
+  }
+
+  /* unlike the rubber-band, this move re-assigns coalescent events across the
+     boundary, so the number of events in each segment changes and the reverse
+     conditional differs from the forward one in its shape parameter too. Record
+     the pre-move event counts; the pre-move C2j is recovered from old_C2ji */
+  for (j = 0; j < affected_count; ++j)
+    for (i = 0; i < opt_locus_count; ++i)
+      coal_old[j] += affected[j]->coal_count[i];
 
   /* save the two affected contributions and remove them from gtree->logpr */
   for (i = 0; i < opt_locus_count; ++i)
@@ -7711,18 +7743,95 @@ static int propose_dem_tau(stree_t * stree,
   for (i = 0; i < opt_locus_count; ++i)
     reattribute_dem_events(U, C, old_tau, new_tau, i);
 
-  /* recompute only the two affected populations' contributions */
+  /* recompute only the two affected populations' contributions, still with the
+     current thetas. This must happen exactly once: the call overwrites old_C2ji
+     and old_logpr_contrib, which the reject path restores from and which the
+     conditionals below read as the pre-move C2j */
   for (i = 0; i < opt_locus_count; ++i)
   {
     gtree_update_logprob_contrib(U, locus[i]->heredity[0], i, thread_index);
     gtree_update_logprob_contrib(C, locus[i]->heredity[0], i, thread_index);
+  }
+
+  /* draw the new segment sizes from their conditionals given the new break-point
+     age, and accumulate the resulting proposal and prior ratios */
+  for (j = 0; j < affected_count; ++j)
+  {
+    snode_t * x = affected[j];
+    double C2j_new = 0;
+    double C2j_old = 0;
+    double a1,b1,a1_old,b1_old;
+    double thetaold;
+    long coal_new = 0;
+
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      coal_new += x->coal_count[i];
+      C2j_new  += x->C2ji[i] / locus[i]->heredity[0];
+      C2j_old  += x->old_C2ji[i] / locus[i]->heredity[0];
+    }
+
+    a1     = opt_theta_alpha + coal_new;
+    b1     = opt_theta_beta  + C2j_new;
+    a1_old = opt_theta_alpha + coal_old[j];
+    b1_old = opt_theta_beta  + C2j_old;
+
+    if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+    {
+      get_gamma_conditional_approx(opt_theta_alpha,
+                                   opt_theta_beta,
+                                   coal_new,
+                                   C2j_new,
+                                   &a1,
+                                   &b1);
+      get_gamma_conditional_approx(opt_theta_alpha,
+                                   opt_theta_beta,
+                                   coal_old[j],
+                                   C2j_old,
+                                   &a1_old,
+                                   &b1_old);
+    }
+
+    thetaold = x->old_theta = x->theta;
+    x->theta = legacy_rndgamma(thread_index,a1) / b1;
+    if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA || (opt_theta_prop == BPP_THETA_PROP_MG_INVG))
+      x->theta = 1 / x->theta;
+
+    /* proposal ratio */
+    if (opt_theta_prop == BPP_THETA_PROP_MG_GAMMA)
+      lnacceptance += logPDFGamma(thetaold, a1_old, b1_old) -
+                      logPDFGamma(x->theta, a1, b1);
+    else if ((opt_theta_prop == BPP_THETA_PROP_MG_INVG) || (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA))
+      lnacceptance += logPDFInvG(thetaold, a1_old, b1_old) -
+                      logPDFInvG(x->theta, a1, b1);
+
+    /* prior ratio */
+    if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+      lnacceptance += logPDFRatioGamma(x->theta, thetaold,
+                                       opt_theta_alpha, opt_theta_beta);
+    else if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+      lnacceptance += logPDFRatioInvG(x->theta, thetaold,
+                                      opt_theta_alpha, opt_theta_beta);
+
+    /* rescale the contributions just computed from the old theta to the new one
+       (gtree_update_logprob_contrib must not be called a second time) */
+    for (i = 0; i < opt_locus_count; ++i)
+    {
+      double h = locus[i]->heredity[0];
+      x->logpr_contrib[i] += x->C2ji[i]/(thetaold*h);
+      x->logpr_contrib[i] -= x->C2ji[i]/(x->theta*h);
+      x->logpr_contrib[i] -= x->coal_count[i]*log(2./(h*thetaold));
+      x->logpr_contrib[i] += x->coal_count[i]*log(2./(h*x->theta));
+    }
+  }
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
     gtree[i]->logpr += U->logpr_contrib[i];
     gtree[i]->logpr += C->logpr_contrib[i];
     lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
   }
 
-  /* symmetric kernel (Hastings ratio 1); flat alpha=1 break-point prior (ratio
-     1); no Jacobian (no time rescaling) and no sequence-likelihood change */
   if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
     return 1;
 
@@ -7730,6 +7839,9 @@ static int propose_dem_tau(stree_t * stree,
   U->tau = old_tau;
   for (i = 0; i < opt_locus_count; ++i)
     reattribute_dem_events(U, C, new_tau, old_tau, i);
+
+  for (j = 0; j < affected_count; ++j)
+    affected[j]->theta = affected[j]->old_theta;
 
   for (i = 0; i < opt_locus_count; ++i)
   {
