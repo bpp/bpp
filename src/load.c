@@ -580,6 +580,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read alpha of 'theta' tag");
   if (!LOAD(&opt_tau_beta,1,fp))
     fatal("Cannot read beta 'theta' tag");
+  if (!LOAD(&opt_tau_showall_eps,1,fp))
+    fatal("Cannot read tau showall eps");
   #if 0
   printf(" tau: %f %f\n", opt_tau_alpha, opt_tau_beta);
   #endif
@@ -656,6 +658,15 @@ static void load_chk_section_1(FILE * fp,
   opt_finetune_theta = (double *)xmalloc((size_t)opt_finetune_theta_count *
                                          sizeof(double));
 
+  if (!LOAD(&opt_finetune_tau_mode,1,fp))
+    fatal("Cannot read tau finetune mode");
+  if (!LOAD(&opt_finetune_tau_count,1,fp))
+    fatal("Cannot read tau finetune count");
+  if (opt_finetune_tau)
+    free(opt_finetune_tau);
+  opt_finetune_tau = (double *)xmalloc((size_t)opt_finetune_tau_count *
+                                       sizeof(double));
+
   /* read finetune */
   if (!LOAD(&opt_finetune_reset,1,fp))
     fatal("Cannot read 'finetune' tag");
@@ -676,8 +687,8 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read gene tree SPR finetune parameter");
   if (!LOAD(opt_finetune_theta,opt_finetune_theta_count,fp))
     fatal("Cannot read species tree theta finetune parameters");
-  if (!LOAD(&opt_finetune_tau,1,fp))
-    fatal("Cannot read species tree tau finetune parameter");
+  if (!LOAD(opt_finetune_tau,opt_finetune_tau_count,fp))
+    fatal("Cannot read species tree tau finetune parameters");
   if (!LOAD(&opt_finetune_mix,1,fp))
     fatal("Cannot read species mixing step finetune parameter");
   if (!LOAD(&opt_finetune_dem,1,fp))
@@ -788,6 +799,8 @@ static void load_chk_section_1(FILE * fp,
                                        sizeof(double));
   g_pj_theta_slide = (double *)xmalloc((size_t)opt_finetune_theta_count *
                                        sizeof(double));
+  g_pj_tau = (double *)xmalloc((size_t)opt_finetune_tau_count *
+                               sizeof(double));
   if (!(LOAD(&g_pj_gage, 1, fp)))
     fatal("Cannot read g_pj_gage");
   if (!(LOAD(&g_pj_gspr, 1, fp)))
@@ -796,7 +809,7 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read g_pj_theta_gibbs");
   if (!(LOAD(g_pj_theta_slide, opt_finetune_theta_count, fp)))
     fatal("Cannot read g_pj_theta_slide");
-  if (!(LOAD(&g_pj_tau, 1, fp)))
+  if (!(LOAD(g_pj_tau, opt_finetune_tau_count, fp)))
     fatal("Cannot read g_pj_tau");
   if (!(LOAD(&g_pj_mix, 1, fp)))
     fatal("Cannot read g_pj_mix");
@@ -1430,6 +1443,12 @@ void load_chk_section_2(FILE * fp)
   {
     if (!LOAD(&(stree->nodes[i]->theta_step_index),1,fp))
       fatal("Cannot read theta step index for node %ld", i);
+  }
+
+  for (i = 0; i < total_nodes; ++i)
+  {
+    if (!LOAD(&(stree->nodes[i]->tau_step_index),1,fp))
+      fatal("Cannot read tau step index for node %ld", i);
   }
 
   /* read demographic (piecewise-constant) per-node fields before stree_label,
@@ -2627,9 +2646,14 @@ void cmd_checkpoint_info(const char * filename)
   long keep_labels;
   long theta_prior, est_theta, linkedtheta, theta_prop;
   double theta_alpha, theta_beta;
-  double theta_gibbs_eps, theta_slide_prob;
+  /* theta_gibbs_eps must be 'long': LOAD sizes off the pointee and dump.c
+     writes opt_theta_gibbs_showall_eps as a long. Reading it as a double
+     happens to work where long is 8 bytes, but over-reads by 4 on LLP64
+     (the MSVC build) and desynchronises every field after it */
+  long theta_gibbs_eps;
+  double theta_slide_prob;
   double phi_slide_prob, mrate_slide_prob;
-  long tau_dist;
+  long tau_dist, tau_showall_eps;
   double tau_alpha, tau_beta;
   double phi_alpha, phi_beta;
   double mig_alpha, mig_beta;
@@ -2691,6 +2715,26 @@ void cmd_checkpoint_info(const char * filename)
   if (!LOAD(&finetune_mrate_mode, 1, fp))
     fatal("Cannot read finetune mrate mode");
   if (!LOAD(&est_geneflow, 1, fp)) fatal("Cannot read est_geneflow flag");
+
+  /* piecewise-constant demographic model */
+  {
+    long dem, dem_count, dem_model, l_dem;
+    char * dem_label = NULL;
+    if (!LOAD(&dem, 1, fp)) fatal("Cannot read dem flag");
+    if (!LOAD(&dem_count, 1, fp)) fatal("Cannot read dem count");
+    if (!LOAD(&dem_model, 1, fp)) fatal("Cannot read dem model");
+    for (l_dem = 0; l_dem < dem_count; ++l_dem)
+    {
+      /* types must match dem_spec_t exactly: LOAD sizes off the pointer */
+      long segments;
+      unsigned int snode_index;
+      if (!load_string(fp, &dem_label)) fatal("Cannot read dem label");
+      free(dem_label);
+      dem_label = NULL;
+      if (!LOAD(&segments, 1, fp)) fatal("Cannot read dem segments");
+      if (!LOAD(&snode_index, 1, fp)) fatal("Cannot read dem snode index");
+    }
+  }
 
   /* method */
   if (!LOAD(&method, 1, fp)) fatal("Cannot read method");
@@ -2779,6 +2823,7 @@ void cmd_checkpoint_info(const char * filename)
   if (!LOAD(&tau_dist, 1, fp)) fatal("Cannot read tau_dist");
   if (!LOAD(&tau_alpha, 1, fp)) fatal("Cannot read tau_alpha");
   if (!LOAD(&tau_beta, 1, fp)) fatal("Cannot read tau_beta");
+  if (!LOAD(&tau_showall_eps, 1, fp)) fatal("Cannot read tau_showall_eps");
 
   /* phi prior */
   if (!LOAD(&phi_alpha, 1, fp)) fatal("Cannot read phi_alpha");
@@ -2827,6 +2872,11 @@ void cmd_checkpoint_info(const char * filename)
     if (!LOAD(&ft_theta_mode, 1, fp)) fatal("Cannot read ft_theta_mode");
     if (!LOAD(&ft_theta_count, 1, fp)) fatal("Cannot read ft_theta_count");
 
+    /* finetune_tau_mode, finetune_tau_count */
+    long ft_tau_mode, ft_tau_count;
+    if (!LOAD(&ft_tau_mode, 1, fp)) fatal("Cannot read ft_tau_mode");
+    if (!LOAD(&ft_tau_count, 1, fp)) fatal("Cannot read ft_tau_count");
+
     /* finetune_reset + finetune values */
     long ft_reset;
     if (!LOAD(&ft_reset, 1, fp)) fatal("Cannot read finetune_reset");
@@ -2841,7 +2891,10 @@ void cmd_checkpoint_info(const char * filename)
     /* theta finetune array */
     fseek(fp, ft_theta_count * sizeof(double), SEEK_CUR);
 
-    /* tau, mix, locusrate, qrates, freqs, alpha finetune */
+    /* tau finetune array */
+    fseek(fp, ft_tau_count * sizeof(double), SEEK_CUR);
+
+    /* mix, dem, locusrate, qrates, freqs, alpha finetune */
     fseek(fp, 6 * sizeof(double), SEEK_CUR);
 
     /* mubar, mui, nubar, nui, branchrate finetune */
@@ -2880,7 +2933,9 @@ void cmd_checkpoint_info(const char * filename)
     fseek(fp, 2 * sizeof(double), SEEK_CUR);
     /* theta_gibbs, theta_slide arrays */
     fseek(fp, 2 * ft_theta_count * sizeof(double), SEEK_CUR);
-    /* tau, mix, lrht, phi_slide, phi_gibbs, freqs, qmat, alpha */
+    /* tau array */
+    fseek(fp, ft_tau_count * sizeof(double), SEEK_CUR);
+    /* mix, dem, lrht, phi_slide, phi_gibbs, freqs, qmat, alpha */
     fseek(fp, 8 * sizeof(double), SEEK_CUR);
     /* mubar, nubar, mui, nui, brate */
     fseek(fp, 5 * sizeof(double), SEEK_CUR);
@@ -3173,6 +3228,11 @@ void cmd_checkpoint_info(const char * filename)
   for (i = 0; i < total_nodes; ++i)
     if (!LOAD(&(st->nodes[i]->theta_step_index), 1, fp))
       fatal("Cannot read theta_step_index");
+
+  /* read tau_step_index */
+  for (i = 0; i < total_nodes; ++i)
+    if (!LOAD(&(st->nodes[i]->tau_step_index), 1, fp))
+      fatal("Cannot read tau_step_index");
 
   /* read demographic (piecewise-constant) per-node fields before stree_label */
   for (i = 0; i < total_nodes; ++i)

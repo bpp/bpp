@@ -289,6 +289,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_tau_dist,1,fp);
   DUMP(&opt_tau_alpha,1,fp);
   DUMP(&opt_tau_beta,1,fp);
+  DUMP(&opt_tau_showall_eps,1,fp);
 
   DUMP(&opt_phi_alpha,1,fp);
   DUMP(&opt_phi_beta,1,fp);
@@ -330,6 +331,8 @@ static void dump_chk_section_1(FILE * fp,
 
   DUMP(&opt_finetune_theta_mode,1,fp);
   DUMP(&opt_finetune_theta_count,1,fp);
+  DUMP(&opt_finetune_tau_mode,1,fp);
+  DUMP(&opt_finetune_tau_count,1,fp);
   /* write finetune */
   DUMP(&opt_finetune_reset,1,fp);
   long slots = opt_finetune_mrate_mode == 1 ? 1 : opt_migration_count;
@@ -339,7 +342,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_finetune_gtage,1,fp);
   DUMP(&opt_finetune_gtspr,1,fp);
   DUMP(opt_finetune_theta,opt_finetune_theta_count,fp);
-  DUMP(&opt_finetune_tau,1,fp);
+  DUMP(opt_finetune_tau,opt_finetune_tau_count,fp);
   DUMP(&opt_finetune_mix,1,fp);
   DUMP(&opt_finetune_dem,1,fp);
   DUMP(&opt_finetune_locusrate,1,fp);
@@ -391,7 +394,7 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&g_pj_gspr, 1, fp);
   DUMP(g_pj_theta_gibbs, opt_finetune_theta_count, fp);
   DUMP(g_pj_theta_slide, opt_finetune_theta_count, fp);
-  DUMP(&g_pj_tau, 1, fp);
+  DUMP(g_pj_tau, opt_finetune_tau_count, fp);
   DUMP(&g_pj_mix, 1, fp);
   DUMP(&g_pj_dem, 1, fp);
   DUMP(&g_pj_lrht, 1, fp);
@@ -623,6 +626,9 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
   for (i = 0; i < total_nodes; ++i)
     DUMP(&(stree->nodes[i]->theta_step_index),1,fp);
+
+  for (i = 0; i < total_nodes; ++i)
+    DUMP(&(stree->nodes[i]->tau_step_index),1,fp);
 
   /* write demographic (piecewise-constant) per-node fields; dem_base is a node
      pointer, dumped as a validity flag + node index (mirrors the right-child

@@ -74,19 +74,22 @@ static const char * rate_prior_name[] =
    "Gamma-Dirichlet", "Conditional iid"
  };
 
+/* note: 'tau' is not listed here -- the tau step lengths are indexed (ta1, ta2,
+   ..) and handled separately below, exactly like 'th' (theta). A bare 'tau' is
+   accepted there too, and initializes all of them. */
 static const long ft_labels_count = 14;
 
-static const char * ft_labels[] = 
+static const char * ft_labels[] =
  {
-   "Gage", "Gspr", "tau",  "mix",  "lrht", "phis", "pi",
-   "qmat", "alfa", "mubr", "nubr", "mu_i", "nu_i", "brte", 
+   "Gage", "Gspr", "dem",  "mix",  "lrht", "phis", "pi",
+   "qmat", "alfa", "mubr", "nubr", "mu_i", "nu_i", "brte",
  };
 
-static double * ft_ptr[] = 
+static double * ft_ptr[] =
  {
    &opt_finetune_gtage,         /*  1 */
    &opt_finetune_gtspr,         /*  2 */
-   &opt_finetune_tau,           /*  3 */
+   &opt_finetune_dem,           /*  3 */
    &opt_finetune_mix,           /*  4 */
    &opt_finetune_locusrate,     /*  5 */
    &opt_finetune_phi,           /*  6 */
@@ -107,6 +110,7 @@ typedef struct eps_pair_s
 } eps_pair_t;
 
 static list_t * theta_eps_list = NULL;
+static list_t * tau_eps_list = NULL;
 
 static list_t * wr_eps_list = NULL;
 static list_t * wi_eps_list = NULL;
@@ -1911,6 +1915,13 @@ static long parse_finetune(const char * line, long line_count)
   }
   theta_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
 
+  if (tau_eps_list)
+  {
+    list_clear(tau_eps_list,free);
+    free(tau_eps_list);
+  }
+  tau_eps_list = (list_t *)xcalloc(1,sizeof(list_t));
+
   if (wr_eps_list)
   {
     list_clear(wr_eps_list,free);
@@ -1995,6 +2006,56 @@ static long parse_finetune(const char * line, long line_count)
       pair->eps = val;
 
       list_append(theta_eps_list,(void *)pair);
+    }
+    else if (strlen(token) > 2 &&
+             (token[0] == 't' || token[0] == 'T') &&
+             (token[1] == 'a' || token[1] == 'A'))
+    {
+      /* parse tau. The indexed form is 'ta1', 'ta2', .. (mirroring 'th' for
+         theta); 'tau1', 'tau2', .. are accepted as synonyms. The plain 'tau'
+         sets the initial value of *every* tau step length; indexed entries
+         override it (see update_tau_finetunes) and it is recorded here with the
+         index -1 */
+      char * sstart;
+
+      if (token[2] >= '0' && token[2] <= '9')
+        sstart = token+2;                                     /* ta<N>    */
+      else if ((token[2] == 'u' || token[2] == 'U'))
+        sstart = token+3;                                     /* tau<N> or tau */
+      else
+        goto l_unwind;
+
+      /* split token into label, index, value. Note 'sindex' must only ever
+         hold allocated memory -- it is freed at the end of the loop */
+      sval = strchr(sstart,':');
+      if (!sval || sval[1] == '\0')
+      {
+        goto l_unwind;
+      }
+
+      if (sval == sstart)
+      {
+        /* plain 'tau:value' -- applies to all tau step lengths */
+        indexm1 = -1;
+      }
+      else
+      {
+        sindex = xstrndup(sstart,sval-sstart);
+        if (!get_long(sindex, &indexm1))
+          goto l_unwind;
+        --indexm1;
+      }
+
+      ++sval;
+      double val;
+      count = get_double(sval, &val);
+      if (!count) goto l_unwind;
+
+      eps_pair_t * pair = (eps_pair_t *)xmalloc(sizeof(eps_pair_t));
+      pair->indexm1 = indexm1;
+      pair->eps = val;
+
+      list_append(tau_eps_list,(void *)pair);
     }
     else if (strlen(token) > 2 &&
              (token[0] == 'w' || token[0] == 'W') &&
@@ -2613,6 +2674,127 @@ static partition_t ** linearize_plist(list_t * plist, long * records)
 
 
   return pa;
+}
+
+static void update_tau_finetunes()
+{
+  /* allocate proper space for opt_finetune_tau */
+  free(opt_finetune_tau);
+  free(opt_finetune_tau_mask);
+
+  /* tau mode sets the number of step lengths:
+
+       1: a single step length for all taus
+       2: one step length for each tau
+
+     Mode 2 indexes the step lengths by species tree node. That requires the
+     node set (and which of them carry a tau) to be fixed for the whole run, so
+     it is restricted to an analysis with a fixed species tree and no species
+     delimitation. It is also disabled with tip dates: stree_init_tau() then
+     gives the tips a tau of their own, and the rubber-band proposes on them
+     too, which the per-node indexing does not cover. */
+  if (opt_finetune_tau_mode == 2 && (opt_est_stree || opt_est_delimit))
+  {
+    fprintf(stdout,
+            "Warning: Setting --tau_mode to 1 as one step length per tau "
+            "requires a fixed\n         species tree and no species "
+            "delimitation\n");
+    opt_finetune_tau_mode = 1;
+  }
+  if (opt_finetune_tau_mode == 2 && opt_datefile)
+  {
+    fprintf(stdout,
+            "Warning: Setting --tau_mode to 1 as one step length per tau is "
+            "not supported\n         with tip dates\n");
+    opt_finetune_tau_mode = 1;
+  }
+
+  if (opt_finetune_tau_mode == 1)
+    opt_finetune_tau_count = 1;
+  else
+  {
+    assert(opt_finetune_tau_mode == 2);
+
+    /* HACK: see the identical comment in update_theta_finetunes() below */
+    char * tmpcfile = opt_cfile;
+    opt_cfile = NULL;
+    stree_t * stree = bpp_parse_newick_string(opt_streenewick);
+    opt_cfile = tmpcfile;
+    /* upper bound: the exact number of taus that the rubber-band proposes on
+       is settled later by init_tau_stepsize(), which reallocates */
+    opt_finetune_tau_count = stree->inner_count;
+    stree_destroy(stree,NULL);
+
+    if (opt_finetune_tau_count < 1)
+    {
+      opt_finetune_tau_count = 1;
+      opt_finetune_tau_mode = 1;
+    }
+  }
+
+  opt_finetune_tau = (double *)xcalloc((size_t)opt_finetune_tau_count,
+                                       sizeof(double));
+  opt_finetune_tau_mask = (long *)xcalloc((size_t)opt_finetune_tau_count,
+                                          sizeof(long));
+
+  if (!tau_eps_list) return;
+
+  /* Two passes, so that the indexed entries (ta1, ta2, ..) always win over the
+     plain 'tau', no matter in which order they appear on the finetune line.
+
+     Pass 1: the plain 'tau' (index -1) only records a global initial value. It
+     is deliberately not written into opt_finetune_tau[] here: at this point the
+     count is merely an upper bound derived from the newick, and setting the
+     mask for slots that may not survive would trip the "does not exist" check
+     in init_tau_stepsize(). That function applies the global instead, to every
+     step length the user did not name explicitly. */
+  list_item_t * li = tau_eps_list->head;
+  while (li)
+  {
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
+    if (pair->indexm1 < 0)
+      opt_finetune_tau_global = (pair->eps == 0) ? ft_eps : pair->eps;
+    li = li->next;
+  }
+
+  /* Pass 2: the indexed entries */
+  li = tau_eps_list->head;
+  while (li)
+  {
+    eps_pair_t * pair = (eps_pair_t *)(li->data);
+
+    if (pair->indexm1 < 0)
+    {
+      li = li->next;
+      continue;
+    }
+
+    if (opt_finetune_tau_mode == 1)
+    {
+      if (pair->indexm1 != 0)
+        fatal("Error: The --tau_mode 1 option defines a single step length "
+              "(ta1) for all\ntau parameters. However the specified finetune "
+              "option in file %s specifies ta%ld.\n",
+              opt_cfile, pair->indexm1+1);
+    }
+    else
+    {
+      assert(opt_finetune_tau_mode == 2);
+      if (pair->indexm1 < 0 || pair->indexm1 >= opt_finetune_tau_count)
+        fatal("The --tau_mode 2 option defines a unique step length for each "
+              "tau parameter.\nFor the specified species tree in %s, the "
+              "maximum number of tau parameters is %ld.\nHowever, the finetune "
+              "option in the file specifies ta%ld.\n",
+              opt_cfile, opt_finetune_tau_count, pair->indexm1+1);
+    }
+
+    opt_finetune_tau[pair->indexm1] = (pair->eps == 0) ? ft_eps : pair->eps;
+    opt_finetune_tau_mask[pair->indexm1] = 1;
+    li = li->next;
+  }
+  list_clear(tau_eps_list,free);
+  free(tau_eps_list);
+  tau_eps_list = NULL;
 }
 
 static void update_theta_finetunes()
@@ -3568,6 +3750,7 @@ void load_cfile()
   opt_snl_lambda_shrink = log(opt_snl_lambda_shrink) / log(1 - opt_snl_lambda_shrink);
 
   update_locusrate_information();
+  update_tau_finetunes();
   update_theta_finetunes();
   if (opt_migration)
   {

@@ -161,7 +161,7 @@
 
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
-#define VERSION_CHKP 4
+#define VERSION_CHKP 5
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
@@ -604,6 +604,9 @@ typedef struct snode_s
 
   /* independent theta step lengths */
   long theta_step_index;
+
+  /* independent tau step lengths */
+  long tau_step_index;
 
   /* total coalescent waiting time for pop j at locus i */
   double * old_C2ji;
@@ -1227,6 +1230,8 @@ extern long opt_exp_theta;
 extern long opt_exp_sim;
 extern long opt_finetune_mrate_mode;
 extern long opt_finetune_reset;
+extern long opt_finetune_tau_count;
+extern long opt_finetune_tau_mode;
 extern long opt_finetune_theta_count;
 extern long opt_finetune_theta_mode;
 extern long opt_help;
@@ -1280,6 +1285,7 @@ extern long opt_simulate_read_depth;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
+extern long opt_tau_showall_eps;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_prior;
 extern long opt_theta_prop;
@@ -1309,7 +1315,7 @@ extern double opt_finetune_phi;
 extern double opt_finetune_qrates;
 extern double opt_finetune_nubar;
 extern double opt_finetune_nui;
-extern double opt_finetune_tau;
+extern double opt_finetune_tau_global;
 extern double opt_finetune_dem;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
@@ -1352,6 +1358,7 @@ extern double opt_clock_alpha;
 extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
+extern long * opt_finetune_tau_mask;
 extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
 extern long * opt_sp_seqcount;
@@ -1385,6 +1392,7 @@ extern char * opt_treefile;
 extern double * opt_basefreqs_params;
 extern double * opt_finetune_migrates;
 extern double * opt_finetune_mig_Mi;
+extern double * opt_finetune_tau;
 extern double * opt_finetune_theta;
 extern double * opt_qrates_params;
 extern migspec_t * opt_mig_specs;
@@ -1469,7 +1477,7 @@ extern migbuffer_t ** global_migbuffer_r;
 /* pjumps */
 extern double g_pj_gage;
 extern double g_pj_gspr;
-extern double g_pj_tau;
+extern double * g_pj_tau;
 extern double g_pj_dem;
 extern double g_pj_mix;
 extern double g_pj_lrht;
@@ -1599,13 +1607,18 @@ void stree_propose_theta(gtree_t ** gtree,
 
 hashtable_t * datelist_hash(list_t * datelist);
 
-double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+snode_t * stree_tau_step_node(stree_t * stree, long index);
+void stree_propose_tau(gtree_t ** gtree,
+                       stree_t * stree,
+                       locus_t ** loci,
+                       long ft_round);
 double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
-double stree_propose_tau_mig(stree_t ** streeptr,
-                             gtree_t *** gtreeptr,
-                             stree_t ** scloneptr,
-                             gtree_t *** gcloneptr,
-                             locus_t ** loci);
+void stree_propose_tau_mig(stree_t ** streeptr,
+                           gtree_t *** gtreeptr,
+                           stree_t ** scloneptr,
+                           gtree_t *** gcloneptr,
+                           locus_t ** loci,
+                           long ft_round);
 
 void stree_propose_phi(stree_t * stree,
                        gtree_t ** gtree,

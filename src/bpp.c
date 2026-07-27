@@ -90,6 +90,8 @@ long opt_exp_theta;
 long opt_exp_sim;
 long opt_finetune_mrate_mode;
 long opt_finetune_reset;
+long opt_finetune_tau_count;
+long opt_finetune_tau_mode;
 long opt_finetune_theta_count;
 long opt_finetune_theta_mode;
 long opt_help;
@@ -142,6 +144,7 @@ long opt_simulate_read_depth;
 long opt_siterate_fixed;
 long opt_siterate_cats;
 long opt_tau_dist;
+long opt_tau_showall_eps;
 long opt_theta_gibbs_showall_eps;
 long opt_theta_prior;
 long opt_theta_prop;
@@ -173,7 +176,7 @@ double opt_finetune_phi;
 double opt_finetune_qrates;
 double opt_finetune_nubar;
 double opt_finetune_nui;
-double opt_finetune_tau;
+double opt_finetune_tau_global;
 double opt_finetune_dem;
 double opt_heredity_alpha;
 double opt_heredity_beta;
@@ -238,9 +241,11 @@ char * opt_treefile;
 double * opt_basefreqs_params;
 double * opt_finetune_migrates;
 double * opt_finetune_mig_Mi;
+double * opt_finetune_tau;
 double * opt_finetune_theta;
 double * opt_qrates_params;
 long * opt_diploid;
+long * opt_finetune_tau_mask;
 long * opt_finetune_theta_mask;
 long * opt_print_locus_num;
 long * opt_sp_seqcount;
@@ -270,7 +275,7 @@ long neon_present;
 /* pjumps */
 double g_pj_gage;
 double g_pj_gspr;
-double g_pj_tau;
+double * g_pj_tau;
 double g_pj_dem;
 double g_pj_mix;
 double g_pj_lrht;
@@ -356,6 +361,8 @@ static struct option long_options[] =
   {"no-checkpoint",        no_argument,       0, 0 },  /* 56 */
   {"checkpoint-info",      required_argument, 0, 0 },  /* 57 */
   {"bfcollect",            required_argument, 0, 0 },  /* 58 */
+  {"tau_mode",             required_argument, 0, 0 },  /* 59 */
+  {"tau-showeps",          no_argument,       0, 0 },  /* 60 */
   { 0, 0, 0, 0 }
 };
 
@@ -557,8 +564,14 @@ void args_init(int argc, char ** argv)
   opt_finetune_reset = 1;
   opt_finetune_nubar = 0.1;
   opt_finetune_nui = 0.1;
-  opt_finetune_tau = 0.001;
   opt_finetune_dem = 0.0001;
+  opt_finetune_tau = (double *)xmalloc(sizeof(double));
+  opt_finetune_tau_mask = (long *)xmalloc(sizeof(long));
+  opt_finetune_tau[0] = 0.001;
+  opt_finetune_tau_mask[0] = 0;    /* 0: default, 1: specified by user */
+  opt_finetune_tau_count = 1;
+  opt_finetune_tau_mode = 2;
+  opt_finetune_tau_global = -1;    /* < 0: no 'tau:' in the finetune line */
   opt_finetune_theta = (double *)xmalloc(sizeof(double));
   opt_finetune_theta_mask = (long *)xmalloc(sizeof(long));
   opt_finetune_theta[0] = 0.001;
@@ -666,6 +679,7 @@ void args_init(int argc, char ** argv)
   opt_theta_beta = 0;
   opt_theta_prior = BPP_THETA_PRIOR_INVGAMMA;
   opt_theta_prop = -1;
+  opt_tau_showall_eps = 0;
   opt_theta_gibbs_showall_eps = 0;
   opt_theta_slide_prob = 0.1; /* proportion of sliding window proposals */
   opt_threads = 1;
@@ -698,6 +712,7 @@ void args_init(int argc, char ** argv)
   g_pj_mrate_gibbs = NULL;
   g_pj_mrate_slide = NULL;
   g_pj_migvr = NULL;
+  g_pj_tau = NULL;
   g_pj_theta_gibbs = NULL;
   g_pj_theta_slide = NULL;
   g_pj_sspr = 0;
@@ -993,6 +1008,16 @@ void args_init(int argc, char ** argv)
         opt_bfcollect = xstrdup(optarg);
         break;
 
+      case 59:
+        opt_finetune_tau_mode = atol(optarg);
+        if (opt_finetune_tau_mode < 1 || opt_finetune_tau_mode > 2)
+          fatal("Invalid tau mode (%s)", optarg);
+        break;
+
+      case 60:
+        opt_tau_showall_eps = 1;
+        break;
+
       default:
         fatal("Internal error in option parsing");
     }
@@ -1138,6 +1163,10 @@ void cmd_help()
           "  --points INTEGER         number of G-L quadrature points (used with --bfdriver/--bfcollect)\n"
           "  --bfcollect PREFIX       compute marginal log-likelihood from bfdriver output files\n"
           "  --no-pin                 do not pin threads to cores\n"
+          "  --tau_mode INTEGER       definition of tau step lengths (1: one for all,\n"
+          "                           2: one per tau; default: 2)\n"
+          "  --tau-showeps            show acceptance proportions for each tau instead of\n"
+          "                           their average\n"
           "  --theta_mode INTEGER     definition of theta step lengths (default: 2)\n"
           "  --theta-prop STRING      prop. dist. for theta gibbs move ('mg_invg' or 'mg_gamma')\n"
           "  --theta-showeps          show individual step lengths/pjumps for each theta\n"
@@ -1264,6 +1293,8 @@ int main (int argc, char * argv[])
 
   free(opt_finetune_migrates);
   free(opt_finetune_mig_Mi);
+  free(opt_finetune_tau);
+  free(opt_finetune_tau_mask);
   free(opt_finetune_theta);
   free(opt_finetune_theta_mask);
   legacy_fini();

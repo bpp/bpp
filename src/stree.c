@@ -439,6 +439,7 @@ static void snode_clone(snode_t * snode, snode_t * clone, stree_t * clone_stree)
   clone->constraint = snode->constraint;
   clone->constraint_lineno = snode->constraint_lineno;
   clone->theta_step_index = snode->theta_step_index;
+  clone->tau_step_index = snode->tau_step_index;
 
   /* TODO: For Chi to fix */
   clone->trait = NULL;
@@ -2369,6 +2370,129 @@ static void init_w_stepsize()
   }
 }
 
+/* Does the rubber-band move propose on this node? Must agree with the
+   candidate test in stree_propose_tau()/stree_propose_tau_mig(), except for the
+   dynamic 'tau > 0' test: with a fixed species tree and no delimitation (the
+   only case where mode 2 is allowed) every such node keeps tau > 0 for the
+   whole run. */
+static int node_has_tau_step(stree_t * stree, unsigned int i)
+{
+  snode_t * x = stree->nodes[i];
+
+  if (i < stree->tip_count || i >= stree->tip_count + stree->inner_count)
+    return 0;
+  if (x->dem)
+    return 0;                 /* break point; proposed by stree_propose_dem_tau */
+  if (opt_msci && !x->prop_tau)
+    return 0;
+
+  return 1;
+}
+
+/* assign one step length per tau (mode 2), or a single shared one (mode 1).
+   Must be called after stree_init_tau(), so that the initial tau values are
+   available for scaling the default step lengths. */
+static void init_tau_stepsize(stree_t * stree)
+{
+  int alloced = 0;
+  long i,j;
+  long tau_params = 0;
+  unsigned int total_nodes;
+  double tau_eps_default = 0.001;
+
+  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  for (i = 0; i < opt_finetune_tau_count; ++i)
+    if (opt_finetune_tau_mask[i])
+    {
+      alloced = 1;
+      break;
+    }
+
+  /* nodes that are never proposed on still need a valid index */
+  for (i = 0; i < total_nodes; ++i)
+    stree->nodes[i]->tau_step_index = 0;
+
+  for (i = 0; i < total_nodes; ++i)
+    if (node_has_tau_step(stree,(unsigned int)i))
+      tau_params++;
+
+  /* cfile.c already forces mode 1 for A01/A10/A11 and for tip dates; re-check
+     here so that the decision also holds for a tree that ends up with fewer
+     than two taus */
+  if (opt_finetune_tau_mode == 1 || opt_est_stree || opt_est_delimit ||
+      opt_datefile || tau_params < 2)
+  {
+    /* the '== 0' case covers a user who specified only a higher index (ta2, ..)
+       in a run that ends up with a single step length */
+    if (!alloced || opt_finetune_tau[0] == 0)
+      opt_finetune_tau[0] = (opt_finetune_tau_global > 0) ?
+                              opt_finetune_tau_global : tau_eps_default;
+    opt_finetune_tau_count = 1;
+    opt_finetune_tau_mode = 1;
+    return;
+  }
+
+  assert(opt_finetune_tau_mode == 2);
+
+  if (alloced)
+  {
+    for (i = tau_params; i < opt_finetune_tau_count; ++i)
+      if (opt_finetune_tau_mask[i])
+        fatal("ERROR: ta%ld specified in finetune does not exist", i+1);
+  }
+  else
+  {
+    free(opt_finetune_tau);
+    opt_finetune_tau = (double *)xcalloc((size_t)tau_params,sizeof(double));
+  }
+  opt_finetune_tau_count = tau_params;
+
+  /* Assign the indices and fill in the step lengths the user did not name
+     explicitly: a plain 'tau:' in the finetune line initializes all of them,
+     otherwise each gets a default proportional to the tau it belongs to. The
+     whole purpose of mode 2 is that the taus can differ by orders of magnitude,
+     so a flat default would start the small taus at a near-zero acceptance
+     rate. */
+  for (i = 0, j = 0; i < total_nodes; ++i)
+  {
+    if (!node_has_tau_step(stree,(unsigned int)i))
+      continue;
+
+    stree->nodes[i]->tau_step_index = j;
+
+    if (!alloced || !opt_finetune_tau_mask[j] || opt_finetune_tau[j] == 0)
+    {
+      if (opt_finetune_tau_global > 0)
+        opt_finetune_tau[j] = opt_finetune_tau_global;
+      else
+        opt_finetune_tau[j] = (stree->nodes[i]->tau > 0) ?
+                                stree->nodes[i]->tau / 10 : tau_eps_default;
+    }
+    ++j;
+  }
+  assert(j == tau_params);
+}
+
+/* the node owning tau step length 'index', or NULL if there is none (e.g. a
+   single step length for all taus). Used for labelling the output columns */
+snode_t * stree_tau_step_node(stree_t * stree, long index)
+{
+  unsigned int i;
+  unsigned int total_nodes;
+
+  if (opt_finetune_tau_mode == 1)
+    return NULL;
+
+  total_nodes = stree->tip_count+stree->inner_count+stree->hybrid_count;
+
+  for (i = 0; i < total_nodes; ++i)
+    if (node_has_tau_step(stree,i) && stree->nodes[i]->tau_step_index == index)
+      return stree->nodes[i];
+
+  return NULL;
+}
+
 static void init_theta_stepsize(stree_t * stree)
 {
   int alloced = 0;
@@ -3284,6 +3408,10 @@ void stree_init(stree_t * stree,
   }
   else
     stree->nodes[0]->tau = 0;
+
+  /* assign the tau step lengths; requires the taus set above and the 'dem'
+     flags set by stree_expand_demography(), which runs before stree_init() */
+  init_tau_stepsize(stree);
 
   //ANNA
   //stree->nodes[2]->tau = 1.4;
@@ -5792,7 +5920,8 @@ static long propose_tau(locus_t ** loci,
   }
 
   /* propose new tau */
-  newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
+  newage = oldage + opt_finetune_tau[snode->tau_step_index] *
+                    legacy_rnd_symmetrical(thread_index);
   newage = reflect(newage, minage, maxage, thread_index);
   snode->tau = newage;
 
@@ -6966,7 +7095,8 @@ static long propose_tau_mig(locus_t ** loci,
   }
 
   /* propose new tau */
-  newage = oldage + opt_finetune_tau * legacy_rnd_symmetrical(thread_index);
+  newage = oldage + opt_finetune_tau[snode->tau_step_index] *
+                    legacy_rnd_symmetrical(thread_index);
   newage = reflect(newage, minage, maxage, thread_index);
   snode->tau = newage;
 
@@ -7568,7 +7698,10 @@ static long propose_tau_mig(locus_t ** loci,
   return accepted;
 }
 
-double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
+void stree_propose_tau(gtree_t ** gtree,
+                       stree_t * stree,
+                       locus_t ** loci,
+                       long ft_round)
 {
   unsigned int i;
   unsigned int candidate_count = 0;
@@ -7601,21 +7734,41 @@ double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
   }
 
   if (!candidate_count)
-    return 0;
+  {
+    /* nothing to propose; keep the former bookkeeping, which counted this as a
+       round with zero acceptances */
+    long k;
+    for (k = 0; k < opt_finetune_tau_count; ++k)
+      RMEAN_UPDATE(g_pj_tau[k], ft_round, 0);
+    return;
+  }
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau > 0 && !stree->nodes[i]->dem &&
         (!opt_msci || stree->nodes[i]->prop_tau))
-      accepted += propose_tau(loci,
-                              stree->nodes[i],
-                              gtree,
-                              stree,
-                              tau_count,
-                              thread_index);
+    {
+      long acc = propose_tau(loci,
+                             stree->nodes[i],
+                             gtree,
+                             stree,
+                             tau_count,
+                             thread_index);
+      accepted += acc;
+
+      /* one step length per tau: each candidate is proposed exactly once per
+         call, so ft_round is the correct number of rounds for every index */
+      if (opt_finetune_tau_mode != 1)
+        RMEAN_UPDATE(g_pj_tau[stree->nodes[i]->tau_step_index], ft_round, acc);
+    }
   }
 
-  return ((double)accepted / candidate_count);
+  /* a single step length for all taus: pool the acceptances, as before */
+  if (opt_finetune_tau_mode == 1)
+  {
+    double ratio = (double)accepted / candidate_count;
+    RMEAN_UPDATE(g_pj_tau[0], ft_round, ratio);
+  }
 }
 
 /* Piecewise-constant demographic model: break-point move.
@@ -7880,11 +8033,12 @@ double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
   return ((double)accepted / candidate_count);
 }
 
-double stree_propose_tau_mig(stree_t ** streeptr,
-                             gtree_t *** gtreeptr,
-                             stree_t ** scloneptr,
-                             gtree_t *** gcloneptr,
-                             locus_t ** loci)
+void stree_propose_tau_mig(stree_t ** streeptr,
+                           gtree_t *** gtreeptr,
+                           stree_t ** scloneptr,
+                           gtree_t *** gcloneptr,
+                           locus_t ** loci,
+                           long ft_round)
 {
   unsigned int i,j, total_nodes;
   unsigned int candidate_count = 0;
@@ -7920,14 +8074,22 @@ double stree_propose_tau_mig(stree_t ** streeptr,
   {
     if (candidate[i])
     {
+      long step_index;
+
       /* clone species tree and gene trees */
       stree_clone(original_stree,stree);
       for (j = 0; j < opt_locus_count; ++j)
         gtree_clone(original_gtree[j], gtree[j], stree);
       events_clone(original_stree, stree, gtree);
-      
+
       if (opt_debug)
         debug_validate_logpg(stree, gtree, loci, "TAU-M");
+
+      /* read the step index before the proposal: on acceptance the two trees
+         are swapped below. (Both carry the same value -- stree_clone copies it
+         -- but reading it up front keeps that independent of the swap.) */
+      step_index = stree->nodes[i]->tau_step_index;
+
       rc = propose_tau_mig(loci,
                            stree->nodes[i],
                            gtree,
@@ -7943,6 +8105,10 @@ double stree_propose_tau_mig(stree_t ** streeptr,
         SWAP(original_stree,stree);
         SWAP(original_gtree,gtree);
       }
+
+      /* one step length per tau */
+      if (opt_finetune_tau_mode != 1)
+        RMEAN_UPDATE(g_pj_tau[step_index], ft_round, rc);
     }
   }
 
@@ -7954,7 +8120,12 @@ double stree_propose_tau_mig(stree_t ** streeptr,
 
   free(candidate);
 
-  return ((double)accepted / candidate_count);
+  /* a single step length for all taus: pool the acceptances, as before */
+  if (opt_finetune_tau_mode == 1)
+  {
+    double ratio = (double)accepted / candidate_count;
+    RMEAN_UPDATE(g_pj_tau[0], ft_round, ratio);
+  }
 }
 
 void stree_rootdist(stree_t * stree,

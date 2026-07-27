@@ -140,6 +140,50 @@ static char * center(const char * s, int space)
   return r;
 }
 
+/* Width of one tau acceptance-proportion column. The header label ("ta12") and
+   the value ("%*.2f") must use the same width or the two rows drift apart once
+   the index reaches two digits. 4 is the natural width of "0.30" and fits
+   ta1..ta99; wider trees widen the column. */
+static int tau_col_width()
+{
+  int digits = 1;
+  long n = opt_finetune_tau_count;
+
+  while (n >= 10)
+  {
+    n /= 10;
+    ++digits;
+  }
+
+  return MAX(4, digits+2);        /* "ta" + digits */
+}
+
+/* The MCMC progress line shows a single 'tau' column holding the mean
+   acceptance proportion over all tau step lengths. --tau-showeps opens it up
+   into one column per tau (ta1, ta2, ..). With a single step length there is
+   nothing to expand. Note this governs the progress line only: the
+   "Current Pjump / New finetune / => 'finetune = 1 ..'" block always lists
+   every step length, so the printed finetune line stays copy-pasteable. */
+static int tau_cols_merged()
+{
+  return (opt_finetune_tau_mode == 1 || !opt_tau_showall_eps);
+}
+
+/* same for one theta acceptance-proportion column ("th12" / "thg") */
+static int theta_col_width()
+{
+  int digits = 1;
+  long n = opt_finetune_theta_count;
+
+  while (n >= 10)
+  {
+    n /= 10;
+    ++digits;
+  }
+
+  return MAX(4, digits+2);        /* "th" + digits */
+}
+
 
 long dbg_get_mig_idx(stree_t * stree)
 {
@@ -388,7 +432,25 @@ static void print_mcmc_headerline(FILE * fp,
       fprintf(fp, "%*s: species tree theta proposal (gibbs sampler)\n", 6, "thg");
 
   }
-  fprintf(fp, "   tau: species tree tau proposal\n");
+  if (opt_finetune_tau_mode == 1)
+    fprintf(fp, "   tau: species tree tau proposal\n");
+  else
+  {
+    /* the step lengths are always listed, as they all appear in the finetune
+       block, even when the progress line merges them into one column */
+    if (tau_cols_merged())
+      fprintf(fp, "   tau: species tree tau proposal  (mean over ta1-ta%ld)\n",
+              opt_finetune_tau_count);
+    for (k = 0; k < opt_finetune_tau_count; ++k)
+    {
+      char * stau = NULL;
+      snode_t * x = stree_tau_step_node(stree,k);
+      xasprintf(&stau, "ta%ld", k+1);
+      fprintf(fp, "%*s: species tree tau proposal (%s)\n",
+              6, stau, x ? x->label : "?");
+      free(stau);
+    }
+  }
   fprintf(fp, "   mix: mixing proposal\n");
   if (opt_migration && !opt_est_geneflow)
   {
@@ -558,16 +620,19 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp, " log-L: mean log-L of observing data\n");
   fprintf(fp,"\n");
 
-  ap_width += 4*5;
+  ap_width += 3*5;                     /* Gage Gspr mix */
+  ap_width += tau_cols_merged() ? 5 :
+                opt_finetune_tau_count*(tau_col_width()+1);
+  ap_width += opt_dem ? 5 : 0;
   if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1)
   {
     if (opt_theta_gibbs_showall_eps)
-      ap_width += opt_finetune_theta_count*10;
+      ap_width += opt_finetune_theta_count*(MAX(9,theta_col_width())+1);
     else
-      ap_width += (opt_finetune_theta_count+1)*5;
+      ap_width += (opt_finetune_theta_count+1)*(theta_col_width()+1);
   }
   else
-    ap_width += opt_finetune_theta_count*5;
+    ap_width += opt_finetune_theta_count*(theta_col_width()+1);
     
   ap_width += enabled_hrdt ? 5 : 0;
   ap_width += enabled_lrht ? 5 : 0;
@@ -631,33 +696,45 @@ static void print_mcmc_headerline(FILE * fp,
   fprintf(fp," Gspr");      linewidth += 5;
   for (i = 0; i < opt_finetune_theta_count; ++i)
   {
-    int spacing = 4;
+    /* the label must not exceed the field width, or the header drifts away
+       from the values once the index reaches two digits */
+    int spacing = theta_col_width();
     if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1 && opt_theta_gibbs_showall_eps)
-      spacing = 9;
+      spacing = MAX(9,spacing);
     char * sth = NULL;
     if (opt_theta_slide_prob == 0)
     {
       assert(opt_finetune_theta_count == 1);
-      xasprintf(&sth, " thg");
+      xasprintf(&sth, "thg");
     }
-    else 
-    {
-      xasprintf(&sth, " th%ld", i+1);
-      char * s = center(sth,spacing);
-      free(sth);
-      sth = s;
-    }
+    else
+      xasprintf(&sth, "th%ld", i+1);
     fprintf(fp, " %*s", spacing, sth);
     linewidth += spacing+1;
     free(sth);
   }
   if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1 && !opt_theta_gibbs_showall_eps)
   {
-    fprintf(fp, " %*s", 4, "thg");
-    linewidth += 5;
+    fprintf(fp, " %*s", theta_col_width(), "thg");
+    linewidth += theta_col_width()+1;
   }
   //fprintf(fp," thet");    linewidth += 5;
-  fprintf(fp,"  tau");      linewidth += 5;
+  if (tau_cols_merged())
+  {
+    fprintf(fp,"  tau");    linewidth += 5;
+  }
+  else
+  {
+    int tw = tau_col_width();
+    for (i = 0; i < opt_finetune_tau_count; ++i)
+    {
+      char * stau = NULL;
+      xasprintf(&stau, "ta%ld", i+1);
+      fprintf(fp, " %*s", tw, stau);
+      linewidth += tw+1;
+      free(stau);
+    }
+  }
   fprintf(fp,"  mix");      linewidth += 5;
   if (opt_dem)
   {
@@ -959,7 +1036,13 @@ static void active_pjumps_alloc()
 {
   long i,k;
 
-  size_t maxalloc = 16 + opt_finetune_theta_count;
+  /* 15 scalar entries (Gage Gspr mix dem lrht phis pi qmat alfa mubr nubr mu_i
+     nu_i brte, plus one spare), the indexed theta and tau entries, and up to
+     two indexed migration entries (wr,wi) per slot */
+  long mig_slots = (!opt_migration || opt_est_geneflow) ? 0 :
+                     ((opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count);
+  size_t maxalloc = 16 + opt_finetune_theta_count + opt_finetune_tau_count +
+                    2*mig_slots;
 
   active_pjump_titles = (char **)xmalloc(maxalloc*sizeof(char *));
   active_pjump_values = (double **)xmalloc(maxalloc*sizeof(double *));
@@ -1007,10 +1090,25 @@ static void active_pjumps_alloc()
     ++k;
   }
   
-  active_pjump_titles[k] = xstrdup("tau");
-  active_pjump_values[k] = &g_pj_tau;
-  finetune_values_ptr[k] = &opt_finetune_tau;
-  ++k;
+  if (opt_finetune_tau_mode == 1)
+  {
+    /* keep the title 'tau' (rather than 'tau1') so that the printed
+       "finetune = 1 ... tau:..." line stays as it always was */
+    active_pjump_titles[k] = xstrdup("tau");
+    active_pjump_values[k] = g_pj_tau;
+    finetune_values_ptr[k] = opt_finetune_tau;
+    ++k;
+  }
+  else
+  {
+    for (i = 0; i < opt_finetune_tau_count; ++i)
+    {
+      xasprintf(active_pjump_titles+k, "ta%ld", i+1);
+      active_pjump_values[k] = g_pj_tau+i;
+      finetune_values_ptr[k] = opt_finetune_tau+i;
+      ++k;
+    }
+  }
 
   active_pjump_titles[k] = xstrdup("mix");
   active_pjump_values[k] = &g_pj_mix;
@@ -1727,12 +1825,12 @@ static void status_print_pjump(FILE * fp,
   if (opt_theta_slide_prob == 1)
   {
     for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
+      fprintf(fp, " %*.2f", theta_col_width(), g_pj_theta_slide[k]);
   }
   else if (opt_theta_slide_prob == 0)
   {
     for (k = 0; k < opt_finetune_theta_count; ++k)
-      fprintf(fp, " %4.2f", g_pj_theta_gibbs[k]);
+      fprintf(fp, " %*.2f", theta_col_width(), g_pj_theta_gibbs[k]);
   }
   else
   {
@@ -1746,15 +1844,29 @@ static void status_print_pjump(FILE * fp,
       double gavg = 0;
       for (k = 0; k < opt_finetune_theta_count; ++k)
       {
-        fprintf(fp, " %4.2f", g_pj_theta_slide[k]);
+        fprintf(fp, " %*.2f", theta_col_width(), g_pj_theta_slide[k]);
         gavg += g_pj_theta_gibbs[k];
       }
       gavg /= opt_finetune_theta_count;
-      fprintf(fp, " %4.2f", gavg);
+      fprintf(fp, " %*.2f", theta_col_width(), gavg);
     }
 
   }
-  fprintf(fp, " %4.2f", g_pj_tau);
+  if (tau_cols_merged())
+  {
+    /* mean acceptance proportion over all tau step lengths. Every step length
+       is proposed on exactly once per iteration, so a plain mean is right */
+    double tavg = 0;
+    for (k = 0; k < opt_finetune_tau_count; ++k)
+      tavg += g_pj_tau[k];
+    tavg /= opt_finetune_tau_count;
+    fprintf(fp, " %4.2f", tavg);
+  }
+  else
+  {
+    for (k = 0; k < opt_finetune_tau_count; ++k)
+      fprintf(fp, " %*.2f", tau_col_width(), g_pj_tau[k]);
+  }
   fprintf(fp, " %4.2f", g_pj_mix);
   if (opt_dem)
     fprintf(fp, " %4.2f", g_pj_dem);
@@ -4542,6 +4654,9 @@ static FILE * init(stree_t ** ptr_stree,
   g_pj_theta_slide = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
   g_pj_theta_gibbs = (double *)xcalloc((size_t)opt_finetune_theta_count, sizeof(double));
 
+  /* initialize pjump array for taus */
+  g_pj_tau = (double *)xcalloc((size_t)opt_finetune_tau_count, sizeof(double));
+
   /* initialize pjump array for mrate */
   if (opt_migration)
   {
@@ -4921,7 +5036,6 @@ static void pjump_reset()
 
   g_pj_gage = 0;
   g_pj_gspr = 0;
-  g_pj_tau = 0;
   g_pj_dem = 0;
   g_pj_mix = 0;
   g_pj_lrht = 0;
@@ -4952,6 +5066,9 @@ static void pjump_reset()
     g_pj_theta_slide[i] = 0;
     g_pj_theta_gibbs[i] = 0;
   }
+
+  for (i = 0; i < opt_finetune_tau_count; ++i)
+    g_pj_tau[i] = 0;
 
   g_pj_sspr = 0;
   g_pj_ssnl = 0;
@@ -5757,12 +5874,18 @@ void cmd_run()
     #if 1
     if (stree->inner_count >= 1 && stree->root->tau > 0)
     {
-      ratio = 0;
+      /* the two proposals do their own pjump bookkeeping (per step length) */
       if(!opt_usedata_fix_gtree && opt_migration)
-        ratio = stree_propose_tau_mig(&stree, &gtree, &sclone, &gclones, locus);
+        stree_propose_tau_mig(&stree,&gtree,&sclone,&gclones,locus,ft_round);
       else if (!opt_usedata_fix_gtree)
-        ratio = stree_propose_tau(gtree,stree,locus);
-      RMEAN_UPDATE(g_pj_tau, ft_round, ratio);
+        stree_propose_tau(gtree,stree,locus,ft_round);
+      else
+      {
+        /* no tau proposal was made; count it as a round with no acceptances,
+           which is what the pooled bookkeeping used to do */
+        for (j = 0; j < opt_finetune_tau_count; ++j)
+          RMEAN_UPDATE(g_pj_tau[j], ft_round, 0);
+      }
       #ifdef CHECK_LOGL
       check_logl(stree, gtree, locus, i, "TAU");
       #endif
@@ -6588,6 +6711,7 @@ void cmd_run()
 
   free(g_pj_theta_slide);
   free(g_pj_theta_gibbs);
+  free(g_pj_tau);
   if (opt_migration)
   {
     if (g_pj_mrate_slide)
