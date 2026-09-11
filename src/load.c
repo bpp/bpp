@@ -2403,7 +2403,7 @@ void checkpoint_truncate(const char * filename, long offset)
 {
   FILE * fp;
   
-  if (!(fp = fopen(filename, "a")))
+  if (!(fp = fopen(filename, "r+")))
     fatal("Cannot open file %s for reading...", filename);
 
   if (xtruncate(fileno(fp),offset))

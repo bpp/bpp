@@ -57,6 +57,7 @@ static int enabled_mubar = 0;
 static int enabled_nubar = 0;
 
 static const char * template_ratesfile = "%s.locus_%d_params_sample.txt";
+static const char * template_outfile    = "%s.txt";
 
 static int prec_logl =  8;
 static int prec_logpr = 8;
@@ -2998,6 +2999,7 @@ static FILE * resume(stree_t ** ptr_stree,
   char ** gtree_files = NULL;
   char ** mig_files = NULL;
   char ** migcount_files = NULL;
+  char * outfile = NULL;
 
   if (sizeof(BYTE) != 1)
     fatal("Checkpoint does not work on systems with sizeof(char) <> 1");
@@ -3046,7 +3048,8 @@ static FILE * resume(stree_t ** ptr_stree,
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
 
   /* truncate output file to specific offset */
-  checkpoint_truncate(opt_jobname, out_offset);
+  xasprintf(&outfile, template_outfile, opt_jobname);
+  checkpoint_truncate(outfile, out_offset);
 
   /* truncate migcount files if available */
   if (opt_migration && opt_debug_migration)
@@ -3196,11 +3199,9 @@ static FILE * resume(stree_t ** ptr_stree,
   /* open truncated MCMC file for appending */
   if (!(fp_mcmc = fopen(opt_mcmcfile, "a")))
     fatal("Cannot open file %s for appending...", opt_mcmcfile);
-  char * tmpoutfile = NULL;
-  xasprintf(&tmpoutfile, "%s.txt", opt_jobname);
-  if (!(fp_out = fopen(tmpoutfile, "a")))
-    fatal("Cannot open file %s for appending...", opt_jobname);
-  free(tmpoutfile);
+  if (!(fp_out = fopen(outfile, "a")))
+    fatal("Cannot open file %s for appending...", outfile);
+  free(outfile);
   *ptr_fp_out = fp_out;
 
   /* open potential truncated migcount files for appending */
@@ -3403,7 +3404,7 @@ static FILE * init(stree_t ** ptr_stree,
   gtree_t** gclones = NULL;
 
   char* tmpoutfile = NULL;
-  xasprintf(&tmpoutfile, "%s.txt", opt_jobname);
+  xasprintf(&tmpoutfile, template_outfile, opt_jobname);
   if (!(fp_out = fopen(tmpoutfile, "w")))
     fatal("Cannot open file %s for writing...", opt_jobname);
   free(tmpoutfile);
