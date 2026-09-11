@@ -788,6 +788,49 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count)
   fclose(fp_mcmc);
 }
 
+/* Mean of the last (lnL) column of the MCMC sample file. Lines whose last
+   field is not a number - i.e. the header line, which ends in the label 'lnL'
+   - are skipped. Returns the number of samples averaged, or 0 if none.
+
+   This is needed in summary-only mode ('print = -1' or --summary), where the
+   MCMC loop never runs and mean_logl is therefore never accumulated. Note
+   that mcmc_logsample() already divides the log-likelihood by opt_bfbeta
+   before writing it, so the mean of that column is E_b(lnf(X)). */
+long mcmc_mean_logl(const char * filename, double * mean)
+{
+  long count = 0;
+  double sum = 0;
+  double x;
+  char * p;
+  char * end;
+  FILE * fp;
+
+  fp = xopen(filename,"r");
+
+  while (getnextline(fp))
+  {
+    /* last tab-separated field of the line */
+    p = strrchr(line,'\t');
+    if (!p) continue;
+    ++p;
+
+    x = strtod(p,&end);
+    if (end == p) continue;             /* not a number (header line) */
+    while (*end == ' ' || *end == '\t' || *end == '\r') ++end;
+    if (*end) continue;
+
+    sum += x;
+    ++count;
+  }
+
+  fclose(fp);
+
+  if (count)
+    *mean = sum / count;
+
+  return count;
+}
+
 long getlinecount(const char * filename)
 {
   long linecount = 0;

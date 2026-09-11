@@ -6737,10 +6737,31 @@ void cmd_run()
   if (opt_threads > 1)
     threads_exit();
 
-  if (opt_bfbeta != 1 && !opt_onlysummary)
+  if (opt_bfbeta != 1)
   {
-    fprintf(stdout, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
-    fprintf(fp_out, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
+    long ok = 1;
+
+    /* summary-only mode skips the MCMC loop, so mean_logl was never
+       accumulated; recover E_b(lnf(X)) from the lnL column of the MCMC sample
+       file, which already holds lnL/beta (see mcmc_logsample). Methods A01 and
+       A11 log newick trees instead and have no lnL column to recover from */
+    if (opt_onlysummary)
+      ok = (mcmc_mean_logl(opt_mcmcfile, &mean_logl) > 0);
+
+    if (ok)
+    {
+      fprintf(stdout, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
+      fprintf(fp_out, "\nBFbeta = %8.6f  E_b(lnf(X)) = %9.4f\n\n", opt_bfbeta, mean_logl);
+    }
+    else
+    {
+      fprintf(stdout, "\nWarning: no lnL column in %s, cannot recompute "
+                      "E_b(lnf(X)) for BFbeta = %8.6f\n\n",
+              opt_mcmcfile, opt_bfbeta);
+      fprintf(fp_out, "\nWarning: no lnL column in %s, cannot recompute "
+                      "E_b(lnf(X)) for BFbeta = %8.6f\n\n",
+              opt_mcmcfile, opt_bfbeta);
+    }
   }
 
   /* close mcmc file */

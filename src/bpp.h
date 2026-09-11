@@ -2215,6 +2215,8 @@ void stree_summary(FILE * fp_out, char ** species_names, long species_count);
 
 long getlinecount(const char * filename);
 
+long mcmc_mean_logl(const char * filename, double * mean);
+
 /* functions in summary11.c */
 
 void mixed_summary(FILE * fp_out, unsigned int sp_count);
