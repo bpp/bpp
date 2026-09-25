@@ -3463,8 +3463,6 @@ void load_cfile()
   if (species_count == 1 && opt_method != METHOD_00)
     fatal("You can only use method A00 with one species");
 
-  if ( opt_checkpoint && opt_datefile)
-	  fatal("Checkpointing is not implemented with tip dating");
   if ( opt_method != METHOD_00 && opt_datefile)
 	  fatal("You can only use method A00 with tip dating");
   if (opt_clock != BPP_CLOCK_GLOBAL && opt_datefile) 

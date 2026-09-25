@@ -3010,8 +3010,6 @@ static FILE * resume(stree_t ** ptr_stree,
   gtree_t ** gtree = *ptr_gtree;
   stree_t  * stree = *ptr_stree;
 
-  if (opt_datefile) 
-	  fatal("Check pointing is not yet implemented for tip dating");
   gtree_alloc_internals(gtree,opt_locus_count,stree->inner_count, 0);
   reset_gene_leaves_count(stree,gtree);
   stree_reset_pptable(stree);

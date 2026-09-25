@@ -547,6 +547,17 @@ static void dump_chk_section_1(FILE * fp,
         DUMP(spec->Mi, opt_locus_count, fp);
     }
   }
+
+  int haveDateFile = 0;
+  /* Tip dating*/
+  if (opt_datefile) {
+    haveDateFile = 1;
+    DUMP(&haveDateFile,1,fp);
+    DUMP(opt_datefile,strlen(opt_datefile) + 1,fp);
+  }
+  else
+    DUMP(&haveDateFile,1,fp);
+  DUMP(&opt_seqAncestral,1,fp);
 }
 
 
@@ -695,10 +706,43 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
 
   DUMP(&(stree->root_age),1,fp);
 
+  /* Seqin is used to determine the number of gene tree nodes
+   * when loading. Seqin is 0 for tip nodes with tip dating
+   * Reset to the number of samples in tip pops*/
+  if (opt_datefile) {
+
+    unsigned int msa_count = stree->locus_count;
+
+    for (i = 0; i < stree->tip_count; ++i) {
+
+      for (j = 0; j < msa_count; j++) {
+      assert(stree->nodes[i]->seqin_count[j] == 0) ;
+
+	for (k = 0 ; k < stree->nodes[i]->epoch_count[j]; k++) { 
+      	  stree->nodes[i]->seqin_count[j] += stree->nodes[i]->date_count[j][k];
+
+        }
+      }
+    }
+  }
+
+    unsigned int msa_count = stree->locus_count;
   /* TODO : Perhaps write only seqin_count for tips? */
   /* write number of incoming sequences for each node */
-  for (i = 0; i < total_nodes; ++i)
+  for (i = 0; i < total_nodes; ++i) 
     DUMP(stree->nodes[i]->seqin_count,opt_locus_count,fp);
+  
+  /* Reset seqin */
+  if (opt_datefile) {
+
+    unsigned int msa_count = stree->locus_count;
+    for (i = 0; i < stree->tip_count; ++i) {
+      for (j = 0; j < msa_count; j++) {
+      stree->nodes[i]->seqin_count[j] = 0;
+
+      }
+    }
+  }
 
   /* write event indices for each node */
   for (i = 0; i < total_nodes; ++i)
@@ -777,6 +821,32 @@ static void dump_chk_section_2(FILE * fp, stree_t * stree)
       }
     }
   }
+
+  if (opt_datefile) {
+
+    /* record constraint files*/
+    DUMP(stree->l_constraint, stree->inner_count, fp);
+    DUMP(stree->u_constraint, stree->inner_count, fp);
+
+    unsigned int msa_count = stree->locus_count;
+
+    /* Write the number of epochs for each locus each species tree node  */
+    for (j = 0; j < stree->tip_count; j++) 
+      DUMP(stree->nodes[j]->epoch_count, msa_count, fp); 
+    
+
+    /* Write the date for each epochs */
+    for (j = 0; j < stree->tip_count; j++) {
+      for (i = 0; i < msa_count; i++) 
+        DUMP(stree->nodes[j]->tip_date[i], stree->nodes[j]->epoch_count[i], fp);
+    }
+
+    /* Write the number of samples for each epochs */
+    for (j = 0; j < stree->tip_count; j++) {
+      for (i = 0; i < msa_count; i++) 
+        DUMP(stree->nodes[j]->date_count[i], stree->nodes[j]->epoch_count[i], fp);
+    }
+  }
 }
 
 static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
@@ -804,6 +874,10 @@ static void dump_gene_tree(FILE * fp, gtree_t * gtree, stree_t * stree)
   /* write ages */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)
     DUMP(&(gtree->nodes[i]->time),1,fp);
+     
+  if (opt_datefile)
+    for (i = 0; i < gtree->tip_count; ++i) 
+      DUMP(&(gtree->nodes[i]->time_fixed),1,fp);
 
   /* write population index (corresponding species tree node index) */
   for (i = 0; i < gtree->tip_count + gtree->inner_count; ++i)

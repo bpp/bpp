@@ -1732,6 +1732,10 @@ void reset_mu_coal(gtree_t * gtree);
 int get_gamma_conditional_approx(double a, double b, long k, double T,
                                  double * a1, double * b1);
 
+void network_reset_tau_iterative_tipdate(stree_t * stree,
+				       double *u_constraint, 
+				       double *l_constraint);
+
 
 /* functions in arch.c */
 

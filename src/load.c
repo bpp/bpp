@@ -1233,6 +1233,22 @@ static void load_chk_section_1(FILE * fp,
   stree->pptable = (int**)xcalloc((size_t)total_nodes,sizeof(int *));
   for (i = 0; i < total_nodes; ++i)
     stree->pptable[i] = (int *)xcalloc((size_t)total_nodes,sizeof(int));
+
+  /* read datefile name */
+
+  int haveDateFile; 
+  if (!LOAD(&haveDateFile,1, fp )) 
+    fatal("Cannot read datefile information");
+
+  if (haveDateFile) {
+    if (!load_string(fp,&opt_datefile)) {
+      fatal("Cannot read name of datefile");
+    }
+  } else 
+     opt_datefile = NULL;
+
+  if (!LOAD(&opt_seqAncestral,1,fp))
+    fatal("Cannot read opt_seqAncestral"); 
 }
 
 static int cb_ascint(const void * a, const void * b)
@@ -1695,6 +1711,60 @@ void load_chk_section_2(FILE * fp)
       }
     }
   }
+
+  /* additional structures for tip dating */
+  if (opt_datefile) {
+    stree->l_constraint = (double *) xmalloc(stree->inner_count * sizeof(double));
+    stree->u_constraint = (double *) xmalloc(stree->inner_count * sizeof(double));
+
+    //if (!LOAD(stree->nodes[i]->seqin_count,opt_locus_count,fp))
+    if (!LOAD(stree->l_constraint, stree->inner_count, fp))
+        fatal("Cannot load lower constraint for tip dating");
+
+
+    if (!LOAD(stree->u_constraint, stree->inner_count, fp))
+        fatal("Cannot load upper constraint for tip dating");
+
+    unsigned int msa_count = stree->locus_count;
+
+
+    /* Read the number of epochs for each locus each species tree node  */
+    for (j = 0; j < stree->tip_count; j++) {
+      stree->nodes[j]->epoch_count = (int *)     xmalloc(msa_count * sizeof(int));
+      stree->nodes[j]->date_count  = (int **)    xmalloc(msa_count * sizeof(int * ));
+      stree->nodes[j]->tip_date    = (double **) xmalloc(msa_count * sizeof(double * ));
+
+      if (!LOAD(stree->nodes[j]->epoch_count, msa_count, fp)) 
+        fatal("Cannot read epoch_count for tip dating for node %d", j);	   
+    }
+
+    /* Allocate memory for tip dates and their counts*/
+    for (j = 0; j < stree->tip_count; j++) {
+      for (i = 0; i < msa_count; i++) {
+        stree->nodes[j]->tip_date[i]   = (double *) xmalloc(stree->nodes[j]->epoch_count[i] * sizeof(double)); 
+        stree->nodes[j]->date_count[i] = (int *) xmalloc(stree->nodes[j]->epoch_count[i] * sizeof(int)); 
+      }
+    }
+
+    /* Read the date for each epoch */
+    for (j = 0; j < stree->tip_count; j++) {
+      for (i = 0; i < msa_count; i++) {
+        if (!LOAD(stree->nodes[j]->tip_date[i], stree->nodes[j]->epoch_count[i], fp))
+          fatal("Cannot read tip_date for tip dating for node %d", j);	   
+      }
+
+    }
+
+    /* Read the number of date for each epoch */
+    for (j = 0; j < stree->tip_count; j++) {
+      for (i = 0; i < msa_count; i++) {
+        if (!LOAD(stree->nodes[j]->date_count[i], stree->nodes[j]->epoch_count[i], fp))
+          fatal("Cannot read date_count for tip dating for node %d", j);	   
+      }
+    }
+
+  }
+
 }
 
 static void load_gene_tree(FILE * fp, long index)
@@ -1800,9 +1870,15 @@ static void load_gene_tree(FILE * fp, long index)
       fatal("Cannot read gene tree branch lengths");
 
   /* load ages */
-  for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
+  for (i = 0; i < gt->tip_count + gt->inner_count; ++i) 
     if (!LOAD(&(gt->nodes[i]->time),1,fp))
       fatal("Cannot read gene tree node ages");
+  
+  /* fixed ages */
+  if (opt_datefile)
+    for (i = 0; i < gt->tip_count; ++i) 
+      if (!LOAD(&(gt->nodes[i]->time_fixed),1,fp))
+        fatal("Cannot read gene tree fixed node ages for tip dating");
 
   /* load population index (corresponding species tree node index) */
   for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
@@ -1922,6 +1998,15 @@ static void load_gene_tree(FILE * fp, long index)
       gt->rb_linked = (snode_t **)xmalloc((size_t)(total_snodes+1) *
                                           sizeof(snode_t *));
     gt->rb_lcount = 0;
+  }
+  
+  /* Reset seqin */
+  if (opt_datefile) {
+
+   //unsigned int msa_count = stree->locus_count;
+    for (i = 0; i < stree->tip_count; ++i) {
+      stree->nodes[i]->seqin_count[index] = 0;
+    }
   }
 }
 
