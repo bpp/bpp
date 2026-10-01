@@ -1127,6 +1127,7 @@ static void fill_hybrid_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_i
       assert(!node_is_mirror(hnode));
       unsigned int hindex2 = GET_HINDEX(stree,mnode->parent);
 
+      /* Anna: This is only the tips, determine which path each tip takes */
       for (j = 0; j < gtree->tip_count; ++j)
       {
         if (gtree->nodes[j]->hpath[i] == BPP_HPATH_LEFT)
@@ -1270,6 +1271,7 @@ static void fill_seqin_counts_recursive(stree_t * stree,
 
   }
 
+  /* This is not set for simulated data */
   if (opt_datefile && opt_cfile) {
     int j;	
     snode_t * node_l = node->left;
@@ -1320,9 +1322,33 @@ void fill_seqin_counts(stree_t * stree, gtree_t * gtree, int msa_index)
         assert(hnode->right && hnode->right->hybrid);
         assert(hnode->seqin_count[msa_index] >= hnode->right->seqin_count[msa_index]);
 
-        assert(hnode->seqin_count[msa_index] + hnode->right->hybrid->seqin_count[msa_index] ==
+	if (opt_datefile && opt_cfile) {
+    		int j, left_count = 0, right_count = 0 ;	
+
+		/* If the hybrid daughter is a tip, find the number of tip samples */
+    		if (!hnode->left->hybrid && !hnode->left->left && !hnode->left->right) {
+    			for (j = 0; j < hnode->left->epoch_count[msa_index]; j++) 
+    		    		left_count += hnode->left->date_count[msa_index][j];
+    		}
+		/* This is the daughter of the other hybrid node hnode->right->hybrid->left */ 
+		/* ANNA: double check the daughter is always left? */
+		/* ->epoch_count is not allocated for simulation */ 
+    		if (!hnode->right->hybrid->left->hybrid && !hnode->right->hybrid->left->left && !hnode->right->hybrid->right->right) {
+    			for (j = 0; j < hnode->right->hybrid->left->epoch_count[msa_index]; j++) 
+    		    		right_count += hnode->right->hybrid->left->date_count[msa_index][j];
+    		}
+    		    
+    		
+          assert(hnode->seqin_count[msa_index] + hnode->right->hybrid->seqin_count[msa_index] ==
+               hnode->left->seqin_count[msa_index] - hnode->left->coal_count[msa_index] +
+               hnode->right->hybrid->left->seqin_count[msa_index] - hnode->right->hybrid->left->coal_count[msa_index] + left_count + right_count);
+
+	} else if (!opt_datefile) {
+          assert(hnode->seqin_count[msa_index] + hnode->right->hybrid->seqin_count[msa_index] ==
                hnode->left->seqin_count[msa_index] - hnode->left->coal_count[msa_index] +
                hnode->right->hybrid->left->seqin_count[msa_index] - hnode->right->hybrid->left->coal_count[msa_index]);
+		 
+	}
       }
     }
   }
@@ -1651,6 +1677,8 @@ void update_tau_constraint(stree_t * stree, pop_t * pop) {
 		t_left = 0;
 		t_right = 0;
 	
+		/* ANNA: I think that thig may break for nodes without two daughters */
+
 		/* In the ancestral populations, you are constrained by 
 		 * (1) the oldest daughter sample (lower), 
 		 * (2) the youngest parent sample (upper), 
@@ -1901,8 +1929,6 @@ double set_tip_date_infer (stree_t * stree,
 
 			stree->nodes[n]->date_count[msa_index][stree->nodes[n]->epoch_count[msa_index]-1]++;
 
-
-			
 		}
 	}
 	free(lastDate);
@@ -2009,7 +2035,6 @@ double set_tip_date_simulate (stree_t * stree,
   	return  tipDateArray[0]->date;
 }
 
-
 void reset_tau_tip_date(stree_t * stree, double * u_constraint, double * l_constraint) {
 	double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
   	const long thread_index = 0;
@@ -2030,9 +2055,9 @@ void reset_tau_tip_date(stree_t * stree, double * u_constraint, double * l_const
 	 stree->root->tau = reflect(newage, l_constraint[root_index-stree->tip_count], 999, thread_index); 
 
 
-		  // This needs to be different with network
 	stree_init_tau_recursive_constraint(stree, stree->root->left, prop, 0, u_constraint, l_constraint);
 	stree_init_tau_recursive_constraint(stree, stree->root->right, prop, 0, u_constraint, l_constraint);
+
 
 }
 
@@ -3294,10 +3319,11 @@ gtree_t ** gtree_init(stree_t * stree,
 		
 	}
 	else if (stree->tip_count > 1) {
-        	reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
+		if (opt_msci)
+			network_reset_tau_iterative_tipdate(stree, stree->u_constraint, stree->l_constraint);
+		else
+        		reset_tau_tip_date(stree, stree->u_constraint, stree->l_constraint);
 	}
-	  //Anna
-	  //stree->nodes[2]->tau = 1.4;
   }
 
   for (i = 0; i < msa_count; ++i)
@@ -3872,7 +3898,7 @@ double gtree_update_logprob_contrib(snode_t * snode,
   sortbuffer[0] = snode->tau;
   j = 1;
 
-  if (opt_datefile && (!snode->left || opt_seqAncestral))
+  if (opt_datefile && ((!snode->left  && !snode->hybrid)  || opt_seqAncestral))
   {
     if (snode->epoch_count[msa_index])
       nextDateInd = 0;
@@ -8452,7 +8478,6 @@ static double simulate_coalescent(gtree_t * gtree,
   int epoch = -1;
   int j = 0;
 
-  //fatal("This function does not work for tipdating. Anna needs to fix it");
   wtimes = (double *)xmalloc((size_t)(gtree->inner_count+1) * sizeof(double));
 
   t = gnode->time;
@@ -9470,4 +9495,5 @@ static long propose_spr_sim(locus_t * locus,
   }
   return accepted;
 }
+
 

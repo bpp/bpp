@@ -1261,11 +1261,172 @@ static int ** populations_seqcount(stree_t * stree,
   return seqcount;
 }
 
+/* ANNA : need a version of this with tip dating constraint */
+
+void network_reset_tau_iterative_tipdate(stree_t * stree,
+                                       //double prop,
+                                       //long thread_index,
+				       double *u_constraint, 
+				       double *l_constraint)
+{
+  long run = 1;
+  long i;
+  double prop = (stree->root->leaves > PROP_THRESHOLD) ? 0.9 : 0.5;
+  const long thread_index = 0;
+
+  assert(opt_msci);
+  assert(stree->root->tau && stree->root->tau != 1);
+
+  while (run)
+  {
+    run = 0;
+    for (i = 0; i < stree->inner_count; ++i)
+    {
+      snode_t * x = stree->nodes[stree->tip_count+i];
+      if (!x->parent) continue;
+
+      if (x->tau == 1) assert(x->parent->tau > 0);
+      if (x->hybrid && x->tau)
+        assert(x->hybrid->parent->tau > 0);
+
+      if (x->hybrid && x->tau)
+      {
+        if (node_is_hybridization(x))
+        {
+
+          /* hybridization nodes */
+
+          if (x->htau && x->parent->tau == 1)
+          {
+              run  = 1;
+              continue;
+          }
+          if (x->hybrid->htau && x->hybrid->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
+
+          if (x->htau == 0)
+          {
+            assert(x->parent->parent);
+            assert(x->parent->parent->tau > 0);
+            if (x->parent->parent->tau == 1)
+            {
+              run = 1;
+              continue;
+            }
+          }
+
+          if (x->hybrid->htau == 0)
+          {
+            assert(x->hybrid->parent->parent);
+            assert(x->hybrid->parent->parent->tau > 0);
+            if (x->hybrid->parent->parent->tau == 1)
+            {
+              run = 1;
+              continue;
+            }
+          }
+	  /* If htau, which age to use */
+          double age1 = (x->htau) ?
+                          x->parent->tau : x->parent->parent->tau;
+          double age2 = (x->hybrid->htau) ?
+                          x->hybrid->parent->tau : x->hybrid->parent->parent->tau;
+
+          if (x->tau != 1)
+            continue;
+
+	  /* Figure out constraint */
+          x->tau = MIN(age1,age2) * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index))) ;
+	  /*ANNA this would need to fix for hybridization node */
+          x->hybrid->tau = x->tau;
+          if (x->htau == 0)
+            x->parent->tau = x->tau;
+          if (x->hybrid->htau == 0)
+            x->hybrid->parent->tau = x->tau;
+        }
+        else
+        {
+
+          /* bidirectional introgression nodes */
+
+          assert(node_is_bidirection(x));
+
+          /* TODO: Account for parallel bidirectional introgressions among two
+             lineages with no speciations in between. */
+
+          assert(!node_is_mirror(x));
+          if (x->parent->tau == 1 || x->right->hybrid->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
+
+          assert(x->hybrid->parent);
+          assert(x->hybrid->parent->hybrid);
+
+          if (x->tau != 1) continue;
+
+          assert(x->hybrid->tau == 1 &&
+                 x->right->tau == 1 &&
+                 x->right->hybrid->tau == 1);
+
+	  /* ANNA: Need to add constraints */
+
+          double age = MIN(x->parent->tau,x->right->hybrid->parent->tau) * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
+	  
+	  /* Get tip_date constraints from daughter  */
+	  age = reflect(age, l_constraint[stree->root->node_index - stree->tip_count], MIN(x->parent->tau,x->right->hybrid->parent->tau), thread_index);
+
+          x->tau                = age;
+          x->hybrid->tau        = age;
+          x->right->tau         = age;
+          x->right->hybrid->tau = age;
+
+        }
+
+      }
+      else
+      {
+        if (x->parent->tau)
+        {
+          if (x->parent->tau == 1)
+          {
+            run = 1;
+            continue;
+          }
+          else
+          {
+            if (x->tau > 0 && x->tau == 1)
+            {
+              if (x->prop_tau)
+              {
+		/* Need to add constraint */
+
+                double age = x->parent->tau * (prop + (1-prop)*(.2 + .1*legacy_rndu(thread_index)));
+                x->tau = reflect(age, l_constraint[stree->root->node_index - stree->tip_count], x->parent->tau, thread_index); 
+              }
+              else
+              {
+                run = 1;
+                continue;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 /* TODO: Terribly slow (quadratic to number of nodes) method for initializing
    tau on species tree nodes when we have hybridizations. The method basically
    iterates the species tree nodes array indefinitely, and at each iteration
    it sets the tau for the nodes whose parent(s) have been already processed.
    The iteration stops when no nodes need to be processed */
+/* ANNA : need a version of this with tip dating constraint */
+
 static void network_init_tau_iterative(stree_t * stree,
                                        double prop,
                                        long thread_index)
@@ -1416,7 +1577,6 @@ void stree_init_tau_recursive_constraint(stree_t * stree,
 				     double *u_constraint, 
 				     double *l_constraint)
 {
-  assert(!opt_msci);
   double newage, minage, maxage;
 
   /* end recursion if node is a tip */
