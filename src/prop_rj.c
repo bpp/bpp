@@ -750,9 +750,10 @@ long prop_split(gtree_t ** gtree,
   {
     /* rejected */
 
-    /* no need at the moment as things will be recomputed */
-    //if (opt_traitfile)
-    //  trait_restore(stree);
+    /* restore the trait log-likelihood values; the node-level quantities
+       are not restored as they are recomputed before being used */
+    if (opt_traitfile)
+      trait_restore(stree);
 
     node->tau = node->old_tau;
     node->left->theta  = node->left->old_theta;
@@ -1267,9 +1268,10 @@ long prop_join(gtree_t ** gtree,
   {
     /* rejected */
 
-    /* no need at the moment as things will be recomputed */
-    //if (opt_traitfile)
-    //  trait_restore(stree);
+    /* restore the trait log-likelihood values; the node-level quantities
+       are not restored as they are recomputed before being used */
+    if (opt_traitfile)
+      trait_restore(stree);
 
     /* restore old tau */
     node->tau = node->old_tau;

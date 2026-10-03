@@ -79,17 +79,18 @@ static int parse_label(FILE * fp, char * name, int len)
   if (c == EOF)
     return -1;
   
-  for (j = 0; j < len; ++j)
+  for (j = 0; j < len && c != EOF && !isspace(c); ++j)
   {
     name[j] = c;
     c = fgetc(fp);
-    if (c == EOF || isspace(c)) break;
   }
-  
-  if (j < len)
-    name[j+1] = '\0';
-  else
-    name[len] = '\0';
+  name[j] = '\0';
+
+  if (c != EOF && !isspace(c))
+  {
+    fprintf(stderr, "Label %s... exceeds %d characters\n", name, len);
+    return 1;
+  }
 
   return 0;
 }
@@ -798,7 +799,7 @@ static void mk_trprob(double ** p, double v, int max_state)
 static void mk_update_cp(int idx, snode_t * snode, stree_t * stree)
 {
   int h, j, k, a, x, y, z;
-  int * nstate, nchar, max_state;
+  int    *nstate, nchar, max_state;
   double v, prob_l, prob_r, tr_prob;
   
   /* update the branch length */
@@ -1118,7 +1119,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
    initial setup (trait_alloc_mem) and checkpoint loading path (trait_load). */
 static void trait_alloc_nodes(stree_t * stree)
 {
-  unsigned int n, i, j, nchar;
+  int n, i, j, nchar;
   trait_t * trait;
 
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
@@ -1170,7 +1171,7 @@ static void trait_alloc_nodes(stree_t * stree)
 
 static void trait_alloc_mem(stree_t * stree, morph_t ** morph_list, int n_part)
 {
-  unsigned int n, nchar;
+  int n, nchar;
   
   stree->trait_dim = (int *)xcalloc(n_part, sizeof(int));
   stree->trait_type = (int *)xcalloc(n_part, sizeof(int));
@@ -1515,6 +1516,13 @@ void trait_load(FILE * fp, stree_t * stree, long * trait_offset)
       if (!TRAIT_LOAD(&(trait->brate), 1, fp) ||
           !TRAIT_LOAD(&(trait->old_brate), 1, fp))
         fatal("Cannot read trait branch rates");
+
+      /* older checkpoints may carry a stale rate at the root node */
+      if (i > 0)
+      {
+        trait->brate = stree->nodes[0]->trait[n]->brate;
+        trait->old_brate = stree->nodes[0]->trait[n]->old_brate;
+      }
 
       if (stree->trait_type[n] == BPP_DATA_DISC)
       {
