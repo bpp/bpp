@@ -2266,6 +2266,11 @@ int checkpoint_load(gtree_t *** gtreep,
   /* load section 2 */
   load_chk_section_2(fp);
 
+  /* rebuild the derived trait quantities from the restored tip data and
+     rates, now that the species tree topology and taus have been loaded */
+  if (opt_traitfile)
+    trait_update(stree);
+
   /* initialize gene trees */
 //  gtree = init_gtrees(opt_locus_count);
 

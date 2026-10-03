@@ -310,7 +310,7 @@ static morph_t * morph_parse(FILE * fp)
   for (i = 0; i < morph->ntaxa; ++i)
   {
     /* read the label (species name) */
-    if (parse_label(fp, morph->label[i], LABEL_LEN+1))
+    if (parse_label(fp, morph->label[i], LABEL_LEN))
     {
       fprintf(stderr, "Failed to read label of species %d\n", i+1);
       morph_destroy(morph);
@@ -353,7 +353,7 @@ static morph_t * morph_parse(FILE * fp)
     {
       /* read log determinant of R* */
       morph->matRs = (double *)xmalloc(sizeof(double));
-      if (fscanf(fp, "%s %lf", tmpstr, morph->matRs) != 2)
+      if (fscanf(fp, "%9s %lf", tmpstr, morph->matRs) != 2)
       {
         fprintf(stderr, "Error reading log determinant of R*\n");
         morph_destroy(morph);
@@ -528,6 +528,11 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
       }
       else
       {
+        /* only log(det(R*)) was given, which is not enough for Mitov et al. */
+        if (morph->model == Morph_BM_AC)
+          fatal("Error: trait partition %d has missing values, "
+                "the correlation matrix (R*) is needed instead of ldetR*", n+1);
+
         /* check whether R* is symmetric */
         if (mat_asym(morph->matRs, nchar))
           fatal("Error: correlation matrix R* is not symmetric");
@@ -535,6 +540,9 @@ static int bm_init_Rs_Phi(stree_t * stree, morph_t ** morph_list)
         for (i = 0; i < nchar; ++i)
           if (fabs(morph->matRs[i*nchar + i] - 1.0) > 1e-8)
             fatal("Error: correlation matrix R* has diagonal element != 1.0");
+        /* and that R* is positive definite (trait_Rs_1 as scratch space) */
+        if (mat_chol(morph->matRs, stree->trait_Rs_1[n], nchar))
+          fatal("Error: correlation matrix R* is not positive definite");
 
         /* copy the R* matrix over */
         memcpy(stree->trait_Rs[n], morph->matRs, nchar*nchar*sizeof(double));
@@ -1025,7 +1033,7 @@ static int trait_fill_tip(stree_t * stree, morph_t ** morph_list)
         }
 
         /* record the number of states for each character */
-        for (k = 2; state_bin(k) <= max_state; ++k);
+        for (k = 2; k < 10 && state_bin(k) <= max_state; ++k);
         stree->trait_nstate[n][j] = k;
         
         /* record the max number of states of this partition */
@@ -1527,8 +1535,8 @@ void trait_load(FILE * fp, stree_t * stree, long * trait_offset)
     }
   }
 
-  /* rebuild all derived quantities from the restored tip data and rates */
-  trait_update(stree);
+  /* the derived quantities are rebuilt by calling trait_update() in
+     checkpoint_load(), once the species tree has been fully restored */
 }
 
 void trait_init(stree_t * stree, morph_t ** morph_list, int n_part)
@@ -1808,30 +1816,18 @@ double loglikelihood_trait(stree_t * stree)
 
 static double logprior_trait_part(int idx, stree_t * stree)
 {
-  int i;
   double logpr, a, b, x;
-  snode_t * snode;
 
-  logpr = 0.0;
-  
-  /* the branch rates follow i.i.d. gamma distributions
+  /* there is a single rate shared across branches in each partition (see
+     prop_branch_rates_trait), which follows a gamma distribution
      with parameters opt_brate_m_alpha and opt_brate_m_beta */
   a = opt_brate_m_alpha;
   b = stree->trait_type[idx] == BPP_DATA_CONT ? opt_brate_m_beta_c
                                               : opt_brate_m_beta_d;
-  for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
-  {
-    snode = stree->nodes[i];
-    
-    /* skip the root */
-    if (!snode->parent)
-      continue;
-    
-    x = snode->trait[idx]->brate;
- 
-    logpr += a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
-  }
-  
+  x = stree->nodes[0]->trait[idx]->brate;
+
+  logpr = a * log(b) - lgamma(a) + (a - 1) * log(x) - b * x;
+
   stree->trait_logpr[idx] = logpr;
   
   return logpr;
@@ -1949,13 +1945,12 @@ double prop_branch_rates_trait(stree_t * stree)
     stree->trait_logpr[n] += logpr_diff;
     lnacceptance += logpr_diff;
     
+    /* set the rate at all nodes, including the root, as the root may become
+       a non-root node when the species tree topology changes */
     for (i = 0; i < stree->tip_count+stree->inner_count; ++i)
     {
       snode = stree->nodes[i];
-      
-      /* skip the root */
-      if (!snode->parent) continue;
-      
+
       snode->trait[n]->brate = new_rate;
     }
     
@@ -1977,8 +1972,8 @@ double prop_branch_rates_trait(stree_t * stree)
     
     proposed++;
   }
-  
-  return (double)accepted/proposed;
+
+  return proposed ? (double)accepted/proposed : 0.0;
 }
 
 void trait_print_header(FILE * fp, stree_t * stree)

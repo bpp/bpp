@@ -662,9 +662,10 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   }
   else
   {
-    /* no need at the moment as things will be recomputed */
-    //if (opt_traitfile)
-    //  trait_restore(stree);
+    /* restore the trait log-likelihood values; the node-level quantities
+       are not restored as they are recomputed before being used */
+    if (opt_traitfile)
+      trait_restore(stree);
 
     /* revert thetas and logpr contributions */
     if (opt_est_theta)

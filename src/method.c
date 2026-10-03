@@ -5643,6 +5643,11 @@ void cmd_run()
           if (opt_traitfile)
             trait_store(stree);
         }
+        else if (opt_traitfile)
+        {
+          /* rejected */
+          trait_restore(stree);
+        }
         if (opt_debug_bruce)
           debug_bruce(stree,gtree,stree_snl == 0 ? "SSPR" : "SNL", i, fp_debug);
       }

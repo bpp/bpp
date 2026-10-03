@@ -6334,9 +6334,10 @@ static long propose_tau(locus_t ** loci,
     /* rejected */
     snode->tau = oldage;
 
-    /* no need at the moment as things will be recomputed */
-    //if (opt_traitfile)
-    //  trait_restore(stree);
+    /* restore the trait log-likelihood values; the node-level quantities
+       are not restored as they are recomputed before being used */
+    if (opt_traitfile)
+      trait_restore(stree);
 
     if (opt_msci && snode->hybrid)
     {
