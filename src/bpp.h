@@ -161,8 +161,7 @@
 
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
-/* checkpoint version */
-#define VERSION_CHKP 3
+#define VERSION_CHKP 5
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
@@ -271,6 +270,9 @@ extern const char * global_freqs_strings[28];
 #define BPP_TAU_PRIOR_GAMMA             1
 #define BPP_TAU_PRIOR_INVGAMMA          2
 #define BPP_TAU_PRIOR_MAX               2
+
+#define BPP_DEM_PIECEWISE_CONSTANT      0
+#define BPP_DEM_PIECEWISE_LINEAR        1
 
 
 #define BPP_THETA_PRIOR_MIN             1
@@ -475,6 +477,13 @@ typedef struct migspec_s
   char * outfile;       /* used only to store rates when simulating  */
 } migspec_t;
 
+typedef struct dem_spec_s
+{
+  char * label;             /* population label from the control file */
+  long segments;            /* number of constant-size segments (>= 2) */
+  unsigned int snode_index; /* resolved species-tree node index (filled later) */
+} dem_spec_t;
+
 typedef struct migbuffer_s
 {
   double time;
@@ -599,12 +608,23 @@ typedef struct snode_s
   /* independent theta step lengths */
   long theta_step_index;
 
+  /* independent tau step lengths */
+  long tau_step_index;
+
   /* total coalescent waiting time for pop j at locus i */
   double * old_C2ji;
   double * C2ji;  /* total coal waiting time x2 in current pop (j) at locus i */
 
   /* trait related things (per partition): branch length, rate, trait values, etc */
   trait_t ** trait;
+
+  /* piecewise-constant demographic model (opt_dem): a unary segment/break-point
+     node. dem==1 marks such a node; dem_base points to the base population
+     (segment 0, the original branch, which keeps label/theta:A/tau:A) and
+     dem_index is the segment number (1..K-1). Zero/NULL for ordinary nodes. */
+  long dem;
+  struct snode_s * dem_base;
+  long dem_index;
 
   long flag;
 } snode_t;
@@ -634,6 +654,7 @@ typedef struct stree_s
   unsigned int inner_count;
   unsigned int edge_count;
   unsigned int hybrid_count;
+  unsigned int dem_count;   /* number of unary demographic (segment) nodes (opt_dem) */
 
   unsigned int locus_count;
 
@@ -1213,6 +1234,8 @@ extern long opt_exp_theta;
 extern long opt_exp_sim;
 extern long opt_finetune_mrate_mode;
 extern long opt_finetune_reset;
+extern long opt_finetune_tau_count;
+extern long opt_finetune_tau_mode;
 extern long opt_finetune_theta_count;
 extern long opt_finetune_theta_mode;
 extern long opt_help;
@@ -1227,6 +1250,9 @@ extern long opt_max_species_count;
 extern long opt_method;
 extern long opt_migration;
 extern long opt_migration_count;
+extern long opt_dem;
+extern long opt_dem_count;
+extern long opt_dem_model;
 extern long opt_mig_vrates_exist;
 extern long opt_mix_theta_update;
 extern long opt_mix_w_update;
@@ -1263,6 +1289,7 @@ extern long opt_simulate_read_depth;
 extern long opt_siterate_cats;
 extern long opt_siterate_fixed;
 extern long opt_tau_dist;
+extern long opt_tau_showall_eps;
 extern long opt_theta_gibbs_showall_eps;
 extern long opt_theta_prior;
 extern long opt_theta_prop;
@@ -1293,7 +1320,8 @@ extern double opt_finetune_phi;
 extern double opt_finetune_qrates;
 extern double opt_finetune_nubar;
 extern double opt_finetune_nui;
-extern double opt_finetune_tau;
+extern double opt_finetune_tau_global;
+extern double opt_finetune_dem;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_snl_lambda_expand;
@@ -1335,6 +1363,7 @@ extern double opt_clock_alpha;
 extern double opt_clock_vbar;
 extern double opt_vi_alpha;
 extern long * opt_diploid;
+extern long * opt_finetune_tau_mask;
 extern long * opt_finetune_theta_mask;
 extern long * opt_print_locus_num;
 extern long * opt_sp_seqcount;
@@ -1368,9 +1397,11 @@ extern char * opt_treefile;
 extern double * opt_basefreqs_params;
 extern double * opt_finetune_migrates;
 extern double * opt_finetune_mig_Mi;
+extern double * opt_finetune_tau;
 extern double * opt_finetune_theta;
 extern double * opt_qrates_params;
 extern migspec_t * opt_mig_specs;
+extern dem_spec_t * opt_dem_specs;
 extern long ** opt_migration_matrix;
 extern long ** opt_mig_bitmatrix;
 extern double ** opt_migration_events;
@@ -1458,7 +1489,8 @@ extern migbuffer_t ** global_migbuffer_r;
 /* pjumps */
 extern double g_pj_gage;
 extern double g_pj_gspr;
-extern double g_pj_tau;
+extern double * g_pj_tau;
+extern double g_pj_dem;
 extern double g_pj_mix;
 extern double g_pj_lrht;
 extern double g_pj_phi_gibbs;
@@ -1599,12 +1631,18 @@ void stree_propose_theta(gtree_t ** gtree,
 
 hashtable_t * datelist_hash(list_t * datelist);
 
-double stree_propose_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
-double stree_propose_tau_mig(stree_t ** streeptr,
-                             gtree_t *** gtreeptr,
-                             stree_t ** scloneptr,
-                             gtree_t *** gcloneptr,
-                             locus_t ** loci);
+snode_t * stree_tau_step_node(stree_t * stree, long index);
+void stree_propose_tau(gtree_t ** gtree,
+                       stree_t * stree,
+                       locus_t ** loci,
+                       long ft_round);
+double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+void stree_propose_tau_mig(stree_t ** streeptr,
+                           gtree_t *** gtreeptr,
+                           stree_t ** scloneptr,
+                           gtree_t *** gcloneptr,
+                           locus_t ** loci,
+                           long ft_round);
 
 void stree_propose_phi(stree_t * stree,
                        gtree_t ** gtree,
@@ -1651,6 +1689,8 @@ void stree_init(stree_t * stree,
                 int msa_count,
                 int * tau_ctl,
                 FILE * fp_out);
+
+void stree_expand_demography(stree_t * stree);
 
 void stree_init_pptable(stree_t * stree);
 
@@ -2198,6 +2238,8 @@ void summary_dealloc_hashtables(void);
 void stree_summary(FILE * fp_out, char ** species_names, long species_count);
 
 long getlinecount(const char * filename);
+
+long mcmc_mean_logl(const char * filename, double * mean);
 
 /* functions in summary11.c */
 

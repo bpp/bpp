@@ -804,7 +804,12 @@ static void header_tokens_shorten(char ** tokens, long keep_labels, long count)
       if (p)
       {
         char * q = strchr(p+1,':');
-        assert(q);
+        /* the header carries no label for this parameter, so there is nothing
+           to shorten -- mcmc_printheader() omits labels when tip_count > 10,
+           while opt_keep_labels may still have been switched on because every
+           node label is short */
+        if (!q)
+          continue;
         assert(*(q+1));
         assert(p != q);
         long len = strlen(q+1);
