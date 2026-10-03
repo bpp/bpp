@@ -495,13 +495,6 @@ void stree_destroy(stree_t * tree,
   if (tree->l_constraint)
     free(tree->l_constraint);
 
-  /* TODO: For Chi to fix
-
-     This is the wrong place to call trait_destroy, as snodes
-     have already been freed. Move this call before the node
-     deallocation  */
-  //trait_destroy(tree);  //Chi
-
   /* deallocate tree structure */
   free(tree->nodes);
   free(tree);

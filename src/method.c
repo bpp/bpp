@@ -1204,15 +1204,14 @@ static void active_pjumps_alloc()
     finetune_values_ptr[k] = &opt_finetune_branchrate;
     ++k;
   }
-  #if 0
-  for (i = 0; i < opt_finetune_theta_count; ++i)
+
+  if (opt_traitfile)
   {
-    xasprintf(active_pjump_titles+k, "th%ld", i+1);
-    active_pjump_values[k] = g_pj_theta_slide+i;
-    finetune_values_ptr[k] = opt_finetune_theta+i;
+    active_pjump_titles[k] = xstrdup("br_m");
+    active_pjump_values[k] = &g_pj_brate_m;
+    finetune_values_ptr[k] = &opt_finetune_brate_m;
     ++k;
   }
-  #endif
 
   if (opt_migration && !opt_est_geneflow)
   {
@@ -2979,7 +2978,8 @@ static FILE * resume(stree_t ** ptr_stree,
                      FILE *** ptr_fp_migcount,
                      FILE ** ptr_fp_out,
                      FILE ** ptr_fp_a1b1,
-		     int ** ptr_printLocusIndex)
+                     FILE ** ptr_fp_mcmc_trait,
+                     int ** ptr_printLocusIndex)
 {
   long i,j;
   FILE * fp_mcmc;
@@ -2992,6 +2992,7 @@ static FILE * resume(stree_t ** ptr_stree,
   long mcmc_offset;
   long out_offset;
   long a1b1_offset;
+  long trait_offset = 0;
   long * gtree_offset;
   long * mig_offset;
   long * rates_offset;
@@ -3042,7 +3043,8 @@ static FILE * resume(stree_t ** ptr_stree,
                   ptr_mean_phi_count,
                   &prec_logpr,
                   &prec_logl, 
-		  ptr_printLocusIndex);
+                  ptr_printLocusIndex,
+                  &trait_offset);
 
   /* truncate MCMC file to specific offset */
   checkpoint_truncate(opt_mcmcfile, mcmc_offset);
@@ -3287,6 +3289,18 @@ static FILE * resume(stree_t ** ptr_stree,
     *ptr_fp_a1b1 = fp_a1b1;
   }
 
+  /* reopen the truncated morphological trait output file for appending */
+  *ptr_fp_mcmc_trait = NULL;
+  if (opt_traitfile)
+  {
+    char * trait_fn = NULL;
+    xasprintf(&trait_fn, "%s.trait.txt", opt_jobname);
+    checkpoint_truncate(trait_fn, trait_offset);
+    if (!(*ptr_fp_mcmc_trait = fopen(trait_fn, "a")))
+      fatal("Cannot open file %s for appending...", trait_fn);
+    free(trait_fn);
+  }
+
   /* if we are infering the species tree or gene flow, then create another
      cloned copy of the species tree and gene trees */
   if (opt_est_stree || opt_migration)
@@ -3368,6 +3382,7 @@ static FILE * init(stree_t ** ptr_stree,
                    FILE *** ptr_fp_mig,
                    FILE *** ptr_fp_locus,
                    FILE *** ptr_fp_migcount,
+                   FILE ** ptr_fp_mcmc_trait,
                    FILE ** ptr_fp_out,
                    FILE ** ptr_fp_a1b1,
                    int ** ptr_printLocusIndex)
@@ -3383,6 +3398,7 @@ static FILE * init(stree_t ** ptr_stree,
   stree_t* stree;
   const unsigned int* pll_map;
   FILE* fp_mcmc = NULL;
+  FILE* fp_mcmc_trait = NULL;
   FILE* fp_out;
   FILE* fp_a1b1 = NULL;
   FILE** fp_gtree = NULL;
@@ -4141,19 +4157,30 @@ static FILE * init(stree_t ** ptr_stree,
   if (opt_traitfile)  //Chi
   {
     /* parse the trait file */
-    printf("Parsing trait file...");
+    printf("\nParsing trait file...");
     morph_list = parse_traitfile(opt_traitfile, &opt_trait_count);
     assert(morph_list);
     printf(" Done\n");
 
-    /* initialize trait values and contrasts */
+    /* initialize trait values, etc */
     trait_init(stree, morph_list, opt_trait_count);
     
     /* calculate log likelihood for morphological traits */
     logl_sum += loglikelihood_trait(stree);
+    logpr_sum += logprior_trait(stree);
     
     /* store current values for later use */
     trait_store(stree);
+
+    /* prepare file for printing parameter values (e.g. rates) */
+    char * trait_fn = NULL;
+    xasprintf(&trait_fn, "%s.trait.txt", opt_jobname);
+    fp_mcmc_trait = xopen(trait_fn, "w");
+    free(trait_fn);
+    *ptr_fp_mcmc_trait = fp_mcmc_trait;
+
+    /* print header */
+    trait_print_header(fp_mcmc_trait, stree);
   }
 
   /* allocate arrays for locus mutation rate and heredity scalars */
@@ -4274,7 +4301,6 @@ static FILE * init(stree_t ** ptr_stree,
     gtree[i]->original_index = msa_list[i]->original_index;
     gtree[i]->msa_index = i;
   }
-
 
 
   /* Generate space for cloning the species and gene trees (used for species
@@ -4585,7 +4611,7 @@ static FILE * init(stree_t ** ptr_stree,
       if (!stree->nodes[j]->linked_theta)
       #endif
       {
-        logpr_sum += update_logpg_contrib(stree,stree->nodes[j]);
+        logpr_sum += update_logpg_contrib(stree,stree->nodes[j],1);
       }
     }
     stree->notheta_logpr += logpr_sum;
@@ -5199,6 +5225,7 @@ void cmd_run()
   long * phi_av = NULL;
   long * phi_av_count = NULL;
   FILE * fp_mcmc;
+  FILE * fp_mcmc_trait = NULL;
   FILE * fp_out;
   FILE * fp_a1b1 = NULL;
   stree_t * stree;
@@ -5312,7 +5339,8 @@ void cmd_run()
                      &fp_migcount,
                      &fp_out,
                      &fp_a1b1,
-		     &printLocusIndex);
+                     &fp_mcmc_trait,
+                     &printLocusIndex);
   else
   {
     fp_mcmc = init(&stree,
@@ -5336,9 +5364,10 @@ void cmd_run()
                    &fp_mig,
                    &fp_locus,
                    &fp_migcount,
+                   &fp_mcmc_trait,
                    &fp_out, 
                    &fp_a1b1,
-		   &printLocusIndex);
+                   &printLocusIndex);
 
     /* allocate mean_mrate, mean_tau, mean_theta */
     if (opt_migration && !opt_est_geneflow)
@@ -5768,6 +5797,14 @@ void cmd_run()
           SWAP(stree,sclone);
           SWAP(gtree,gclones);
           stree_label(stree);
+          
+          if (opt_traitfile)
+            trait_store(stree);
+        }
+        else if (opt_traitfile)
+        {
+          /* rejected */
+          trait_restore(stree);
         }
         if (opt_debug_bruce)
           debug_bruce(stree,gtree,stree_snl == 0 ? "SSPR" : "SNL", i, fp_debug);
@@ -6187,6 +6224,9 @@ void cmd_run()
       /* log rates */
       if (opt_print_locusfile)
         print_rates(fp_locus, stree, gtree, locus, printLocusIndex);
+
+      if (opt_traitfile)
+        trait_print_mcmc(fp_mcmc_trait, i+1, stree);
     }
 
     if (opt_method == METHOD_10)
@@ -6599,7 +6639,8 @@ void cmd_run()
                         mean_phi_count,
                         prec_logpr,
                         prec_logl,
-                        printLocusIndex);
+                        printLocusIndex,
+                        opt_traitfile ? ftell(fp_mcmc_trait) : 0);
         fprintf(stdout, " [CHK]");
 
         chk_next_idx++;
@@ -6688,7 +6729,8 @@ void cmd_run()
                     mean_phi_count,
                     prec_logpr,
                     prec_logl,
-                    printLocusIndex);
+                    printLocusIndex,
+                    opt_traitfile ? ftell(fp_mcmc_trait) : 0);
     fprintf(stdout, " [CHK]");
   }
 
@@ -7040,6 +7082,15 @@ void cmd_run()
     free(ft_round_theta_slide);
   if (ft_round_theta_gibbs)
     free(ft_round_theta_gibbs);
+
+  /* free trait related memory once! as the pointers in cloned nodes point to
+     the same locations --- this is how they are initialized in stree_clone().
+     this is a bad practice, and need to be refined */
+  if (opt_traitfile)  //Chi
+  {
+    trait_destroy(stree);
+    fclose(fp_mcmc_trait);
+  }
 
   /* deallocate tree */
   stree_destroy(stree,NULL);

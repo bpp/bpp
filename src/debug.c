@@ -1742,7 +1742,7 @@ void debug_validate_logpg(stree_t * stree,
     for (j = 0; j < total_nodes; ++j)
     {
       if (!stree->nodes[j]->linked_theta || stree->nodes[j]->hybrid)
-        logpr_sum += update_logpg_contrib(stree,stree->nodes[j]);
+        logpr_sum += update_logpg_contrib(stree,stree->nodes[j],1);
     }
     stree->notheta_logpr += logpr_sum;
     stree->notheta_old_logpr = 0;

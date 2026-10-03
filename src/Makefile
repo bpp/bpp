@@ -18,17 +18,16 @@
 # University College London, Gower Street, London WC1E 6BT, England
 
 # Profiling
-#PROFILING=-g -pg -no-pie
-#PROFILING=-g
+# PROFILING = -g -pg -no-pie
 
 # Compiler warnings
-WARN=-Wall -Wsign-compare
+WARN = -Wall -Wsign-compare
 
-AVXDEF=-DHAVE_AVX
-AVXOBJ=core_partials_avx.o core_likelihood_avx.o
+AVXDEF = -DHAVE_AVX
+AVXOBJ = core_partials_avx.o core_likelihood_avx.o
 
-AVX2DEF=-DHAVE_AVX2
-AVX2OBJ=core_partials_avx2.o core_likelihood_avx2.o
+AVX2DEF = -DHAVE_AVX2
+AVX2OBJ = core_partials_avx2.o core_likelihood_avx2.o
 
 ifdef DISABLE_AVX2
   AVX2DEF=
@@ -43,13 +42,18 @@ endif
 ifndef CC
 CC = gcc-7
 endif
-CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
-LINKFLAGS=$(PROFILING)
-LIBS=-lm -lpthread
+BASEFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -msse3 $(WARN)
+CFLAGS = $(BASEFLAGS) -O3
+DBFLAGS = $(BASEFLAGS) -g # -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
+# LDFLAGS += $(PROFILING)
+LIBS = -lm -lpthread
 
-PROG=bpp
+PROG = bpp
 
 all: $(PROG)
+
+debug: CFLAGS = $(DBFLAGS)
+debug: $(PROG)
 
 OBJS=bpp.o rtree.o util.o \
      arch.o phylip.o msa.o \
@@ -77,3 +81,5 @@ $(PROG): $(OBJS)
 
 clean:
 	rm -f *~ $(OBJS) gmon.out $(PROG)
+
+.PHONY: all debug clean

@@ -90,7 +90,8 @@ static char * reallocline(phylip_t * fd, size_t newmaxsize)
 {
   char * temp = (char *)xmalloc((size_t)newmaxsize*sizeof(char));
 
-  memcpy(temp,fd->line,fd->line_size*sizeof(char));
+  if (fd->line && fd->line_size)
+    memcpy(temp,fd->line,fd->line_size*sizeof(char));
   free(fd->line);
   fd->line = temp;
   fd->line_maxsize = newmaxsize;

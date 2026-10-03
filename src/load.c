@@ -1903,9 +1903,10 @@ static void load_gene_tree(FILE * fp, long index)
       fatal("Cannot read gene tree marks");
 
   /* load hpath */
-  for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
-    if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
-      fatal("Cannot read gene tree path flags");
+  if (stree->hybrid_count)
+    for (i = 0; i < gt->tip_count + gt->inner_count; ++i)
+      if (!LOAD(gt->nodes[i]->hpath,stree->hybrid_count,fp))
+        fatal("Cannot read gene tree path flags");
 
   if (!LOAD(&(gt->rate_mui),1,fp))
       fatal("Cannot read gene tree mu_%ld", index);
@@ -2230,7 +2231,8 @@ int checkpoint_load(gtree_t *** gtreep,
                     long * mean_phi_count,
                     int * prec_logpg,
                     int * prec_logl, 
-		    int ** ptr_printLocusIndex)
+                    int ** ptr_printLocusIndex,
+                    long * trait_offset)
 {
   long i,j,k;
   FILE * fp;
@@ -2325,10 +2327,18 @@ int checkpoint_load(gtree_t *** gtreep,
                      mean_phi_count,
                      prec_logpg,
                      prec_logl,
-		     ptr_printLocusIndex);
+                     ptr_printLocusIndex);
+
+  /* load morphological trait section */
+  trait_load(fp,stree,trait_offset);
 
   /* load section 2 */
   load_chk_section_2(fp);
+
+  /* rebuild the derived trait quantities from the restored tip data and
+     rates, now that the species tree topology and taus have been loaded */
+  if (opt_traitfile)
+    trait_update(stree);
 
   /* initialize gene trees */
 //  gtree = init_gtrees(opt_locus_count);
