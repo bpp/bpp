@@ -28,8 +28,9 @@ import shutil
 import urllib
 
 #define hash for stable bpp version
+# (2b566f8, 2026-06-23: the last commit before the demographic models)
 
-opt_stable_hash = "c6aadc38edf1a8bc740d38e975bd9e994846ea64"
+opt_stable_hash = "2b566f85919d93ac6c1dd4578aa3a0cbb9f44356"
 
 #define path to BPP binary
 opt_bpp_bin = ""
@@ -303,13 +304,16 @@ def testf(curtest,numtest,t,desc,arch):
   if not os.path.exists(refdir):
     os.makedirs(refdir)
 
+  # the control files set 'jobname = <test>/out/out', so bpp writes its files
+  # as <test>/out/out.<suffix> (out.txt, out.mcmc.txt, out.FigTree.tre, ..)
+
   # remove old files if they exist in outdir
-  if os.path.exists(outdir + "/mcmc.txt"):
-    os.remove(outdir + "/mcmc.txt")
+  if os.path.exists(outdir + "/out.mcmc.txt"):
+    os.remove(outdir + "/out.mcmc.txt")
   if os.path.exists(outdir + "/out.txt"):
     os.remove(outdir + "/out.txt")
-  if os.path.exists(outdir + "/FigTree.tre"):
-    os.remove(outdir + "/FigTree.tre")
+  if os.path.exists(outdir + "/out.FigTree.tre"):
+    os.remove(outdir + "/out.FigTree.tre")
 
   # remove old files if they exist in refdir
   if os.path.exists(refdir + "/mcmc.txt"):
@@ -329,11 +333,13 @@ def testf(curtest,numtest,t,desc,arch):
   p1 = Popen(cmd, shell=True)
   os.waitpid(p1.pid,0)
 
-  os.rename(outdir + "/mcmc.txt", refdir + "/mcmc.txt")
+  os.rename(outdir + "/out.mcmc.txt", refdir + "/mcmc.txt")
   os.rename(outdir + "/out.txt", refdir + "/out.txt")
-  if os.path.exists(outdir + "/FigTree.tre"):
-    os.rename(outdir + "/FigTree.tre", refdir + "/FigTree.tre")
-    
+  if os.path.exists(outdir + "/out.FigTree.tre"):
+    os.rename(outdir + "/out.FigTree.tre", refdir + "/FigTree.tre")
+
+  # delete output directory and the remaining files (checkpoint, summaries, ..)
+  shutil.rmtree(outdir)
 
   tend = time.time()
   runtime = tend - tstart
