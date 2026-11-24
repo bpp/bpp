@@ -2,8 +2,7 @@
 
        seqfile = testbed/small/common-data/frogs.txt
       Imapfile = testbed/small/common-data/frogs.Imap.txt
-       outfile = testbed/small/78/out/out.txt
-      mcmcfile = testbed/small/78/out/mcmc.txt
+       jobname = testbed/small/78/out/out
 
 *  speciesdelimitation = 0 * fixed species tree
  speciesdelimitation = 1 0 2    * species delimitation rjMCMC algorithm0 and finetune(e)
@@ -28,7 +27,7 @@
      heredity = 1 4 4
     locusrate = 1 0 0 5
 
-      finetune =  1: 5 0.001 0.001  0.001 0.3 0.33 1.0  # finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+      finetune =  1 Gage:5 Gspr:0.001 th1:0.001 th2:0.001 tau:0.001 mix:0.3 lrht:0.33  # step lengths (auto-adjusted): gene-tree age and SPR, theta (tips, inner), tau, mixing, locus rate/heredity
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars, Genetrees
         burnin = 400

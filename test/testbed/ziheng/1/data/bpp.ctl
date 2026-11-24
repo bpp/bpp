@@ -3,8 +3,7 @@
        seqfile = testbed/ziheng/1/data/test3s.txt
 *       seqfile =my3s.het.txt
       Imapfile = testbed/ziheng/1/data/Imap.3s.txt
-       outfile = testbed/ziheng/1/out/out.txt
-      mcmcfile = testbed/ziheng/1/out/mcmc.txt
+       jobname = testbed/ziheng/1/out/out
 
 *        phase = 1        * 0: phased sequences, 1: unphased diploid sequences
 *     breakpoint = 2        * 0: nothing;  1 : save;  2: read
@@ -33,7 +32,7 @@ speciesmodelprior = 1  * 0: uniform LH; 1:uniform rooted trees; 2: uniformSLH; 3
 *      heredity = 1 4 4   # (0: No variation, 1: estimate, 2: from file) & a_gamma b_gamma (if 1)
 * sequenceerror = 0 0 0 0 0 : 0.05 1   # sequencing errors: gamma(a, b) prior
 
-       finetune = 1: 0.2 0.002 0.01 0.001 0.1 0.1 0.1  # finetune for GBtj, GBspr, theta, tau, mix, locusrate, seqerr
+       finetune = 1 Gage:0.2 Gspr:0.002 th1:0.01 th2:0.01 tau:0.001 mix:0.1 lrht:0.1  # step lengths (auto-adjusted): gene-tree age and SPR, theta (tips, inner), tau, mixing, locus rate/heredity
 
          print = 1 0 0 0   * MCMC samples, locusrate, heredityscalars Genetrees
         burnin = 8000

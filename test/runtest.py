@@ -23,11 +23,21 @@ from subprocess import Popen, PIPE, call
 
 import sys, stat, os
 import time
+import shutil
 
 # define path to BPP binary
 
 opt_bpp_bin = "$HOME/DEV/bpp/src/bpp"
 # opt_bpp_bin = "$HOME/DELETE/bpp/src/bpp"
+
+# additional command-line options passed to the tested BPP binary. The reference
+# results (opt_stable_hash in regen.py) come from a version with a single step
+# length for all taus, while newer versions default to one step length per tau
+# (--tau_mode 2), which changes the results of the 16 A00 tests. "--tau_mode 1"
+# compares like with like; set this to "" once the reference version itself
+# defaults to --tau_mode 2.
+
+opt_bpp_args = "--tau_mode 1"
 
 # define each testbed and 
 
@@ -289,13 +299,19 @@ def test_fail():
   
 
 def difftest(test):
-  mcmcfile = test + "/out/mcmc.txt"
+  # the control files set 'jobname = <test>/out/out'
+  mcmcfile = test + "/out/out.mcmc.txt"
   outfile  = test + "/out/out.txt"
 
   refmcmcfile = test + "/ref/mcmc.txt"
 
-  p = Popen(["diff","-q",mcmcfile,refmcmcfile], stdout=PIPE)
-  output = p.communicate()[0]
+  p = Popen(["diff","-q",mcmcfile,refmcmcfile], stdout=PIPE, stderr=PIPE)
+  output,error = p.communicate()
+
+  # diff exits with status 2 and prints nothing on stdout if a file is missing
+  # (bpp did not run to completion, or there is no reference): a failed test
+  if p.returncode != 0 and output == "":
+    output = error if error else "diff failed"
   return output
 
 def testf(curtest,numtest,t,desc,arch):
@@ -306,7 +322,10 @@ def testf(curtest,numtest,t,desc,arch):
     os.makedirs(outdir)
 
   ctl = t + "/data/bpp.ctl"
-  cmd = opt_bpp_bin + " --cfile " + ctl + " --arch "  + arch + " 2>tmperr >tmp"
+  cmd = opt_bpp_bin + " --cfile " + ctl + " --arch "  + arch
+  if opt_bpp_args:
+    cmd += " " + opt_bpp_args
+  cmd += " 2>tmperr >tmp"
 
   now = time.strftime("  %H:%M:%S")
 
@@ -330,10 +349,9 @@ def testf(curtest,numtest,t,desc,arch):
     test_fail()
   print
 
-  # delete output directory and files
-  os.remove(outdir + "/mcmc.txt")
-  os.remove(outdir + "/out.txt")
-  os.rmdir(outdir)
+  # delete output directory and all its files (out.txt, out.mcmc.txt,
+  # checkpoint, summaries, ..)
+  shutil.rmtree(outdir)
    
 def runtests():
   total = 0;
