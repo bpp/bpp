@@ -1207,6 +1207,29 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
     "c"           /* 8 */
   };
   snodes_total = stree->tip_count + stree->inner_count + stree->hybrid_count;
+
+  /* nothing to summarize if no parameter has a conjugate conditional. This
+     happens under the piecewise-linear demographic model when every population
+     is segmented (e.g. a single species): all sizes are then boundary sizes,
+     which are left out of the file (see log_a1b1), and the file holds the
+     sample numbers only */
+  if (!opt_msci && !(opt_migration && !opt_est_geneflow))
+  {
+    for (i = 0; i < snodes_total; ++i)
+      if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL &&
+          !DEM_LINEAR_SEGMENTED(stree->nodes[i]))
+        break;
+
+    if (i == snodes_total)
+    {
+      fprintf(stdout, "No parameters with a conditional distribution; "
+              "nothing to summarize.\n");
+      fprintf(fp_out, "No parameters with a conditional distribution; "
+              "nothing to summarize.\n");
+      return;
+    }
+  }
+
   fp = xopen(opt_a1b1file,"r");
 
   /* skip line containing header */
@@ -1647,8 +1670,8 @@ void allfixed_summary(FILE * fp_out, stree_t * stree)
     char * ntype;
     if (i < stree->tip_count)
       ntype = ntypes[0];
-    else if (stree->nodes[i] == stree->root)
-      ntype = ntypes[1];
+    else if (stree->nodes[i] == STREE_ROOT_BASE(stree))
+      ntype = ntypes[1];   /* root divergence, also if the root is segmented */
     else if (stree->nodes[i]->hybrid)
       ntype = ntypes[2];
     else

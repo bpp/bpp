@@ -363,6 +363,11 @@ static void load_chk_section_1(FILE * fp,
     fatal("Cannot read demography count");
   if (!LOAD(&opt_dem_model,1,fp))
     fatal("Cannot read demography model");
+  /* prior on the break points of a segmented root population (demprior) */
+  if (!LOAD(&opt_dem_tmax,1,fp))
+    fatal("Cannot read demography root prior (Tmax)");
+  if (!LOAD(&opt_dem_rho,1,fp))
+    fatal("Cannot read demography root prior (rho)");
   if (opt_dem_count)
   {
     opt_dem_specs = (dem_spec_t *)xcalloc((size_t)opt_dem_count,sizeof(dem_spec_t));
@@ -1349,8 +1354,10 @@ void load_chk_section_2(FILE * fp)
 
   free(hindices);
 
-  /* now set the root node */
-  if (stree->tip_count == 1)
+  /* now set the root node. A single species is its own root, unless its
+     population is segmented (demographic models): the root is then the oldest
+     segment, a parentless unary inner node */
+  if (stree->tip_count == 1 && !opt_dem)
   {
     stree->root = stree->nodes[0];
   }
@@ -2482,6 +2489,7 @@ void cmd_checkpoint_info(const char * filename)
   FILE * fp;
   long file_size;
   int sha1_ok = 1;
+  long dem_flag = 0;    /* demographic models in use (opt_dem of the run) */
 
   /* open file and get size */
 
@@ -2719,10 +2727,15 @@ void cmd_checkpoint_info(const char * filename)
   /* piecewise-constant demographic model */
   {
     long dem, dem_count, dem_model, l_dem;
+    double dem_tmax, dem_rho;
     char * dem_label = NULL;
     if (!LOAD(&dem, 1, fp)) fatal("Cannot read dem flag");
     if (!LOAD(&dem_count, 1, fp)) fatal("Cannot read dem count");
     if (!LOAD(&dem_model, 1, fp)) fatal("Cannot read dem model");
+    /* types must match opt_dem_tmax/opt_dem_rho: LOAD sizes off the pointer */
+    if (!LOAD(&dem_tmax, 1, fp)) fatal("Cannot read dem root prior (Tmax)");
+    if (!LOAD(&dem_rho, 1, fp)) fatal("Cannot read dem root prior (rho)");
+    dem_flag = dem;
     for (l_dem = 0; l_dem < dem_count; ++l_dem)
     {
       /* types must match dem_spec_t exactly: LOAD sizes off the pointer */
@@ -3182,8 +3195,10 @@ void cmd_checkpoint_info(const char * filename)
     st->nodes[rci]->parent = st->nodes[stree_tip_count + i];
   }
 
-  /* find root */
-  if (stree_tip_count == 1)
+  /* find root. A single species is its own root, unless its population is
+     segmented (demographic models): the root is then the oldest segment, a
+     parentless unary inner node */
+  if (stree_tip_count == 1 && !dem_flag)
   {
     st->root = st->nodes[0];
   }

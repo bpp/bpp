@@ -170,6 +170,15 @@ static int tau_cols_merged()
   return (opt_finetune_tau_mode == 1 || !opt_tau_showall_eps);
 }
 
+/* The 'dem' column and finetune entry belong to the single step length shared
+   by all demographic break points, which exists under --tau_mode 1 only. With
+   one step length per tau (--tau_mode 2) every break point owns one of the
+   ta1, ta2, .. entries instead. */
+static int dem_col_shown()
+{
+  return (opt_dem && opt_finetune_tau_mode == 1);
+}
+
 /* same for one theta acceptance-proportion column ("th12" / "thg") */
 static int theta_col_width()
 {
@@ -447,12 +456,18 @@ static void print_mcmc_headerline(FILE * fp,
       char * stau = NULL;
       snode_t * x = stree_tau_step_node(stree,k);
       xasprintf(&stau, "ta%ld", k+1);
-      fprintf(fp, "%*s: species tree tau proposal (%s)\n",
-              6, stau, x ? x->label : "?");
+      if (x && x->dem)
+        fprintf(fp, "%*s: demographic break-point proposal (%s)\n",
+                6, stau, x->label);
+      else
+        fprintf(fp, "%*s: species tree tau proposal (%s)\n",
+                6, stau, x ? x->label : "?");
       free(stau);
     }
   }
   fprintf(fp, "   mix: mixing proposal\n");
+  if (dem_col_shown())
+    fprintf(fp, "   dem: demographic break-point proposal\n");
   if (opt_migration && !opt_est_geneflow)
   {
     long slots = (opt_finetune_mrate_mode == 1) ? 1 : opt_migration_count;
@@ -561,7 +576,9 @@ static void print_mcmc_headerline(FILE * fp,
     for (i = 0; i < mean_theta_count; ++i)
       fprintf(fp, "theta%ld: mean theta of node %ld\n", i+1,mean_theta_index[i]+1);
   }
-  if (mean_tau_count == 1)
+  /* a single tau is the root age, except for a single species with two
+     segments (demographic models), where it is the break point */
+  if (mean_tau_count == 1 && !stree->dem_count)
     fprintf(fp, "  tau1: root node mean tau\n");
   else
   {
@@ -624,7 +641,7 @@ static void print_mcmc_headerline(FILE * fp,
   ap_width += 3*5;                     /* Gage Gspr mix */
   ap_width += tau_cols_merged() ? 5 :
                 opt_finetune_tau_count*(tau_col_width()+1);
-  ap_width += opt_dem ? 5 : 0;
+  ap_width += dem_col_shown() ? 5 : 0;
   if (opt_theta_slide_prob > 0 && opt_theta_slide_prob < 1)
   {
     if (opt_theta_gibbs_showall_eps)
@@ -737,7 +754,7 @@ static void print_mcmc_headerline(FILE * fp,
     }
   }
   fprintf(fp,"  mix");      linewidth += 5;
-  if (opt_dem)
+  if (dem_col_shown())
   {
     fprintf(fp,"  dem");    linewidth += 5;
   }
@@ -1116,7 +1133,7 @@ static void active_pjumps_alloc()
   finetune_values_ptr[k] = &opt_finetune_mix;
   ++k;
 
-  if (opt_dem)
+  if (dem_col_shown())
   {
     active_pjump_titles[k] = xstrdup("dem");
     active_pjump_values[k] = &g_pj_dem;
@@ -1869,7 +1886,7 @@ static void status_print_pjump(FILE * fp,
       fprintf(fp, " %*.2f", tau_col_width(), g_pj_tau[k]);
   }
   fprintf(fp, " %4.2f", g_pj_mix);
-  if (opt_dem)
+  if (dem_col_shown())
     fprintf(fp, " %4.2f", g_pj_dem);
 
   if (extra)
@@ -4119,6 +4136,40 @@ static FILE * init(stree_t ** ptr_stree,
   /* initialize species tree (tau + theta) */
   stree_init(stree,msa_list,map_list,msa_count, &tau_ctl, fp_out);
 
+  /* demographic models: report the prior on the break points of a segmented
+     root population (option 'demprior') */
+  if (opt_dem && stree->root->dem)
+  {
+    long bp_count = DEM_ROOT_BP_COUNT(stree);
+    double tmax = 0;
+    FILE * fp_list[2];
+
+    fp_list[0] = stdout; fp_list[1] = fp_out;
+
+    for (i = 1; i <= bp_count; ++i)
+      tmax += stree_dem_root_mean(stree,i);
+
+    for (j = 0; j < 2; ++j)
+    {
+      fprintf(fp_list[j],
+              "Prior on the break points of the root population %s:\n"
+              "  independent exponential durations of its %ld youngest "
+              "segment%s\n"
+              "  Tmax = %g x E(theta) = %f, rho = %g\n"
+              "  mean durations:",
+              STREE_ROOT_BASE(stree)->label,
+              bp_count, (bp_count > 1) ? "s" : "",
+              opt_dem_tmax, tmax, opt_dem_rho);
+      for (i = 1; i <= bp_count; ++i)
+        fprintf(fp_list[j], " %f", stree_dem_root_mean(stree,i));
+      fprintf(fp_list[j], "\n\n");
+    }
+  }
+  else if (opt_dem && opt_demprior)
+    fprintf(stdout,
+            "Note: option 'demprior' has no effect, as the root population is "
+            "not segmented\n\n");
+
   stree_show_pptable(stree, BPP_FALSE);
 
   /* check ancestor-descendant constraints */
@@ -5915,8 +5966,12 @@ void cmd_run()
     /* propose demographic break points (piecewise-constant and -linear models) */
     if (opt_dem && !opt_usedata_fix_gtree)
     {
-      ratio = stree_propose_dem_tau(gtree, stree, locus);
-      RMEAN_UPDATE(g_pj_dem, ft_round, ratio);
+      /* with one step length per tau (--tau_mode 2) every break point owns a
+         step length and the proposal does its own pjump bookkeeping; g_pj_dem
+         belongs to the single step length shared by all break points */
+      ratio = stree_propose_dem_tau(gtree, stree, locus, ft_round);
+      if (opt_finetune_tau_mode == 1)
+        RMEAN_UPDATE(g_pj_dem, ft_round, ratio);
       #ifdef CHECK_LOGPR
       debug_validate_logpg(stree, gtree, locus, "DEM");
       #endif

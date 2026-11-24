@@ -3143,7 +3143,9 @@ void reset_gene_leaves_count(stree_t * stree, gtree_t ** gtree)
   reset_gene_leaves_count_recursive(stree->root, stree->locus_count);
 
   /* TODO: IS THIS NECESSARY ? */
-  if (stree->tip_count > 1)
+  /* not for a segmented root population, whose root node (the oldest segment)
+     has a single child and was set by the recursion above */
+  if (stree->tip_count > 1 && stree->root->right)
   {
     for (j = 0; j < stree->locus_count; ++j)
       stree->root->gene_leaves[j] = stree->root->left->gene_leaves[j] +

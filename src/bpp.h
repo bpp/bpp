@@ -161,7 +161,7 @@
 
 #define PVER_SHA1 "2e06f2ff77462da2eeb5b385c5dfaa22f496de60"
 
-#define VERSION_CHKP 5
+#define VERSION_CHKP 6
 
 #define PROG_VERSION "v" PLL_C2S(VERSION_MAJOR) "." PLL_C2S(VERSION_MINOR) "." \
         PLL_C2S(VERSION_PATCH)
@@ -302,6 +302,28 @@ extern const char * global_freqs_strings[28];
    mixing moves, and from the a1b1 conditional output/summary */
 #define DEM_LINEAR_SEGMENTED(s) (opt_dem_model == BPP_DEM_PIECEWISE_LINEAR && \
                                  DEM_SEGMENTED(s))
+
+/* segmented root population. Its chain is built above the root divergence R:
+   R -> R|1 -> ... -> R|K-1, where the top node R|K-1 has no parent and is
+   stree->root. So stree->root is always the oldest, unbounded population, while
+   the node that carries the root age tau_R and its prior is
+
+   STREE_ROOT_BASE(stree): the base of the root population, i.e. the root
+   divergence R (two children). It equals stree->root when the root population
+   is not segmented. With a single species it is the only tip (no tau_R).
+
+   DEM_ROOT_BP(stree,s): s is a break point of the root population. Such break
+   points are not part of the uniform (order statistics) prior on the non-root
+   ages; their durations have independent exponential priors (demprior), see
+   stree_dem_root_mean().
+
+   DEM_ROOT_BP_COUNT(stree): number of root break points (K-1, or 0) */
+#define STREE_ROOT_BASE(stree) ((stree)->root->dem ? \
+                                (stree)->root->dem_base : (stree)->root)
+#define DEM_ROOT_BP(stree,s) ((s)->dem && \
+                              (s)->dem_base == (stree)->root->dem_base)
+#define DEM_ROOT_BP_COUNT(stree) ((stree)->root->dem ? \
+                                  (stree)->root->dem_index : 0)
 
 
 #define BPP_THETA_PRIOR_MIN             1
@@ -1284,6 +1306,7 @@ extern long opt_migration_count;
 extern long opt_dem;
 extern long opt_dem_count;
 extern long opt_dem_model;
+extern long opt_demprior;
 extern long opt_mig_vrates_exist;
 extern long opt_mix_theta_update;
 extern long opt_mix_w_update;
@@ -1352,6 +1375,8 @@ extern double opt_finetune_nubar;
 extern double opt_finetune_nui;
 extern double opt_finetune_tau_global;
 extern double opt_finetune_dem;
+extern double opt_dem_rho;
+extern double opt_dem_tmax;
 extern double opt_heredity_alpha;
 extern double opt_heredity_beta;
 extern double opt_snl_lambda_expand;
@@ -1647,7 +1672,12 @@ void stree_propose_tau(gtree_t ** gtree,
                        stree_t * stree,
                        locus_t ** loci,
                        long ft_round);
-double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci);
+double stree_propose_dem_tau(gtree_t ** gtree,
+                             stree_t * stree,
+                             locus_t ** loci,
+                             long ft_round);
+double stree_dem_root_mean(const stree_t * stree, long k);
+double stree_dem_root_sum(const stree_t * stree);
 void stree_propose_tau_mig(stree_t ** streeptr,
                            gtree_t *** gtreeptr,
                            stree_t ** scloneptr,

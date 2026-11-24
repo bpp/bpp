@@ -1511,11 +1511,27 @@ static void stree_init_tau_recursive(snode_t * node, double prop, long thread_in
     stree_init_tau_recursive(node->right, prop, thread_index);
 }
 
+/* starting ages of the break points of a segmented root population: every root
+   segment starts at the prior mean of its duration,
+   tau_{R,k} = tau_{R,k-1} + Dbar_k, where tau_{R,0} is the root age (0 for a
+   single species). No random number is used */
+static void stree_init_dem_root_tau(stree_t * stree)
+{
+  long k;
+  snode_t * x;
+
+  if (!stree->root->dem)
+    return;
+
+  for (k = 1, x = STREE_ROOT_BASE(stree)->parent; x; x = x->parent, ++k)
+    x->tau = x->left->tau + stree_dem_root_mean(stree, k);
+}
+
 static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 {
   unsigned int i;
   unsigned int total_nodes;
-  
+
   total_nodes = stree->tip_count + stree->inner_count + stree->hybrid_count;
 
   for (i = stree->tip_count; i < total_nodes; ++i)
@@ -1567,14 +1583,19 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
 	   }
   }
 
+   /* the node carrying the root age: the root divergence. It is stree->root,
+      unless the root population is segmented, in which case stree->root is the
+      oldest root segment and the divergence is the base of that chain */
+   snode_t * rootbase = STREE_ROOT_BASE(stree);
+
    /* set the speciation time for root */
    if (!*tau_ctl) {
-   	if (stree->root->tau)
+        if (rootbase->tau)
    	{
    	  if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
-   	    stree->root->tau = opt_tau_beta / (opt_tau_alpha - 1);
+            rootbase->tau = opt_tau_beta / (opt_tau_alpha - 1);
    	  else
-   	    stree->root->tau = opt_tau_alpha / opt_tau_beta;
+            rootbase->tau = opt_tau_alpha / opt_tau_beta;
    	}
    }
 
@@ -1587,9 +1608,12 @@ static void stree_init_tau(stree_t * stree, long thread_index, int * tau_ctl)
    else
    {
 	   if (!*tau_ctl) {
-     		stree_init_tau_recursive(stree->root->left, prop, thread_index);
-     		stree_init_tau_recursive(stree->root->right, prop, thread_index);
+                stree_init_tau_recursive(rootbase->left, prop, thread_index);
+                stree_init_tau_recursive(rootbase->right, prop, thread_index);
 	   }
+
+     /* break points of a segmented root population */
+     stree_init_dem_root_tau(stree);
    }
 
    /* check to see if everything is OK */
@@ -2370,19 +2394,21 @@ static void init_w_stepsize()
   }
 }
 
-/* Does the rubber-band move propose on this node? Must agree with the
-   candidate test in stree_propose_tau()/stree_propose_tau_mig(), except for the
-   dynamic 'tau > 0' test: with a fixed species tree and no delimitation (the
-   only case where mode 2 is allowed) every such node keeps tau > 0 for the
-   whole run. */
+/* Does this node own a tau step length under --tau_mode 2? These are the nodes
+   the rubber-band move proposes on, and the demographic break-point nodes,
+   which stree_propose_dem_tau() proposes on. For the former the test must
+   agree with the candidate test in stree_propose_tau()/stree_propose_tau_mig(),
+   except for the dynamic 'tau > 0' test: with a fixed species tree and no
+   delimitation (the only case where mode 2 is allowed) every such node keeps
+   tau > 0 for the whole run. Break-point nodes are appended after the original
+   inner nodes, so they take the step-length indices that follow those of the
+   divergence times. */
 static int node_has_tau_step(stree_t * stree, unsigned int i)
 {
   snode_t * x = stree->nodes[i];
 
   if (i < stree->tip_count || i >= stree->tip_count + stree->inner_count)
     return 0;
-  if (x->dem)
-    return 0;                 /* break point; proposed by stree_propose_dem_tau */
   if (opt_msci && !x->prop_tau)
     return 0;
 
@@ -2465,6 +2491,13 @@ static void init_tau_stepsize(stree_t * stree)
     {
       if (opt_finetune_tau_global > 0)
         opt_finetune_tau[j] = opt_finetune_tau_global;
+      else if (stree->nodes[i]->dem)
+      {
+        /* break point: a tenth of the initial duration of the segment below */
+        double below = stree->nodes[i]->tau - stree->nodes[i]->left->tau;
+
+        opt_finetune_tau[j] = (below > 0) ? below / 10 : tau_eps_default;
+      }
       else
         opt_finetune_tau[j] = (stree->nodes[i]->tau > 0) ?
                                 stree->nodes[i]->tau / 10 : tau_eps_default;
@@ -2518,9 +2551,10 @@ static void init_theta_stepsize(stree_t * stree)
       break;
     }
 
+  /* a single species has a single theta, unless its population is segmented */
   if (opt_finetune_theta_mode == 1 ||
       opt_linkedtheta == BPP_LINKEDTHETA_ALL ||
-      stree->tip_count == 1)
+      (stree->tip_count == 1 && !stree->dem_count))
   {
     if (!alloced)
       opt_finetune_theta[0] = theta_eps_default;
@@ -3264,6 +3298,55 @@ static void msci_validate(stree_t * stree)
   }
 }
 
+/* prior mean of the duration of root segment k-1, D_k = tau_{R,k} - tau_{R,k-1}
+   for k = 1..K-1, where tau_{R,0} is the root age (0 for a single species):
+
+     Dbar_k = Tmax (rho-1) rho^(k-1) / (rho^(K-1) - 1),
+
+   with rho = opt_dem_rho and Tmax = opt_dem_tmax times the prior mean of theta
+   (paper eq. rootdeltamean). The means grow geometrically by rho and sum to
+   Tmax. They are computed from the options on demand, so that nothing has to be
+   stored, cloned or restored from a checkpoint */
+double stree_dem_root_mean(const stree_t * stree, long k)
+{
+  long bp_count = DEM_ROOT_BP_COUNT(stree);      /* K-1 */
+  double thetabar;
+  double tmax;
+
+  assert(bp_count >= 1 && k >= 1 && k <= bp_count);
+
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+    thetabar = opt_theta_beta / (opt_theta_alpha - 1);
+  else
+    thetabar = opt_theta_alpha / opt_theta_beta;
+
+  tmax = opt_dem_tmax * thetabar;
+
+  if (bp_count == 1)
+    return tmax;
+
+  return tmax * (opt_dem_rho - 1) * pow(opt_dem_rho, (double)(k-1)) /
+         (pow(opt_dem_rho, (double)bp_count) - 1);
+}
+
+/* sum over the root break points of D_k / Dbar_k. The log prior density of the
+   root break points given the root age is minus this sum, up to a constant
+   (paper eq. rootbpprior). Zero if the root population is not segmented */
+double stree_dem_root_sum(const stree_t * stree)
+{
+  long k;
+  double sum = 0;
+  snode_t * x;
+
+  if (!stree->root->dem)
+    return 0;
+
+  for (k = 1, x = STREE_ROOT_BASE(stree)->parent; x; x = x->parent, ++k)
+    sum += (x->tau - x->left->tau) / stree_dem_root_mean(stree, k);
+
+  return sum;
+}
+
 /* Piecewise-constant demographic model (opt_dem): turn each population listed
    in 'demography = P:k, ...' into a chain of k constant-size segments by
    splicing k-1 unary "break-point" nodes onto the branch (P -> P->parent).
@@ -3275,7 +3358,13 @@ static void msci_validate(stree_t * stree)
 
    Run AFTER the (binary) species tree is parsed and BEFORE stree_init, so that
    stree_init's pptable, per-node arrays, theta and tau initialisation all size
-   to the expanded tree. */
+   to the expanded tree.
+
+   The root population can be segmented too. Its unary nodes are stacked above
+   the root divergence R (R -> R|1 -> ... -> R|K-1) and the topmost one replaces
+   R as stree->root; with a single species the chain sits above the only tip.
+   The break points of the root population have their own prior (demprior), see
+   stree_dem_root_mean(). */
 void stree_expand_demography(stree_t * stree)
 {
   long i, j;
@@ -3304,9 +3393,13 @@ void stree_expand_demography(stree_t * stree)
             "tree.\nInternal nodes must be labelled in the 'species&tree' "
             "newick (e.g. ((A,B)X,C)R;).", opt_dem_specs[i].label);
 
-    if (!p->parent)
-      fatal("Error: 'demography' population '%s' is the root; splitting the "
-            "root population is not supported yet.", opt_dem_specs[i].label);
+    /* the root population (with a single species: the only population). Under
+       a linked-theta model all its segments would share one size, which leaves
+       its break points to their prior, so the combination is rejected */
+    if (!p->parent && opt_linkedtheta != BPP_LINKEDTHETA_NONE)
+      fatal("Error: 'demography' population '%s' is the root population; a "
+            "segmented root is not compatible with linked thetas (thetamodel) "
+            "in this version.", opt_dem_specs[i].label);
 
     opt_dem_specs[i].snode_index = p->node_index;
     new_unary += opt_dem_specs[i].segments - 1;
@@ -3324,11 +3417,15 @@ void stree_expand_demography(stree_t * stree)
   {
     snode_t * p = stree->nodes[opt_dem_specs[i].snode_index];
     long k = opt_dem_specs[i].segments;
-    snode_t * par = p->parent;
-    snode_t ** parlink = (par->left == p) ? &(par->left) : &(par->right);
+    snode_t * par = p->parent;    /* NULL for the root population */
+    snode_t ** parlink = NULL;
     snode_t * below = p;   /* node currently below the unary being created */
 
-    assert(*parlink == p);
+    if (par)
+    {
+      parlink = (par->left == p) ? &(par->left) : &(par->right);
+      assert(*parlink == p);
+    }
 
     /* build the chain  p -> U_1 -> U_2 -> ... -> U_{k-1} -> par  (youngest first) */
     for (j = 1; j <= k - 1; ++j)
@@ -3359,9 +3456,15 @@ void stree_expand_demography(stree_t * stree)
       below = u;
     }
 
-    /* connect the topmost unary node to the original parent */
+    /* connect the topmost unary node to the original parent. The root
+       population has none: its topmost node becomes the root of the species
+       tree, i.e. the oldest (unbounded) population, while p stays the root
+       divergence and keeps the root age (see STREE_ROOT_BASE) */
     below->parent = par;
-    *parlink = below;
+    if (parlink)
+      *parlink = below;
+    else
+      stree->root = below;
   }
 
   stree->inner_count += (unsigned int)new_unary;
@@ -3407,7 +3510,13 @@ void stree_init(stree_t * stree,
     stree_init_tau(stree, thread_index, tau_ctl);
   }
   else
+  {
     stree->nodes[0]->tau = 0;
+
+    /* a single species whose population is segmented: all its break points are
+       root break points, counted from the present */
+    stree_init_dem_root_tau(stree);
+  }
 
   /* assign the tau step lengths; requires the taus set above and the 'dem'
      flags set by stree_expand_demography(), which runs before stree_init() */
@@ -5921,11 +6030,14 @@ static snode_t * return_ltheta_master(stree_t * stree, snode_t * snode)
 }
 #endif
 
-/* 'tau_count' is the TOTAL number of nodes carrying a tau > 0 (including
-   demographic break-point nodes, which this move does not propose on). It is
-   used only for the root's tau prior: the uniform-Dirichlet prior on the
-   non-root node ages contributes a factor tau_root^-(tau_count-1). It must not
-   be confused with the number of nodes the rubber-band proposes on. */
+/* 'tau_count' is the number of nodes carrying a tau > 0 that enter the tau
+   prior: the root divergence and all nodes younger than it, including the
+   demographic break-point nodes of non-root populations (which this move does
+   not propose on). It is used only for the root's tau prior: the
+   uniform-Dirichlet prior on the non-root node ages contributes a factor
+   tau_root^-(tau_count-1). The break points of a segmented root population are
+   older than the root age and have their own prior; they are not counted. It
+   must not be confused with the number of nodes the rubber-band proposes on. */
 static long propose_tau(locus_t ** loci,
                         snode_t * snode,
                         gtree_t ** gtree,
@@ -6078,9 +6190,10 @@ static long propose_tau(locus_t ** loci,
   minfactor = (newage - minage) / (oldage - minage);
   maxfactor = (newage - maxage) / (oldage - maxage);
 
-  /* if we are dealing with the root population, add the following factor to
-     the acceptance ratio */
-  if (snode == stree->root)
+  /* if we are dealing with the root age, add the following factor to the
+     acceptance ratio. The root age belongs to the root divergence, which is not
+     stree->root when the root population is segmented */
+  if (snode == STREE_ROOT_BASE(stree))
   {
     if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
       lnacceptance = (-opt_tau_alpha - 1 - tau_count + 1) *
@@ -6088,6 +6201,13 @@ static long propose_tau(locus_t ** loci,
     else
       lnacceptance = (opt_tau_alpha-1 - tau_count + 1) *
                      log(newage/oldage) - opt_tau_beta*(newage-oldage);
+
+    /* segmented root population: the root break points are held fixed, so the
+       root age is bounded above by the first of them (maxage), and the
+       duration of the youngest root segment changes by -(newage-oldage).
+       Ratio of its exponential prior (paper eq. rootbpprior) */
+    if (snode->parent)
+      lnacceptance += (newage - oldage) / stree_dem_root_mean(stree, 1);
   }
 
   #if 0
@@ -6302,6 +6422,16 @@ static long propose_tau(locus_t ** loci,
          propose_tau_update_gtrees since they remain in 'affected'. old_theta
          must be set as the reject path restores every theta_list node from it */
       if (DEM_LINEAR_SEGMENTED(x))
+      {
+        x->old_theta = x->theta;
+        continue;
+      }
+
+      /* root age of a segmented root population: the sizes of the root
+         population are held fixed in this move under either model (paper,
+         rubber-band moves). Of the root segments only the youngest, i.e. the
+         root divergence itself, is among the affected populations */
+      if (stree->root->dem && x == stree->root->dem_base)
       {
         x->old_theta = x->theta;
         continue;
@@ -7849,22 +7979,27 @@ void stree_propose_tau(gtree_t ** gtree,
 
   /* Two distinct counts:
 
-     tau_count       - ALL nodes carrying a tau > 0, including demographic
-                       break-point nodes. This sets the exponent of the root's
-                       tau prior (the uniform-Dirichlet prior on the non-root
-                       node ages contributes tau_root^-(tau_count-1)), so a
+     tau_count       - the nodes carrying a tau > 0 that enter the tau prior:
+                       the root divergence and everything younger, including
+                       the demographic break-point nodes of non-root
+                       populations. This sets the exponent of the root's tau
+                       prior (the uniform-Dirichlet prior on the non-root node
+                       ages contributes tau_root^-(tau_count-1)), so such a
                        break-point tau must be counted here even though the
-                       rubber-band never proposes on it.
+                       rubber-band never proposes on it. The break points of a
+                       segmented root population are older than the root age
+                       and have their own prior (demprior): not counted.
 
      candidate_count - the nodes the rubber-band actually proposes on, i.e.
-                       tau_count minus the demographic break-point nodes (those
-                       have their own proposal). Used only for bookkeeping of
-                       the acceptance rate. */
+                       the nodes with a tau > 0 that are not demographic
+                       break-point nodes (those have their own proposal). Used
+                       only for bookkeeping of the acceptance rate. */
   for (i = 0; i < stree->tip_count + stree->inner_count; ++i)
   {
     if (stree->nodes[i]->tau > 0 && (!opt_msci || stree->nodes[i]->prop_tau))
     {
-      tau_count++;
+      if (!DEM_ROOT_BP(stree,stree->nodes[i]))
+        tau_count++;
       if (!stree->nodes[i]->dem)
         candidate_count++;
     }
@@ -7873,10 +8008,13 @@ void stree_propose_tau(gtree_t ** gtree,
   if (!candidate_count)
   {
     /* nothing to propose; keep the former bookkeeping, which counted this as a
-       round with zero acceptances */
+       round with zero acceptances. Not when break points own step lengths (a
+       single species with a segmented population under --tau_mode 2): their
+       acceptance proportions are updated by stree_propose_dem_tau() */
     long k;
-    for (k = 0; k < opt_finetune_tau_count; ++k)
-      RMEAN_UPDATE(g_pj_tau[k], ft_round, 0);
+    if (opt_finetune_tau_mode == 1 || !stree->dem_count)
+      for (k = 0; k < opt_finetune_tau_count; ++k)
+        RMEAN_UPDATE(g_pj_tau[k], ft_round, 0);
     return;
   }
 
@@ -7992,14 +8130,35 @@ static int propose_dem_tau(stree_t * stree,
   long coal_old[2] = {0,0};
   double old_tau = U->tau;
   double lower = C->tau;                  /* younger neighbour (break point / node) */
-  double upper = U->parent->tau;          /* older neighbour (break point / divergence) */
+  /* older neighbour (break point / divergence). The oldest break point of a
+     segmented root population has none: 999 stands for "no upper bound", as it
+     does for the root age in propose_tau() */
+  double upper = U->parent ? U->parent->tau : 999;
   double new_tau;
   double lnacceptance = 0;
+  /* one step length per break point (--tau_mode 2), or the one shared by all
+     break points */
+  double eps = (opt_finetune_tau_mode == 1) ?
+                 opt_finetune_dem : opt_finetune_tau[U->tau_step_index];
 
   assert(!U->right);
 
-  new_tau = old_tau + opt_finetune_dem * legacy_rnd_symmetrical(thread_index);
+  new_tau = old_tau + eps * legacy_rnd_symmetrical(thread_index);
   new_tau = reflect(new_tau, lower, upper, thread_index);
+
+  /* prior ratio of the node ages. A break point of a non-root population stays
+     between its two neighbours and the uniform (order statistics) prior does
+     not change. A root break point k changes the durations of the root
+     segments below and above it by +-(new_tau-old_tau); these have independent
+     exponential priors with means Dbar_k and Dbar_{k+1} (paper eq.
+     rootbpprior). The oldest root break point bounds only the segment below */
+  if (DEM_ROOT_BP(stree,U))
+  {
+    lnacceptance -= (new_tau - old_tau) / stree_dem_root_mean(stree, U->dem_index);
+    if (U->parent)
+      lnacceptance += (new_tau - old_tau) /
+                      stree_dem_root_mean(stree, U->dem_index+1);
+  }
 
   /* the populations whose sizes are resampled along with the break point. Under
      a linked-theta model a segment shares its theta with populations this move
@@ -8148,8 +8307,15 @@ static int propose_dem_tau(stree_t * stree,
   return 0;
 }
 
-/* propose every break point (unary demographic node) in turn */
-double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
+/* propose every break point (unary demographic node) in turn. Returns the
+   proportion of accepted proposals, which is the acceptance proportion of the
+   single step length shared by all break points under --tau_mode 1 (the caller
+   updates g_pj_dem). With one step length per tau (--tau_mode 2) every break
+   point owns a step length, and its acceptance proportion is updated here */
+double stree_propose_dem_tau(gtree_t ** gtree,
+                             stree_t * stree,
+                             locus_t ** loci,
+                             long ft_round)
 {
   unsigned int i;
   unsigned int candidate_count = 0;
@@ -8165,11 +8331,17 @@ double stree_propose_dem_tau(gtree_t ** gtree, stree_t * stree, locus_t ** loci)
 
   for (i = stree->tip_count; i < stree->tip_count + stree->inner_count; ++i)
     if (stree->nodes[i]->dem)
-      accepted += propose_dem_tau(stree,
-                                  gtree,
-                                  loci,
-                                  stree->nodes[i],
-                                  thread_index);
+    {
+      long acc = propose_dem_tau(stree,
+                                 gtree,
+                                 loci,
+                                 stree->nodes[i],
+                                 thread_index);
+      accepted += acc;
+
+      if (opt_finetune_tau_mode != 1)
+        RMEAN_UPDATE(g_pj_tau[stree->nodes[i]->tau_step_index], ft_round, acc);
+    }
 
   return ((double)accepted / candidate_count);
 }

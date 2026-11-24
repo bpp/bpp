@@ -195,6 +195,9 @@ static void dump_chk_section_1(FILE * fp,
   DUMP(&opt_dem,1,fp);
   DUMP(&opt_dem_count,1,fp);
   DUMP(&opt_dem_model,1,fp);
+  /* prior on the break points of a segmented root population (demprior) */
+  DUMP(&opt_dem_tmax,1,fp);
+  DUMP(&opt_dem_rho,1,fp);
   for (i = 0; i < (unsigned int)opt_dem_count; ++i)
   {
     DUMP(opt_dem_specs[i].label,strlen(opt_dem_specs[i].label)+1,fp);

@@ -109,6 +109,7 @@ long opt_migration_count;
 long opt_dem;
 long opt_dem_count;
 long opt_dem_model;
+long opt_demprior;
 long opt_mig_vrates_exist;
 long opt_mix_theta_update;
 long opt_mix_w_update;
@@ -178,6 +179,8 @@ double opt_finetune_nubar;
 double opt_finetune_nui;
 double opt_finetune_tau_global;
 double opt_finetune_dem;
+double opt_dem_rho;
+double opt_dem_tmax;
 double opt_heredity_alpha;
 double opt_heredity_beta;
 double opt_locusrate_mubar;
@@ -609,6 +612,9 @@ void args_init(int argc, char ** argv)
   opt_dem_count = 0;
   opt_dem_model = BPP_DEM_PIECEWISE_CONSTANT;
   opt_dem_specs = NULL;
+  opt_demprior = 0;     /* set when the control file has a 'demprior' line */
+  opt_dem_tmax = 10;    /* demprior: Tmax as a multiple of the theta prior mean */
+  opt_dem_rho = 1.5;    /* demprior: ratio of consecutive mean durations */
   opt_mig_vrates_exist = 0;
   opt_mix_theta_update = 1;
   opt_mix_w_update = 1;

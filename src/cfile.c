@@ -1783,6 +1783,44 @@ l_unwind:
   return ret;
 }
 
+/* demprior = c rho
+
+   Prior on the break points of a segmented root population (demographic
+   models). The durations of the root segments, each counted from the root age
+   or from the previous root break point, have independent exponential priors.
+   Their means grow by the factor rho (> 1) from one segment to the next and
+   sum to Tmax = c x (prior mean of theta); see stree_dem_root_mean(). */
+static long parse_demprior(const char * line)
+{
+  long ret = 0;
+  char * s = xstrdup(line);
+  char * p = s;
+  long count;
+  double tmax,rho;
+
+  count = get_double(p, &tmax);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  count = get_double(p, &rho);
+  if (!count) goto l_unwind;
+
+  p += count;
+
+  if (!is_emptyline(p)) goto l_unwind;
+
+  opt_dem_tmax = tmax;
+  opt_dem_rho = rho;
+  opt_demprior = 1;
+
+  ret = 1;
+
+l_unwind:
+  free(s);
+  return ret;
+}
+
 static long parse_phiprior(const char * line)
 {
   long ret = 0;
@@ -2744,6 +2782,13 @@ static void update_tau_finetunes()
     opt_finetune_tau_count = stree->inner_count;
     stree_destroy(stree,NULL);
 
+    /* every demographic break point owns a step length as well. The unary
+       break-point nodes are added to the species tree only later, by
+       stree_expand_demography(), so count them from the specification */
+    long dem_index;
+    for (dem_index = 0; dem_index < opt_dem_count; ++dem_index)
+      opt_finetune_tau_count += opt_dem_specs[dem_index].segments - 1;
+
     if (opt_finetune_tau_count < 1)
     {
       opt_finetune_tau_count = 1;
@@ -2841,6 +2886,15 @@ static void update_theta_finetunes()
     opt_cfile = tmpcfile;
     opt_finetune_theta_count = stree->tip_count+stree->inner_count+stree->hybrid_count;
     stree_destroy(stree,NULL);
+
+    /* every segment of a demographic model has a theta. The unary segment
+       nodes are added to the species tree only later, by
+       stree_expand_demography(), so count them from the specification;
+       otherwise init_theta_stepsize() would run past the arrays below when
+       explicit th<N> entries are given */
+    long dem_index;
+    for (dem_index = 0; dem_index < opt_dem_count; ++dem_index)
+      opt_finetune_theta_count += opt_dem_specs[dem_index].segments - 1;
   }
 
   opt_finetune_theta = (double *)xmalloc((size_t)opt_finetune_theta_count*
@@ -2859,9 +2913,11 @@ static void update_theta_finetunes()
     printf("(%ld,%.6f)\n", pair->indexm1, pair->eps);
     #endif
 
+    /* a single species has a single theta, unless its population is segmented
+       (demographic models) */
     if (opt_finetune_theta_mode == 1 ||
         opt_linkedtheta == BPP_LINKEDTHETA_ALL ||
-        species_count == 1)
+        (species_count == 1 && !opt_dem))
     {
       if (opt_finetune_theta_mode != 1)
         fprintf(stdout, "Warning: Setting --theta-mode to 1 due to single theta parameter "
@@ -3011,6 +3067,19 @@ static void check_validity()
 
   if (!opt_usedata && opt_bfbeta != 1)
     fatal("Cannot use option 'BayesFactorBeta' when usedata = 0");
+
+  /* prior on the break points of a segmented root population */
+  if (opt_demprior)
+  {
+    if (!opt_dem)
+      fatal("Option 'demprior' requires option 'demography'");
+    if (!(opt_dem_tmax > 0) || isinf(opt_dem_tmax))
+      fatal("Option 'demprior': the first value (Tmax as a multiple of the "
+            "prior mean of theta) must be positive and finite");
+    if (!(opt_dem_rho > 1) || isinf(opt_dem_rho))
+      fatal("Option 'demprior': the second value (ratio rho of consecutive "
+            "mean durations) must be greater than 1 and finite");
+  }
 
   if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
   {
@@ -3483,6 +3552,17 @@ void load_cfile()
           fatal("Option 'tauprior' (line %ld) expects the following syntax:\n"
                 "  tauprior = invgamma alpha beta     # for inverse gamma prior\n"
                 "  tauprior = gamma alpha beta        # for gamma prior\n",
+                line_count);
+        valid = 1;
+      }
+      else if (!strncasecmp(token,"demprior",8))
+      {
+        if (!parse_demprior(value))
+          fatal("Option 'demprior' (line %ld) expects the following syntax:\n"
+                "  demprior = c rho     # break points of a segmented root "
+                "population:\n"
+                "                       # Tmax = c x (prior mean of theta), "
+                "rho > 1\n",
                 line_count);
         valid = 1;
       }

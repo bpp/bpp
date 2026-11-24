@@ -537,23 +537,38 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
   }
   else
   {
+    /* the root age and its prior belong to the root divergence, which is not
+       the parentless node when the root population is segmented (demographic
+       models). The break points of the root population are scaled like every
+       other age, and are counted in tau_count for the proposal ratio above, but
+       they are not part of the uniform prior on the non-root ages */
+    snode_t * rootbase = STREE_ROOT_BASE(stree);
+    unsigned int tau_prior_count = tau_count - DEM_ROOT_BP_COUNT(stree);
+
+    /* prior ratio of the root break points: the durations of the root segments
+       have independent exponential priors and are all multiplied by c (paper
+       eq. rootmix; its factor c^(K-1) is in the proposal ratio above). The sum
+       must be taken before the ages are scaled */
+    if (stree->root->dem)
+      lnacceptance -= (c - 1) * stree_dem_root_sum(stree);
+
     for (i = stree->tip_count; i < stree->tip_count+stree->inner_count; ++i)
     {
       if (snodes[i]->tau == 0) continue;
       snodes[i]->old_tau = snodes[i]->tau;
       snodes[i]->tau *= c;
-      if (!snodes[i]->parent)
+      if (snodes[i] == rootbase)
       {
         if (opt_tau_dist == BPP_TAU_PRIOR_INVGAMMA)
         {
           /* inv-gamma prior */
-          lnacceptance += (-opt_tau_alpha-1 - tau_count+1)*lnc -
+          lnacceptance += (-opt_tau_alpha-1 - tau_prior_count+1)*lnc -
                           opt_tau_beta*(1/snodes[i]->tau - 1/snodes[i]->old_tau);
         }
         else
         {
           /* gamma prior */
-          lnacceptance += (opt_tau_alpha-1 - tau_count+1)*lnc -
+          lnacceptance += (opt_tau_alpha-1 - tau_prior_count+1)*lnc -
                           opt_tau_beta*(snodes[i]->tau - snodes[i]->old_tau);
         }
       }
