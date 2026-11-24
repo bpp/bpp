@@ -3884,6 +3884,26 @@ double update_logpg_contrib(stree_t * stree, snode_t * snode)
   return logpr;
 }
 
+/* coalescent-density contribution of population snode at locus msa_index.
+
+   Constant size (standard MSC, piecewise-constant segments and the oldest
+   segment under the piecewise-linear model):
+
+     logpr = coal_count*log(2/(h*theta)) - T2h/(h*theta),
+     T2h   = sum_j n_j(n_j-1) dt_j,
+
+   and C2ji stores T2h (waiting-time sum, units of time).
+
+   Younger segment under the piecewise-linear model (DEM_LINEAR_SEGMENT), where
+   theta(t) = th0 + slope*(t - tau) runs from theta at tau to parent->theta at
+   parent->tau (paper eqs. pwl, logint, Clin, fxlin):
+
+     logpr = sum_c log(2/(h*theta(t_c))) - T2h/h,
+     T2h   = sum_j n_j(n_j-1) I_j,   I_j = int_{t_j}^{t_{j+1}} dt/theta(t),
+
+   and C2ji stores this theta-integrated T2h (dimensionless). Only the mixing
+   move reads C2ji of such nodes (it scales by c like a waiting time); every
+   conjugate theta update excludes DEM_SEGMENTED nodes under the linear model */
 double gtree_update_logprob_contrib(snode_t * snode,
                                     double heredity,
                                     long msa_index,
@@ -3894,8 +3914,21 @@ double gtree_update_logprob_contrib(snode_t * snode,
   double logpr = 0;
   double T2h = 0;
   dlist_item_t* coalevent;
-  int nextDateInd = -1; 
+  int nextDateInd = -1;
   double* sortbuffer = global_sortbuffer_r[thread_index];
+
+  /* piecewise-linear segment: theta(t) = th0 + slope*(t - t0) */
+  int linear = DEM_LINEAR_SEGMENT(snode);
+  double t0 = snode->tau;
+  double th0 = snode->theta;
+  double slope = 0;
+  double sumlogtheta = 0;
+
+  if (linear)
+  {
+    assert(snode->parent->tau > t0);
+    slope = (snode->parent->theta - th0) / (snode->parent->tau - t0);
+  }
 
   sortbuffer[0] = snode->tau;
   j = 1;
@@ -3915,6 +3948,10 @@ double gtree_update_logprob_contrib(snode_t * snode,
   {
     gnode_t* gnode = (gnode_t*)(coalevent->data);
     sortbuffer[j++] = gnode->time;
+
+    /* product over coalescent events of 1/theta(t_c) (eq. fxlin) */
+    if (linear)
+      sumlogtheta += log(th0 + slope*(gnode->time - t0));
   }
 
 
@@ -3938,7 +3975,19 @@ double gtree_update_logprob_contrib(snode_t * snode,
   if ((unsigned int)(snode->seqin_count[msa_index]) == j - 1 && ! opt_datefile) --j;
   for (k = 1, n = snode->seqin_count[msa_index]; k < j; ++k, --n)
   {
-    T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]);
+    if (!linear)
+      T2h += n * (n - 1) * (sortbuffer[k] - sortbuffer[k - 1]);
+    else if (n >= 2)
+    {
+      /* I_j = int dt/theta(t) over the waiting interval (eq. logint), written
+         with log1p so that it tends to dt/theta(t_j) as the slope vanishes */
+      double t1  = sortbuffer[k - 1];
+      double dt  = sortbuffer[k] - t1;
+      double th1 = th0 + slope*(t1 - t0);
+      double I   = (slope == 0) ? dt / th1 : log1p(slope*dt/th1) / slope;
+
+      T2h += n * (n - 1) * I;
+    }
 
     if (nextDateInd > -1 && snode->tip_date[msa_index][nextDateInd] == sortbuffer[k])
     {
@@ -3961,14 +4010,25 @@ double gtree_update_logprob_contrib(snode_t * snode,
   /* now distinguish between estimating theta and analytical computation */
   if (opt_est_theta)
   {
-    /* This is the 2/theta in the product over coalescent events */
-    if (snode->coal_count[msa_index])
-      logpr += snode->coal_count[msa_index] * log(2.0 / (heredity*snode->theta));
-
-    /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
-    if (T2h)
+    if (linear)
     {
-      logpr -= T2h / (snode->theta*heredity);
+      /* eq. fxlin: theta already integrated into sumlogtheta and T2h */
+      if (snode->coal_count[msa_index])
+        logpr += snode->coal_count[msa_index] * log(2.0 / heredity) - sumlogtheta;
+      if (T2h)
+        logpr -= T2h / heredity;
+    }
+    else
+    {
+      /* This is the 2/theta in the product over coalescent events */
+      if (snode->coal_count[msa_index])
+        logpr += snode->coal_count[msa_index] * log(2.0 / (heredity*snode->theta));
+
+      /* This is the j(j-1)/theta * coalescent times (in the product over coalescent events */
+      if (T2h)
+      {
+        logpr -= T2h / (snode->theta*heredity);
+      }
     }
     snode->old_C2ji[msa_index] = snode->C2ji[msa_index];
     snode->C2ji[msa_index] = T2h; // / heredity;

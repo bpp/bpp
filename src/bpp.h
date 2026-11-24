@@ -274,6 +274,35 @@ extern const char * global_freqs_strings[28];
 #define BPP_DEM_PIECEWISE_CONSTANT      0
 #define BPP_DEM_PIECEWISE_LINEAR        1
 
+/* demographic model helpers. A population with K>1 segments is a chain
+   base -> U_1 -> ... -> U_{K-1} -> parent(base). The base is the original
+   species-tree node (segment 0) and keeps dem == 0; U_1..U_{K-1} are the added
+   unary nodes and have dem == 1 (snode dem fields). The only child of a unary
+   node is the next younger segment of the same population, so s->parent->dem
+   means "there is an older segment of the same population above s".
+
+   DEM_LINEAR_SEGMENT(s): s is a younger segment under the piecewise-linear
+   model; its size runs linearly from s->theta at s->tau to s->parent->theta at
+   s->parent->tau. The oldest segment (parent is not a segment node) and every
+   segment under the piecewise-constant model have the constant size s->theta.
+
+   DEM_SEGMENTED(s): s (base or unary node) belongs to a population with K>1
+   segments. Both tests are needed: s->dem holds for U_1..U_{K-1} but not for
+   the base, and s->parent->dem holds for the base and U_1..U_{K-2} but not for
+   the oldest segment U_{K-1}. Under the linear model the thetas of such nodes
+   are boundary sizes of linear segments and must not use the conjugate (Gibbs)
+   updates */
+#define DEM_LINEAR_SEGMENT(s) (opt_dem_model == BPP_DEM_PIECEWISE_LINEAR && \
+                               (s)->parent && (s)->parent->dem)
+#define DEM_SEGMENTED(s) ((s)->dem || ((s)->parent && (s)->parent->dem))
+
+/* DEM_LINEAR_SEGMENTED(s): s is a boundary size of the piecewise-linear model.
+   It has no conjugate (inverse-gamma) conditional: excluded from the Gibbs
+   theta moves, from the theta resampling of the rubber-band, break-point and
+   mixing moves, and from the a1b1 conditional output/summary */
+#define DEM_LINEAR_SEGMENTED(s) (opt_dem_model == BPP_DEM_PIECEWISE_LINEAR && \
+                                 DEM_SEGMENTED(s))
+
 
 #define BPP_THETA_PRIOR_MIN             1
 #define BPP_THETA_PRIOR_INVGAMMA        1
@@ -480,7 +509,8 @@ typedef struct migspec_s
 typedef struct dem_spec_s
 {
   char * label;             /* population label from the control file */
-  long segments;            /* number of constant-size segments (>= 2) */
+  long segments;            /* number of segments (>= 2); the model (piecewise
+                               constant or linear) is global: opt_dem_model */
   unsigned int snode_index; /* resolved species-tree node index (filled later) */
 } dem_spec_t;
 
@@ -617,10 +647,15 @@ typedef struct snode_s
      for continuous traits, it contains phylogenetic indepandent contrasts */
   trait_t ** trait;
 
-  /* piecewise-constant demographic model (opt_dem): a unary segment/break-point
-     node. dem==1 marks such a node; dem_base points to the base population
-     (segment 0, the original branch, which keeps label/theta:A/tau:A) and
-     dem_index is the segment number (1..K-1). Zero/NULL for ordinary nodes. */
+  /* demographic models (opt_dem): a unary segment/break-point node. dem==1
+     marks such a node; dem_base points to the base population (segment 0, the
+     original branch, which keeps label/theta:A/tau:A) and dem_index is the
+     segment number (1..K-1). Zero/NULL for ordinary nodes. The node's tau is
+     the break point tau_{X,k} and its theta is theta_{X,k}: the constant size
+     of segment k under the piecewise-constant model, or the size at the
+     younger boundary tau_{X,k} under the piecewise-linear model, where segment
+     k runs linearly to parent->theta at parent->tau (constant for the oldest
+     segment). See DEM_LINEAR_SEGMENT / DEM_SEGMENTED. */
   long dem;
   struct snode_s * dem_base;
   long dem_index;

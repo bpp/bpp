@@ -1224,9 +1224,11 @@ static void summarize_a1b1(stree_t * stree, FILE * fp_out)
   /* the following is required for finding theta indices associated with Ws */
   header_tokens_shorten(numeric_tokens,0,token_count);
 
-  /* compute number of theta parameters */
+  /* compute number of theta parameters (piecewise-linear boundary sizes have
+     no conjugate conditional and are not in the file, see log_a1b1) */
   for (i = 0; i < snodes_total; ++i)
-    if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL)
+    if (stree->nodes[i]->theta >= 0 && stree->nodes[i]->linked_theta == NULL &&
+        !DEM_LINEAR_SEGMENTED(stree->nodes[i]))
       cols += 2;
 
 #if  1

@@ -1470,12 +1470,15 @@ l_unwind:
 
 static long parse_demography(const char * line)
 {
-  /* Parse the 'demography' option: a comma-separated list of
-       population_label:num_segments
-     items, e.g.  demography = A:3, X:4, D:2
-     Each label is a species-tree node (tip or labelled inner node) whose
-     population size is made piecewise-constant with 'num_segments' segments
-     (num_segments-1 break points). Labels are resolved to species-tree nodes
+  /* Parse the 'demography' option:
+       demography = [constant|linear] population_label:num_segments ...
+     e.g.  demography = A:3, X:4, D:2
+           demography = linear A:5 B:2 C:8
+     The optional leading keyword selects the piecewise-constant (default) or
+     the piecewise-linear model (opt_dem_model). Each label is a species-tree
+     node (tip or labelled inner node) whose population size is split into
+     'num_segments' segments (num_segments-1 break points). Items are separated
+     by whitespace and/or commas. Labels are resolved to species-tree nodes
      later (after the tree is built). */
 
   long i;
@@ -1489,6 +1492,21 @@ static long parse_demography(const char * line)
 
   opt_dem_count = 0;
   opt_dem_specs = NULL;
+  opt_dem_model = BPP_DEM_PIECEWISE_CONSTANT;
+
+  /* optional model keyword: a first token without a colon */
+  p += strspn(p, " \t\r\n,");
+  count = strcspn(p, " \t\r\n,*#");
+  if (count && !memchr(p, ':', (size_t)count))
+  {
+    if (count == 8 && !strncasecmp(p, "constant", 8))
+      opt_dem_model = BPP_DEM_PIECEWISE_CONSTANT;
+    else if (count == 6 && !strncasecmp(p, "linear", 6))
+      opt_dem_model = BPP_DEM_PIECEWISE_LINEAR;
+    else
+      goto l_unwind;
+    p += count;
+  }
 
   while (*p)
   {
@@ -1562,6 +1580,7 @@ l_unwind:
     opt_dem_specs = NULL;
     opt_dem_count = 0;
     opt_dem = 0;
+    opt_dem_model = BPP_DEM_PIECEWISE_CONSTANT;
   }
   return ret;
 }
@@ -3576,10 +3595,15 @@ void load_cfile()
       {
         if (!parse_demography(value))
           fatal("Erroneous format of 'demography' (line %ld)\n"
-                "Expected a comma-separated list of population:segments, e.g.\n"
+                "Expected an optional model keyword followed by a list of\n"
+                "population:segments items (separated by spaces and/or commas),\n"
+                "e.g.\n"
                 "  demography = A:3, X:4, D:2\n"
-                "where each population label is a species-tree node (tip or\n"
-                "labelled inner node) and each segment count is an integer >= 2.",
+                "  demography = linear A:5 B:2 C:8\n"
+                "where the keyword is 'constant' (default, piecewise-constant\n"
+                "population sizes) or 'linear' (piecewise-linear sizes), each\n"
+                "population label is a species-tree node (tip or labelled inner\n"
+                "node) and each segment count is an integer >= 2.",
                 line_count);
         valid = 1;
       }

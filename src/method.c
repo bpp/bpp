@@ -4083,28 +4083,35 @@ static FILE * init(stree_t ** ptr_stree,
     create_mig_bitmatrix(stree);
   }
 
-  /* piecewise-constant demographic model: expand each split population into a
-     chain of unary segment nodes (before stree_init sizes everything) */
+  /* demographic models (piecewise-constant / piecewise-linear): expand each
+     split population into a chain of unary segment nodes (before stree_init
+     sizes everything) */
   if (opt_dem)
   {
     if (opt_msci)
-      fatal("The 'demography' (piecewise-constant) model is not compatible with "
-            "the MSci (introgression) model in this version.");
+      fatal("The 'demography' model is not compatible with the MSC-I "
+            "(introgression) model in this version.");
     if (opt_migration)
-      fatal("The 'demography' (piecewise-constant) model is not compatible with "
-            "the migration (IM) model in this version.");
+      fatal("The 'demography' model is not compatible with the migration (MSC-M) "
+            "model in this version.");
     if (!opt_est_theta)
-      fatal("The 'demography' (piecewise-constant) model requires estimated "
-            "theta in this version.");
+      fatal("The 'demography' model requires estimated theta in this version.");
     if (opt_est_stree)
-      fatal("The 'demography' (piecewise-constant) model is not compatible with "
-            "species-tree estimation (A01/A11) in this version.");
+      fatal("The 'demography' model is not compatible with species-tree "
+            "estimation (A01/A11) in this version.");
     if (opt_est_delimit)
-      fatal("The 'demography' (piecewise-constant) model is not compatible with "
-            "species delimitation (A10/A11) in this version.");
+      fatal("The 'demography' model is not compatible with species "
+            "delimitation (A10/A11) in this version.");
     if (opt_clock != BPP_CLOCK_GLOBAL)
-      fatal("The 'demography' (piecewise-constant) model requires the strict "
-            "clock (clock = 1) in this version.");
+      fatal("The 'demography' model requires the strict clock (clock = 1) in "
+            "this version.");
+    if (opt_datefile)
+      fatal("The 'demography' model is not compatible with tip dating "
+            "(datefile) in this version.");
+    if (opt_dem_model == BPP_DEM_PIECEWISE_LINEAR &&
+        opt_linkedtheta != BPP_LINKEDTHETA_NONE)
+      fatal("The piecewise-linear 'demography' model is not compatible with "
+            "linked thetas (linkedtheta) in this version.");
     stree_expand_demography(stree);
   }
 
@@ -4720,7 +4727,9 @@ static FILE * init(stree_t ** ptr_stree,
       {
         snode_t * x = stree->nodes[i];
 
-        if (x->theta >= 0 && !x->linked_theta)
+        /* boundary sizes of the piecewise-linear model have no conjugate
+           conditional and are left out (also in log_a1b1 and summarize_a1b1) */
+        if (x->theta >= 0 && !x->linked_theta && !DEM_LINEAR_SEGMENTED(x))
           fprintf(fp_a1b1, "\ttheta:%d_a1:%s_a1\ttheta:%d_b1:%s_b1", x->node_index+1,x->label,x->node_index+1,x->label);
       }
       if (opt_msci)
@@ -5097,6 +5106,9 @@ static void log_a1b1(FILE * fp_a1b1,
     snode = stree->nodes[i];
 
     if (snode->linked_theta || snode->theta < 0) continue;
+
+    /* no conjugate conditional for piecewise-linear boundary sizes */
+    if (DEM_LINEAR_SEGMENTED(snode)) continue;
 
     coal_sum = C2h_sum = 0;
 
@@ -5900,7 +5912,7 @@ void cmd_run()
     }
     #endif
 
-    /* propose demographic break points (piecewise-constant model) */
+    /* propose demographic break points (piecewise-constant and -linear models) */
     if (opt_dem && !opt_usedata_fix_gtree)
     {
       ratio = stree_propose_dem_tau(gtree, stree, locus);

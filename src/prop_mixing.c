@@ -155,13 +155,25 @@ void prop_mixing_update_gtrees(locus_t ** locus,
 
           x->old_logpr_contrib[i] = x->logpr_contrib[i];
 
-          if (x->old_C2ji[i] > 0 && oldtheta > 0)
-            x->logpr_contrib[i] += (x->old_C2ji[i]/oldtheta - x->C2ji[i]/x->theta) /
-                                   locus[i]->heredity[0];
-          if (x->coal_count[i] && opt_mix_theta_update)
+          if (DEM_LINEAR_SEGMENT(x))
           {
-            x->logpr_contrib[i] += x->coal_count[i]*log(oldtheta*locus[i]->heredity[0]);
-            x->logpr_contrib[i] -= x->coal_count[i]*log(x->theta*locus[i]->heredity[0]);
+            /* piecewise-linear segment: its sizes are held fixed by this move
+               and C2ji is the theta-integrated sum (gtree_update_logprob_contrib),
+               which scales by c like a waiting time; the product over
+               coalescent events is unchanged since theta(c*t) = theta(t) */
+            x->logpr_contrib[i] += (x->old_C2ji[i] - x->C2ji[i]) /
+                                   locus[i]->heredity[0];
+          }
+          else
+          {
+            if (x->old_C2ji[i] > 0 && oldtheta > 0)
+              x->logpr_contrib[i] += (x->old_C2ji[i]/oldtheta - x->C2ji[i]/x->theta) /
+                                     locus[i]->heredity[0];
+            if (x->coal_count[i] && opt_mix_theta_update)
+            {
+              x->logpr_contrib[i] += x->coal_count[i]*log(oldtheta*locus[i]->heredity[0]);
+              x->logpr_contrib[i] -= x->coal_count[i]*log(x->theta*locus[i]->heredity[0]);
+            }
           }
 
           logpr += x->logpr_contrib[i];
@@ -341,6 +353,15 @@ long proposal_mixing(gtree_t ** gtree, stree_t * stree, locus_t ** locus)
     for (i = 0; i < nodes_count; ++i)
     {
       if (snodes[i]->theta <= 0 || snodes[i]->linked_theta) continue;
+
+      /* piecewise-linear model: the boundary sizes of segmented populations
+         have no conjugate conditional and are held fixed; old_theta must still
+         be set as the density update and the reject path read it */
+      if (DEM_LINEAR_SEGMENTED(snodes[i]))
+      {
+        snodes[i]->old_theta = snodes[i]->theta;
+        continue;
+      }
 
       snodes[i]->old_theta = snodes[i]->theta;
 

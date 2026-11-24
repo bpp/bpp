@@ -41,7 +41,7 @@ ifdef DISABLE_AVX
 endif
 
 ifndef CC
-CC = gcc-7
+CC = gcc
 endif
 CFLAGS = -D_GNU_SOURCE -DHAVE_SSE3 $(AVXDEF) $(AVX2DEF) -g -msse3 -O3 $(WARN) # -pg -no-pie -DDEBUG_GTREE_SIMULATE -DDEBUG_STREE_INIT
 LINKFLAGS=$(PROFILING)

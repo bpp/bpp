@@ -4240,6 +4240,100 @@ static int propose_theta_slide(stree_t * stree,
 
   return 0;
 }
+
+/* piecewise-linear demographic model: sliding-window update of a boundary size
+   theta_{X,k} of a segmented population (paper eqs. thetaslide, thetahastings,
+   thetaaccept). The size is shared by the segment starting at the node (its
+   younger boundary) and, for a break-point node, by the segment below it (its
+   older boundary), so the move recomputes the coalescent density of those one
+   or two segments from scratch: no conjugate conditional exists and the
+   analytic C2ji rescale of propose_theta_slide does not apply. The window is on
+   the log scale, giving the proposal-density ratio theta_new / theta_old */
+static int propose_theta_slide_linear(stree_t * stree,
+                                      gtree_t ** gtree,
+                                      locus_t ** locus,
+                                      snode_t * snode,
+                                      long thread_index)
+{
+  long i,j;
+  long lcount = 0;
+  double thetaold, logthetaold;
+  double thetanew, logthetanew;
+  double lnacceptance = 0;
+  double minv = -99;
+  double maxv =  99;
+  double eps = opt_finetune_theta[snode->theta_step_index];
+
+  assert(DEM_LINEAR_SEGMENTED(snode));
+  assert(!snode->linked_theta);
+
+  thetaold = snode->theta;
+
+  logthetaold = log(thetaold);
+  logthetanew = logthetaold + eps*legacy_rnd_symmetrical(thread_index);
+  logthetanew = reflect(logthetanew, minv, maxv, thread_index);
+  thetanew = exp(logthetanew);
+
+  /* proposal-density ratio of the log-scale window */
+  lnacceptance = logthetanew - logthetaold;
+
+  snode->theta = thetanew;
+
+  /* prior ratio */
+  if (opt_theta_prior == BPP_THETA_PRIOR_INVGAMMA)
+    lnacceptance += (-opt_theta_alpha - 1) * log(thetanew / thetaold) -
+                    opt_theta_beta*(1 / thetanew - 1 / thetaold);
+  else if (opt_theta_prior == BPP_THETA_PRIOR_GAMMA)
+    lnacceptance += (opt_theta_alpha-1) * log(thetanew / thetaold) -
+                    opt_theta_beta*(thetanew - thetaold);
+
+  /* affected segments: the one starting at snode and, for a break-point node,
+     the one below it, whose older boundary size this is */
+  stree->td[lcount++] = snode;
+  if (snode->dem)
+    stree->td[lcount++] = snode->left;
+
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree[i]->old_logpr = gtree[i]->logpr;
+
+    for (j = 0; j < lcount; ++j)
+    {
+      snode_t * x = stree->td[j];
+
+      /* exactly one call per node and locus: it rotates old_C2ji and
+         old_logpr_contrib, from which the reject path restores */
+      gtree[i]->logpr -= x->logpr_contrib[i];
+      gtree_update_logprob_contrib(x, locus[i]->heredity[0], i, thread_index);
+      gtree[i]->logpr += x->logpr_contrib[i];
+    }
+
+    lnacceptance += (gtree[i]->logpr - gtree[i]->old_logpr);
+  }
+
+  if (opt_debug_theta)
+    printf("[Debug] (theta linear) lnacceptance = %f\n", lnacceptance);
+
+  if (lnacceptance >= -1e-10 || legacy_rndu(thread_index) < exp(lnacceptance))
+    return 1;
+
+  /* reject */
+  snode->theta = thetaold;
+  for (i = 0; i < opt_locus_count; ++i)
+  {
+    gtree[i]->logpr = gtree[i]->old_logpr;
+    for (j = 0; j < lcount; ++j)
+    {
+      snode_t * x = stree->td[j];
+
+      x->logpr_contrib[i] = x->old_logpr_contrib[i];
+      x->C2ji[i] = x->old_C2ji[i];
+    }
+  }
+
+  return 0;
+}
+
 void stree_propose_theta(gtree_t ** gtree,
                          locus_t ** locus,
                          stree_t * stree,
@@ -4269,7 +4363,38 @@ void stree_propose_theta(gtree_t ** gtree,
     snode = stree->nodes[i];
     if (snode->theta >= 0 && snode->has_theta && !snode->linked_theta)
     {
-      if (opt_theta_slide_prob > 0 && 
+      if (DEM_LINEAR_SEGMENTED(snode))
+      {
+        /* piecewise-linear model: boundary sizes of segmented populations
+           always use their sliding window (no conjugate update exists) and
+           are accounted with the sliding-window moves */
+        accepted = propose_theta_slide_linear(stree,
+                                              gtree,
+                                              locus,
+                                              snode,
+                                              thread_index_zero);
+        if (opt_finetune_theta_mode == 3)
+        {
+          ft_round_slide[snode->theta_step_index]++;
+          RMEAN_UPDATE(g_pj_theta_slide[snode->theta_step_index],
+                       ft_round_slide[snode->theta_step_index],
+                       accepted);
+        }
+        else
+        {
+          if (i < stree->tip_count)
+          {
+            slide_tip_count++;
+            slide_tip_accept += accepted;
+          }
+          else
+          {
+            slide_inner_count++;
+            slide_inner_accept += accepted;
+          }
+        }
+      }
+      else if (opt_theta_slide_prob > 0 &&
           legacy_rndu(thread_index_zero) < opt_theta_slide_prob)
       {
         /* sliding window */
@@ -4330,8 +4455,9 @@ void stree_propose_theta(gtree_t ** gtree,
     }
   }
 
-  /* sanity checks */
-  if (opt_finetune_theta_mode < 3)
+  /* sanity checks (not under the piecewise-linear model, whose segmented
+     populations always slide) */
+  if (opt_finetune_theta_mode < 3 && opt_dem_model != BPP_DEM_PIECEWISE_LINEAR)
   {
     if (opt_theta_slide_prob == 1)
     {
@@ -6170,6 +6296,17 @@ static long propose_tau(locus_t ** loci,
       if (x->theta == -1)
         continue;
 
+      /* piecewise-linear model: the boundary sizes of segmented populations
+         have no conjugate conditional and are held fixed by the rubber-band
+         (paper, rubber-band moves); their densities are still recomputed by
+         propose_tau_update_gtrees since they remain in 'affected'. old_theta
+         must be set as the reject path restores every theta_list node from it */
+      if (DEM_LINEAR_SEGMENTED(x))
+      {
+        x->old_theta = x->theta;
+        continue;
+      }
+
       for (jj = 0; jj < totnodes; ++jj)
       {
         if (snodes[jj]->linked_theta != x && snodes[jj] != x) continue;
@@ -7771,13 +7908,15 @@ void stree_propose_tau(gtree_t ** gtree,
   }
 }
 
-/* Piecewise-constant demographic model: break-point move.
+/* Demographic models: break-point move.
 
    A demographic (unary) node U represents a break point; U->left is the segment
    below it, U->parent the segment above. Moving U->tau re-partitions the
    coalescent events that the boundary crosses between U and its child, without
    touching any gene-tree node age or the sequence likelihood. Only the
-   coalescent-density contributions of U and U->left change. */
+   coalescent-density contributions of U and U->left change (under the
+   piecewise-linear model also through the slopes of the two segments, which
+   gtree_update_logprob_contrib recomputes from the moved break point). */
 
 /* re-assign the coalescent events crossed as the U / U->left boundary slides
    from 'from_tau' to 'to_tau', moving them between U and its child C=U->left and
@@ -7841,8 +7980,10 @@ static int propose_dem_tau(stree_t * stree,
      Metropolised-Gibbs step, as propose_tau does for the rubber-band). Under the
      inverse-gamma prior the conditional is exact, the theta prior and proposal
      densities cancel against the coalescent density, and the move becomes a
-     theta-integrated (collapsed) update of the break point */
-  const int change_theta = 1;
+     theta-integrated (collapsed) update of the break point. Piecewise-constant
+     model only: under the piecewise-linear model the sizes are boundary values
+     without a conjugate conditional and are held fixed (paper, breakpoint move) */
+  const int change_theta = (opt_dem_model == BPP_DEM_PIECEWISE_CONSTANT);
 
   long i,j;
   snode_t * C = U->left;                 /* child segment */
